@@ -1,0 +1,194 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Settings",
+  "module": "OmniTrack",
+  "issingle": 1,
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "sb_features",
+      "fieldtype": "Section Break",
+      "label": "Feature Switches"
+    },
+    {
+      "fieldname": "enable_split_shifts",
+      "fieldtype": "Check",
+      "label": "Enable Discontinuous Split Shifts",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_pai_engine",
+      "fieldtype": "Check",
+      "label": "Enable Plan Adherence (PAI) Engine",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_variance_tracking",
+      "fieldtype": "Check",
+      "label": "Enable Task Expectation Variance Tracking",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_document_linking",
+      "fieldtype": "Check",
+      "label": "Enable Dynamic Document & URL Linking",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_attachment_sync",
+      "fieldtype": "Check",
+      "label": "Enable Cross-Site File Attachment Sync",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_auto_attendance",
+      "fieldtype": "Check",
+      "label": "Enable Automated Attendance Synthesis",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_client_workspaces",
+      "fieldtype": "Check",
+      "label": "Enable Client SaaS Workspaces (Subdomain)",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_workspace_branding",
+      "fieldtype": "Check",
+      "label": "Enable Workspace White-Label Branding",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_site_sync",
+      "fieldtype": "Check",
+      "label": "Enable Site-to-Site Live Sync",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_push_notifications",
+      "fieldtype": "Check",
+      "label": "Enable Web & Mobile Push Notifications",
+      "default": 1
+    },
+    {
+      "fieldname": "sb_roles_entitlements",
+      "fieldtype": "Section Break",
+      "label": "Multi-Tier Role & Capability Entitlements"
+    },
+    {
+      "fieldname": "user_entitlements",
+      "fieldtype": "Table",
+      "label": "Role & User Entitlement Matrix",
+      "options": "OmniTrack User Entitlement"
+    },
+    {
+      "fieldname": "sb_timesheet_lifecycle",
+      "fieldtype": "Section Break",
+      "label": "Global Timesheet Generation & Billing Policies"
+    },
+    {
+      "fieldname": "default_timesheet_mode",
+      "fieldtype": "Select",
+      "options": "Off\nManual On-Demand\nAuto Draft\nAuto Sync Draft",
+      "default": "Auto Sync Draft"
+    },
+    {
+      "fieldname": "default_timesheet_frequency",
+      "fieldtype": "Select",
+      "options": "Timelog (Per Work Block)\nDaily Consolidated\nWeekly Consolidated\nBi-Weekly Consolidated\nMonthly Consolidated",
+      "default": "Daily Consolidated"
+    },
+    {
+      "fieldname": "default_timesheet_aggregation",
+      "fieldtype": "Select",
+      "options": "Individual User\nConsolidated Project",
+      "default": "Individual User"
+    },
+    {
+      "fieldname": "require_manager_pricing_signoff",
+      "fieldtype": "Check",
+      "label": "Require Manager Pricing Sign-Off Before Submission",
+      "default": 1
+    },
+    {
+      "fieldname": "project_timesheet_policies",
+      "fieldtype": "Table",
+      "label": "Per-Project Timesheet Overrides",
+      "options": "OmniTrack Project Policy"
+    },
+    {
+      "fieldname": "sb_push_config",
+      "fieldtype": "Section Break",
+      "label": "Web Push (VAPID) Gateway & Fatigue Prevention"
+    },
+    {
+      "fieldname": "vapid_public_key",
+      "fieldtype": "Small Text",
+      "label": "VAPID Public Key",
+      "read_only": 1
+    },
+    {
+      "fieldname": "vapid_private_key",
+      "fieldtype": "Password",
+      "label": "VAPID Private Key"
+    },
+    {
+      "fieldname": "silence_push_on_leave",
+      "fieldtype": "Check",
+      "label": "Silence Push Notifications During Approved Leave",
+      "default": 1
+    },
+    {
+      "fieldname": "silence_push_on_ooo",
+      "fieldtype": "Check",
+      "label": "Silence Push During Explicit Out-of-Office Blocks",
+      "default": 1
+    },
+    {
+      "fieldname": "allow_push_during_blank_gaps",
+      "fieldtype": "Check",
+      "label": "Deliver Push During Unplanned Shift Gaps",
+      "default": 1
+    },
+    {
+      "fieldname": "sb_sync",
+      "fieldtype": "Section Break",
+      "label": "Site-to-Site Live Sync Policies"
+    },
+    {
+      "fieldname": "conflict_resolution_strategy",
+      "fieldtype": "Select",
+      "options": "Field-Level Merge\nLast Write Wins\nManager Review",
+      "default": "Field-Level Merge"
+    },
+    {
+      "fieldname": "remote_deletion_policy",
+      "fieldtype": "Select",
+      "options": "Mark Status as Cancelled / Archived\nHard Delete\nUnlink Only",
+      "default": "Mark Status as Cancelled / Archived"
+    },
+    {
+      "fieldname": "sanitize_billing_rates",
+      "fieldtype": "Check",
+      "label": "Sanitize Billing & Cost Rates During Sync",
+      "default": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1
+    },
+    {
+      "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 0
+    }
+  ]
+}

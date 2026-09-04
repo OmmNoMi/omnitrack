@@ -1,0 +1,89 @@
+{
+  "app": "omnitrack",
+  "doctype": "Workspace",
+  "name": "OmniTrack",
+  "label": "OmniTrack",
+  "title": "OmniTrack",
+  "icon": "shield-check",
+  "indicator_color": "blue",
+  "module": "OmniTrack",
+  "public": 1,
+  "is_hidden": 0,
+  "roles": [],
+  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"OmniTrack\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"OmniTrack Settings\", \"label\": \"OmniTrack Settings\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Settings\", \"color\": \"Blue\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Planned Work Blocks\", \"label\": \"Planned Work Blocks\", \"type\": \"DocType\", \"link_to\": \"Planned Work Block\", \"color\": \"Green\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Remote Connections\", \"label\": \"Remote Connections\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Remote Connection\", \"color\": \"Purple\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Client Workspaces\", \"label\": \"Client Workspaces\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Workspace\", \"color\": \"Yellow\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Workforce & Tasks\", \"label\": \"Workforce & Tasks\", \"links\": [{\"label\": \"Planned Work Blocks\", \"type\": \"Link\", \"link_to\": \"Planned Work Block\", \"link_type\": \"doctype\"}, {\"label\": \"OmniTrack Settings\", \"type\": \"Link\", \"link_to\": \"OmniTrack Settings\", \"link_type\": \"doctype\"}]}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Live Sync & Integrations\", \"label\": \"Live Sync & Integrations\", \"links\": [{\"label\": \"Remote Connections\", \"type\": \"Link\", \"link_to\": \"OmniTrack Remote Connection\", \"link_type\": \"doctype\"}, {\"label\": \"Client Workspaces\", \"type\": \"Link\", \"link_to\": \"OmniTrack Workspace\", \"link_type\": \"doctype\"}, {\"label\": \"Push Subscriptions\", \"type\": \"Link\", \"link_to\": \"OmniTrack Push Subscription\", \"link_type\": \"doctype\"}]}}]",
+  "shortcuts": [
+    {
+      "label": "OmniTrack Settings",
+      "link_to": "OmniTrack Settings",
+      "type": "DocType",
+      "color": "Blue"
+    },
+    {
+      "label": "Planned Work Blocks",
+      "link_to": "Planned Work Block",
+      "type": "DocType",
+      "color": "Green"
+    },
+    {
+      "label": "Remote Connections",
+      "link_to": "OmniTrack Remote Connection",
+      "type": "DocType",
+      "color": "Purple"
+    },
+    {
+      "label": "Client Workspaces",
+      "link_to": "OmniTrack Workspace",
+      "type": "DocType",
+      "color": "Yellow"
+    }
+  ],
+  "links": [
+    {
+      "label": "Workforce & Tasks",
+      "type": "Card",
+      "links": [
+        {
+          "label": "Planned Work Blocks",
+          "type": "Link",
+          "link_to": "Planned Work Block",
+          "link_type": "doctype"
+        },
+        {
+          "label": "OmniTrack Settings",
+          "type": "Link",
+          "link_to": "OmniTrack Settings",
+          "link_type": "doctype"
+        }
+      ]
+    },
+    {
+      "label": "Live Sync & Integrations",
+      "type": "Card",
+      "links": [
+        {
+          "label": "Remote Connections",
+          "type": "Link",
+          "link_to": "OmniTrack Remote Connection",
+          "link_type": "doctype"
+        },
+        {
+          "label": "Client Workspaces",
+          "type": "Link",
+          "link_to": "OmniTrack Workspace",
+          "link_type": "doctype"
+        },
+        {
+          "label": "Push Subscriptions",
+          "type": "Link",
+          "link_to": "OmniTrack Push Subscription",
+          "link_type": "doctype"
+        }
+      ]
+    }
+  ],
+  "charts": [],
+  "number_cards": [],
+  "quick_lists": [],
+  "custom_blocks": [],
+  "type": "Workspace"
+}

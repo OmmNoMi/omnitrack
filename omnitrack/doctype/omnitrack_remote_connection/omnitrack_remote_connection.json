@@ -1,0 +1,138 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Remote Connection",
+  "module": "OmniTrack",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "connection_name",
+      "fieldtype": "Data",
+      "label": "Connection Name",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "remote_url",
+      "fieldtype": "Data",
+      "label": "Remote Frappe Site URL",
+      "reqd": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "Active\nPaused\nError",
+      "default": "Active"
+    },
+    {
+      "fieldname": "cb_auth",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "api_key",
+      "fieldtype": "Data",
+      "label": "Remote API Key",
+      "reqd": 1
+    },
+    {
+      "fieldname": "api_secret",
+      "fieldtype": "Password",
+      "label": "Remote API Secret",
+      "reqd": 1
+    },
+    {
+      "fieldname": "hmac_secret",
+      "fieldtype": "Password",
+      "label": "Webhook HMAC Secret"
+    },
+    {
+      "fieldname": "sync_direction",
+      "fieldtype": "Select",
+      "options": "Bi-Directional\nPush to Remote\nPull from Remote",
+      "default": "Bi-Directional"
+    },
+    {
+      "fieldname": "sb_scope",
+      "fieldtype": "Section Break",
+      "label": "Live Sync Scope & Mapping"
+    },
+    {
+      "fieldname": "linked_customer",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "label": "Linked ERPNext Customer"
+    },
+    {
+      "fieldname": "linked_project",
+      "fieldtype": "Link",
+      "options": "Project",
+      "label": "Linked ERPNext Project"
+    },
+    {
+      "fieldname": "auto_sync_tasks",
+      "fieldtype": "Check",
+      "label": "Live Sync Tasks & To-Dos",
+      "default": 1
+    },
+    {
+      "fieldname": "auto_sync_comments",
+      "fieldtype": "Check",
+      "label": "Live Sync Form Timeline Comments",
+      "default": 1
+    },
+    {
+      "fieldname": "auto_sync_attachments",
+      "fieldtype": "Check",
+      "label": "Live Sync File Attachments",
+      "default": 1
+    },
+    {
+      "fieldname": "auto_sync_context_links",
+      "fieldtype": "Check",
+      "label": "Live Sync External Context Links",
+      "default": 1
+    },
+    {
+      "fieldname": "auto_sync_milestones",
+      "fieldtype": "Check",
+      "label": "Live Sync Milestones & ETAs",
+      "default": 1
+    },
+    {
+      "fieldname": "cb_metrics",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "last_sync_timestamp",
+      "fieldtype": "Datetime",
+      "label": "Last Successful Sync",
+      "read_only": 1
+    },
+    {
+      "fieldname": "sync_error_log",
+      "fieldtype": "Small Text",
+      "label": "Recent Sync Errors",
+      "read_only": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Sync Agent",
+      "read": 1,
+      "write": 1
+    }
+  ]
+}

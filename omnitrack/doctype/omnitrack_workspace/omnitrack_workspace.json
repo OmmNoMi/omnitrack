@@ -1,0 +1,96 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Workspace",
+  "module": "OmniTrack",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "workspace_name",
+      "fieldtype": "Data",
+      "label": "Workspace Name",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "subdomain",
+      "fieldtype": "Data",
+      "label": "Subdomain Slug (e.g. clientdomain)",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "linked_customer",
+      "fieldtype": "Link",
+      "options": "Customer",
+      "label": "Linked Customer",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_branding",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "workspace_logo",
+      "fieldtype": "Attach Image",
+      "label": "Client Logo"
+    },
+    {
+      "fieldname": "brand_accent_color",
+      "fieldtype": "Color",
+      "label": "Brand Accent Color",
+      "default": "#4285F4"
+    },
+    {
+      "fieldname": "custom_support_url",
+      "fieldtype": "Data",
+      "label": "Custom Support Link"
+    },
+    {
+      "fieldname": "sb_features",
+      "fieldtype": "Section Break",
+      "label": "Tenant Feature Whitelist"
+    },
+    {
+      "fieldname": "allow_internal_tasks",
+      "fieldtype": "Check",
+      "label": "Allow Client Internal Tasks Mode",
+      "default": 1
+    },
+    {
+      "fieldname": "allow_internal_timesheets",
+      "fieldtype": "Check",
+      "label": "Allow Client Internal Timesheets",
+      "default": 0
+    },
+    {
+      "fieldname": "allow_file_uploads",
+      "fieldtype": "Check",
+      "label": "Allow Client File Attachments",
+      "default": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Client",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

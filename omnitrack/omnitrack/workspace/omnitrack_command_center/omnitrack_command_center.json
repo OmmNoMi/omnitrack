@@ -1,0 +1,65 @@
+{
+  "app": "omnitrack",
+  "doctype": "Workspace",
+  "name": "OmniTrack Command Center",
+  "label": "OmniTrack Command Center",
+  "title": "OmniTrack Command Center",
+  "icon": "shield",
+  "indicator_color": "blue",
+  "module": "OmniTrack",
+  "public": 1,
+  "is_hidden": 0,
+  "roles": [],
+  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"OmniTrack Command Center\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"OmniTrack Settings\", \"label\": \"OmniTrack Settings\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Settings\", \"color\": \"Blue\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Remote Connections\", \"label\": \"Remote Connections\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Remote Connection\", \"color\": \"Purple\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Client Workspaces\", \"label\": \"Client Workspaces\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Workspace\", \"color\": \"Yellow\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Administration\", \"label\": \"Administration\", \"links\": [{\"label\": \"OmniTrack Settings\", \"type\": \"Link\", \"link_to\": \"OmniTrack Settings\", \"link_type\": \"doctype\"}, {\"label\": \"Remote Connections\", \"type\": \"Link\", \"link_to\": \"OmniTrack Remote Connection\", \"link_type\": \"doctype\"}, {\"label\": \"Push Subscriptions\", \"type\": \"Link\", \"link_to\": \"OmniTrack Push Subscription\", \"link_type\": \"doctype\"}]}}]",
+  "shortcuts": [
+    {
+      "label": "OmniTrack Settings",
+      "link_to": "OmniTrack Settings",
+      "type": "DocType",
+      "color": "Blue"
+    },
+    {
+      "label": "Remote Connections",
+      "link_to": "OmniTrack Remote Connection",
+      "type": "DocType",
+      "color": "Purple"
+    },
+    {
+      "label": "Client Workspaces",
+      "link_to": "OmniTrack Workspace",
+      "type": "DocType",
+      "color": "Yellow"
+    }
+  ],
+  "links": [
+    {
+      "label": "Administration",
+      "type": "Card",
+      "links": [
+        {
+          "label": "OmniTrack Settings",
+          "type": "Link",
+          "link_to": "OmniTrack Settings",
+          "link_type": "doctype"
+        },
+        {
+          "label": "Remote Connections",
+          "type": "Link",
+          "link_to": "OmniTrack Remote Connection",
+          "link_type": "doctype"
+        },
+        {
+          "label": "Push Subscriptions",
+          "type": "Link",
+          "link_to": "OmniTrack Push Subscription",
+          "link_type": "doctype"
+        }
+      ]
+    }
+  ],
+  "charts": [],
+  "number_cards": [],
+  "quick_lists": [],
+  "custom_blocks": [],
+  "type": "Workspace"
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="b2Bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="50%" stop-color="#00A8CC"/>
+      <stop offset="100%" stop-color="#005B7F"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#b2Bg)"/>
+
+  <!-- Left Orbit Ring (Shift 1) -->
+  <circle cx="26" cy="32" r="14" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.9"/>
+  
+  <!-- Right Orbit Ring (Shift 2) -->
+  <circle cx="38" cy="32" r="14" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.9"/>
+
+  <!-- Intersecting Central Core Lens -->
+  <path d="M 32 20.5 C 36 24 36 40 32 43.5 C 28 40 28 24 32 20.5 Z" fill="#FFFFFF"/>
+  <circle cx="32" cy="32" r="2" fill="#005B7F"/>
+
+  <!-- Orbital Node Satellites -->
+  <circle cx="12" cy="32" r="2.2" fill="#FFFFFF"/>
+  <circle cx="52" cy="32" r="2.2" fill="#FFFFFF"/>
+  <circle cx="26" cy="18" r="1.8" fill="#FFFFFF" opacity="0.7"/>
+  <circle cx="38" cy="46" r="1.8" fill="#FFFFFF" opacity="0.7"/>
+</svg>

@@ -1,0 +1,46 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Project Policy",
+  "module": "OmniTrack",
+  "istable": 1,
+  "editable_grid": 1,
+  "fields": [
+    {
+      "fieldname": "project",
+      "fieldtype": "Link",
+      "options": "Project",
+      "label": "Target Project",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "timesheet_generation_mode",
+      "fieldtype": "Select",
+      "options": "Inherit Global\nOff\nManual On-Demand\nAuto Draft\nAuto Sync Draft",
+      "default": "Inherit Global",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "timesheet_frequency",
+      "fieldtype": "Select",
+      "options": "Inherit Global\nTimelog (Per Work Block)\nDaily Consolidated\nWeekly Consolidated\nBi-Weekly Consolidated\nMonthly Consolidated",
+      "default": "Inherit Global",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "timesheet_aggregation",
+      "fieldtype": "Select",
+      "options": "Inherit Global\nIndividual User\nConsolidated Project",
+      "default": "Inherit Global",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "custom_variance_threshold",
+      "fieldtype": "Float",
+      "label": "Project Variance Alert Threshold (Hours)",
+      "default": 1.0,
+      "in_list_view": 1
+    }
+  ],
+  "permissions": []
+}

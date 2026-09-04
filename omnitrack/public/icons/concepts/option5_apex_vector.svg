@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="opt5Grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F2FE"/>
+      <stop offset="60%" stop-color="#00A8CC"/>
+      <stop offset="100%" stop-color="#004D66"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#opt5Grad)"/>
+  <!-- Dual Orbit Rings -->
+  <ellipse cx="32" cy="34" rx="20" ry="9" fill="none" stroke="rgba(255, 255, 255, 0.3)" stroke-width="2" transform="rotate(-20 32 34)"/>
+  <!-- Apex Chevron (Top) -->
+  <path d="M 32 12 L 46 26 L 40 28 L 32 20 L 24 28 L 18 26 Z" fill="#FFFFFF"/>
+  <!-- Secondary Chevron (Base) -->
+  <path d="M 32 25 L 44 37 L 39 39 L 32 32 L 25 39 L 20 37 Z" fill="rgba(255, 255, 255, 0.75)"/>
+  <!-- Dynamic Core Node -->
+  <circle cx="32" cy="44" r="3.5" fill="#FFFFFF"/>
+  <circle cx="32" cy="44" r="1.6" fill="#00F2FE"/>
+</svg>

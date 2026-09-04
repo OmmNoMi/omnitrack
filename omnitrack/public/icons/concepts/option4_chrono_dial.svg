@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="opt4Grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="40%" stop-color="#00B4DB"/>
+      <stop offset="100%" stop-color="#005C8A"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#opt4Grad)"/>
+  <!-- Chrono Outer Ring -->
+  <circle cx="32" cy="32" r="21" fill="none" stroke="rgba(255, 255, 255, 0.25)" stroke-width="1.5"/>
+  <!-- Segment 1: Morning Block (09:00 - 13:00) -->
+  <path d="M 32 14 A 18 18 0 0 1 50 32" fill="none" stroke="#FFFFFF" stroke-width="4.2" stroke-linecap="round"/>
+  <!-- Segment 2: Evening Block (17:00 - 21:00) -->
+  <path d="M 32 50 A 18 18 0 0 1 14 32" fill="none" stroke="#FFFFFF" stroke-width="4.2" stroke-linecap="round"/>
+  <!-- Dial Center Boss -->
+  <circle cx="32" cy="32" r="7" fill="#FFFFFF"/>
+  <circle cx="32" cy="32" r="3.5" fill="#005C8A"/>
+  <!-- Tracking Arrow Hand -->
+  <path d="M 32 32 L 32 18" stroke="#00E5FF" stroke-width="2.5" stroke-linecap="round"/>
+  <polygon points="32,15 29.5,20 34.5,20" fill="#00E5FF"/>
+  <!-- Hour Markers -->
+  <circle cx="32" cy="14" r="1.6" fill="#00E5FF"/>
+  <circle cx="50" cy="32" r="1.6" fill="#00E5FF"/>
+  <circle cx="32" cy="50" r="1.6" fill="#00E5FF"/>
+  <circle cx="14" cy="32" r="1.6" fill="#00E5FF"/>
+</svg>

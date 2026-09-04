@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="b3Bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F2FE"/>
+      <stop offset="45%" stop-color="#00B4DB"/>
+      <stop offset="100%" stop-color="#006080"/>
+    </linearGradient>
+    <linearGradient id="b3BarGrad" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E0F7FA"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#b3Bg)"/>
+
+  <!-- Slanted Velocity Bars (15deg forward slant) -->
+  <!-- Bar 1 (Left / Short - Morning Interval) -->
+  <rect x="17" y="24" width="6" height="18" rx="3" fill="url(#b3BarGrad)" transform="skewX(-15)"/>
+  
+  <!-- Bar 2 (Middle / Tall - Peak Velocity / Main Shift) -->
+  <rect x="29" y="15" width="6" height="34" rx="3" fill="#FFFFFF" transform="skewX(-15)"/>
+  
+  <!-- Bar 3 (Right / Medium - Evening Interval) -->
+  <rect x="41" y="21" width="6" height="24" rx="3" fill="url(#b3BarGrad)" transform="skewX(-15)"/>
+
+  <!-- Dynamic Connecting Sync Line -->
+  <line x1="12" y1="36" x2="52" y2="28" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+  
+  <!-- Center Sync Pulse Dot -->
+  <circle cx="34" cy="31.5" r="2.5" fill="#006080"/>
+</svg>

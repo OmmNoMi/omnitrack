@@ -1,0 +1,66 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack User Entitlement",
+  "module": "OmniTrack",
+  "istable": 1,
+  "editable_grid": 1,
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "Target User",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Link",
+      "options": "Role",
+      "label": "Target Role",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_timesheet_tracking",
+      "fieldtype": "Check",
+      "label": "Allow Timesheet Tracking",
+      "default": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_todo_creation",
+      "fieldtype": "Check",
+      "label": "Allow To-Do Creation",
+      "default": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_split_shift_planning",
+      "fieldtype": "Check",
+      "label": "Allow Split Shift Planning",
+      "default": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_manager_overrides",
+      "fieldtype": "Check",
+      "label": "Allow Manager Overrides",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "allow_client_workspace_access",
+      "fieldtype": "Check",
+      "label": "Client Workspace Access",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "receive_push_notifications",
+      "fieldtype": "Check",
+      "label": "Receive Push Notifications",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "permissions": []
+}

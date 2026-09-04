@@ -1,0 +1,68 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Push Subscription",
+  "module": "OmniTrack",
+  "track_changes": 0,
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "Subscribed User",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "endpoint",
+      "fieldtype": "Small Text",
+      "label": "Push Service Endpoint",
+      "reqd": 1
+    },
+    {
+      "fieldname": "p256dh_key",
+      "fieldtype": "Small Text",
+      "label": "p256dh Public Key"
+    },
+    {
+      "fieldname": "auth_key",
+      "fieldtype": "Small Text",
+      "label": "Auth Secret"
+    },
+    {
+      "fieldname": "device_type",
+      "fieldtype": "Data",
+      "label": "Device / Browser Type",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "is_active",
+      "fieldtype": "Check",
+      "label": "Active Subscription",
+      "default": 1,
+      "in_list_view": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Context Link",
+  "module": "OmniTrack",
+  "istable": 1,
+  "editable_grid": 1,
+  "fields": [
+    {
+      "fieldname": "link_title",
+      "fieldtype": "Data",
+      "label": "Link Title",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "link_type",
+      "fieldtype": "Select",
+      "options": "Google Drive\nFigma\nGitHub PR/Issue\nLoom\nJira\nWeb URL\nOther",
+      "default": "Web URL",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "url",
+      "fieldtype": "Data",
+      "label": "Target URL",
+      "reqd": 1,
+      "in_list_view": 1
+    }
+  ],
+  "permissions": []
+}

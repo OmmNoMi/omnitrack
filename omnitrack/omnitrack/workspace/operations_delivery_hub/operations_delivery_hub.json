@@ -1,0 +1,53 @@
+{
+  "app": "omnitrack",
+  "doctype": "Workspace",
+  "name": "Operations & Delivery Hub",
+  "label": "Operations & Delivery Hub",
+  "title": "Operations & Delivery Hub",
+  "icon": "briefcase",
+  "indicator_color": "green",
+  "module": "OmniTrack",
+  "public": 1,
+  "is_hidden": 0,
+  "roles": [],
+  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"Operations & Delivery Hub\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Planned Work Blocks\", \"label\": \"Planned Work Blocks\", \"type\": \"DocType\", \"link_to\": \"Planned Work Block\", \"color\": \"Green\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"To-Dos\", \"label\": \"To-Dos\", \"type\": \"DocType\", \"link_to\": \"ToDo\", \"color\": \"Blue\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Operations\", \"label\": \"Operations\", \"links\": [{\"label\": \"Planned Work Blocks\", \"type\": \"Link\", \"link_to\": \"Planned Work Block\", \"link_type\": \"doctype\"}, {\"label\": \"To-Dos\", \"type\": \"Link\", \"link_to\": \"ToDo\", \"link_type\": \"doctype\"}]}}]",
+  "shortcuts": [
+    {
+      "label": "Planned Work Blocks",
+      "link_to": "Planned Work Block",
+      "type": "DocType",
+      "color": "Green"
+    },
+    {
+      "label": "To-Dos",
+      "link_to": "ToDo",
+      "type": "DocType",
+      "color": "Blue"
+    }
+  ],
+  "links": [
+    {
+      "label": "Operations",
+      "type": "Card",
+      "links": [
+        {
+          "label": "Planned Work Blocks",
+          "type": "Link",
+          "link_to": "Planned Work Block",
+          "link_type": "doctype"
+        },
+        {
+          "label": "To-Dos",
+          "type": "Link",
+          "link_to": "ToDo",
+          "link_type": "doctype"
+        }
+      ]
+    }
+  ],
+  "charts": [],
+  "number_cards": [],
+  "quick_lists": [],
+  "custom_blocks": [],
+  "type": "Workspace"
+}

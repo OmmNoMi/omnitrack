@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="omniCyanGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="50%" stop-color="#00B4DB"/>
+      <stop offset="100%" stop-color="#0083B0"/>
+    </linearGradient>
+    <linearGradient id="omniAccentGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E0F7FA"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Base Squircle (Frappe CardView Standard) -->
+  <rect width="64" height="64" rx="14" fill="url(#omniCyanGrad)"/>
+  
+  <!-- Outer Circular Track Arc -->
+  <circle cx="32" cy="32" r="20" fill="none" stroke="rgba(255, 255, 255, 0.25)" stroke-width="2" stroke-dasharray="3 2"/>
+  
+  <!-- Discontinuous Split Shift Arcs -->
+  <!-- Morning Shift Arc (Top-Right) -->
+  <path d="M 32 12 A 20 20 0 0 1 52 32" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <!-- Afternoon / Night Shift Arc (Bottom-Left) -->
+  <path d="M 32 52 A 20 20 0 0 1 12 32" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <!-- Center Synchronizer Core (Omni Compass) -->
+  <circle cx="32" cy="32" r="9" fill="url(#omniAccentGrad)"/>
+  
+  <!-- Inner Dynamic Split Pivot / Sync Dot -->
+  <circle cx="32" cy="32" r="4" fill="#0083B0"/>
+  <circle cx="32" cy="32" r="1.8" fill="#00E5FF"/>
+  
+  <!-- Active Node Orbit Points -->
+  <circle cx="32" cy="12" r="2.2" fill="#FFFFFF"/>
+  <circle cx="52" cy="32" r="2.2" fill="#FFFFFF"/>
+  <circle cx="32" cy="52" r="2.2" fill="#FFFFFF"/>
+  <circle cx="12" cy="32" r="2.2" fill="#FFFFFF"/>
+</svg>

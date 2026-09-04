@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="opt3Grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="50%" stop-color="#0288D1"/>
+      <stop offset="100%" stop-color="#4A148C"/>
+    </linearGradient>
+    <linearGradient id="opt3Ribbon" x1="12" y1="18" x2="52" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E1F5FE"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#opt3Grad)"/>
+  <!-- Infinity Sync Track -->
+  <path d="M 22 24 C 28 24 36 40 42 40 C 47 40 50 36.5 50 32 C 50 27.5 47 24 42 24 C 36 24 28 40 22 40 C 17 40 14 36.5 14 32 C 14 27.5 17 24 22 24 Z" 
+        fill="none" stroke="url(#opt3Ribbon)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Central Intersection Node -->
+  <circle cx="32" cy="32" r="3.8" fill="#FFFFFF"/>
+  <circle cx="32" cy="32" r="2" fill="#00E5FF"/>
+  <!-- Left Loop Node (Local Site) -->
+  <circle cx="21" cy="32" r="2" fill="#FFFFFF"/>
+  <!-- Right Loop Node (Remote Site) -->
+  <circle cx="43" cy="32" r="2" fill="#FFFFFF"/>
+</svg>

@@ -1,0 +1,53 @@
+{
+  "app": "omnitrack",
+  "doctype": "Workspace",
+  "name": "My Workstation",
+  "label": "My Workstation",
+  "title": "My Workstation",
+  "icon": "user",
+  "indicator_color": "purple",
+  "module": "OmniTrack",
+  "public": 1,
+  "is_hidden": 0,
+  "roles": [],
+  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"My Workstation\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My Planned Blocks\", \"label\": \"My Planned Blocks\", \"type\": \"DocType\", \"link_to\": \"Planned Work Block\", \"color\": \"Purple\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"My To-Dos\", \"label\": \"My To-Dos\", \"type\": \"DocType\", \"link_to\": \"ToDo\", \"color\": \"Blue\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"My Desk\", \"label\": \"My Desk\", \"links\": [{\"label\": \"My Planned Blocks\", \"type\": \"Link\", \"link_to\": \"Planned Work Block\", \"link_type\": \"doctype\"}, {\"label\": \"My To-Dos\", \"type\": \"Link\", \"link_to\": \"ToDo\", \"link_type\": \"doctype\"}]}}]",
+  "shortcuts": [
+    {
+      "label": "My Planned Blocks",
+      "link_to": "Planned Work Block",
+      "type": "DocType",
+      "color": "Purple"
+    },
+    {
+      "label": "My To-Dos",
+      "link_to": "ToDo",
+      "type": "DocType",
+      "color": "Blue"
+    }
+  ],
+  "links": [
+    {
+      "label": "My Desk",
+      "type": "Card",
+      "links": [
+        {
+          "label": "My Planned Blocks",
+          "type": "Link",
+          "link_to": "Planned Work Block",
+          "link_type": "doctype"
+        },
+        {
+          "label": "My To-Dos",
+          "type": "Link",
+          "link_to": "ToDo",
+          "link_type": "doctype"
+        }
+      ]
+    }
+  ],
+  "charts": [],
+  "number_cards": [],
+  "quick_lists": [],
+  "custom_blocks": [],
+  "type": "Workspace"
+}

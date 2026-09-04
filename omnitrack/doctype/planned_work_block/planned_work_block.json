@@ -1,0 +1,161 @@
+{
+  "doctype": "DocType",
+  "name": "Planned Work Block",
+  "module": "OmniTrack",
+  "track_changes": 1,
+  "autoname": "PWB-.YYYY.-.#####",
+  "naming_rule": "Expression (old style)",
+  "fields": [
+    {
+      "fieldname": "employee",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "Team Member / User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "work_date",
+      "fieldtype": "Date",
+      "label": "Work Date",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "default": "Today"
+    },
+    {
+      "fieldname": "location",
+      "fieldtype": "Select",
+      "options": "Office\nRemote\nHybrid",
+      "label": "Work Location",
+      "default": "Office",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_timing",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "start_time",
+      "fieldtype": "Time",
+      "label": "Start Time",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "end_time",
+      "fieldtype": "Time",
+      "label": "End Time",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "duration_hours",
+      "fieldtype": "Float",
+      "label": "Duration (Hours)",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sb_task_details",
+      "fieldtype": "Section Break",
+      "label": "Task & Project Association"
+    },
+    {
+      "fieldname": "task_nature",
+      "fieldtype": "Select",
+      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office",
+      "label": "Task Nature",
+      "default": "\ud83c\udfaf Planned",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "unplanned_reason",
+      "fieldtype": "Data",
+      "label": "Unplanned Reason / Incident Note",
+      "depends_on": "eval:doc.task_nature=='\u26a0\ufe0f Unplanned'"
+    },
+    {
+      "fieldname": "project",
+      "fieldtype": "Link",
+      "options": "Project",
+      "label": "Project",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "task",
+      "fieldtype": "Link",
+      "options": "Task",
+      "label": "Associated Task",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "Draft\nIn Progress\nCompleted\nCancelled",
+      "label": "Status",
+      "default": "Draft",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_sync_ts",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "timesheet",
+      "fieldtype": "Link",
+      "options": "Timesheet",
+      "label": "Linked Timesheet",
+      "read_only": 1
+    },
+    {
+      "fieldname": "cryptographic_hash",
+      "fieldtype": "Data",
+      "label": "Check-In Hash",
+      "read_only": 1
+    },
+    {
+      "fieldname": "deliverable_notes",
+      "fieldtype": "Small Text",
+      "label": "Deliverable & Handoff Notes"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack Auditor",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

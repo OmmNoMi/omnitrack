@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <linearGradient id="opt6Grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF"/>
+      <stop offset="50%" stop-color="#00B4DB"/>
+      <stop offset="100%" stop-color="#007991"/>
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect width="64" height="64" rx="14" fill="url(#opt6Grad)"/>
+  <!-- Orbit Track -->
+  <circle cx="32" cy="32" r="20" fill="none" stroke="rgba(255, 255, 255, 0.3)" stroke-width="2" stroke-dasharray="2 3"/>
+  <!-- Split Shift White Arcs -->
+  <path d="M 32 12 A 20 20 0 0 1 52 32" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M 32 52 A 20 20 0 0 1 12 32" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round"/>
+  <!-- Center Core -->
+  <circle cx="32" cy="32" r="8.5" fill="#FFFFFF"/>
+  <circle cx="32" cy="32" r="4.2" fill="#007991"/>
+  <circle cx="32" cy="32" r="1.8" fill="#00E5FF"/>
+  <!-- OmmNoMi 4 Brand Quadrant Nodes -->
+  <!-- Top (North / Blue) -->
+  <circle cx="32" cy="12" r="3" fill="#FFFFFF"/>
+  <circle cx="32" cy="12" r="2" fill="#4285F4"/>
+  <!-- Right (East / Green) -->
+  <circle cx="52" cy="32" r="3" fill="#FFFFFF"/>
+  <circle cx="52" cy="32" r="2" fill="#34A853"/>
+  <!-- Bottom (South / Red) -->
+  <circle cx="32" cy="52" r="3" fill="#FFFFFF"/>
+  <circle cx="32" cy="52" r="2" fill="#EA4335"/>
+  <!-- Left (West / Yellow) -->
+  <circle cx="12" cy="32" r="3" fill="#FFFFFF"/>
+  <circle cx="12" cy="32" r="2" fill="#FBBC05"/>
+</svg>
