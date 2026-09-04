@@ -1,0 +1,49 @@
+name: 🐛 Bug Report
+description: File a bug or issue in OmniTrack
+title: "[BUG]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug in **OmniTrack**!
+  - type: input
+    id: version
+    attributes:
+      label: OmniTrack & Frappe Version
+      description: What version of OmniTrack and Frappe Framework are you using?
+      placeholder: "e.g. OmniTrack v1.0.1, Frappe v16.0.0-dev / v15.x"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Go to 'Planned Work Block'
+        2. Click on 'New'
+        3. Set Start Time and End Time across split-shift
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs & Tracebacks
+      description: Please copy and paste any relevant browser console or bench server traceback logs.
+      render: shell

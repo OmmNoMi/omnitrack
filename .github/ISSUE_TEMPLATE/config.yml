@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Frappe Community Forum
+    url: https://discuss.frappe.io
+    about: Ask questions and discuss OmniTrack on the official Frappe forum.
+  - name: 🏢 OmmNoMi Support & Enterprise Inquiries
+    url: https://ommnomi.in
+    about: Enterprise multi-site deployment and integration assistance.
