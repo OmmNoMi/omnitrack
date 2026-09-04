@@ -18,8 +18,8 @@ self.addEventListener('push', function(event) {
 	}
 	const options = {
 		body: data.message,
-		icon: '/assets/omnitrack/images/omnitrack-icon.png',
-		badge: '/assets/omnitrack/images/omnitrack-badge.png',
+		icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+		badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
 		data: { url: data.url || '/' },
 		actions: [
 			{ action: 'view', title: 'View Task' },

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ title }} | OmmNoMi</title>
+  
+  <!-- PWA Manifest & Meta Tags -->
+  <link rel="manifest" href="/assets/omnitrack/manifest.json">
+  <meta name="theme-color" content="#00B4DB">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OmniTrack">
+  <link rel="apple-touch-icon" href="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg">
+  <link rel="icon" type="image/svg+xml" href="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg">
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --omm-cyan: #00E5FF;
+      --omm-blue: #00B4DB;
+      --omm-dark: #006680;
+      --bg-main: #0B1120;
+      --bg-card: #131D31;
+      --bg-card-hover: #1A2742;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --badge-green: #34A853;
+      --badge-yellow: #FBBC05;
+      --badge-red: #EA4335;
+      --badge-purple: #673AB7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 30px;
+    }
+
+    /* Top Navbar */
+    .pwa-navbar {
+      background: rgba(19, 29, 49, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+    }
+
+    .brand-text {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: -0.3px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-install {
+      background: linear-gradient(135deg, #00E5FF, #00B4DB);
+      color: #0B1120;
+      border: none;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 7px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-install:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(0, 229, 255, 0.4);
+    }
+
+    .btn-desk {
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+      background: transparent;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-desk:hover {
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      width: 100%;
+      flex: 1;
+    }
+
+    .hero-card {
+      background: linear-gradient(135deg, #131D31 0%, #1A2742 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .hero-greeting {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .hero-subtext {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .shift-metrics {
+      display: flex;
+      gap: 20px;
+    }
+
+    .metric-pill {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-color);
+      padding: 10px 18px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--omm-cyan);
+      font-family: 'Roboto Mono', monospace;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* Section Title */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    /* Blocks List */
+    .block-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+
+    .block-card:hover {
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+
+    .block-time {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .block-duration {
+      font-size: 13px;
+      color: var(--omm-cyan);
+      margin-top: 2px;
+    }
+
+    .block-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .badge-planned {
+      background: rgba(52, 168, 83, 0.15);
+      color: #34A853;
+      border: 1px solid rgba(52, 168, 83, 0.3);
+    }
+
+    .badge-in-progress {
+      background: rgba(0, 229, 255, 0.15);
+      color: #00E5FF;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+    }
+
+    .hash-tag {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px dashed var(--border-color);
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PWA Navigation Bar -->
+  <nav class="pwa-navbar">
+    <a href="/omnitrack" class="brand-lockup">
+      <img src="{{ app_logo_url }}" alt="OmniTrack" class="brand-logo">
+      <span class="brand-text">OmniTrack</span>
+    </a>
+    <div class="nav-actions">
+      <button id="pwa-install-btn" class="btn-install">
+        <span>📲 Install App</span>
+      </button>
+      <a href="/desk/omnitrack" class="btn-desk">Desk &rarr;</a>
+    </div>
+  </nav>
+
+  <!-- Content Container -->
+  <div class="container">
+    
+    <!-- Hero Summary Card -->
+    <div class="hero-card">
+      <div>
+        <div class="hero-greeting">Welcome back, {{ user_fullname }}</div>
+        <div class="hero-subtext">📅 {{ today_date }} • Discontinuous Split-Shift Workstation</div>
+      </div>
+      <div class="shift-metrics">
+        <div class="metric-pill">
+          <div class="metric-value">{{ today_blocks | length }}</div>
+          <div class="metric-label">Planned Blocks</div>
+        </div>
+        <div class="metric-pill">
+          <div class="metric-value">{{ total_planned_hours }}h</div>
+          <div class="metric-label">Target Hours</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Split Shift Schedule -->
+    <div class="section-header">
+      <div class="section-title">Today's Shift Blocks</div>
+      <a href="/desk/planned-work-block/new" class="btn-desk" style="padding: 4px 10px; font-size: 12px;">+ Add Block</a>
+    </div>
+
+    {% if today_blocks and today_blocks|length > 0 %}
+      {% for block in today_blocks %}
+        <div class="block-card">
+          <div>
+            <div class="block-time">{{ block.start_time }} &mdash; {{ block.end_time }}</div>
+            <div class="block-duration">⏱️ {{ block.duration_hours }} Hours {% if block.project %}• 📁 {{ block.project }}{% endif %}</div>
+          </div>
+          <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+            <span class="block-badge badge-planned">{{ block.status }}</span>
+            {% if block.checkin_hash %}
+              <span class="hash-tag">{{ block.checkin_hash }}</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <p>No Planned Work Blocks found for today.</p>
+        <p style="margin-top: 6px; font-size: 13px;">Create a split-shift interval in Desk to get started!</p>
+      </div>
+    {% endif %}
+
+    <footer>
+      Mahunag · Karsog · Mandi, HP, India · <strong>OmmNoMi Automation LLP</strong>
+    </footer>
+  </div>
+
+  <!-- PWA Service Worker & Install Script -->
+  <script>
+    // Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/assets/omnitrack/sw.js', { scope: '/omnitrack' })
+          .then(reg => console.log('OmniTrack PWA Service Worker registered:', reg.scope))
+          .catch(err => console.log('Service Worker registration failed:', err));
+      });
+    }
+
+    // PWA Install Prompt Handling
+    let deferredPrompt;
+    const installBtn = document.getElementById('pwa-install-btn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (installBtn) {
+        installBtn.style.display = 'inline-flex';
+      }
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`PWA install prompt outcome: ${outcome}`);
+        deferredPrompt = null;
+        installBtn.style.display = 'none';
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      console.log('OmniTrack PWA installed successfully!');
+      if (installBtn) installBtn.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
