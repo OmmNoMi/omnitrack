@@ -10,6 +10,7 @@ COMPANY_BEFORE = "Nomeshwar Sharma"
 COMPANY_AFTER = "OmmNoMi Automation LLP"
 
 
+@frappe.whitelist()
 def verify_migration_prerequisites():
 	"""Verify all DocTypes, custom fields, and companies required for historical migration."""
 	results = {"status": "success", "checks": [], "errors": []}
@@ -370,6 +371,7 @@ def import_timelogs(timelog_csv_path, project_map, task_map, dry_run=False, batc
 	return stats
 
 
+@frappe.whitelist()
 def run_full_migration(data_directory, dry_run=False):
 	"""Execute end-to-end historical migration from AppSheet CSV exports directory."""
 	start_time = datetime.now()
@@ -484,6 +486,7 @@ def find_uploaded_migration_files():
 	return found_paths
 
 
+@frappe.whitelist()
 def run_migration_from_site_files(dry_run=False):
 	"""Execute migration using CSV files uploaded via Frappe Desk File Manager (/app/file)."""
 	start_time = datetime.now()
