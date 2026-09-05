@@ -32,21 +32,34 @@ def synthesize_employee_attendance(employee, attendance_date=None):
 	next_date = str(getdate(attendance_date) + timedelta(days=1))
 	end_window = f"{next_date} {cutoff_str}"
 
-	if not frappe.db.exists("DocType", "Employee Checkin"):
-		return {"status": "skipped", "message": "Employee Checkin DocType not found"}
-
 	# Fetch raw checkins in window
-	checkins = frappe.get_all(
-		"Employee Checkin",
-		filters={
-			"employee": employee,
-			"time": ["between", [start_window, end_window]]
-		},
-		fields=["name", "log_type", "time", "device_id"],
-		order_by="time asc"
-	)
+	checkins = []
+	if frappe.db.exists("DocType", "Employee Checkin"):
+		checkins = frappe.get_all(
+			"Employee Checkin",
+			filters={
+				"employee": employee,
+				"time": ["between", [start_window, end_window]]
+			},
+			fields=["name", "log_type", "time", "device_id"],
+			order_by="time asc"
+		)
 
-	if not checkins:
+	# If no Employee Checkin found, check Planned Work Block
+	work_blocks = []
+	if not checkins and frappe.db.exists("DocType", "Planned Work Block"):
+		user_id = frappe.db.get_value("Employee", employee, "user_id") or employee
+		work_blocks = frappe.get_all(
+			"Planned Work Block",
+			filters={
+				"employee": ["in", [employee, user_id]],
+				"work_date": ["between", [attendance_date, next_date]]
+			},
+			fields=["name", "work_date", "start_time", "end_time", "duration_hours", "status"],
+			order_by="work_date asc, start_time asc"
+		)
+
+	if not checkins and not work_blocks:
 		return {
 			"status": "no_punches",
 			"employee": employee,
@@ -78,21 +91,61 @@ def synthesize_employee_attendance(employee, attendance_date=None):
 	current_in = None
 	raw_uids = []
 
-	for chk in checkins:
-		raw_uids.append(chk.name)
-		ltype = (chk.log_type or "IN").upper()
-		chk_time = chk.time if isinstance(chk.time, datetime) else datetime.strptime(str(chk.time)[:19], "%Y-%m-%d %H:%M:%S")
+	if checkins:
+		for chk in checkins:
+			raw_uids.append(chk.name)
+			ltype = (chk.log_type or "IN").upper()
+			chk_time = chk.time if isinstance(chk.time, datetime) else datetime.strptime(str(chk.time)[:19], "%Y-%m-%d %H:%M:%S")
 
-		if ltype == "IN":
-			if current_in is None:
-				current_in = chk_time
-		elif ltype == "OUT":
-			if current_in:
-				duration = (chk_time - current_in).total_seconds()
-				if duration > 0:
-					total_working_seconds += duration
-					pairs.append((current_in, chk_time))
-				current_in = None
+			if ltype == "IN":
+				if current_in is None:
+					current_in = chk_time
+			elif ltype == "OUT":
+				if current_in:
+					duration = (chk_time - current_in).total_seconds()
+					if duration > 0:
+						total_working_seconds += duration
+						pairs.append((current_in, chk_time))
+					current_in = None
+	elif work_blocks:
+		for wb in work_blocks:
+			raw_uids.append(wb.name)
+			w_date = str(wb.work_date)
+			
+			def _fmt_t(t_val):
+				if isinstance(t_val, timedelta):
+					tot = int(t_val.total_seconds())
+					return f"{tot // 3600:02d}:{(tot % 3600) // 60:02d}:{tot % 60:02d}"
+				ts = str(t_val).strip()
+				pts = ts.split(":")
+				if len(pts) == 2:
+					return f"{int(pts[0]):02d}:{int(pts[1]):02d}:00"
+				elif len(pts) == 3:
+					return f"{int(pts[0]):02d}:{int(pts[1]):02d}:{int(pts[2].split('.')[0]):02d}"
+				return "00:00:00"
+
+			s_time = _fmt_t(wb.start_time)
+			e_time = _fmt_t(wb.end_time)
+			
+			# Parse start and end datetimes
+			dt_start = datetime.strptime(f"{w_date} {s_time}", "%Y-%m-%d %H:%M:%S")
+			
+			# If end time < start time, it spans midnight into next day
+			if e_time < s_time:
+				dt_end_date = str(getdate(w_date) + timedelta(days=1))
+				dt_end = datetime.strptime(f"{dt_end_date} {e_time}", "%Y-%m-%d %H:%M:%S")
+			else:
+				dt_end = datetime.strptime(f"{w_date} {e_time}", "%Y-%m-%d %H:%M:%S")
+			
+			# Filter by window
+			dt_start_win = datetime.strptime(start_window, "%Y-%m-%d %H:%M:%S")
+			dt_end_win = datetime.strptime(end_window, "%Y-%m-%d %H:%M:%S")
+			
+			if dt_start >= dt_start_win and dt_end <= dt_end_win:
+				dur = (dt_end - dt_start).total_seconds()
+				if dur > 0:
+					total_working_seconds += dur
+					pairs.append((dt_start, dt_end))
 
 	total_working_hours = round(total_working_seconds / 3600.0, 2)
 
