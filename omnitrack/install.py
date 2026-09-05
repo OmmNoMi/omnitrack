@@ -29,18 +29,12 @@ CUSTOM_FIELDS = {
 			"label": "Legacy Project Code",
 			"fieldtype": "Data",
 			"insert_after": "custom_appsheet_id"
-		},
-		{
-			"fieldname": "custom_subtitle",
-			"label": "SubTitle",
-			"fieldtype": "Data",
-			"insert_after": "custom_legacy_code"
 		}
 	],
 	"Task": [
 		{
 			"fieldname": "custom_omnitrack_section",
-			"label": "OmniTrack Workforce & Legacy Details",
+			"label": "OmniTrack Workforce Details",
 			"fieldtype": "Section Break",
 			"insert_after": "description"
 		},
@@ -57,18 +51,11 @@ CUSTOM_FIELDS = {
 			"insert_after": "custom_appsheet_id"
 		},
 		{
-			"fieldname": "custom_phase",
-			"label": "OmniTrack Phase",
-			"fieldtype": "Link",
-			"options": "OmniTrack Phase",
-			"insert_after": "custom_activity_code"
-		},
-		{
 			"fieldname": "custom_expected_hours",
 			"label": "Expected Hours",
 			"fieldtype": "Float",
 			"default": 0.0,
-			"insert_after": "custom_phase"
+			"insert_after": "custom_activity_code"
 		},
 		{
 			"fieldname": "custom_actual_hours",
@@ -92,23 +79,11 @@ CUSTOM_FIELDS = {
 			"insert_after": "custom_variance_hours"
 		},
 		{
-			"fieldname": "custom_remarks",
-			"label": "Legacy Remarks",
-			"fieldtype": "Small Text",
-			"insert_after": "custom_col_break_omni"
-		},
-		{
-			"fieldname": "custom_note",
-			"label": "Legacy Note",
-			"fieldtype": "Small Text",
-			"insert_after": "custom_remarks"
-		},
-		{
 			"fieldname": "custom_remote_task_id",
 			"label": "Remote Site Task ID",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"insert_after": "custom_note"
+			"insert_after": "custom_col_break_omni"
 		},
 		{
 			"fieldname": "custom_sync_status",
@@ -206,8 +181,7 @@ def _ensure_workspaces():
 				{"label": "Planned Work Blocks", "type": "DocType", "link_to": "Planned Work Block", "color": "Green"},
 				{"label": "Shift Templates", "type": "DocType", "link_to": "OmniTrack Shift Template", "color": "Purple"},
 				{"label": "Shift Split Assignments", "type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "color": "Yellow"},
-				{"label": "Synthesizer Logs", "type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "color": "Orange"},
-				{"label": "Project Phases", "type": "DocType", "link_to": "OmniTrack Phase", "color": "Grey"}
+				{"label": "Synthesizer Logs", "type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "color": "Orange"}
 			],
 			"cards": [
 				{
@@ -220,9 +194,8 @@ def _ensure_workspaces():
 					]
 				},
 				{
-					"label": "Projects, Phases & Tasks",
+					"label": "Projects & Tasks",
 					"links": [
-						{"label": "OmniTrack Phases", "link_to": "OmniTrack Phase"},
 						{"label": "Projects", "link_to": "Project"},
 						{"label": "Tasks", "link_to": "Task"}
 					]
@@ -330,8 +303,7 @@ def _ensure_workspace_sidebar():
 			{"type": "Link", "label": "Shift Templates", "link_type": "DocType", "link_to": "OmniTrack Shift Template", "icon": "clock", "child": 1},
 			{"type": "Link", "label": "Shift Split Assignments", "link_type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "icon": "users", "child": 1},
 			{"type": "Link", "label": "Attendance Synthesizer Logs", "link_type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "icon": "check-circle", "child": 1},
-			{"type": "Section Break", "label": "Projects & Operations", "link_type": "DocType", "icon": "briefcase", "indent": 1, "collapsible": 1},
-			{"type": "Link", "label": "Project Phases", "link_type": "DocType", "link_to": "OmniTrack Phase", "icon": "layers", "child": 1},
+			{"type": "Section Break", "label": "Administration & Settings", "link_type": "DocType", "icon": "settings", "indent": 1, "collapsible": 1},
 			{"type": "Link", "label": "OmniTrack Settings", "link_type": "DocType", "link_to": "OmniTrack Settings", "icon": "settings", "child": 1},
 			{"type": "Section Break", "label": "Sync & Integrations", "link_type": "DocType", "icon": "repeat", "indent": 1, "collapsible": 1},
 			{"type": "Link", "label": "Task Sync Payloads", "link_type": "DocType", "link_to": "OmniTrack Task Sync", "icon": "repeat", "child": 1},
