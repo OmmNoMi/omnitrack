@@ -192,10 +192,13 @@ def import_tasks(phase_csv_path, activity_csv_path, project_map, dry_run=False):
 					task.custom_appsheet_id = phase_id
 					task.custom_activity_code = code
 					task.description = desc
+					task.is_group = 1
 					task.insert(ignore_permissions=True)
 					phase_map[phase_id] = task.name
 					mapping[phase_id] = task.name
 				elif existing:
+					if not dry_run:
+						frappe.db.set_value("Task", existing, "is_group", 1, update_modified=False)
 					phase_map[phase_id] = existing
 					mapping[phase_id] = existing
 				else:
@@ -225,6 +228,8 @@ def import_tasks(phase_csv_path, activity_csv_path, project_map, dry_run=False):
 				parent_project = None
 				if parent_task:
 					parent_project = frappe.db.get_value("Task", parent_task, "project")
+					if not dry_run:
+						frappe.db.set_value("Task", parent_task, "is_group", 1, update_modified=False)
 
 				existing = frappe.db.get_value("Task", {"custom_appsheet_id": act_id}, "name")
 
@@ -232,10 +237,12 @@ def import_tasks(phase_csv_path, activity_csv_path, project_map, dry_run=False):
 					task = frappe.new_doc("Task")
 					task.subject = title[:140]
 					task.project = parent_project
-					task.parent_task = parent_task
+					if parent_task:
+						task.parent_task = parent_task
 					task.custom_appsheet_id = act_id
 					task.custom_activity_code = code
 					task.description = desc
+					task.is_group = 0
 					task.insert(ignore_permissions=True)
 					mapping[act_id] = task.name
 				elif existing:
