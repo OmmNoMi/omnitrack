@@ -1,3 +1,4 @@
+# Python
 *.pyc
 *.pyo
 *.pyd
@@ -10,3 +11,22 @@ dist/
 build/
 node_modules/
 *.log
+
+# Strict Data & Confidentiality Guardrails (NEVER PUSH TO GIT)
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.jsonl
+*.sql
+*.sqlite
+*.db
+*.dump
+*TimeLog*
+*Empire_NoMi*
+*timelog*
+*confidential*
+private/
+data/
+uploads/
+backups/
