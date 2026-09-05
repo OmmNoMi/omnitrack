@@ -65,16 +65,16 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office",
+      "options": "🎯 Planned\n⚠️ Unplanned\n🚫 Out-of-Office",
       "label": "Task Nature",
-      "default": "\ud83c\udfaf Planned",
+      "default": "🎯 Planned",
       "in_list_view": 1
     },
     {
       "fieldname": "unplanned_reason",
       "fieldtype": "Data",
       "label": "Unplanned Reason / Incident Note",
-      "depends_on": "eval:doc.task_nature=='\u26a0\ufe0f Unplanned'"
+      "depends_on": "eval:doc.task_nature=='⚠️ Unplanned'"
     },
     {
       "fieldname": "project",
@@ -119,6 +119,53 @@
       "fieldname": "deliverable_notes",
       "fieldtype": "Small Text",
       "label": "Deliverable & Handoff Notes"
+    },
+    {
+      "fieldname": "sb_historical_migration",
+      "fieldtype": "Section Break",
+      "label": "Historical AppSheet Migration Mapping"
+    },
+    {
+      "fieldname": "appsheet_id",
+      "fieldtype": "Data",
+      "label": "AppSheet ID (Legacy)",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "legacy_activity_id",
+      "fieldtype": "Data",
+      "label": "Legacy Activity ID"
+    },
+    {
+      "fieldname": "legacy_project_id",
+      "fieldtype": "Data",
+      "label": "Legacy Project ID"
+    },
+    {
+      "fieldname": "cb_legacy_costing",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "associate_name",
+      "fieldtype": "Data",
+      "label": "Associate / Author"
+    },
+    {
+      "fieldname": "billing_status",
+      "fieldtype": "Select",
+      "options": "Unbilled\nPartially Billed\nFully Billed\nNon-Billable\nInternal",
+      "label": "Billing Status",
+      "default": "Unbilled"
+    },
+    {
+      "fieldname": "costing_amount",
+      "fieldtype": "Currency",
+      "label": "Costing Amount"
+    },
+    {
+      "fieldname": "billing_amount",
+      "fieldtype": "Currency",
+      "label": "Billing Amount"
     }
   ],
   "permissions": [

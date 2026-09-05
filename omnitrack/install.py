@@ -16,19 +16,59 @@ ROLES = [
 ]
 
 CUSTOM_FIELDS = {
+	"Project": [
+		{
+			"fieldname": "custom_appsheet_id",
+			"label": "Legacy AppSheet ID",
+			"fieldtype": "Data",
+			"insert_after": "project_name",
+			"read_only": 0
+		},
+		{
+			"fieldname": "custom_legacy_code",
+			"label": "Legacy Project Code",
+			"fieldtype": "Data",
+			"insert_after": "custom_appsheet_id"
+		},
+		{
+			"fieldname": "custom_subtitle",
+			"label": "SubTitle",
+			"fieldtype": "Data",
+			"insert_after": "custom_legacy_code"
+		}
+	],
 	"Task": [
 		{
 			"fieldname": "custom_omnitrack_section",
-			"label": "OmniTrack Workforce & Sync Details",
+			"label": "OmniTrack Workforce & Legacy Details",
 			"fieldtype": "Section Break",
 			"insert_after": "description"
+		},
+		{
+			"fieldname": "custom_appsheet_id",
+			"label": "Legacy AppSheet ID",
+			"fieldtype": "Data",
+			"insert_after": "custom_omnitrack_section"
+		},
+		{
+			"fieldname": "custom_activity_code",
+			"label": "Legacy Activity Code",
+			"fieldtype": "Data",
+			"insert_after": "custom_appsheet_id"
+		},
+		{
+			"fieldname": "custom_phase",
+			"label": "OmniTrack Phase",
+			"fieldtype": "Link",
+			"options": "OmniTrack Phase",
+			"insert_after": "custom_activity_code"
 		},
 		{
 			"fieldname": "custom_expected_hours",
 			"label": "Expected Hours",
 			"fieldtype": "Float",
 			"default": 0.0,
-			"insert_after": "custom_omnitrack_section"
+			"insert_after": "custom_phase"
 		},
 		{
 			"fieldname": "custom_actual_hours",
@@ -52,24 +92,23 @@ CUSTOM_FIELDS = {
 			"insert_after": "custom_variance_hours"
 		},
 		{
-			"fieldname": "custom_client_eta",
-			"label": "Client Target ETA",
-			"fieldtype": "Datetime",
+			"fieldname": "custom_remarks",
+			"label": "Legacy Remarks",
+			"fieldtype": "Small Text",
 			"insert_after": "custom_col_break_omni"
 		},
 		{
-			"fieldname": "custom_is_public_deliverable",
-			"label": "Public Client Deliverable",
-			"fieldtype": "Check",
-			"default": 0,
-			"insert_after": "custom_client_eta"
+			"fieldname": "custom_note",
+			"label": "Legacy Note",
+			"fieldtype": "Small Text",
+			"insert_after": "custom_remarks"
 		},
 		{
 			"fieldname": "custom_remote_task_id",
 			"label": "Remote Site Task ID",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"insert_after": "custom_is_public_deliverable"
+			"insert_after": "custom_note"
 		},
 		{
 			"fieldname": "custom_sync_status",
@@ -110,40 +149,6 @@ CUSTOM_FIELDS = {
 			"default": 0.0,
 			"read_only": 1,
 			"insert_after": "custom_actual_hours"
-		},
-		{
-			"fieldname": "custom_col_break_omni",
-			"fieldtype": "Column Break",
-			"insert_after": "custom_variance_hours"
-		},
-		{
-			"fieldname": "custom_client_eta",
-			"label": "Client Target ETA",
-			"fieldtype": "Datetime",
-			"insert_after": "custom_col_break_omni"
-		},
-		{
-			"fieldname": "custom_is_public_deliverable",
-			"label": "Public Client Deliverable",
-			"fieldtype": "Check",
-			"default": 0,
-			"insert_after": "custom_client_eta"
-		},
-		{
-			"fieldname": "custom_remote_task_id",
-			"label": "Remote Site Task ID",
-			"fieldtype": "Data",
-			"read_only": 1,
-			"insert_after": "custom_is_public_deliverable"
-		},
-		{
-			"fieldname": "custom_sync_status",
-			"label": "Sync Status",
-			"fieldtype": "Select",
-			"options": "Not Synced\nSynced\nPending\nConflict",
-			"default": "Not Synced",
-			"read_only": 1,
-			"insert_after": "custom_remote_task_id"
 		}
 	]
 }
@@ -181,7 +186,7 @@ def _ensure_default_settings():
 	try:
 		if frappe.db.exists("DocType", "OmniTrack Settings"):
 			settings = frappe.get_single("OmniTrack Settings")
-			if not settings.vapid_public_key:
+			if not getattr(settings, "vapid_public_key", None):
 				settings.vapid_public_key = f"VAPID_PUB_{secrets.token_hex(16)}"
 				settings.vapid_private_key = secrets.token_hex(32)
 				settings.save(ignore_permissions=True)
@@ -199,85 +204,36 @@ def _ensure_workspaces():
 			"shortcuts": [
 				{"label": "OmniTrack Settings", "type": "DocType", "link_to": "OmniTrack Settings", "color": "Blue"},
 				{"label": "Planned Work Blocks", "type": "DocType", "link_to": "Planned Work Block", "color": "Green"},
-				{"label": "Remote Connections", "type": "DocType", "link_to": "OmniTrack Remote Connection", "color": "Purple"},
-				{"label": "Client Workspaces", "type": "DocType", "link_to": "OmniTrack Workspace", "color": "Yellow"}
+				{"label": "Shift Templates", "type": "DocType", "link_to": "OmniTrack Shift Template", "color": "Purple"},
+				{"label": "Shift Split Assignments", "type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "color": "Yellow"},
+				{"label": "Synthesizer Logs", "type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "color": "Orange"},
+				{"label": "Project Phases", "type": "DocType", "link_to": "OmniTrack Phase", "color": "Grey"}
 			],
 			"cards": [
 				{
-					"label": "Workforce & Tasks",
+					"label": "Workforce & Shifts",
 					"links": [
 						{"label": "Planned Work Blocks", "link_to": "Planned Work Block"},
-						{"label": "OmniTrack Settings", "link_to": "OmniTrack Settings"}
+						{"label": "Shift Templates", "link_to": "OmniTrack Shift Template"},
+						{"label": "Shift Split Assignments", "link_to": "OmniTrack Shift Split Assignment"},
+						{"label": "Attendance Synthesizer Logs", "link_to": "OmniTrack Attendance Synthesizer Log"}
+					]
+				},
+				{
+					"label": "Projects, Phases & Tasks",
+					"links": [
+						{"label": "OmniTrack Phases", "link_to": "OmniTrack Phase"},
+						{"label": "Projects", "link_to": "Project"},
+						{"label": "Tasks", "link_to": "Task"}
 					]
 				},
 				{
 					"label": "Live Sync & Integrations",
 					"links": [
+						{"label": "Task Sync Payloads", "link_to": "OmniTrack Task Sync"},
 						{"label": "Remote Connections", "link_to": "OmniTrack Remote Connection"},
 						{"label": "Client Workspaces", "link_to": "OmniTrack Workspace"},
 						{"label": "Push Subscriptions", "link_to": "OmniTrack Push Subscription"}
-					]
-				}
-			]
-		},
-		{
-			"name": "OmniTrack Command Center",
-			"label": "OmniTrack Command Center",
-			"title": "OmniTrack Command Center",
-			"icon": "shield",
-			"indicator_color": "blue",
-			"shortcuts": [
-				{"label": "OmniTrack Settings", "type": "DocType", "link_to": "OmniTrack Settings", "color": "Blue"},
-				{"label": "Remote Connections", "type": "DocType", "link_to": "OmniTrack Remote Connection", "color": "Purple"},
-				{"label": "Client Workspaces", "type": "DocType", "link_to": "OmniTrack Workspace", "color": "Yellow"}
-			],
-			"cards": [
-				{
-					"label": "Administration",
-					"links": [
-						{"label": "OmniTrack Settings", "link_to": "OmniTrack Settings"},
-						{"label": "Remote Connections", "link_to": "OmniTrack Remote Connection"},
-						{"label": "Push Subscriptions", "link_to": "OmniTrack Push Subscription"}
-					]
-				}
-			]
-		},
-		{
-			"name": "Operations & Delivery Hub",
-			"label": "Operations & Delivery Hub",
-			"title": "Operations & Delivery Hub",
-			"icon": "briefcase",
-			"indicator_color": "green",
-			"shortcuts": [
-				{"label": "Planned Work Blocks", "type": "DocType", "link_to": "Planned Work Block", "color": "Green"},
-				{"label": "To-Dos", "type": "DocType", "link_to": "ToDo", "color": "Blue"}
-			],
-			"cards": [
-				{
-					"label": "Operations",
-					"links": [
-						{"label": "Planned Work Blocks", "link_to": "Planned Work Block"},
-						{"label": "To-Dos", "link_to": "ToDo"}
-					]
-				}
-			]
-		},
-		{
-			"name": "My Workstation",
-			"label": "My Workstation",
-			"title": "My Workstation",
-			"icon": "user",
-			"indicator_color": "purple",
-			"shortcuts": [
-				{"label": "My Planned Blocks", "type": "DocType", "link_to": "Planned Work Block", "color": "Purple"},
-				{"label": "My To-Dos", "type": "DocType", "link_to": "ToDo", "color": "Blue"}
-			],
-			"cards": [
-				{
-					"label": "My Desk",
-					"links": [
-						{"label": "My Planned Blocks", "link_to": "Planned Work Block"},
-						{"label": "My To-Dos", "link_to": "ToDo"}
 					]
 				}
 			]
@@ -359,36 +315,41 @@ def _ensure_workspace_sidebar():
 	try:
 		if not frappe.db.exists("DocType", "Workspace Sidebar"):
 			return
-		for sidebar_name in ("OmniTrack", "OmniTrack Command Center"):
-			existing = frappe.db.exists("Workspace Sidebar", {"name": sidebar_name, "for_user": None})
-			doc = frappe.get_doc("Workspace Sidebar", sidebar_name) if existing else frappe.new_doc("Workspace Sidebar")
-			doc.name = sidebar_name
-			doc.title = sidebar_name
-			doc.module = MODULE_NAME
-			doc.header_icon = SIDEBAR_ICON
-			doc.set("items", [])
-			
-			items = [
-				{"type": "Section Break", "label": "Workforce & Shifts", "link_type": "DocType", "icon": "calendar", "indent": 1, "collapsible": 1},
-				{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1},
-				{"type": "Link", "label": "OmniTrack Settings", "link_type": "DocType", "link_to": "OmniTrack Settings", "icon": "settings", "child": 1},
-				{"type": "Section Break", "label": "Sync & Integrations", "link_type": "DocType", "icon": "repeat", "indent": 1, "collapsible": 1},
-				{"type": "Link", "label": "Remote Connections", "link_type": "DocType", "link_to": "OmniTrack Remote Connection", "icon": "repeat", "child": 1},
-				{"type": "Link", "label": "Client Workspaces", "link_type": "DocType", "link_to": "OmniTrack Workspace", "icon": "globe", "child": 1},
-				{"type": "Link", "label": "Push Subscriptions", "link_type": "DocType", "link_to": "OmniTrack Push Subscription", "icon": "bell", "child": 1}
-			]
-			for it in items:
-				doc.append("items", it)
+		sidebar_name = "OmniTrack"
+		existing = frappe.db.exists("Workspace Sidebar", {"name": sidebar_name, "for_user": None})
+		doc = frappe.get_doc("Workspace Sidebar", sidebar_name) if existing else frappe.new_doc("Workspace Sidebar")
+		doc.name = sidebar_name
+		doc.title = sidebar_name
+		doc.module = MODULE_NAME
+		doc.header_icon = SIDEBAR_ICON
+		doc.set("items", [])
+		
+		items = [
+			{"type": "Section Break", "label": "Workforce & Shifts", "link_type": "DocType", "icon": "calendar", "indent": 1, "collapsible": 1},
+			{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1},
+			{"type": "Link", "label": "Shift Templates", "link_type": "DocType", "link_to": "OmniTrack Shift Template", "icon": "clock", "child": 1},
+			{"type": "Link", "label": "Shift Split Assignments", "link_type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "icon": "users", "child": 1},
+			{"type": "Link", "label": "Attendance Synthesizer Logs", "link_type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "icon": "check-circle", "child": 1},
+			{"type": "Section Break", "label": "Projects & Operations", "link_type": "DocType", "icon": "briefcase", "indent": 1, "collapsible": 1},
+			{"type": "Link", "label": "Project Phases", "link_type": "DocType", "link_to": "OmniTrack Phase", "icon": "layers", "child": 1},
+			{"type": "Link", "label": "OmniTrack Settings", "link_type": "DocType", "link_to": "OmniTrack Settings", "icon": "settings", "child": 1},
+			{"type": "Section Break", "label": "Sync & Integrations", "link_type": "DocType", "icon": "repeat", "indent": 1, "collapsible": 1},
+			{"type": "Link", "label": "Task Sync Payloads", "link_type": "DocType", "link_to": "OmniTrack Task Sync", "icon": "repeat", "child": 1},
+			{"type": "Link", "label": "Remote Connections", "link_type": "DocType", "link_to": "OmniTrack Remote Connection", "icon": "link", "child": 1},
+			{"type": "Link", "label": "Client Workspaces", "link_type": "DocType", "link_to": "OmniTrack Workspace", "icon": "globe", "child": 1}
+		]
+		for it in items:
+			doc.append("items", it)
 
-			dev_mode = frappe.conf.get("developer_mode")
-			try:
-				frappe.conf.developer_mode = 0
-				if existing:
-					doc.save(ignore_permissions=True)
-				else:
-					doc.insert(ignore_permissions=True)
-			finally:
-				frappe.conf.developer_mode = dev_mode
+		dev_mode = frappe.conf.get("developer_mode")
+		try:
+			frappe.conf.developer_mode = 0
+			if existing:
+				doc.save(ignore_permissions=True)
+			else:
+				doc.insert(ignore_permissions=True)
+		finally:
+			frappe.conf.developer_mode = dev_mode
 		frappe.db.commit()
 	except Exception:
 		frappe.log_error(title="OmniTrack: could not set up workspace sidebar")
@@ -398,36 +359,31 @@ def _ensure_desktop_icon():
 		if not frappe.db.exists("DocType", "Desktop Icon"):
 			return
 		logo = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg?v=shiva_eye_v1"
-		icons_to_setup = [
-			{"name": "OmniTrack", "label": "OmniTrack", "hidden": 0},
-			{"name": "OmniTrack Command Center", "label": "OmniTrack Command Center", "hidden": 1}
-		]
-		for it in icons_to_setup:
-			icon_name = it["name"]
-			existing = frappe.db.exists("Desktop Icon", icon_name)
-			doc = frappe.get_doc("Desktop Icon", icon_name) if existing else frappe.new_doc("Desktop Icon")
-			doc.name = icon_name
-			doc.label = it["label"]
-			doc.icon_type = "Link"
-			doc.link_type = "Workspace Sidebar"
-			doc.link_to = "OmniTrack"
-			doc.app = "omnitrack"
-			doc.icon = "shield-check"
-			doc.logo_url = logo
-			doc.bg_color = "blue"
-			doc.standard = 1
-			doc.hidden = it["hidden"]
-			doc.restrict_removal = 0
+		icon_name = "OmniTrack"
+		existing = frappe.db.exists("Desktop Icon", icon_name)
+		doc = frappe.get_doc("Desktop Icon", icon_name) if existing else frappe.new_doc("Desktop Icon")
+		doc.name = icon_name
+		doc.label = "OmniTrack"
+		doc.icon_type = "Link"
+		doc.link_type = "Workspace Sidebar"
+		doc.link_to = "OmniTrack"
+		doc.app = "omnitrack"
+		doc.icon = "shield-check"
+		doc.logo_url = logo
+		doc.bg_color = "blue"
+		doc.standard = 1
+		doc.hidden = 0
+		doc.restrict_removal = 0
 
-			dev_mode = frappe.conf.get("developer_mode")
-			try:
-				frappe.conf.developer_mode = 0
-				if existing:
-					doc.save(ignore_permissions=True)
-				else:
-					doc.insert(ignore_permissions=True)
-			finally:
-				frappe.conf.developer_mode = dev_mode
+		dev_mode = frappe.conf.get("developer_mode")
+		try:
+			frappe.conf.developer_mode = 0
+			if existing:
+				doc.save(ignore_permissions=True)
+			else:
+				doc.insert(ignore_permissions=True)
+		finally:
+			frappe.conf.developer_mode = dev_mode
 		frappe.db.commit()
 	except Exception:
 		frappe.log_error(title="OmniTrack: could not set up desktop icon")
