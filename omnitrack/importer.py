@@ -425,3 +425,103 @@ def run_full_migration(data_directory, dry_run=False):
 		"timelog_stats": time_stats,
 		"elapsed_seconds": elapsed
 	}
+
+
+def find_uploaded_migration_files():
+	"""Find the 4 AppSheet CSV files uploaded to Frappe Desk File Manager (/app/file)."""
+	targets = {
+		"project": ["Empire_NoMi - Project.csv", "Empire_NoMi-Project.csv", "Project.csv"],
+		"phase": ["Empire_NoMi - Phase.csv", "Empire_NoMi-Phase.csv", "Phase.csv"],
+		"activity": ["Empire_NoMi - Activity.csv", "Empire_NoMi-Activity.csv", "Activity.csv"],
+		"timelog": ["Empire_NoMi - TimeLog.csv", "Empire_NoMi-TimeLog.csv", "TimeLog.csv"]
+	}
+	found_paths = {}
+
+	# 1. Search File DocType records
+	try:
+		files = frappe.get_all("File", fields=["file_name", "file_url", "is_private"])
+		for f in files:
+			fname = f.file_name or ""
+			fpath = None
+			if f.is_private and f.file_url:
+				rel = f.file_url.replace("/private/files/", "")
+				fpath = frappe.get_site_path("private", "files", rel)
+			elif f.file_url:
+				rel = f.file_url.replace("/files/", "")
+				fpath = frappe.get_site_path("public", "files", rel)
+
+			if not fpath or not os.path.exists(fpath):
+				continue
+
+			for key, aliases in targets.items():
+				if key not in found_paths:
+					for a in aliases:
+						if a.lower() in fname.lower():
+							found_paths[key] = fpath
+							break
+	except Exception:
+		pass
+
+	# 2. Search private and public directories directly
+	search_dirs = [
+		frappe.get_site_path("private", "files"),
+		frappe.get_site_path("public", "files")
+	]
+	for sdir in search_dirs:
+		if not os.path.exists(sdir):
+			continue
+		for fname in os.listdir(sdir):
+			fpath = os.path.join(sdir, fname)
+			if not os.path.isfile(fpath):
+				continue
+			for key, aliases in targets.items():
+				if key not in found_paths:
+					for a in aliases:
+						if a.lower() in fname.lower():
+							found_paths[key] = fpath
+							break
+
+	return found_paths
+
+
+def run_migration_from_site_files(dry_run=False):
+	"""Execute migration using CSV files uploaded via Frappe Desk File Manager (/app/file)."""
+	start_time = datetime.now()
+	found = find_uploaded_migration_files()
+
+	missing = []
+	for req in ["project", "phase", "activity", "timelog"]:
+		if req not in found:
+			missing.append(req)
+
+	if missing:
+		msg = f"Missing required migration CSV files in Desk File Manager: {', '.join(missing)}"
+		print(f"❌ {msg}")
+		return {"status": "failed", "error": msg, "found": found}
+
+	print(f"🚀 Starting Historical AppSheet Migration from Desk Uploads (Dry Run: {dry_run})")
+	print(f"📁 Project CSV: {found['project']}")
+	print(f"📁 Phase CSV: {found['phase']}")
+	print(f"📁 Activity CSV: {found['activity']}")
+	print(f"📁 TimeLog CSV: {found['timelog']}")
+
+	prereqs = verify_migration_prerequisites()
+	if prereqs["status"] != "success":
+		return prereqs
+
+	proj_map, proj_count = import_projects(found['project'], dry_run=dry_run)
+	task_map, task_count = import_tasks(found['phase'], found['activity'], proj_map, dry_run=dry_run)
+	time_stats = import_timelogs(found['timelog'], proj_map, task_map, dry_run=dry_run)
+
+	elapsed = (datetime.now() - start_time).total_seconds()
+	print(f"🏁 Historical Migration Finished in {elapsed:.2f} seconds.")
+
+	return {
+		"status": "success",
+		"dry_run": dry_run,
+		"projects_count": proj_count,
+		"tasks_count": task_count,
+		"timelog_stats": time_stats,
+		"elapsed_seconds": elapsed
+	}
+
