@@ -285,6 +285,21 @@ def import_timelogs(timelog_csv_path, project_map, task_map, dry_run=False, batc
 	# Existing appsheet IDs to prevent duplicate insertion
 	existing_ids = set(frappe.get_all("Planned Work Block", pluck="appsheet_id"))
 
+	bulk_rows = []
+	year = str(datetime.now().year)
+	current_count = frappe.db.count("Planned Work Block")
+	idx_counter = current_count + 1
+	now_str = str(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+	fields = [
+		"name", "creation", "modified", "modified_by", "owner", "docstatus", "idx",
+		"employee", "work_date", "start_time", "end_time", "duration_hours",
+		"location", "task_nature", "project", "task", "status",
+		"cryptographic_hash", "deliverable_notes", "appsheet_id",
+		"legacy_activity_id", "legacy_project_id", "associate_name",
+		"billing_status", "costing_amount", "billing_amount"
+	]
+
 	with open(timelog_csv_path, mode="r", encoding="utf-8-sig") as f:
 		reader = csv.DictReader(f)
 		for row in reader:
@@ -347,44 +362,23 @@ def import_timelogs(timelog_csv_path, project_map, task_map, dry_run=False, batc
 			desc = row.get("Description", "").strip() or row.get("Notes", "").strip() or row.get("Remark", "").strip()
 			c_hash = generate_migration_hash(emp_user, w_date, s_time, e_time, app_id)
 
-			doc_data = {
-				"doctype": "Planned Work Block",
-				"employee": emp_user,
-				"work_date": w_date,
-				"start_time": s_time,
-				"end_time": e_time,
-				"duration_hours": duration,
-				"location": "Office",
-				"task_nature": "🎯 Planned",
-				"project": proj_link,
-				"task": task_link,
-				"status": "Completed",
-				"cryptographic_hash": c_hash,
-				"deliverable_notes": desc,
-				"appsheet_id": app_id,
-				"legacy_activity_id": act_id,
-				"legacy_project_id": dd_proj,
-				"associate_name": assoc,
-				"billing_status": b_status,
-				"costing_amount": cost_amt,
-				"billing_amount": bill_amt
-			}
-
 			if dry_run:
 				stats["inserted"] += 1
 			else:
-				try:
-					doc = frappe.get_doc(doc_data)
-					doc.insert(ignore_permissions=True, ignore_mandatory=True)
-					existing_ids.add(app_id)
-					stats["inserted"] += 1
-				except Exception as ex:
-					stats["errors"].append(f"Row {app_id}: {str(ex)}")
+				row_name = f"PWB-{year}-{idx_counter:05d}"
+				idx_counter += 1
+				bulk_rows.append((
+					row_name, now_str, now_str, admin_user, admin_user, 0, 0,
+					emp_user, str(w_date), str(s_time), str(e_time), duration,
+					"Office", "🎯 Planned", proj_link, task_link, "Completed",
+					c_hash, desc, app_id,
+					act_id, dd_proj, assoc,
+					b_status, cost_amt, bill_amt
+				))
+				stats["inserted"] += 1
 
-				if stats["inserted"] % batch_size == 0:
-					frappe.db.commit()
-
-	if not dry_run:
+	if not dry_run and bulk_rows:
+		frappe.db.bulk_insert("Planned Work Block", fields, bulk_rows, ignore_duplicates=True)
 		frappe.db.commit()
 
 	return stats
