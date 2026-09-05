@@ -1,0 +1,110 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Task Sync",
+  "module": "OmniTrack",
+  "autoname": "field:sync_id",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "sync_id",
+      "fieldtype": "Data",
+      "label": "Sync ID (UUID)",
+      "reqd": 1,
+      "unique": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sync_status",
+      "fieldtype": "Select",
+      "options": "Queued\nIn Progress\nSynchronized\nConflict\nFailed",
+      "label": "Sync Status",
+      "default": "Queued",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "source_doctype",
+      "fieldtype": "Data",
+      "label": "Source DocType",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "source_docname",
+      "fieldtype": "Data",
+      "label": "Source DocName",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_sync_instances",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "source_instance_url",
+      "fieldtype": "Data",
+      "label": "Source Instance URL"
+    },
+    {
+      "fieldname": "target_instance_url",
+      "fieldtype": "Data",
+      "label": "Target Instance URL"
+    },
+    {
+      "fieldname": "payload_hash",
+      "fieldtype": "Data",
+      "label": "Payload Hash (SHA-256)",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "conflict_resolution_strategy",
+      "fieldtype": "Select",
+      "options": "Latest Timestamp\nSource Wins\nTarget Wins\nManual",
+      "label": "Conflict Resolution Strategy",
+      "default": "Latest Timestamp"
+    },
+    {
+      "fieldname": "last_sync_timestamp",
+      "fieldtype": "Datetime",
+      "label": "Last Sync Timestamp",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sb_payload",
+      "fieldtype": "Section Break",
+      "label": "Payload JSON & Error Log"
+    },
+    {
+      "fieldname": "payload_json",
+      "fieldtype": "Code",
+      "options": "JSON",
+      "label": "Payload JSON"
+    },
+    {
+      "fieldname": "error_log",
+      "fieldtype": "Small Text",
+      "label": "Error Log / Conflict Details"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ]
+}

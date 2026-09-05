@@ -1,0 +1,102 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Shift Split Assignment",
+  "module": "OmniTrack",
+  "autoname": "OT-SSA-.YYYY.-.#####",
+  "naming_rule": "Expression (old style)",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "employee",
+      "fieldtype": "Link",
+      "options": "Employee",
+      "label": "Employee",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "shift_template",
+      "fieldtype": "Link",
+      "options": "OmniTrack Shift Template",
+      "label": "Assigned Shift Template",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "options": "Active\nInactive",
+      "label": "Status",
+      "default": "Active",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_dates",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "start_date",
+      "fieldtype": "Date",
+      "label": "Start Date",
+      "reqd": 1,
+      "default": "Today",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "end_date",
+      "fieldtype": "Date",
+      "label": "End Date",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "rotation_pattern",
+      "fieldtype": "Select",
+      "options": "Fixed\nWeekly\nBi-Weekly\nCustom",
+      "label": "Rotation Pattern",
+      "default": "Fixed",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "sb_notes",
+      "fieldtype": "Section Break",
+      "label": "Notes & Exceptions"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Small Text",
+      "label": "Assignment Notes"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack User",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

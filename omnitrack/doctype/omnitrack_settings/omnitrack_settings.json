@@ -6,6 +6,51 @@
   "track_changes": 1,
   "fields": [
     {
+      "fieldname": "sb_split_shift_attendance",
+      "fieldtype": "Section Break",
+      "label": "Split-Shift & Attendance Synthesis Engine"
+    },
+    {
+      "fieldname": "enable_split_shift_engine",
+      "fieldtype": "Check",
+      "label": "Enable Split-Shift Engine",
+      "default": 1
+    },
+    {
+      "fieldname": "auto_synthesize_attendance_on_checkin",
+      "fieldtype": "Check",
+      "label": "Auto Synthesize Daily Attendance on Checkin",
+      "default": 1
+    },
+    {
+      "fieldname": "midnight_cutoff_hour",
+      "fieldtype": "Time",
+      "label": "Midnight Cutoff Hour",
+      "default": "04:00:00"
+    },
+    {
+      "fieldname": "cb_attendance_thresholds",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "grace_period_mins",
+      "fieldtype": "Int",
+      "label": "Grace Period (Minutes)",
+      "default": 15
+    },
+    {
+      "fieldname": "min_hours_present",
+      "fieldtype": "Float",
+      "label": "Minimum Hours for Present",
+      "default": 6.0
+    },
+    {
+      "fieldname": "min_hours_half_day",
+      "fieldtype": "Float",
+      "label": "Minimum Hours for Half Day",
+      "default": 3.0
+    },
+    {
       "fieldname": "sb_features",
       "fieldtype": "Section Break",
       "label": "Feature Switches"
@@ -43,7 +88,7 @@
     {
       "fieldname": "enable_auto_attendance",
       "fieldtype": "Check",
-      "label": "Enable Automated Attendance Synthesis",
+      "label": "Enable Automated Attendance Synthesis (Legacy)",
       "default": 1
     },
     {
@@ -56,12 +101,6 @@
       "fieldname": "enable_workspace_branding",
       "fieldtype": "Check",
       "label": "Enable Workspace White-Label Branding",
-      "default": 1
-    },
-    {
-      "fieldname": "enable_site_sync",
-      "fieldtype": "Check",
-      "label": "Enable Site-to-Site Live Sync",
       "default": 1
     },
     {
@@ -117,6 +156,61 @@
       "options": "OmniTrack Project Policy"
     },
     {
+      "fieldname": "sb_cross_site_sync",
+      "fieldtype": "Section Break",
+      "label": "Universal Cross-Site Replication Engine"
+    },
+    {
+      "fieldname": "enable_cross_site_sync",
+      "fieldtype": "Check",
+      "label": "Enable Cross-Site Task & Timesheet Sync",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_site_sync",
+      "fieldtype": "Check",
+      "label": "Enable Site-to-Site Live Sync",
+      "default": 1
+    },
+    {
+      "fieldname": "sync_role_scope",
+      "fieldtype": "Select",
+      "options": "Master\nSatellite\nPeer",
+      "label": "Instance Role Scope",
+      "default": "Master"
+    },
+    {
+      "fieldname": "sync_interval_mins",
+      "fieldtype": "Int",
+      "label": "Sync Interval (Minutes)",
+      "default": 15
+    },
+    {
+      "fieldname": "conflict_resolution_strategy",
+      "fieldtype": "Select",
+      "options": "Source Wins\nTarget Wins\nLatest Timestamp\nManual Review\nField-Level Merge",
+      "label": "Conflict Resolution Strategy",
+      "default": "Latest Timestamp"
+    },
+    {
+      "fieldname": "remote_deletion_policy",
+      "fieldtype": "Select",
+      "options": "Mark Status as Cancelled / Archived\nHard Delete\nUnlink Only",
+      "default": "Mark Status as Cancelled / Archived"
+    },
+    {
+      "fieldname": "sanitize_billing_rates",
+      "fieldtype": "Check",
+      "label": "Sanitize Billing & Cost Rates During Sync",
+      "default": 1
+    },
+    {
+      "fieldname": "audit_log_retention_days",
+      "fieldtype": "Int",
+      "label": "Audit Log Retention (Days)",
+      "default": 90
+    },
+    {
       "fieldname": "sb_push_config",
       "fieldtype": "Section Break",
       "label": "Web Push (VAPID) Gateway & Fatigue Prevention"
@@ -148,29 +242,6 @@
       "fieldname": "allow_push_during_blank_gaps",
       "fieldtype": "Check",
       "label": "Deliver Push During Unplanned Shift Gaps",
-      "default": 1
-    },
-    {
-      "fieldname": "sb_sync",
-      "fieldtype": "Section Break",
-      "label": "Site-to-Site Live Sync Policies"
-    },
-    {
-      "fieldname": "conflict_resolution_strategy",
-      "fieldtype": "Select",
-      "options": "Field-Level Merge\nLast Write Wins\nManager Review",
-      "default": "Field-Level Merge"
-    },
-    {
-      "fieldname": "remote_deletion_policy",
-      "fieldtype": "Select",
-      "options": "Mark Status as Cancelled / Archived\nHard Delete\nUnlink Only",
-      "default": "Mark Status as Cancelled / Archived"
-    },
-    {
-      "fieldname": "sanitize_billing_rates",
-      "fieldtype": "Check",
-      "label": "Sanitize Billing & Cost Rates During Sync",
       "default": 1
     }
   ],

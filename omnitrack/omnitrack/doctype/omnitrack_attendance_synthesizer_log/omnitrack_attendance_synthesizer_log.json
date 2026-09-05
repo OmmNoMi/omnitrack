@@ -1,0 +1,115 @@
+{
+  "doctype": "DocType",
+  "name": "OmniTrack Attendance Synthesizer Log",
+  "module": "OmniTrack",
+  "autoname": "OT-SYN-.YYYY.-.#####",
+  "naming_rule": "Expression (old style)",
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "employee",
+      "fieldtype": "Link",
+      "options": "Employee",
+      "label": "Employee",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "attendance_date",
+      "fieldtype": "Date",
+      "label": "Attendance Date",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "synthesized_status",
+      "fieldtype": "Select",
+      "options": "Present\nHalf Day\nAbsent\nOn Leave",
+      "label": "Synthesized Status",
+      "default": "Present",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "cb_metrics",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "total_working_hours",
+      "fieldtype": "Float",
+      "label": "Total Working Hours",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "effective_sessions_completed",
+      "fieldtype": "Int",
+      "label": "Sessions Completed",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "late_entry_mins",
+      "fieldtype": "Float",
+      "label": "Late Entry (Minutes)"
+    },
+    {
+      "fieldname": "early_exit_mins",
+      "fieldtype": "Float",
+      "label": "Early Exit (Minutes)"
+    },
+    {
+      "fieldname": "sb_generated",
+      "fieldtype": "Section Break",
+      "label": "Generated Attendance & Raw Audit Hashes"
+    },
+    {
+      "fieldname": "generated_attendance_doc",
+      "fieldtype": "Link",
+      "options": "Attendance",
+      "label": "Synthesized Attendance Record",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "raw_checkin_uids",
+      "fieldtype": "Small Text",
+      "label": "Raw Check-In UIDs / Hashes"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack Auditor",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack User",
+      "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    }
+  ]
+}

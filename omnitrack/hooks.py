@@ -30,7 +30,8 @@ doc_events = {
 		"on_trash": "omnitrack.sync.on_task_trash"
 	},
 	"Employee Checkin": {
-		"on_update": "omnitrack.api.on_employee_checkin"
+		"after_insert": "omnitrack.synthesizer.on_checkin_event",
+		"on_update": "omnitrack.synthesizer.on_checkin_event"
 	}
 }
 
@@ -46,7 +47,7 @@ permission_query_conditions = {
 # ---------------
 scheduler_events = {
 	"daily": [
-		"omnitrack.api.process_daily_attendance_synthesis",
+		"omnitrack.synthesizer.synthesize_all_active_employees",
 		"omnitrack.api.process_scheduled_timesheet_sync"
 	],
 	"hourly": [
