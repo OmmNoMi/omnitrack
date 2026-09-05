@@ -544,79 +544,68 @@ def run_migration_from_site_files(dry_run=False):
 
 @frappe.whitelist()
 def remap_work_block_users(custom_map=None):
-	"""Remap employee and owner on Planned Work Blocks based on historical associate_name.
-	
-	Default rules:
-	- 'EaGeR_NoMi', 'NoMi', 'Nomeshwer' -> Nomeshwer Sharma
-	- 'Meenaxi_Maxi', 'Maxi', 'Meenaxi' -> Meenaxi Maxi
-	- 'Hardik', 'Hardik_Sharma' -> Hardik Sharma
-	- 'Misha', 'Misha_Sharma' -> Misha Sharma
-	"""
+	"""Remap employee and owner on Planned Work Blocks based on confirmed user accounts."""
 	if custom_map and isinstance(custom_map, str):
 		import json
 		custom_map = json.loads(custom_map)
 
-	users = frappe.get_all("User", fields=["name", "full_name", "first_name", "email"])
-
-	def find_user(name_keywords):
-		for u in users:
-			combined = f"{u.name} {u.full_name or ''} {u.first_name or ''} {u.email or ''}".lower()
-			for kw in name_keywords:
-				if kw.lower() in combined:
-					return u.name
-		return None
-
-	nomi_user = find_user(["nomeshwer", "nomeshwar", "nomi"])
-	maxi_user = find_user(["meenaxi", "maxi"])
-	hardik_user = find_user(["hardik"])
-	misha_user = find_user(["misha"])
-
-	mapping = {
-		"EaGeR_NoMi": nomi_user,
-		"NoMi": nomi_user,
-		"Nomeshwer": nomi_user,
-		"Nomeshwar": nomi_user,
-		"Nomeshwer_Sharma": nomi_user,
-		"Nomeshwar_Sharma": nomi_user,
-		"Meenaxi_Maxi": maxi_user,
-		"Maxi": maxi_user,
-		"Meenaxi": maxi_user,
-		"Meenaxi_Sharma": maxi_user,
-		"Hardik": hardik_user,
-		"Hardik_Sharma": hardik_user,
-		"Misha": misha_user,
-		"Misha_Sharma": misha_user
+	exact_user_map = {
+		"hardiksharma80912@gmail.com": [
+			"Hardik_Hardi", "Hardik_Gagi", "Hardik_NoMi", "Hardik_Shobhi", "Hardik_Deepi", "Hardi", "Hardik"
+		],
+		"nomeshwer@ommnomi.in": [
+			"Devoted_NoMi", "EaGeR_NoMi", "Dev_NoMi", "Keen_NoMi", "Consult_NoMi", "NoMi"
+		],
+		"meenaxi22aug@gmail.com": [
+			"Meenaxi_Maxi", "Meenaxi_NoMi", "Meenaxi", "Maxi"
+		],
+		"shobhanamnag@gmail.com": [
+			"Shobhi_Shobhi", "Shobhi"
+		],
+		"nehathakur08990@gmail.com": [
+			"Neha_Neha", "Neha_NoMi", "Neha_Maxi", "Neha"
+		],
+		"deepikagautam3mn@gmail.com": [
+			"Deepi_Deepi", "Deepi"
+		],
+		"gayatri62515@gmail.com": [
+			"Gagi_Gagi", "Gagi_Maxi", "Gagi_Nomi", "Gagi_Shobhi", "Gagi"
+		]
 	}
-
-	if custom_map:
-		mapping.update(custom_map)
 
 	results = {}
 	total_updated = 0
-	for assoc, target_user in mapping.items():
-		if not target_user:
-			continue
-		count = frappe.db.count("Planned Work Block", {"associate_name": assoc})
-		if count > 0:
-			frappe.db.sql("""
-				UPDATE `tabPlanned Work Block`
-				SET employee = %s, owner = %s
-				WHERE associate_name = %s
-			""", (target_user, target_user, assoc))
-			results[assoc] = {"user": target_user, "count": count}
-			total_updated += count
+
+	for email, aliases in exact_user_map.items():
+		placeholders = ", ".join(["%s"] * len(aliases))
+		query = f"""
+			UPDATE `tabPlanned Work Block`
+			SET employee = %s, owner = %s
+			WHERE associate_name IN ({placeholders})
+		"""
+		frappe.db.sql(query, [email, email] + aliases)
+		
+		# Also match by prefix if any remaining
+		first_prefix = aliases[0].split('_')[0]
+		frappe.db.sql("""
+			UPDATE `tabPlanned Work Block`
+			SET employee = %s, owner = %s
+			WHERE associate_name LIKE %s AND employee = 'Administrator'
+		""", (email, email, f"{first_prefix}%"))
+
+		count = frappe.db.sql(
+			"SELECT COUNT(*) FROM `tabPlanned Work Block` WHERE employee = %s",
+			(email,)
+		)[0][0]
+		results[email] = count
+		total_updated += count
 
 	frappe.db.commit()
 	return {
 		"status": "success",
 		"total_updated": total_updated,
-		"details": results,
-		"discovered_users": {
-			"nomeshwer": nomi_user,
-			"meenaxi": maxi_user,
-			"hardik": hardik_user,
-			"misha": misha_user
-		}
+		"breakdown": results
 	}
+
 
 
