@@ -43,9 +43,12 @@ def get_context(context):
 
 	ctx.today_blocks = blocks
 
-	# Calculate today's planned total hours
-	total_planned = sum([(b.duration_hours or 0.0) for b in blocks]) if blocks else 0.0
-	ctx.total_planned_hours = round(total_planned, 2)
+	# Fetch initial live data
+	try:
+		from omnitrack.api import get_workstation_data
+		ctx.initial_data = get_workstation_data()
+	except Exception:
+		ctx.initial_data = {}
 
 	# Fetch Settings safely as dict
 	try:

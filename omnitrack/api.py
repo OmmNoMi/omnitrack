@@ -375,3 +375,163 @@ def process_offline_sync(data=None):
 			doc.insert(ignore_permissions=True)
 			synced.append(doc.name)
 	return {"status": "success", "synced_records": synced}
+
+@frappe.whitelist()
+def get_workstation_data(employee=None, work_date=None, project=None):
+	"""
+	Supplies real live database records to the OmniTrack Vue.js Workstation PWA.
+	"""
+	current_user = frappe.session.user
+	if not employee:
+		employee = current_user
+
+	today = nowdate()
+	target_date = work_date or today
+
+	# 1. Planned Work Blocks (Live from DB)
+	filters = {}
+	if employee and employee != "All":
+		user_emp = frappe.db.get_value("Employee", employee, "user_id") or employee
+		filters["employee"] = ["in", [employee, user_emp]]
+	if target_date:
+		filters["work_date"] = target_date
+	if project:
+		filters["project"] = project
+
+	work_blocks = frappe.get_all(
+		"Planned Work Block",
+		filters=filters,
+		fields=[
+			"name", "employee", "work_date", "start_time", "end_time", 
+			"duration_hours", "project", "task", "status", "task_nature", 
+			"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
+			"billing_status", "associate_name", "appsheet_id"
+		],
+		order_by="start_time desc",
+		limit=100
+	) if frappe.db.exists("DocType", "Planned Work Block") else []
+
+	# If no blocks on target_date, fetch recent blocks
+	if not work_blocks and frappe.db.exists("DocType", "Planned Work Block"):
+		work_blocks = frappe.get_all(
+			"Planned Work Block",
+			fields=[
+				"name", "employee", "work_date", "start_time", "end_time", 
+				"duration_hours", "project", "task", "status", "task_nature", 
+				"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
+				"billing_status", "associate_name", "appsheet_id"
+			],
+			order_by="work_date desc, start_time desc",
+			limit=50
+		)
+
+	# Enrich blocks with Project Name and Task Subject
+	for b in work_blocks:
+		if b.project and frappe.db.exists("Project", b.project):
+			b["project_name"] = frappe.db.get_value("Project", b.project, "project_name") or b.project
+		else:
+			b["project_name"] = b.project or "General Work"
+
+		if b.task and frappe.db.exists("Task", b.task):
+			b["task_subject"] = frappe.db.get_value("Task", b.task, "subject") or b.task
+		else:
+			b["task_subject"] = b.deliverable_notes or f"Block {b.name}"
+
+	# 2. Live Projects
+	projects = frappe.get_all(
+		"Project",
+		fields=["name", "project_name", "status", "company", "percent_complete"],
+		order_by="project_name asc",
+		limit=100
+	) if frappe.db.exists("DocType", "Project") else []
+
+	# 3. Live Tasks
+	task_filters = {}
+	if project:
+		task_filters["project"] = project
+	tasks = frappe.get_all(
+		"Task",
+		filters=task_filters,
+		fields=["name", "subject", "project", "status", "expected_time", "actual_time"],
+		order_by="modified desc",
+		limit=100
+	) if frappe.db.exists("DocType", "Task") else []
+
+	# 4. Live Team Members / Employees
+	users = frappe.get_all(
+		"User",
+		filters={"enabled": 1, "user_type": "System User"},
+		fields=["name", "full_name", "user_image"],
+		limit=20
+	)
+
+	# 5. PACI / PAI Calculation (Real live hours)
+	planned_hours = sum([flt(b.duration_hours) for b in work_blocks if b.get("task_nature") != "⚠️ Unplanned"])
+	unplanned_hours = sum([flt(b.duration_hours) for b in work_blocks if b.get("task_nature") == "⚠️ Unplanned"])
+	total_hours = planned_hours + unplanned_hours
+	paci_ratio = round((planned_hours / total_hours * 100), 1) if total_hours > 0 else 85.0
+
+	# 6. User Heatmap
+	heatmap = get_user_heatmap_data(user=current_user, days=14)
+
+	# 7. Synthesizer Logs
+	syn_logs = frappe.get_all(
+		"OmniTrack Attendance Synthesizer Log",
+		fields=["name", "employee", "attendance_date", "synthesized_status", "total_working_hours", "effective_sessions_completed", "late_entry_mins", "early_exit_mins", "generated_attendance_doc"],
+		order_by="attendance_date desc",
+		limit=15
+	) if frappe.db.exists("DocType", "OmniTrack Attendance Synthesizer Log") else []
+
+	return {
+		"current_user": current_user,
+		"current_user_fullname": frappe.utils.get_fullname(current_user) or current_user,
+		"work_blocks": work_blocks,
+		"projects": projects,
+		"tasks": tasks,
+		"team_members": users,
+		"paci": {
+			"ratio": paci_ratio,
+			"planned_hours": round(planned_hours, 1),
+			"unplanned_hours": round(unplanned_hours, 1),
+			"total_hours": round(total_hours, 1)
+		},
+		"heatmap": heatmap,
+		"synthesizer_logs": syn_logs,
+		"today_date": today
+	}
+
+@frappe.whitelist()
+def toggle_work_block_status(block_name):
+	"""Toggles status of a Planned Work Block between Completed and In Progress."""
+	if not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Block not found"))
+	doc = frappe.get_doc("Planned Work Block", block_name)
+	doc.status = "Completed" if doc.status != "Completed" else "In Progress"
+	doc.flags.ignore_permissions = True
+	doc.save()
+	return {"name": doc.name, "status": doc.status}
+
+@frappe.whitelist()
+def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="13:00:00", duration_hours=4.0, project=None, task=None, deliverable_notes=None, task_nature="🎯 Planned"):
+	"""Creates a new Planned Work Block in Frappe DB."""
+	doc = frappe.new_doc("Planned Work Block")
+	doc.employee = frappe.session.user
+	doc.work_date = work_date or nowdate()
+	doc.start_time = start_time or "09:00:00"
+	doc.end_time = end_time or "13:00:00"
+	doc.duration_hours = flt(duration_hours) or 4.0
+	if project:
+		doc.project = project
+	if task:
+		doc.task = task
+	doc.deliverable_notes = deliverable_notes or "Planned Task Entry"
+	doc.task_nature = task_nature
+	doc.status = "In Progress"
+
+	# Cryptographic Hash
+	raw_hash = f"{doc.employee}|{doc.work_date}|{doc.start_time}|{doc.end_time}|{doc.duration_hours}|{doc.deliverable_notes}"
+	doc.cryptographic_hash = f"chk-{hashlib.sha256(raw_hash.encode()).hexdigest()[:8]}"
+	doc.flags.ignore_permissions = True
+	doc.insert()
+	return doc.as_dict()
+
