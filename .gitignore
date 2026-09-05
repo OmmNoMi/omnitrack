@@ -1,4 +1,4 @@
-# Python
+# Python & Bytecode
 *.pyc
 *.pyo
 *.pyd
@@ -22,11 +22,23 @@ node_modules/
 *.sqlite
 *.db
 *.dump
+*.bak
+*.env*
+*secret*
+*credential*
 *TimeLog*
-*Empire_NoMi*
 *timelog*
+*Empire_NoMi*
+*Phase*
+*Project*
 *confidential*
+*export*
+*import*
+*raw_data*
 private/
 data/
 uploads/
 backups/
+downloads/
+temp/
+scratch/
