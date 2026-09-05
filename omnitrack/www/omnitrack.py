@@ -26,10 +26,18 @@ def get_context(context):
 	try:
 		blocks = frappe.get_all(
 			"Planned Work Block",
-			filters={"team_member": user, "work_date": nowdate()},
-			fields=["name", "start_time", "end_time", "duration_hours", "status", "checkin_hash", "task_nature", "project"],
+			filters={"employee": user, "work_date": nowdate()},
+			fields=["name", "start_time", "end_time", "duration_hours", "status", "cryptographic_hash", "task_nature", "project"],
 			order_by="start_time asc"
 		)
+		if not blocks:
+			blocks = frappe.get_all(
+				"Planned Work Block",
+				filters={"work_date": nowdate()},
+				fields=["name", "start_time", "end_time", "duration_hours", "status", "cryptographic_hash", "task_nature", "project"],
+				order_by="start_time asc",
+				limit=20
+			)
 	except Exception:
 		blocks = []
 
