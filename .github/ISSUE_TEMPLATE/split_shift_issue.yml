@@ -1,0 +1,60 @@
+name: "⏱️ Split-Shift / Attendance Synthesis Issue"
+description: "Report an issue with split-shift calculations, midnight cutoff spanning, or attendance synthesis"
+title: "[Shift/Attendance]: "
+labels: ["type: bug", "area: split-shift", "status: in-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this specialized form to report discrepancies in split-shift pairing, midnight punch cutoff spanning, or calculated attendance status.
+  - type: input
+    id: cutoff_hour
+    attributes:
+      label: Configured Midnight Cutoff Hour
+      description: What is the `midnight_cutoff_hour` in your OmniTrack Settings? (e.g., 04:00:00)
+      placeholder: "04:00:00"
+    validations:
+      required: true
+  - type: textarea
+    id: shift_template_config
+    attributes:
+      label: Shift Template Configuration
+      description: Details of the assigned `OmniTrack Shift Template` (session names, start/end times, spans_midnight).
+      placeholder: |
+        - Session 1: 09:00:00 to 13:00:00 (Mandatory)
+        - Session 2: 18:00:00 to 01:00:00 (Spans Midnight: Yes)
+    validations:
+      required: true
+  - type: textarea
+    id: raw_punches
+    attributes:
+      label: Raw Employee Check-In Timestamps
+      description: List the actual IN / OUT check-in timestamps recorded for the employee.
+      placeholder: |
+        - 2026-09-05 09:02:14 (IN)
+        - 2026-09-05 13:05:00 (OUT)
+        - 2026-09-05 18:15:00 (IN)
+        - 2026-09-06 01:10:00 (OUT)
+    validations:
+      required: true
+  - type: textarea
+    id: synthesis_discrepancy
+    attributes:
+      label: Expected vs Synthesized Result
+      description: What did the synthesizer output vs what was expected?
+      placeholder: |
+        - Synthesized Output: Absent, Total Hours: 4.0h
+        - Expected Output: Present, Total Hours: 11.0h
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 📸 Screenshots of Checkin Records & Synthesizer Log
+      description: |
+        **Mandatory:** Attach screenshots showing the Employee Checkin list, Attendance Synthesizer Log, and Attendance document.
+      placeholder: |
+        <!-- Drag and drop screenshots here -->
+        ![Attendance Record](url)
+    validations:
+      required: true

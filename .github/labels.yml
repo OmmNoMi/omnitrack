@@ -1,0 +1,122 @@
+# Standardized OmniTrack GitHub Label Taxonomy
+
+# Types
+- name: "type: bug"
+  color: "d73a4a"
+  description: "Something is not working or behaving unexpectedly"
+
+- name: "type: feature"
+  color: "a2eeef"
+  description: "New feature or major capability request"
+
+- name: "type: enhancement"
+  color: "8ae234"
+  description: "Incremental improvement to existing functionality"
+
+- name: "type: documentation"
+  color: "0075ca"
+  description: "Improvements or additions to documentation and guides"
+
+- name: "type: performance"
+  color: "ff9f1c"
+  description: "Speed, query optimization, or memory efficiency improvements"
+
+- name: "type: refactor"
+  color: "c5def5"
+  description: "Code restructuring without changing external behavior"
+
+- name: "type: test"
+  color: "fef2c0"
+  description: "Adding or improving test suites and assertions"
+
+# Areas
+- name: "area: split-shift"
+  color: "6f42c1"
+  description: "Split-shift engine, session definitions, and rotation patterns"
+
+- name: "area: attendance"
+  color: "238636"
+  description: "Attendance synthesis, midnight cutoff, and check-in correlation"
+
+- name: "area: task-sync"
+  color: "1f6feb"
+  description: "Multi-instance cross-site replication, HMAC signatures, and queue"
+
+- name: "area: pai-engine"
+  color: "3fb950"
+  description: "Plan Adherence Index (PAI) calculation and variance policies"
+
+- name: "area: live-timer"
+  color: "e3b341"
+  description: "Floating live stopwatch timer and quick-punch actions"
+
+- name: "area: ui-ux"
+  color: "d4c5f9"
+  description: "GitHub-style heatmaps, desk workspace, and CSS/styling"
+
+- name: "area: doctypes"
+  color: "bfdadc"
+  description: "DocType schema definitions, child tables, and field properties"
+
+- name: "area: settings"
+  color: "5319e7"
+  description: "OmniTrack Settings control plane and role entitlements"
+
+- name: "area: security"
+  color: "b60205"
+  description: "Security vulnerability, secret handling, or token authorization"
+
+# Status
+- name: "status: in-triage"
+  color: "ededed"
+  description: "New issue awaiting maintainer review and categorization"
+
+- name: "status: planned"
+  color: "0e8a16"
+  description: "Accepted and scheduled for an upcoming milestone"
+
+- name: "status: in-progress"
+  color: "fbca04"
+  description: "Active development currently underway"
+
+- name: "status: blocked"
+  color: "b60205"
+  description: "Progress blocked on external dependency or prerequisite"
+
+- name: "status: ready-for-review"
+  color: "0e8a16"
+  description: "PR or issue ready for code review and QA testing"
+
+- name: "status: stale"
+  color: "ffffff"
+  description: "Inactive issue or PR marked for automatic closing"
+
+# Priority
+- name: "priority: critical"
+  color: "b60205"
+  description: "Urgent blocker affecting production sites or core synthesis"
+
+- name: "priority: high"
+  color: "d93f0b"
+  description: "High priority item for the next release"
+
+- name: "priority: medium"
+  color: "fbca04"
+  description: "Standard priority item"
+
+- name: "priority: low"
+  color: "0e8a16"
+  description: "Low priority or cosmetic improvement"
+
+# Community
+- name: "good first issue"
+  color: "7057ff"
+  description: "Great starting issue for new open-source contributors"
+
+- name: "help wanted"
+  color: "008672"
+  description: "Extra attention or community contribution needed"
+
+- name: "breaking change"
+  color: "d93f0b"
+  description: "Changes that break backward compatibility"

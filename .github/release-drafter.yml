@@ -1,0 +1,45 @@
+name-template: "v$RESOLVED_VERSION 🚀"
+tag-template: "v$RESOLVED_VERSION"
+categories:
+  - title: "✨ New Features & Capabilities"
+    labels:
+      - "type: feature"
+      - "enhancement"
+  - title: "🐛 Bug Fixes & Stability"
+    labels:
+      - "type: bug"
+      - "bug"
+  - title: "⚡ Performance Optimizations"
+    labels:
+      - "type: performance"
+  - title: "📚 Documentation Updates"
+    labels:
+      - "type: documentation"
+      - "documentation"
+  - title: "🔧 Maintenance & Architecture"
+    labels:
+      - "type: refactor"
+      - "chore"
+change-template: "- $TITLE (@$AUTHOR) in #$NUMBER"
+version-resolver:
+  major:
+    labels:
+      - "breaking change"
+      - "major"
+  minor:
+    labels:
+      - "type: feature"
+      - "minor"
+  patch:
+    labels:
+      - "type: bug"
+      - "type: performance"
+      - "patch"
+  default: patch
+template: |
+  ## 🌟 What's Changed in OmniTrack $RESOLVED_VERSION
+
+  $CHANGES
+
+  ---
+  **Full Changelog**: https://github.com/OmmNoMi/omnitrack/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

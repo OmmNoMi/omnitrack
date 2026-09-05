@@ -1,0 +1,30 @@
+"area: split-shift":
+  - "omnitrack/synthesizer.py"
+  - "omnitrack/**/doctype/omnitrack_shift*/**"
+
+"area: task-sync":
+  - "omnitrack/sync.py"
+  - "omnitrack/**/doctype/omnitrack_task_sync/**"
+  - "omnitrack/**/doctype/omnitrack_remote_connection/**"
+
+"area: pai-engine":
+  - "omnitrack/api.py"
+  - "omnitrack/**/doctype/planned_work_block/**"
+
+"area: ui-ux":
+  - "omnitrack/public/**"
+  - "**/*.js"
+  - "**/*.css"
+  - "**/*.svg"
+
+"area: settings":
+  - "omnitrack/**/doctype/omnitrack_settings/**"
+
+"type: documentation":
+  - "docs/**"
+  - "**/*.md"
+  - "license.txt"
+
+"dx: ci-cd":
+  - ".github/**"
+  - "pyproject.toml"

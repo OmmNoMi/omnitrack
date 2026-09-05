@@ -1,18 +1,46 @@
-name: 🐛 Bug Report
-description: File a bug or issue in OmniTrack
-title: "[BUG]: "
-labels: ["bug", "triage"]
+name: "🐛 Bug Report"
+description: "Report a reproducible bug, defect, or unexpected behavior in OmniTrack"
+title: "[Bug]: "
+labels: ["type: bug", "status: in-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug in **OmniTrack**!
-  - type: input
-    id: version
+        Thank you for reporting a bug! Please provide complete reproduction details and **attach relevant screenshots or screen recordings**.
+  - type: checkboxes
     attributes:
-      label: OmniTrack & Frappe Version
-      description: What version of OmniTrack and Frappe Framework are you using?
-      placeholder: "e.g. OmniTrack v1.0.1, Frappe v16.0.0-dev / v15.x"
+      label: Pre-Submission Verification
+      options:
+        - label: I have searched existing issues and verified this has not already been reported.
+          required: true
+        - label: I am running the latest version of OmniTrack.
+          required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Frappe Framework & Deployment Environment
+      options:
+        - "Frappe v16 + ERPNext v16 (Development / Production)"
+        - "Frappe v15 + ERPNext v15 (Production)"
+        - "Frappe Cloud Managed Site"
+        - "Self-Hosted Linux Docker / Kubernetes"
+        - "Local Frappe Bench (WSL2 / Linux)"
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: module_affected
+    attributes:
+      label: Module / Functional Area Affected
+      options:
+        - "Split-Shift & Attendance Synthesizer Engine"
+        - "Cross-Site Multi-Instance Task Sync"
+        - "Plan Adherence Index (PAI) & Variance Engine"
+        - "Desk Live Timer Bar & Workspace UI"
+        - "GitHub Contribution Heatmap & Streak Cards"
+        - "Settings & Role Entitlements"
+        - "Other / Core DocTypes"
+      default: 0
     validations:
       required: true
   - type: textarea
@@ -20,30 +48,47 @@ body:
     attributes:
       label: Bug Description
       description: A clear and concise description of what the bug is.
+      placeholder: Describe the problem clearly...
     validations:
       required: true
   - type: textarea
-    id: reproduction
+    id: reproduction_steps
     attributes:
       label: Steps to Reproduce
-      description: Steps to reproduce the behavior.
+      description: Detailed, numbered steps to reproduce the behavior.
       placeholder: |
-        1. Go to 'Planned Work Block'
-        2. Click on 'New'
-        3. Set Start Time and End Time across split-shift
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
         4. See error
     validations:
       required: true
   - type: textarea
-    id: expected
+    id: expected_behavior
     attributes:
       label: Expected Behavior
-      description: What did you expect to happen?
+      description: A clear description of what you expected to happen.
     validations:
       required: true
   - type: textarea
-    id: logs
+    id: actual_behavior
     attributes:
-      label: Relevant Logs & Tracebacks
-      description: Please copy and paste any relevant browser console or bench server traceback logs.
+      label: Actual Behavior & Error Traceback
+      description: Paste any error messages, Python tracebacks, or browser console logs here.
       render: shell
+  - type: textarea
+    id: visual_proof
+    attributes:
+      label: 📸 Screenshots & Screen Recordings
+      description: |
+        **Mandatory for UI/UX & Attendance issues:** Drag and drop screenshots or screen recordings (GIF/MP4) here to visually demonstrate the issue.
+      placeholder: |
+        <!-- Drag and drop your screenshots/videos here -->
+        ![Screenshot description](url)
+    validations:
+      required: true
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: Any other system specifications, browser version, or relevant configuration details.

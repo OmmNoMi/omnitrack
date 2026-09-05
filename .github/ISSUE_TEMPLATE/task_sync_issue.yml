@@ -1,0 +1,51 @@
+name: "🔄 Cross-Site Task Sync Issue"
+description: "Report an issue with multi-instance replication, HMAC signatures, or conflict resolution"
+title: "[Sync]: "
+labels: ["type: bug", "area: task-sync", "status: in-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to report issues regarding site-to-site synchronization, HMAC payload verification, or Task / Project replication errors.
+  - type: dropdown
+    id: sync_topology
+    attributes:
+      label: Sync Instance Role Topology
+      options:
+        - "Master to Satellite"
+        - "Satellite to Master"
+        - "Peer-to-Peer"
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: sync_id
+    attributes:
+      label: OmniTrack Task Sync ID (UUID)
+      placeholder: "e.g., 550e8400-e29b-41d4-a716-446655440000"
+  - type: textarea
+    id: error_payload_log
+    attributes:
+      label: Error Log & HTTP Response
+      description: Paste the error log from `OmniTrack Remote Connection` or `OmniTrack Task Sync`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of Conflict / Sync Failure
+      description: Explain what happened to the source vs target document.
+    validations:
+      required: true
+  - type: textarea
+    id: sync_screenshots
+    attributes:
+      label: 📸 Screenshots of Remote Connection & Task Sync Log
+      description: |
+        **Mandatory:** Attach screenshots showing the source Task, target Task, and OmniTrack Task Sync doc with error logs.
+      placeholder: |
+        <!-- Drag and drop screenshots here -->
+        ![Task Sync Log](url)
+    validations:
+      required: true

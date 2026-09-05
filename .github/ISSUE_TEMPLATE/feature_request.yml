@@ -1,29 +1,59 @@
-name: 🚀 Feature Request
-description: Propose a new feature, integration, or workflow for OmniTrack
-title: "[FEAT]: "
-labels: ["enhancement", "triage"]
+name: "✨ Feature Request"
+description: "Suggest a new capability, enhancement, or architectural improvement for OmniTrack"
+title: "[Feature]: "
+labels: ["type: feature", "status: in-triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for suggesting an idea for **OmniTrack**!
+        Thank you for suggesting an enhancement for OmniTrack! Please describe the use-case and attach any UI mockups or visual design references.
   - type: textarea
-    id: problem
+    id: problem_statement
     attributes:
-      label: Problem or Use Case
-      description: Is your feature request related to a specific operational pain point or workflow?
-      placeholder: "e.g. We need automatic webhook triggers whenever a split shift is completed..."
+      label: Problem Statement / Business Context
+      description: Is your feature request related to a problem? Please provide a clear and concise description.
+      placeholder: "I'm always frustrated when..."
     validations:
       required: true
   - type: textarea
-    id: solution
+    id: proposed_solution
     attributes:
-      label: Proposed Solution
-      description: A clear and concise description of what you want to happen.
+      label: Proposed Solution & Design
+      description: Describe the solution you would like to see implemented.
+      placeholder: "OmniTrack should allow..."
+    validations:
+      required: true
+  - type: dropdown
+    id: target_area
+    attributes:
+      label: Target Feature Area
+      options:
+        - "Split-Shift & Scheduling Architecture"
+        - "Attendance Synthesizer & Biometric Correlation"
+        - "Cross-Site Multi-Tenant Sync & REST API"
+        - "Interactive Desk & Mobile UI (Heatmaps, Timers)"
+        - "Analytics, PAI & Developer Productivity Reporting"
+        - "ERPNext / Frappe HRMS Integration"
+        - "Other"
+      default: 0
     validations:
       required: true
   - type: textarea
-    id: alternatives
+    id: visual_mockups
+    attributes:
+      label: 🎨 Visual Mockups, Wireframes & Screenshots
+      description: |
+        **Visuals greatly accelerate feature design:** Drag and drop wireframes, Figma screenshots, UI mockups, or reference screenshots here.
+      placeholder: |
+        <!-- Drag and drop UI mockups / screenshots here -->
+        ![Mockup](url)
+  - type: textarea
+    id: alternatives_considered
     attributes:
       label: Alternatives Considered
-      description: Any alternative solutions or features you've considered.
+      description: A clear and concise description of any alternative solutions or features you've considered.
+  - type: checkboxes
+    attributes:
+      label: Contribution Willingness
+      options:
+        - label: I would be willing to submit a Pull Request to implement this feature!

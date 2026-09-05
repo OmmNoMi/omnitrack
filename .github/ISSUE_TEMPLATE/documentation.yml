@@ -1,0 +1,27 @@
+name: "📚 Documentation Improvement"
+description: "Suggest improvements, fixes, or additions to the OmniTrack documentation and guides"
+title: "[Docs]: "
+labels: ["type: documentation", "status: in-triage"]
+body:
+  - type: textarea
+    id: docs_location
+    attributes:
+      label: Documentation Page / URL Affected
+      placeholder: "e.g., docs/SPLIT_SHIFT_ENGINE.md or README.md"
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_changes
+    attributes:
+      label: Suggested Documentation Changes
+      description: What is missing or inaccurate, and what should be added/fixed?
+    validations:
+      required: true
+  - type: textarea
+    id: visual_reference
+    attributes:
+      label: 📸 Screenshots / Visual References
+      description: Attach screenshots of the current doc section or visual diagrams to include.
+      placeholder: |
+        <!-- Drag and drop screenshots / diagrams here -->
+        ![Doc section](url)
