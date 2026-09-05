@@ -27,10 +27,18 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 
 ## Historical Data Migration & Company Splitting
 - **Company Splitting Cut-Off Date**: `2024-09-02`.
-  - All timesheets, timelogs, and work blocks dated **before 2024-09-02** belong to company `Nomeshwar Sharma`.
+  - All timesheets, timelogs, and work blocks dated **before 2024-09-02** belong to company `Nomeshwer Sharma` (dynamically match `Nomeshwar Sharma` if needed).
   - All timesheets, timelogs, and work blocks dated **on or after 2024-09-02** belong to company `OmmNoMi Automation LLP`.
 - **Native Project & Task Hierarchy**: Historical AppSheet phases are flattened and consolidated directly into native Frappe `Project` and `Task` documents. Do not create an intermediary `Phase` DocType.
 - **Cryptographic Auditability**: All imported or synthesized `Planned Work Block` records must carry a SHA-256 hash in `cryptographic_hash`.
 
+## Cloud & Production Migration Invariants
+- **Desk File Manager Ingestion**: On Frappe Cloud, CSV files are uploaded via Desk File Manager (`/app/file`). Importers must resolve them from `frappe.get_site_path("private", "files")` without requiring SSH/root access.
+- **System Console Sandbox (`safe_exec`)**: Whitelist methods with `@frappe.whitelist()` and execute via `frappe.call(...)` to avoid `__import__ not found` errors.
+- **ERPNext Group Tasks**: Parent milestone/phase tasks must always have `is_group = 1` set before child tasks reference them.
+- **Bulk Insert**: Use `frappe.db.bulk_insert()` for datasets >1,000 records to prevent 60-second Gunicorn/Nginx HTTP timeouts.
+- **Clean Request Hooks**: Never place bare `print()` statements in `before_request` hooks to avoid fatal `BrokenPipeError: [Errno 32]`.
+
 ## Confidential Data Protection
 - Never commit raw customer timesheet CSVs or personal timelog dumps to git. Strict `.gitignore` rules must remain active for all `.csv`, `Empire_NoMi*`, and `media_*` files.
+
