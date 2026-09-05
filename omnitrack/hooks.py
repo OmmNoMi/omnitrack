@@ -54,3 +54,5 @@ scheduler_events = {
 		"omnitrack.sync.process_queued_sync_events"
 	]
 }
+
+commands = ["omnitrack.commands.commands"]

@@ -1,0 +1,427 @@
+import csv
+import os
+import hashlib
+from datetime import datetime
+import frappe
+from frappe.utils import flt, getdate
+
+CUTOFF_DATE = getdate("2024-09-02")
+COMPANY_BEFORE = "Nomeshwar Sharma"
+COMPANY_AFTER = "OmmNoMi Automation LLP"
+
+
+def verify_migration_prerequisites():
+	"""Verify all DocTypes, custom fields, and companies required for historical migration."""
+	results = {"status": "success", "checks": [], "errors": []}
+
+	# Check DocTypes
+	required_doctypes = ["Planned Work Block", "Project", "Task", "Company", "User"]
+	for dt in required_doctypes:
+		if frappe.db.exists("DocType", dt):
+			results["checks"].append(f"DocType '{dt}' exists.")
+		else:
+			results["errors"].append(f"DocType '{dt}' missing!")
+
+	# Check Custom Fields
+	required_fields = {
+		"Project": ["custom_appsheet_id", "custom_legacy_code"],
+		"Task": ["custom_appsheet_id", "custom_activity_code", "custom_expected_hours", "custom_actual_hours", "custom_variance_hours"]
+	}
+	for dt, fields in required_fields.items():
+		for f in fields:
+			exists = frappe.db.exists("Custom Field", {"dt": dt, "fieldname": f})
+			if exists:
+				results["checks"].append(f"Custom Field '{f}' on '{dt}' exists.")
+			else:
+				results["errors"].append(f"Custom Field '{f}' on '{dt}' missing!")
+
+	# Ensure Companies exist
+	for comp_name in [COMPANY_BEFORE, COMPANY_AFTER]:
+		if not frappe.db.exists("Company", comp_name):
+			try:
+				comp = frappe.new_doc("Company")
+				comp.company_name = comp_name
+				comp.default_currency = "INR"
+				comp.country = "India"
+				comp.insert(ignore_permissions=True)
+				results["checks"].append(f"Company '{comp_name}' created.")
+			except Exception as e:
+				results["errors"].append(f"Failed to create Company '{comp_name}': {str(e)}")
+		else:
+			results["checks"].append(f"Company '{comp_name}' already exists.")
+
+	if results["errors"]:
+		results["status"] = "failed"
+
+	return results
+
+
+def parse_appsheet_datetime(dt_str):
+	"""Parse various AppSheet date/time string formats."""
+	if not dt_str or not dt_str.strip():
+		return None, None
+
+	dt_str = dt_str.strip()
+	formats = [
+		"%m/%d/%Y %H:%M:%S",
+		"%m/%d/%Y %I:%M:%S %p",
+		"%m/%d/%Y %H:%M",
+		"%m/%d/%Y %I:%M %p",
+		"%Y-%m-%d %H:%M:%S",
+		"%Y-%m-%d %H:%M",
+		"%d/%m/%Y %H:%M:%S",
+		"%d-%m-%Y %H:%M:%S"
+	]
+
+	for fmt in formats:
+		try:
+			dt = datetime.strptime(dt_str, fmt)
+			return dt.date(), dt.time().strftime("%H:%M:%S")
+		except ValueError:
+			continue
+
+	# Fallback if only date
+	date_formats = ["%m/%d/%Y", "%Y-%m-%d", "%d/%m/%Y"]
+	for dfmt in date_formats:
+		try:
+			dt = datetime.strptime(dt_str, dfmt)
+			return dt.date(), "09:00:00"
+		except ValueError:
+			continue
+
+	return None, None
+
+
+def generate_migration_hash(employee, work_date, start_time, end_time, appsheet_id):
+	"""Generate deterministic SHA-256 audit hash for historical work block."""
+	raw = f"{employee}:{work_date}:{start_time}:{end_time}:{appsheet_id}"
+	short_hash = hashlib.sha256(raw.encode()).hexdigest()[:8]
+	return f"chk-{short_hash}"
+
+
+def import_projects(project_csv_path, dry_run=False):
+	"""Import historical projects from AppSheet Project CSV."""
+	if not os.path.exists(project_csv_path):
+		raise FileNotFoundError(f"Project CSV not found at: {project_csv_path}")
+
+	mapping = {}
+	count = 0
+	with open(project_csv_path, mode="r", encoding="utf-8-sig") as f:
+		reader = csv.DictReader(f)
+		for row in reader:
+			app_id = row.get("ID", "").strip()
+			code = row.get("Code", "").strip()
+			title = row.get("Title", "").strip()
+			desc = row.get("Description", "").strip() or row.get("SubTitle", "").strip()
+
+			if not app_id or not title:
+				continue
+
+			# Determine project name / existence
+			existing = frappe.db.get_value("Project", {"custom_appsheet_id": app_id}, "name")
+			if not existing:
+				existing = frappe.db.get_value("Project", {"project_name": title}, "name")
+
+			if not existing and not dry_run:
+				proj = frappe.new_doc("Project")
+				proj.project_name = title
+				proj.custom_appsheet_id = app_id
+				proj.custom_legacy_code = code
+				proj.company = COMPANY_AFTER
+				proj.notes = desc
+				proj.insert(ignore_permissions=True)
+				mapping[app_id] = proj.name
+			elif existing:
+				mapping[app_id] = existing
+				if not dry_run:
+					frappe.db.set_value("Project", existing, {
+						"custom_appsheet_id": app_id,
+						"custom_legacy_code": code
+					}, update_modified=False)
+			else:
+				mapping[app_id] = f"PROJ-MOCK-{app_id[:6]}"
+
+			count += 1
+
+	if not dry_run:
+		frappe.db.commit()
+
+	return mapping, count
+
+
+def import_tasks(phase_csv_path, activity_csv_path, project_map, dry_run=False):
+	"""Import historical tasks from AppSheet Phase & Activity CSVs."""
+	mapping = {}
+	phase_map = {}
+	count = 0
+
+	# Process Phases first (as high-level tasks or milestone containers)
+	if os.path.exists(phase_csv_path):
+		with open(phase_csv_path, mode="r", encoding="utf-8-sig") as f:
+			reader = csv.DictReader(f)
+			for row in reader:
+				phase_id = row.get("ID", "").strip()
+				proj_app_id = row.get("Project", "").strip()
+				code = row.get("Code", "").strip()
+				title = row.get("Title", "").strip()
+				desc = row.get("Decription", "").strip() or row.get("Description", "").strip()
+
+				if not phase_id or not title:
+					continue
+
+				mapped_project = project_map.get(proj_app_id)
+				existing = frappe.db.get_value("Task", {"custom_appsheet_id": phase_id}, "name")
+
+				if not existing and not dry_run:
+					task = frappe.new_doc("Task")
+					task.subject = title
+					task.project = mapped_project
+					task.custom_appsheet_id = phase_id
+					task.custom_activity_code = code
+					task.description = desc
+					task.insert(ignore_permissions=True)
+					phase_map[phase_id] = task.name
+					mapping[phase_id] = task.name
+				elif existing:
+					phase_map[phase_id] = existing
+					mapping[phase_id] = existing
+				else:
+					phase_map[phase_id] = f"TASK-MOCK-{phase_id[:6]}"
+					mapping[phase_id] = phase_map[phase_id]
+
+				count += 1
+
+	# Process Activities (as granular tasks)
+	if os.path.exists(activity_csv_path):
+		with open(activity_csv_path, mode="r", encoding="utf-8-sig") as f:
+			reader = csv.DictReader(f)
+			for row in reader:
+				act_id = row.get("ID", "").strip()
+				phase_id = row.get("Phase", "").strip()
+				code = row.get("Code", "").strip()
+				title = row.get("Title", "").strip() or row.get("Description", "").strip()
+				desc = row.get("Description", "").strip() or row.get("Note", "").strip()
+
+				if not act_id:
+					continue
+
+				if not title:
+					title = f"Activity {code or act_id}"
+
+				parent_task = phase_map.get(phase_id)
+				parent_project = None
+				if parent_task:
+					parent_project = frappe.db.get_value("Task", parent_task, "project")
+
+				existing = frappe.db.get_value("Task", {"custom_appsheet_id": act_id}, "name")
+
+				if not existing and not dry_run:
+					task = frappe.new_doc("Task")
+					task.subject = title[:140]
+					task.project = parent_project
+					task.parent_task = parent_task
+					task.custom_appsheet_id = act_id
+					task.custom_activity_code = code
+					task.description = desc
+					task.insert(ignore_permissions=True)
+					mapping[act_id] = task.name
+				elif existing:
+					mapping[act_id] = existing
+				else:
+					mapping[act_id] = f"TASK-MOCK-{act_id[:6]}"
+
+				count += 1
+
+	if not dry_run:
+		frappe.db.commit()
+
+	return mapping, count
+
+
+def import_timelogs(timelog_csv_path, project_map, task_map, dry_run=False, batch_size=1000):
+	"""Import historical AppSheet TimeLogs into Planned Work Blocks with company splitting."""
+	if not os.path.exists(timelog_csv_path):
+		raise FileNotFoundError(f"TimeLog CSV not found at: {timelog_csv_path}")
+
+	admin_user = frappe.session.user if getattr(frappe, "session", None) and frappe.session.user != "Guest" else "Administrator"
+
+	# Cache user mappings
+	user_map = {}
+	for u in frappe.get_all("User", fields=["name", "full_name", "first_name"]):
+		user_map[u.name.lower()] = u.name
+		if u.full_name:
+			user_map[u.full_name.lower().replace(" ", "_")] = u.name
+			user_map[u.full_name.lower()] = u.name
+
+	stats = {
+		"total_processed": 0,
+		"inserted": 0,
+		"skipped": 0,
+		"nomeshwar_sharma_count": 0,
+		"ommnomi_automation_count": 0,
+		"errors": []
+	}
+
+	# Existing appsheet IDs to prevent duplicate insertion
+	existing_ids = set(frappe.get_all("Planned Work Block", pluck="appsheet_id"))
+
+	with open(timelog_csv_path, mode="r", encoding="utf-8-sig") as f:
+		reader = csv.DictReader(f)
+		for row in reader:
+			stats["total_processed"] += 1
+			app_id = row.get("ID", "").strip()
+			if not app_id:
+				continue
+
+			if app_id in existing_ids:
+				stats["skipped"] += 1
+				continue
+
+			start_str = row.get("Start_Time", "").strip()
+			end_str = row.get("End_Time", "").strip()
+			w_date, s_time = parse_appsheet_datetime(start_str)
+			_, e_time = parse_appsheet_datetime(end_str)
+
+			if not w_date:
+				stats["skipped"] += 1
+				continue
+
+			if not s_time:
+				s_time = "09:00:00"
+			if not e_time:
+				e_time = "10:00:00"
+
+			# Cutoff Company logic
+			if w_date < CUTOFF_DATE:
+				stats["nomeshwar_sharma_count"] += 1
+			else:
+				stats["ommnomi_automation_count"] += 1
+
+			# Associate / User
+			assoc = row.get("Associate", "").strip()
+			emp_user = admin_user
+			if assoc and assoc.lower() in user_map:
+				emp_user = user_map[assoc.lower()]
+
+			# Duration
+			duration = flt(row.get("Hours", 0.0))
+			if duration <= 0:
+				duration = flt(row.get("Duration", 0.0))
+			if duration <= 0:
+				duration = 1.0
+
+			# Costing / Billing
+			cost_amt = flt(row.get("Net Cost", 0.0)) or flt(row.get("Costing", 0.0))
+			bill_amt = flt(row.get("Net Bill", 0.0)) or flt(row.get("Billing", 0.0))
+			b_status = row.get("Billing", "").strip()
+			if b_status not in ["Unbilled", "Partially Billed", "Fully Billed", "Non-Billable", "Internal"]:
+				b_status = "Fully Billed" if bill_amt > 0 else "Unbilled"
+
+			# Linked Project and Task
+			dd_proj = row.get("DD_Project", "").strip()
+			act_id = row.get("Activity", "").strip()
+
+			proj_link = project_map.get(dd_proj)
+			task_link = task_map.get(act_id) or task_map.get(dd_proj)
+
+			desc = row.get("Description", "").strip() or row.get("Notes", "").strip() or row.get("Remark", "").strip()
+			c_hash = generate_migration_hash(emp_user, w_date, s_time, e_time, app_id)
+
+			doc_data = {
+				"doctype": "Planned Work Block",
+				"employee": emp_user,
+				"work_date": w_date,
+				"start_time": s_time,
+				"end_time": e_time,
+				"duration_hours": duration,
+				"location": "Office",
+				"task_nature": "🎯 Planned",
+				"project": proj_link,
+				"task": task_link,
+				"status": "Completed",
+				"cryptographic_hash": c_hash,
+				"deliverable_notes": desc,
+				"appsheet_id": app_id,
+				"legacy_activity_id": act_id,
+				"legacy_project_id": dd_proj,
+				"associate_name": assoc,
+				"billing_status": b_status,
+				"costing_amount": cost_amt,
+				"billing_amount": bill_amt
+			}
+
+			if dry_run:
+				stats["inserted"] += 1
+			else:
+				try:
+					doc = frappe.get_doc(doc_data)
+					doc.insert(ignore_permissions=True, ignore_mandatory=True)
+					existing_ids.add(app_id)
+					stats["inserted"] += 1
+				except Exception as ex:
+					stats["errors"].append(f"Row {app_id}: {str(ex)}")
+
+				if stats["inserted"] % batch_size == 0:
+					frappe.db.commit()
+
+	if not dry_run:
+		frappe.db.commit()
+
+	return stats
+
+
+def run_full_migration(data_directory, dry_run=False):
+	"""Execute end-to-end historical migration from AppSheet CSV exports directory."""
+	start_time = datetime.now()
+
+	proj_csv = os.path.join(data_directory, "Empire_NoMi - Project.csv")
+	phase_csv = os.path.join(data_directory, "Empire_NoMi - Phase.csv")
+	act_csv = os.path.join(data_directory, "Empire_NoMi - Activity.csv")
+	time_csv = os.path.join(data_directory, "Empire_NoMi - TimeLog.csv")
+
+	print(f"🚀 Starting Historical AppSheet Migration (Dry Run: {dry_run})")
+	print(f"📁 Data Source: {data_directory}")
+
+	# Step 0: Prerequisites Check
+	prereqs = verify_migration_prerequisites()
+	if prereqs["status"] != "success":
+		print("❌ Migration Pre-requisites verification failed:")
+		for err in prereqs["errors"]:
+			print(f"   - {err}")
+		return prereqs
+
+	print("✅ Pre-requisites verified successfully.")
+
+	# Step 1: Import Projects
+	print("📦 Importing Projects...")
+	proj_map, proj_count = import_projects(proj_csv, dry_run=dry_run)
+	print(f"✅ Processed {proj_count} Projects (Mapped: {len(proj_map)})")
+
+	# Step 2: Import Tasks
+	print("📋 Importing Phases & Activities as Tasks...")
+	task_map, task_count = import_tasks(phase_csv, act_csv, proj_map, dry_run=dry_run)
+	print(f"✅ Processed {task_count} Tasks (Mapped: {len(task_map)})")
+
+	# Step 3: Import TimeLogs
+	print("⏱️ Importing TimeLogs into Planned Work Blocks...")
+	time_stats = import_timelogs(time_csv, proj_map, task_map, dry_run=dry_run)
+	print(f"✅ TimeLog Migration Complete:")
+	print(f"   - Total Rows Processed: {time_stats['total_processed']}")
+	print(f"   - Successfully Inserted: {time_stats['inserted']}")
+	print(f"   - Skipped / Already Exists: {time_stats['skipped']}")
+	print(f"   - Nomeshwar Sharma (< 2024-09-02): {time_stats['nomeshwar_sharma_count']}")
+	print(f"   - OmmNoMi Automation LLP (>= 2024-09-02): {time_stats['ommnomi_automation_count']}")
+	if time_stats['errors']:
+		print(f"   - Errors encountered: {len(time_stats['errors'])}")
+
+	elapsed = (datetime.now() - start_time).total_seconds()
+	print(f"🏁 Historical Migration Finished in {elapsed:.2f} seconds.")
+
+	return {
+		"status": "success",
+		"dry_run": dry_run,
+		"projects_count": proj_count,
+		"tasks_count": task_count,
+		"timelog_stats": time_stats,
+		"elapsed_seconds": elapsed
+	}
