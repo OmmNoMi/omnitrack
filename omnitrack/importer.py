@@ -6,8 +6,18 @@ import frappe
 from frappe.utils import flt, getdate
 
 CUTOFF_DATE = getdate("2024-09-02")
-COMPANY_BEFORE = "Nomeshwar Sharma"
 COMPANY_AFTER = "OmmNoMi Automation LLP"
+
+
+def get_company_before():
+	"""Get historical company name, supporting both 'Nomeshwer Sharma' and 'Nomeshwar Sharma'."""
+	for name in ["Nomeshwer Sharma", "Nomeshwar Sharma"]:
+		if frappe.db.exists("Company", name):
+			return name
+	matches = frappe.get_all("Company", filters={"company_name": ["like", "Nomesh%"]}, pluck="name")
+	if matches:
+		return matches[0]
+	return "Nomeshwer Sharma"
 
 
 @frappe.whitelist()
@@ -37,11 +47,13 @@ def verify_migration_prerequisites():
 				results["errors"].append(f"Custom Field '{f}' on '{dt}' missing!")
 
 	# Ensure Companies exist
-	for comp_name in [COMPANY_BEFORE, COMPANY_AFTER]:
+	comp_before = get_company_before()
+	for comp_name in [comp_before, COMPANY_AFTER]:
 		if not frappe.db.exists("Company", comp_name):
 			try:
 				comp = frappe.new_doc("Company")
 				comp.company_name = comp_name
+				comp.abbr = "".join([w[0] for w in comp_name.split() if w])[:5].upper()
 				comp.default_currency = "INR"
 				comp.country = "India"
 				comp.insert(ignore_permissions=True)
