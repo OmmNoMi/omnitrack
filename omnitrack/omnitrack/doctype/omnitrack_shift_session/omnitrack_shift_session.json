@@ -48,5 +48,6 @@
       "in_list_view": 1
     }
   ],
-  "permissions": []
+  "permissions": [],
+  "icon": "clock"
 }

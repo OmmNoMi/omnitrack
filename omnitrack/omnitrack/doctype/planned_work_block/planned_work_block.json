@@ -65,16 +65,16 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "🎯 Planned\n⚠️ Unplanned\n🚫 Out-of-Office",
+      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office",
       "label": "Task Nature",
-      "default": "🎯 Planned",
+      "default": "\ud83c\udfaf Planned",
       "in_list_view": 1
     },
     {
       "fieldname": "unplanned_reason",
       "fieldtype": "Data",
       "label": "Unplanned Reason / Incident Note",
-      "depends_on": "eval:doc.task_nature=='⚠️ Unplanned'"
+      "depends_on": "eval:doc.task_nature=='\u26a0\ufe0f Unplanned'"
     },
     {
       "fieldname": "project",
@@ -204,5 +204,6 @@
       "create": 0,
       "delete": 0
     }
-  ]
+  ],
+  "icon": "calendar"
 }

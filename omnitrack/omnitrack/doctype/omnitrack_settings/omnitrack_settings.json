@@ -261,5 +261,6 @@
       "read": 1,
       "write": 0
     }
-  ]
+  ],
+  "icon": "setting"
 }

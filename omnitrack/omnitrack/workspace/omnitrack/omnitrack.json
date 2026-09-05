@@ -1,89 +1,216 @@
 {
-  "app": "omnitrack",
-  "doctype": "Workspace",
-  "name": "OmniTrack",
-  "label": "OmniTrack",
-  "title": "OmniTrack",
-  "icon": "shield-check",
-  "indicator_color": "blue",
-  "module": "OmniTrack",
-  "public": 1,
-  "is_hidden": 0,
-  "roles": [],
-  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"OmniTrack\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"OmniTrack Settings\", \"label\": \"OmniTrack Settings\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Settings\", \"color\": \"Blue\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Planned Work Blocks\", \"label\": \"Planned Work Blocks\", \"type\": \"DocType\", \"link_to\": \"Planned Work Block\", \"color\": \"Green\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Remote Connections\", \"label\": \"Remote Connections\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Remote Connection\", \"color\": \"Purple\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Client Workspaces\", \"label\": \"Client Workspaces\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Workspace\", \"color\": \"Yellow\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Workforce & Tasks\", \"label\": \"Workforce & Tasks\", \"links\": [{\"label\": \"Planned Work Blocks\", \"type\": \"Link\", \"link_to\": \"Planned Work Block\", \"link_type\": \"doctype\"}, {\"label\": \"OmniTrack Settings\", \"type\": \"Link\", \"link_to\": \"OmniTrack Settings\", \"link_type\": \"doctype\"}]}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Live Sync & Integrations\", \"label\": \"Live Sync & Integrations\", \"links\": [{\"label\": \"Remote Connections\", \"type\": \"Link\", \"link_to\": \"OmniTrack Remote Connection\", \"link_type\": \"doctype\"}, {\"label\": \"Client Workspaces\", \"type\": \"Link\", \"link_to\": \"OmniTrack Workspace\", \"link_type\": \"doctype\"}, {\"label\": \"Push Subscriptions\", \"type\": \"Link\", \"link_to\": \"OmniTrack Push Subscription\", \"link_type\": \"doctype\"}]}}]",
-  "shortcuts": [
-    {
-      "label": "OmniTrack Settings",
-      "link_to": "OmniTrack Settings",
-      "type": "DocType",
-      "color": "Blue"
-    },
-    {
-      "label": "Planned Work Blocks",
-      "link_to": "Planned Work Block",
-      "type": "DocType",
-      "color": "Green"
-    },
-    {
-      "label": "Remote Connections",
-      "link_to": "OmniTrack Remote Connection",
-      "type": "DocType",
-      "color": "Purple"
-    },
-    {
-      "label": "Client Workspaces",
-      "link_to": "OmniTrack Workspace",
-      "type": "DocType",
-      "color": "Yellow"
-    }
-  ],
-  "links": [
-    {
-      "label": "Workforce & Tasks",
-      "type": "Card",
-      "links": [
-        {
-          "label": "Planned Work Blocks",
-          "type": "Link",
-          "link_to": "Planned Work Block",
-          "link_type": "doctype"
-        },
-        {
-          "label": "OmniTrack Settings",
-          "type": "Link",
-          "link_to": "OmniTrack Settings",
-          "link_type": "doctype"
-        }
-      ]
-    },
-    {
-      "label": "Live Sync & Integrations",
-      "type": "Card",
-      "links": [
-        {
-          "label": "Remote Connections",
-          "type": "Link",
-          "link_to": "OmniTrack Remote Connection",
-          "link_type": "doctype"
-        },
-        {
-          "label": "Client Workspaces",
-          "type": "Link",
-          "link_to": "OmniTrack Workspace",
-          "link_type": "doctype"
-        },
-        {
-          "label": "Push Subscriptions",
-          "type": "Link",
-          "link_to": "OmniTrack Push Subscription",
-          "link_type": "doctype"
-        }
-      ]
-    }
-  ],
-  "charts": [],
-  "number_cards": [],
-  "quick_lists": [],
-  "custom_blocks": [],
-  "type": "Workspace"
+ "app": "omnitrack",
+ "charts": [],
+ "content": "[{\"type\": \"header\", \"data\": {\"text\": \"OmniTrack Workforce & Task Engine\", \"level\": 4}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Planned Work Blocks\", \"label\": \"Planned Work Blocks\", \"type\": \"DocType\", \"link_to\": \"Planned Work Block\", \"color\": \"Green\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shift Templates\", \"label\": \"Shift Templates\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Shift Template\", \"color\": \"Blue\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shift Split Assignments\", \"label\": \"Shift Split Assignments\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Shift Split Assignment\", \"color\": \"Orange\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Synthesizer Logs\", \"label\": \"Synthesizer Logs\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Attendance Synthesizer Log\", \"color\": \"Purple\"}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"OmniTrack Settings\", \"label\": \"OmniTrack Settings\", \"type\": \"DocType\", \"link_to\": \"OmniTrack Settings\", \"color\": \"Grey\"}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Workforce & Shifts\", \"label\": \"Workforce & Shifts\", \"links\": [{\"label\": \"Planned Work Blocks\", \"type\": \"Link\", \"link_to\": \"Planned Work Block\", \"link_type\": \"doctype\", \"icon\": \"calendar\"}, {\"label\": \"Shift Templates\", \"type\": \"Link\", \"link_to\": \"OmniTrack Shift Template\", \"link_type\": \"doctype\", \"icon\": \"clock\"}, {\"label\": \"Shift Split Assignments\", \"type\": \"Link\", \"link_to\": \"OmniTrack Shift Split Assignment\", \"link_type\": \"doctype\", \"icon\": \"users\"}, {\"label\": \"Synthesizer Logs\", \"type\": \"Link\", \"link_to\": \"OmniTrack Attendance Synthesizer Log\", \"link_type\": \"doctype\", \"icon\": \"activity\"}]}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Administration\", \"label\": \"Administration\", \"links\": [{\"label\": \"OmniTrack Settings\", \"type\": \"Link\", \"link_to\": \"OmniTrack Settings\", \"link_type\": \"doctype\", \"icon\": \"setting\"}, {\"label\": \"Project Policies\", \"type\": \"Link\", \"link_to\": \"OmniTrack Project Policy\", \"link_type\": \"doctype\", \"icon\": \"shield\"}]}}, {\"type\": \"card\", \"data\": {\"card_name\": \"Sync & Integrations\", \"label\": \"Sync & Integrations\", \"links\": [{\"label\": \"Task Sync Payloads\", \"type\": \"Link\", \"link_to\": \"OmniTrack Task Sync\", \"link_type\": \"doctype\", \"icon\": \"sync\"}, {\"label\": \"Remote Connections\", \"type\": \"Link\", \"link_to\": \"OmniTrack Remote Connection\", \"link_type\": \"doctype\", \"icon\": \"link\"}, {\"label\": \"Client Workspaces\", \"type\": \"Link\", \"link_to\": \"OmniTrack Workspace\", \"link_type\": \"doctype\", \"icon\": \"globe\"}, {\"label\": \"Push Subscriptions\", \"type\": \"Link\", \"link_to\": \"OmniTrack Push Subscription\", \"link_type\": \"doctype\", \"icon\": \"bell\"}]}}]",
+ "creation": "2026-09-05 18:29:00.888404",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "shield-check",
+ "idx": 0,
+ "indicator_color": "blue",
+ "is_hidden": 0,
+ "label": "OmniTrack",
+ "links": [
+  {
+   "hidden": 0,
+   "icon": "calendar",
+   "is_query_report": 0,
+   "label": "Workforce & Shifts",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "calendar",
+   "is_query_report": 0,
+   "label": "Planned Work Blocks",
+   "link_count": 0,
+   "link_to": "Planned Work Block",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "clock",
+   "is_query_report": 0,
+   "label": "Shift Templates",
+   "link_count": 0,
+   "link_to": "OmniTrack Shift Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "users",
+   "is_query_report": 0,
+   "label": "Shift Split Assignments",
+   "link_count": 0,
+   "link_to": "OmniTrack Shift Split Assignment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "activity",
+   "is_query_report": 0,
+   "label": "Synthesizer Logs",
+   "link_count": 0,
+   "link_to": "OmniTrack Attendance Synthesizer Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "icon": "setting",
+   "is_query_report": 0,
+   "label": "Administration",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "setting",
+   "is_query_report": 0,
+   "label": "OmniTrack Settings",
+   "link_count": 0,
+   "link_to": "OmniTrack Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "shield",
+   "is_query_report": 0,
+   "label": "Project Policies",
+   "link_count": 0,
+   "link_to": "OmniTrack Project Policy",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "icon": "sync",
+   "is_query_report": 0,
+   "label": "Sync & Integrations",
+   "link_count": 0,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "sync",
+   "is_query_report": 0,
+   "label": "Task Sync Payloads",
+   "link_count": 0,
+   "link_to": "OmniTrack Task Sync",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "link",
+   "is_query_report": 0,
+   "label": "Remote Connections",
+   "link_count": 0,
+   "link_to": "OmniTrack Remote Connection",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "globe",
+   "is_query_report": 0,
+   "label": "Client Workspaces",
+   "link_count": 0,
+   "link_to": "OmniTrack Workspace",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "icon": "bell",
+   "is_query_report": 0,
+   "label": "Push Subscriptions",
+   "link_count": 0,
+   "link_to": "OmniTrack Push Subscription",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-09-05 18:55:49.099058",
+ "modified_by": "Administrator",
+ "module": "OmniTrack",
+ "name": "OmniTrack",
+ "number_cards": [],
+ "owner": "Administrator",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 0.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "",
+   "label": "Planned Work Blocks",
+   "link_to": "Planned Work Block",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "label": "Shift Templates",
+   "link_to": "OmniTrack Shift Template",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "label": "Shift Split Assignments",
+   "link_to": "OmniTrack Shift Split Assignment",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "Synthesizer Logs",
+   "link_to": "OmniTrack Attendance Synthesizer Log",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "OmniTrack Settings",
+   "link_to": "OmniTrack Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "OmniTrack",
+ "type": "Workspace"
 }
