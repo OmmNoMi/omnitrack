@@ -41,8 +41,9 @@ def validate_task_variance(doc, method=None):
 
 	# Fetch project threshold override or default (1.0 hour)
 	threshold = 1.0
-	if doc.get("project") and frappe.db.exists("DocType", "OmniTrack Project Policy"):
-		policy = frappe.db.get_value("OmniTrack Project Policy", {"project": doc.project}, "custom_variance_threshold")
+	project = doc.get("project")
+	if project and frappe.db.exists("DocType", "OmniTrack Project Policy"):
+		policy = frappe.db.get_value("OmniTrack Project Policy", {"project": project}, "custom_variance_threshold")
 		if policy:
 			threshold = flt(policy)
 
