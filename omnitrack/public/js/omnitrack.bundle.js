@@ -13,6 +13,7 @@ omnitrack.init = function() {
 	console.log('[OmniTrack] Initialized v1.0.1 (OmmNoMi Automation LLP)');
 	omnitrack.register_service_worker();
 	omnitrack.setup_keyboard_shortcuts();
+	omnitrack.setup_pwa_navigation();
 	omnitrack.mount_navbar_timer();
 };
 
@@ -194,11 +195,67 @@ omnitrack.render_heatmap = function(containerSelector, days=30) {
 
 omnitrack.setup_keyboard_shortcuts = function() {
 	$(document).on('keydown', function(e) {
-		if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'T' || e.key === 't')) {
+		// Alt+Shift+T (Option+Shift+T on Mac) prevents overriding browser's Cmd+Shift+T / Ctrl+Shift+T (Reopen Tab)
+		if (e.altKey && e.shiftKey && (e.key === 'T' || e.key === 't')) {
 			e.preventDefault();
 			omnitrack.toggle_timer();
 		}
 	});
+};
+
+omnitrack.setup_pwa_navigation = function() {
+	// Robust navigation handler for PWA Workstation shortcuts and sidebar items (capture phase bypasses popup blockers)
+	document.addEventListener('click', function(e) {
+		const pwaTarget = e.target.closest && e.target.closest(
+			'.shortcut-widget-box[aria-label*="PWA"], .shortcut-widget-box[data-label*="PWA"], [data-id*="PWA"], [item-name*="PWA"], a[href="/omnitrack"]'
+		);
+		if (!pwaTarget) return;
+
+		// If user deliberately held metaKey or ctrlKey, open in new tab
+		if (e.metaKey || e.ctrlKey || e.button === 1) {
+			window.open('/omnitrack', '_blank');
+			e.preventDefault();
+			e.stopPropagation();
+			return;
+		}
+
+		// Normal click: navigate directly to PWA Workstation on same page
+		e.preventDefault();
+		e.stopPropagation();
+		window.location.href = '/omnitrack';
+	}, true);
+
+	// Keyboard accessibility (Enter / Space on shortcut box)
+	document.addEventListener('keydown', function(e) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			const el = document.activeElement;
+			if (el && el.closest) {
+				const pwaTarget = el.closest(
+					'.shortcut-widget-box[aria-label*="PWA"], .shortcut-widget-box[data-label*="PWA"], [data-id*="PWA"], [item-name*="PWA"], a[href="/omnitrack"]'
+				);
+				if (pwaTarget) {
+					e.preventDefault();
+					e.stopPropagation();
+					if (e.metaKey || e.ctrlKey) {
+						window.open('/omnitrack', '_blank');
+					} else {
+						window.location.href = '/omnitrack';
+					}
+				}
+			}
+		}
+	}, true);
+
+	// Ensure PWA icon is rendered if icon container is blank
+	function renderPwaIcons() {
+		$('[item-name="PWA Workstation"] .sidebar-item-icon').each(function() {
+			if ($(this).find('svg').length === 0) {
+				$(this).html(frappe.utils.icon('smartphone', 'sm', '', '', 'text-ink-gray-7 current-color', true));
+			}
+		});
+	}
+	renderPwaIcons();
+	$(document).on('page_change toolbar_setup', renderPwaIcons);
 };
 
 $(document).ready(function() {

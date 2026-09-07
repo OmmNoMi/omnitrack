@@ -8,8 +8,8 @@ app_license = "GNU General Public License v3.0"
 
 # Includes in <head>
 # ------------------
-app_include_js = "/assets/omnitrack/js/omnitrack.bundle.js"
-app_include_css = "/assets/omnitrack/css/omnitrack.bundle.css"
+app_include_js = "omnitrack.bundle.js"
+app_include_css = "omnitrack.bundle.css"
 
 # Installation Hooks
 # ------------------

@@ -24,7 +24,7 @@ def on_task_update(doc, method=None):
 				user=user,
 				title=_("Task Updated: {0}").format(title_subject[:40]),
 				message=_("Status changed to {0}").format(doc.status),
-				action_url=f"/app/{doc.doctype.lower().replace(' ', '-')}/{doc.name}"
+				action_url=f"/desk/{doc.doctype.lower().replace(' ', '-')}/{doc.name}"
 			)
 
 def dispatch_push_notification(user, title, message, action_url="/", is_urgent=False):

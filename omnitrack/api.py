@@ -536,3 +536,22 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 	doc.insert()
 	return doc.as_dict()
 
+@frappe.whitelist()
+def trigger_attendance_synthesis():
+	"""One-click trigger to synthesize attendance records for all active employees."""
+	from omnitrack.synthesizer import synthesize_all_active_employees
+	try:
+		results = synthesize_all_active_employees()
+		total = len(results) if isinstance(results, list) else 0
+		return {
+			"status": "success",
+			"message": _("Attendance synthesized successfully for {0} employee(s).").format(total),
+			"count": total
+		}
+	except Exception as e:
+		return {
+			"status": "error",
+			"message": str(e)
+		}
+
+
