@@ -239,7 +239,7 @@ def get_team_heatmap_data(days=14):
 	return {"days": days, "team": team_data}
 
 @frappe.whitelist()
-def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliverable_notes=None):
+def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliverable_notes=None, work_nature=None):
 	"""
 	Quick Stopwatch Punch API from Desktop / Mobile HUD.
 	Creates/Completes a Planned Work Block and triggers attendance synthesis.
@@ -248,13 +248,13 @@ def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliv
 	today = nowdate()
 	now_t = nowtime()
 	dur_secs = flt(duration_seconds)
-	dur_hours = round(dur_secs / 3600.0, 2) if dur_secs > 0 else 0.5
+	dur_hours = max(round(dur_secs / 3600.0, 2), 0.01) if dur_secs > 0 else 0.5
 
 	if action in ("stop", "punch_out", "save_block"):
 		# Calculate start time
 		from datetime import datetime, timedelta
 		now_dt = datetime.now()
-		start_dt = now_dt - timedelta(seconds=max(dur_secs, 1800))
+		start_dt = now_dt - timedelta(seconds=max(dur_secs, 60))
 		start_t = start_dt.strftime("%H:%M:%S")
 		end_t = now_dt.strftime("%H:%M:%S")
 
@@ -268,12 +268,12 @@ def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliv
 		block.task = task
 		block.deliverable_notes = deliverable_notes or f"Stopwatch log recorded from Desk Navbar ({dur_hours} hrs)"
 		block.status = "Completed"
-		block.task_nature = "🎯 Planned"
+		block.task_nature = work_nature or "🎯 Planned"
 		block.flags.ignore_permissions = True
 		block.insert()
 
 		# Also log Employee Checkin if Employee exists
-		emp = frappe.db.get_value("Employee", {"user_id": user}, "name")
+		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
 		if emp and frappe.db.exists("DocType", "Employee Checkin"):
 			chk = frappe.new_doc("Employee Checkin")
 			chk.employee = emp
@@ -290,7 +290,7 @@ def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliv
 		}
 
 	elif action in ("punch_in", "start"):
-		emp = frappe.db.get_value("Employee", {"user_id": user}, "name")
+		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
 		if emp and frappe.db.exists("DocType", "Employee Checkin"):
 			chk = frappe.new_doc("Employee Checkin")
 			chk.employee = emp

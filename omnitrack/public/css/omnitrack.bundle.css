@@ -15,62 +15,366 @@
 	--gh-overtime: #39d353;
 }
 
-/* Desk Navbar Floating Timer HUD */
+/* Desk Top-Bar Live Stopwatch HUD - Native Frappe Styling */
 #omnitrack-nav-timer {
 	display: inline-flex;
 	align-items: center;
-	gap: 8px;
-	background: #0d1117;
-	color: #c9d1d9;
-	border: 1px solid #30363d;
-	border-radius: 20px;
-	padding: 4px 12px;
-	font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-	font-size: 12px;
-	margin-right: 12px;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+	align-self: center;
+	background: var(--card-bg, #ffffff);
+	color: var(--text-color, #1f272e);
+	border: 1px solid var(--border-color, #d1d8dd);
+	border-radius: var(--border-radius-sm, 6px);
+	height: 28px;
+	font-family: var(--font-stack, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+	font-size: var(--text-sm, 12px);
+	font-weight: 500;
+	box-shadow: var(--card-shadow, 0 1px 2px rgba(0,0,0,0.05));
 	cursor: pointer;
-	transition: all 0.2s ease;
+	user-select: none;
+	transition: border-color 0.15s ease, background 0.15s ease, width 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+	z-index: 10;
+	position: relative;
+	box-sizing: border-box;
+}
+
+#omnitrack-nav-timer .omni-timer-pill-inner {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px;
+	height: 100%;
+}
+
+/* Top-bar layout */
+#omnitrack-nav-timer.omni-pos-topbar {
+	margin-right: 8px;
+}
+
+#omnitrack-nav-timer.omnitrack-floating {
+	position: fixed;
+	top: 10px;
+	right: 80px;
+	z-index: 1005;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 #omnitrack-nav-timer:hover {
-	border-color: #58a6ff;
-	background: #161b22;
+	border-color: var(--gray-400, #a0aec0);
+	background: var(--bg-hover, #f8fafc);
+}
+
+/* ── SIDEBAR DOCK HOVER WIDGET ──────────────────────────────────────────
+   Docked along the .body-sidebar vertical border line.
+   Sits at bottom: 116px (right above the native collapse button at bottom: 80px
+   and the Assistant Help ? button at bottom: 44px).
+   - Resting state: clean 24px circular button matching .sidebar-toggle-btn.
+   - When sidebar is unhovered: hidden unless active/running.
+   - On hover: expands horizontally outward to the right into the main canvas.
+   - Zero overlap with the crowded top-right page header actions!
+──────────────────────────────────────────────────────────────────────── */
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar {
+	position: absolute;
+	right: -12px;
+	bottom: 116px;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	padding: 0;
+	justify-content: center;
+	border: 1px solid var(--sidebar-border-color, #d1d8dd);
+	background: var(--surface-menu-bar, var(--card-bg, #ffffff));
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.15s ease, visibility 0.15s ease, width 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.2s ease, box-shadow 0.2s ease;
+	z-index: 1023;
+	overflow: visible;
+}
+
+/* Sidebar hover reveal (inherits native Frappe sidebar interaction) */
+.body-sidebar:hover #omnitrack-nav-timer.omni-pos-sidebar,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-running,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover {
+	opacity: 1;
+	visibility: visible;
+}
+
+/* While resting as a 24px circular button in sidebar dock */
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) {
+	width: 24px !important;
+	border-radius: 50% !important;
+}
+
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) .omni-timer-pill-inner {
+	padding: 0;
+	justify-content: center;
+	width: 100%;
+}
+
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) #omni-timer-text,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) #omni-timer-btn,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) .omnitrack-timer-opts {
+	display: none;
+}
+
+/* On hover over the sidebar dock button: expands outward into the content canvas */
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open {
+	width: auto;
+	border-radius: 16px;
+	padding: 0 4px;
+	background: var(--card-bg, #ffffff);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+	border-color: var(--primary, #2490ef);
+	transform: translateX(10px);
+}
+
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover .omni-timer-pill-inner,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open .omni-timer-pill-inner {
+	padding: 0 6px;
+}
+
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover #omni-timer-text,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open #omni-timer-text,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover #omni-timer-btn,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open #omni-timer-btn,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover .omnitrack-timer-opts,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open .omnitrack-timer-opts {
+	display: inline-flex;
+}
+
+/* Options Dropdown orientation when in sidebar dock: fly upwards/outwards cleanly */
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar .omnitrack-opts-dropdown {
+	top: auto;
+	bottom: calc(100% + 6px);
+	left: 0;
+	right: auto;
+}
+
+#omni-timer-text {
+	font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: var(--text-color, #1f272e);
+}
+
+/* Zen Auto-Collapse Mode (Top Bar):
+   - Idle OR Running: stays as a compact 28px micro-pill with only the indicator dot visible (green pulsing when running, grey when idle).
+   - Zero numbers or buttons cluttering the screen by default.
+   - Smoothly expands to full widget on hover OR during the 3-second minute-boundary accessibility peek (.omni-peek).
+*/
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:not(:hover):not(.omni-peek) {
+	width: 28px;
+	padding: 0;
+	justify-content: center;
+	overflow: hidden;
+	opacity: 0.85;
+}
+
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:not(:hover):not(.omni-peek) .omni-timer-pill-inner {
+	padding: 0;
+	justify-content: center;
+	width: 100%;
+}
+
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:not(:hover):not(.omni-peek) #omni-timer-text,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:not(:hover):not(.omni-peek) #omni-timer-btn,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:not(:hover):not(.omni-peek) .omnitrack-timer-opts {
+	display: none;
+}
+
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:hover,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen.omni-peek {
+	width: auto;
+	padding: 0;
+	overflow: visible;
+	opacity: 1;
+	border-color: var(--primary, #2490ef);
+}
+
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:hover #omni-timer-text,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen.omni-peek #omni-timer-text,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:hover #omni-timer-btn,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen.omni-peek #omni-timer-btn,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen:hover .omnitrack-timer-opts,
+#omnitrack-nav-timer.omni-pos-topbar.omni-mode-zen.omni-peek .omnitrack-timer-opts {
+	display: inline-flex;
+}
+
+/* Hidden Mode: completely hidden unless active or summoned */
+#omnitrack-nav-timer.omni-mode-hidden:not(.omni-running) {
+	display: none !important;
 }
 
 .omnitrack-timer-dot {
-	width: 8px;
-	height: 8px;
+	width: 7px;
+	height: 7px;
 	border-radius: 50%;
-	background: #8b949e;
+	background: var(--gray-400, #94a3b8);
 	transition: background 0.3s ease;
+	flex-shrink: 0;
 }
 
 .omnitrack-timer-dot.active {
-	background: #39d353;
-	box-shadow: 0 0 8px rgba(57, 211, 83, 0.8);
+	background: #10b981;
+	box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
 	animation: omni-pulse 1.5s infinite;
 }
 
 @keyframes omni-pulse {
 	0% { opacity: 1; transform: scale(1); }
-	50% { opacity: 0.4; transform: scale(1.2); }
+	50% { opacity: 0.4; transform: scale(1.25); }
 	100% { opacity: 1; transform: scale(1); }
 }
 
 .omnitrack-timer-action {
-	background: #238636;
-	color: #fff;
+	background: #10b981;
+	color: #ffffff;
 	border: none;
-	border-radius: 12px;
-	padding: 2px 8px;
+	border-radius: 4px;
+	padding: 2px 7px;
 	font-size: 11px;
 	font-weight: 600;
 	cursor: pointer;
+	line-height: 16px;
+	transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.omnitrack-timer-action:hover {
+	background: #059669;
 }
 
 .omnitrack-timer-action.stop {
-	background: #da3633;
+	background: #ef4444;
+}
+
+.omnitrack-timer-action.stop:hover {
+	background: #dc2626;
+}
+
+/* Settings / Options Dropdown Trigger */
+.omnitrack-timer-opts {
+	background: transparent;
+	border: none;
+	color: var(--text-muted, #64748b);
+	padding: 0 2px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	border-radius: 3px;
+	font-size: 11px;
+	height: 18px;
+	transition: color 0.15s ease, background 0.15s ease;
+}
+
+.omnitrack-timer-opts:hover {
+	color: var(--text-color, #1f272e);
+	background: var(--bg-hover, rgba(0,0,0,0.05));
+}
+
+/* Native Frappe Dropdown Menu Spec:
+   - Width: auto with generous min-width (220px) preventing text truncation
+   - Background: var(--card-bg)
+   - Border: 1px solid var(--border-color)
+   - Border Radius: var(--border-radius-lg, 8px)
+   - Box shadow: Frappe standard dropdown shadow */
+.omnitrack-opts-dropdown {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	background: var(--card-bg, #ffffff);
+	border: 1px solid var(--border-color, #e2e8f0);
+	border-radius: var(--border-radius-lg, 8px);
+	padding: 6px;
+	min-width: 220px;
+	max-width: 320px;
+	box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1));
+	z-index: 1050;
+	display: none;
+	font-family: var(--font-stack, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+	font-size: 12px;
+}
+
+.omnitrack-opts-dropdown.show {
+	display: block;
+}
+
+.omnitrack-opts-dropdown .omni-opt-header {
+	padding: 6px 8px 4px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted, #64748b);
+	border-bottom: 1px solid var(--border-color, #f1f5f9);
+	margin-bottom: 4px;
+	white-space: nowrap;
+}
+
+.omnitrack-opts-dropdown .omni-opt-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 8px;
+	border-radius: var(--border-radius-sm, 6px);
+	color: var(--text-color, #1f272e);
+	cursor: pointer;
+	white-space: nowrap;
+	gap: 12px;
+	transition: background 0.15s ease, color 0.15s ease;
+	outline: none;
+}
+
+.omnitrack-opts-dropdown .omni-opt-item:hover,
+.omnitrack-opts-dropdown .omni-opt-item:focus,
+.omnitrack-opts-dropdown .omni-opt-item.cv-menu-active {
+	background: var(--sidebar-hover-color, var(--bg-hover, #f1f5f9));
+	color: var(--text-color, #0f172a);
+	outline: none;
+}
+
+.omnitrack-opts-dropdown .omni-opt-item.active {
+	color: var(--primary, #2490ef);
+	font-weight: 600;
+}
+
+.omnitrack-opts-dropdown .omni-opt-item.active:hover,
+.omnitrack-opts-dropdown .omni-opt-item.active:focus,
+.omnitrack-opts-dropdown .omni-opt-item.active.cv-menu-active {
+	background: var(--sidebar-hover-color, var(--bg-hover, #f1f5f9));
+	color: var(--primary, #2490ef);
+}
+
+.omnitrack-opts-dropdown .omni-opt-item .check {
+	font-size: 12px;
+	color: var(--primary, #2490ef);
+	opacity: 0;
+	font-weight: bold;
+}
+
+.omnitrack-opts-dropdown .omni-opt-item.active .check {
+	opacity: 1;
+}
+
+/* Save Modal Discard Action Styling Fix (crisp white label on red) */
+.modal-footer button.btn-danger,
+.modal-footer .btn-danger {
+	color: #ffffff !important;
+	background-color: #da3633 !important;
+	border-color: #da3633 !important;
+	font-weight: 500 !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+}
+
+.modal-footer button.btn-danger:hover,
+.modal-footer .btn-danger:hover {
+	background-color: #b62324 !important;
+	border-color: #b62324 !important;
+	color: #ffffff !important;
 }
 
 /* Heatmap Card & Grid */

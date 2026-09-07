@@ -56,6 +56,12 @@
       "label": "Feature Switches"
     },
     {
+      "fieldname": "enable_desk_stopwatch_hud",
+      "fieldtype": "Check",
+      "label": "Enable Desk Top-Bar Stopwatch HUD",
+      "default": 1
+    },
+    {
       "fieldname": "enable_split_shifts",
       "fieldtype": "Check",
       "label": "Enable Discontinuous Split Shifts",
