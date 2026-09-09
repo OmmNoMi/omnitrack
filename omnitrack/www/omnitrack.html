@@ -253,15 +253,6 @@
         <span>Raven Feed</span>
       </button>
 
-      <!-- Tab 8: Frappe Blueprint -->
-      <button 
-        @click="activeTab = 'blueprint'"
-        class="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer whitespace-nowrap"
-        :class="activeTab === 'blueprint' ? (isDarkMode ? 'bg-blue-900/60 text-blue-200 border border-blue-700 font-bold shadow-xs' : 'bg-blue-50 text-blue-700 border border-blue-200 font-bold shadow-xs') : (isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100')">
-        <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        <span>API Blueprint</span>
-      </button>
-
     </div>
 
   </nav>
@@ -889,29 +880,6 @@
       </div>
     </div>
 
-    <!-- ======================================== -->
-    <!-- TAB 8: FRAPPE BLUEPRINT                  -->
-    <!-- ======================================== -->
-    <div v-if="activeTab === 'blueprint'" class="space-y-4 sm:space-y-6">
-      <div class="rounded-3xl p-4 sm:p-6 border shadow-xs space-y-4 transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
-        <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">OmniTrack Live API & Blueprint</h3>
-        </div>
-        <div class="space-y-2 text-xs font-mono">
-          <div class="p-3 rounded-xl border" :class="isDarkMode ? 'bg-[#252528] border-gray-700 text-emerald-400' : 'bg-gray-50 border-gray-200 text-emerald-700'">
-            GET /api/method/omnitrack.api.get_workstation_data?employee=&lt;emp&gt;
-          </div>
-          <div class="p-3 rounded-xl border" :class="isDarkMode ? 'bg-[#252528] border-gray-700 text-blue-400' : 'bg-gray-50 border-gray-200 text-blue-700'">
-            POST /api/method/omnitrack.api.quick_timer_punch
-          </div>
-          <div class="p-3 rounded-xl border" :class="isDarkMode ? 'bg-[#252528] border-gray-700 text-purple-400' : 'bg-gray-50 border-gray-200 text-purple-700'">
-            POST /api/method/omnitrack.api.create_planned_work_block
-          </div>
-        </div>
-      </div>
-    </div>
-
   </main>
 
   <!-- ========================================== -->
@@ -1110,8 +1078,7 @@
         { id: 'timeline', label: 'Timeline', icon: '📅' },
         { id: 'attendance', label: 'Attendance', icon: '👥' },
         { id: 'client_portal', label: 'Client', icon: '🛡️' },
-        { id: 'raven', label: 'Raven', icon: '💬' },
-        { id: 'blueprint', label: 'API', icon: '</>' }
+        { id: 'raven', label: 'Raven', icon: '💬' }
       ]);
 
             // Nature / Type Options with High-Fidelity Vector SVGs

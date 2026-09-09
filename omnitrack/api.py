@@ -399,8 +399,9 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 
 	# 1. Planned Work Blocks (Live from DB)
 	if employee and employee != "All":
-		user_emp = frappe.db.get_value("Employee", employee, "user_id") or employee
-		emp_fullname = frappe.db.get_value("User", employee, "full_name") or frappe.db.get_value("Employee", employee, "employee_name") or employee
+		has_employee = frappe.db.exists("DocType", "Employee")
+		user_emp = (frappe.db.get_value("Employee", employee, "user_id") if has_employee else None) or employee
+		emp_fullname = frappe.db.get_value("User", employee, "full_name") or (frappe.db.get_value("Employee", employee, "employee_name") if has_employee else None) or employee
 		first_name = emp_fullname.split(" ")[0]
 		name_part = employee.split("@")[0].split(" ")[0]
 
@@ -573,7 +574,7 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 	doc.employee = assigned_emp
 	if frappe.db.exists("User", assigned_emp):
 		doc.associate_name = frappe.db.get_value("User", assigned_emp, "full_name") or assigned_emp
-	elif frappe.db.exists("Employee", assigned_emp):
+	elif frappe.db.exists("DocType", "Employee") and frappe.db.exists("Employee", assigned_emp):
 		doc.associate_name = frappe.db.get_value("Employee", assigned_emp, "employee_name") or assigned_emp
 	else:
 		doc.associate_name = assigned_emp
