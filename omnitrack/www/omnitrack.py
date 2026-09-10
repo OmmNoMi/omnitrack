@@ -23,6 +23,16 @@ def get_context(context):
 	ctx.today_date = nowdate()
 	ctx.current_time = nowtime()
 	ctx.no_cache = 1
+	# Administrator / freshly-created sessions have no csrf_token yet; get_csrf_token()
+	# generates and persists one so client POSTs validate instead of racing a 417.
+	try:
+		from frappe.sessions import get_csrf_token
+		ctx.csrf_token = get_csrf_token()
+	except Exception:
+		try:
+			ctx.csrf_token = frappe.local.session.data.csrf_token or ""
+		except Exception:
+			ctx.csrf_token = ""
 
 	# Fetch today's Planned Work Blocks for the active user safely
 	try:

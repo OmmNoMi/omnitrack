@@ -90,7 +90,8 @@
     window.OMNITRACK_SESSION = {
       user: "{{ user }}",
       user_fullname: "{{ user_fullname }}",
-      is_manager: {{ 'true' if is_manager else 'false' }}
+      is_manager: {{ 'true' if is_manager else 'false' }},
+      csrf_token: "{{ csrf_token }}"
     };
   </script>
 </head>
@@ -159,9 +160,53 @@
         <svg class="w-3.5 h-3.5 text-gray-400 absolute right-2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
 
+      <!-- Compact Header Stopwatch + Popup -->
+      <div class="relative">
+        <button
+          @click="showTrackerPopup = !showTrackerPopup"
+          :title="isTracking ? 'Recording — open tracker' : 'Open quick tracker'"
+          class="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full border text-xs font-mono font-bold transition-colors cursor-pointer"
+          :class="isTracking ? 'bg-red-50 border-red-300 text-red-700 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300' : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')">
+          <span class="w-2 h-2 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
+          <span>{{ formattedTime }}</span>
+        </button>
+
+        <transition enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0 -translate-y-1" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0 -translate-y-1">
+          <div v-if="showTrackerPopup" class="absolute right-0 mt-2 w-80 z-50 rounded-2xl border shadow-2xl p-4 space-y-3" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="dialog" aria-label="Quick tracker">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
+                <span class="font-mono text-lg font-extrabold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ formattedTime }}</span>
+              </div>
+              <span class="text-[10px] font-bold uppercase" :class="isTracking ? 'text-red-500' : 'text-gray-400'">{{ isTracking ? 'Recording' : 'Ready' }}</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              <button v-for="opt in natureOptions" :key="opt.id" @click="selectedNature = opt.label"
+                class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
+                :class="selectedNature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
+                <span v-html="opt.svgIcon" class="w-3 h-3 flex items-center justify-center"></span>
+                <span>{{ opt.label }}</span>
+              </button>
+            </div>
+            <input type="text" v-model="trackerNotes" :placeholder="'Logging task for ' + currentEmployeeFirstName + '...'"
+              class="w-full text-xs rounded-xl px-3 py-2 outline-none border" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'">
+            <select v-model="selectedProject" class="w-full text-xs rounded-xl px-3 py-2 outline-none border" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-white border-gray-300 text-gray-700'">
+              <option value="">General Work</option>
+              <option v-for="p in projects" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
+            </select>
+            <button @click="toggleTrack" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white cursor-pointer active:scale-95"
+              :class="isTracking ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1B64DA] hover:bg-blue-700'">
+              <svg v-if="!isTracking" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              <svg v-else class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+              <span>{{ isTracking ? 'Stop Tracking' : 'Start Timer' }}</span>
+            </button>
+          </div>
+        </transition>
+      </div>
+
       <!-- Google Material Light/Dark Mode Switcher -->
-      <button 
-        @click="toggleTheme" 
+      <button
+        @click="toggleTheme"
         :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
         class="p-2 rounded-full border transition-colors cursor-pointer flex items-center justify-center"
         :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-amber-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'">
@@ -253,6 +298,15 @@
         <span>Raven Feed</span>
       </button>
 
+      <!-- Tab 8: Planner -->
+      <button
+        @click="activeTab = 'planner'"
+        class="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer whitespace-nowrap"
+        :class="activeTab === 'planner' ? (isDarkMode ? 'bg-blue-900/60 text-blue-200 border border-blue-700 font-bold shadow-xs' : 'bg-blue-50 text-blue-700 border border-blue-200 font-bold shadow-xs') : (isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100')">
+        <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/></svg>
+        <span>Planner</span>
+      </button>
+
     </div>
 
   </nav>
@@ -280,8 +334,9 @@
 
     <!-- ======================================== -->
     <!-- DEDICATED QUICK TIMER & ACTION CARD      -->
+    <!-- (hidden on Planner tab — a compact stopwatch lives in the header there) -->
     <!-- ======================================== -->
-    <div class="rounded-3xl p-4 sm:p-6 border shadow-xs transition-all duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
+    <div v-if="activeTab !== 'planner'" class="rounded-3xl p-4 sm:p-6 border shadow-xs transition-all duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
       
       <!-- Top Row: Stopwatch Display, Tracking State & Action Button -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
@@ -880,7 +935,306 @@
       </div>
     </div>
 
+    <!-- ======================================== -->
+    <!-- TAB 8: PLANNER (Calendar Work-Block Self-Booking) -->
+    <!-- ======================================== -->
+    <div v-if="activeTab === 'planner'" class="space-y-4 sm:space-y-5">
+
+      <!-- Week adherence summary -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="rounded-2xl p-3.5 border shadow-xs transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Planned this week</div>
+          <div class="text-2xl font-extrabold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ fmtHrs(plannerData.totals.planned_hours) }}<span class="text-sm font-normal text-gray-400">h</span></div>
+          <div class="text-[11px] text-gray-400">{{ plannerData.totals.block_count }} work block{{ plannerData.totals.block_count === 1 ? '' : 's' }}</div>
+        </div>
+        <div class="rounded-2xl p-3.5 border shadow-xs transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Actually logged</div>
+          <div class="text-2xl font-extrabold text-emerald-500">{{ fmtHrs(plannerData.totals.actual_hours) }}<span class="text-sm font-normal text-gray-400">h</span></div>
+          <div class="text-[11px] text-gray-400">across real sessions</div>
+        </div>
+        <div class="rounded-2xl p-3.5 border shadow-xs transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Plan vs actual</div>
+          <div class="text-2xl font-extrabold" :class="plannerData.totals.variance_hours < 0 ? 'text-amber-500' : (plannerData.totals.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
+            {{ plannerData.totals.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(plannerData.totals.variance_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+          </div>
+          <div class="text-[11px] text-gray-400">{{ plannerData.totals.variance_hours < 0 ? 'under-logged vs plan' : (plannerData.totals.variance_hours > 0 ? 'overran the plan' : 'on plan') }}</div>
+        </div>
+        <div class="rounded-2xl p-3.5 border shadow-xs transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Adherence</div>
+          <div class="text-2xl font-extrabold text-blue-500">{{ plannerData.totals.adherence_pct }}<span class="text-sm font-normal text-gray-400">%</span></div>
+          <div class="mt-1 h-1.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
+            <div class="h-full bg-blue-500 rounded-full" :style="{ width: Math.min(100, plannerData.totals.adherence_pct) + '%' }"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
+
+        <!-- Left rail: assigned tasks -->
+        <div class="rounded-3xl p-4 border shadow-xs space-y-3 transition-colors self-start" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">My Assigned Work</h3>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" :class="isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'">{{ plannerData.assigned_tasks.length }}</span>
+          </div>
+          <p class="text-[11px] text-gray-400 leading-snug">Pick a task, then drop it into a time slot on the calendar. One task can be booked across many blocks and days.</p>
+          <div v-if="!plannerData.assigned_tasks.length" class="text-xs text-gray-400 py-6 text-center">Nothing assigned to you right now.</div>
+          <ul class="space-y-2 max-h-[520px] overflow-y-auto no-scrollbar">
+            <li v-for="t in plannerData.assigned_tasks" :key="t.ref">
+              <button type="button"
+                @click="pickTask(t)"
+                class="w-full text-left p-3 rounded-2xl border transition-all cursor-pointer"
+                :class="pickedTask && pickedTask.ref === t.ref
+                  ? (isDarkMode ? 'bg-blue-950/70 border-blue-600 ring-2 ring-blue-500/30' : 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20')
+                  : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 hover:border-gray-600' : 'bg-gray-50 border-gray-200 hover:border-gray-300')">
+                <div class="text-xs font-bold leading-snug" :class="isDarkMode ? 'text-gray-100' : 'text-gray-800'">{{ t.subject }}</div>
+                <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span v-if="t.project_name" class="text-[10px] px-1.5 py-0.5 rounded-full" :class="isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-white text-gray-500 border border-gray-200'">{{ t.project_name }}</span>
+                  <span v-if="t.priority" class="text-[10px] px-1.5 py-0.5 rounded-full" :class="isDarkMode ? 'bg-gray-800 text-amber-300' : 'bg-amber-50 text-amber-700'">{{ t.priority }}</span>
+                  <span v-if="t.due_date" class="text-[10px] text-gray-400">due {{ t.due_date }}</span>
+                </div>
+                <div class="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
+                  <span>booked <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(t.booked_hours) }}h</b></span>
+                  <span>·</span>
+                  <span>logged <b class="text-emerald-500">{{ fmtHrs(t.logged_hours) }}h</b></span>
+                  <span v-if="t.estimate_hours">· est {{ fmtHrs(t.estimate_hours) }}h</span>
+                </div>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Calendar -->
+        <div class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+          <!-- toolbar -->
+          <div class="flex items-center justify-between gap-2 p-3 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'">
+            <div class="flex items-center gap-1">
+              <button type="button" @click="plannerShift(-1)" aria-label="Previous" class="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'">‹</button>
+              <button type="button" @click="plannerToday" class="text-xs font-bold px-2.5 py-1.5 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">Today</button>
+              <button type="button" @click="plannerShift(1)" aria-label="Next" class="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'">›</button>
+              <span class="text-xs font-bold ml-2" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ plannerRangeLabel }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <!-- Nature filter (multi-select) -->
+              <div class="relative">
+                <button type="button" @click="showNatureFilter = !showNatureFilter"
+                  class="text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer flex items-center gap-1.5"
+                  :class="isDarkMode ? 'border-gray-700 text-gray-200 hover:bg-gray-800' : 'border-gray-200 text-gray-700 hover:bg-gray-100'"
+                  :aria-expanded="showNatureFilter" aria-haspopup="true">
+                  <span>{{ natureFilterLabel }}</span>
+                  <svg class="w-3 h-3 opacity-60" viewBox="0 0 20 20" fill="currentColor"><path d="M5.5 7.5l4.5 4.5 4.5-4.5z"/></svg>
+                </button>
+                <transition enter-active-class="transition ease-out duration-100" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100" leave-active-class="transition ease-in duration-75" leave-from-class="opacity-100" leave-to-class="opacity-0">
+                  <div v-if="showNatureFilter" class="absolute right-0 mt-2 w-52 z-50 rounded-xl border shadow-xl p-1.5" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="menu">
+                    <button type="button" @click="setNatureFilter('all')" class="w-full text-left text-xs font-bold px-2 py-1.5 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+                      {{ natureFilter.length === 0 ? '✓ ' : '' }}All types
+                    </button>
+                    <div class="my-1 border-t" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'"></div>
+                    <label v-for="n in plannerNatureOptions" :key="n" class="flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+                      <input type="checkbox" :value="n" :checked="natureFilter.includes(n)" @change="toggleNatureFilter(n)" class="accent-blue-600">
+                      <span>{{ n }}</span>
+                    </label>
+                  </div>
+                </transition>
+              </div>
+              <div class="flex items-center rounded-lg p-0.5" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
+                <button type="button" @click="plannerView = 'day'" class="text-xs font-bold px-3 py-1 rounded-md cursor-pointer transition-colors" :class="plannerView === 'day' ? (isDarkMode ? 'bg-[#1E1F22] text-white' : 'bg-white text-gray-900 shadow-xs') : 'text-gray-400'">Day</button>
+                <button type="button" @click="plannerView = 'week'" class="text-xs font-bold px-3 py-1 rounded-md cursor-pointer transition-colors" :class="plannerView === 'week' ? (isDarkMode ? 'bg-[#1E1F22] text-white' : 'bg-white text-gray-900 shadow-xs') : 'text-gray-400'">Week</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="pickedTask" class="px-3 py-2 text-[11px] flex items-center gap-2" :class="isDarkMode ? 'bg-blue-950/50 text-blue-200' : 'bg-blue-50 text-blue-700'">
+            <span>📌 Booking <b>{{ pickedTask.subject }}</b> — click a time slot to place it.</span>
+            <button type="button" @click="pickedTask = null" class="underline cursor-pointer">clear</button>
+          </div>
+
+          <!-- grid -->
+          <div class="overflow-x-auto">
+            <div class="min-w-[640px]">
+              <!-- day headers -->
+              <div class="grid border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', 1fr)' }">
+                <div></div>
+                <div v-for="d in plannerDays" :key="d" class="text-center py-2">
+                  <div class="text-[10px] uppercase font-bold text-gray-400">{{ dowLabel(d) }}</div>
+                  <div class="text-sm font-bold" :class="d === todayDate ? 'text-blue-500' : (isDarkMode ? 'text-gray-200' : 'text-gray-800')">{{ domLabel(d) }}</div>
+                </div>
+              </div>
+              <!-- hour rows (full 24h, scrollable; opens scrolled to ~7a) -->
+              <div ref="plannerGridScroll" class="overflow-y-auto" style="max-height: 60vh; scrollbar-gutter: stable;">
+              <div class="relative" :style="{ height: (plannerHours.length * 44) + 'px' }">
+                <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', 1fr)' }">
+                  <!-- hour gutter -->
+                  <div class="relative">
+                    <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-1 text-[10px] text-gray-400 text-right -translate-y-1/2" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
+                  </div>
+                  <!-- day columns -->
+                  <div v-for="d in plannerDays" :key="d" data-day-col class="relative border-l" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+                    <div v-for="(h, i) in plannerHours" :key="h"
+                      class="absolute left-0 right-0 border-t cursor-pointer transition-colors"
+                      :class="[isDarkMode ? 'border-gray-800 hover:bg-blue-950/30' : 'border-gray-100 hover:bg-blue-50/60']"
+                      :style="{ top: (i * 44) + 'px', height: '44px' }"
+                      role="button"
+                      :aria-label="'Book work on ' + d + ' at ' + hourLabel(h)"
+                      tabindex="0"
+                      @click="openBookModal(d, h)"
+                      @keydown.enter.prevent="openBookModal(d, h)"
+                      @keydown.space.prevent="openBookModal(d, h)"></div>
+                    <!-- blocks -->
+                    <button type="button" v-for="b in blocksForDay(d)" :key="b.name"
+                      @pointerdown="startBlockDrag($event, b, 'move')"
+                      @click.stop="onBlockClick(b)"
+                      @keydown.enter.prevent="openBlockDrawer(b)"
+                      @keydown.space.prevent="openBlockDrawer(b)"
+                      :title="'Drag to reschedule · click to open · ' + hhmm(b.start_time) + '–' + hhmm(b.end_time)"
+                      class="absolute left-1 right-1 rounded-lg px-2 py-1 text-left overflow-hidden border touch-none select-none hover:z-10"
+                      :class="[blockClass(b), (plannerDrag && plannerDrag.name === b.name) ? 'cursor-grabbing' : 'cursor-grab']"
+                      :style="dragStyle(b)">
+                      <!-- recorded (timesheet) time filling up from the bottom of the planned block -->
+                      <div v-if="b.actual_hours > 0 && b.status !== 'Cancelled' && !b.is_away"
+                        class="absolute left-0 right-0 bottom-0 pointer-events-none rounded-b-lg"
+                        :class="b.actual_hours > b.duration_hours ? 'bg-rose-500/25 border-t-2 border-rose-500' : 'bg-emerald-500/30 border-t-2 border-emerald-500'"
+                        :style="{ height: Math.min(100, (b.actual_hours / (parseFloat(b.duration_hours) || b.actual_hours) * 100)) + '%' }"
+                        :title="fmtHrs(b.actual_hours) + 'h recorded of ' + fmtHrs(b.duration_hours) + 'h planned'"></div>
+                      <div class="relative text-[10px] font-bold leading-tight truncate">{{ b.task_subject || b.work_item_label || b.deliverable_notes || 'Work block' }}</div>
+                      <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(b) }}</div>
+                      <div class="relative text-[9px] opacity-80" v-if="blockHeight(b) > 44">
+                        {{ fmtHrs(b.actual_hours) }}/{{ fmtHrs(b.duration_hours) }}h
+                        <span v-if="b.variance_hours" :class="b.variance_hours < 0 ? 'text-amber-200' : 'text-rose-200'">({{ b.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(b.variance_hours) }})</span>
+                      </div>
+                      <div @pointerdown.stop="startBlockDrag($event, b, 'resize')"
+                        class="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize" aria-hidden="true"></div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
+
+  <!-- ========================================== -->
+  <!-- PLANNER: BOOK WORK BLOCK MODAL             -->
+  <!-- ========================================== -->
+  <transition enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0">
+    <div v-if="showBookModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" @click.self="showBookModal = false" role="dialog" aria-modal="true" aria-label="Book work block">
+      <div class="w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4" :class="isDarkMode ? 'bg-[#1E1F22] border border-gray-800' : 'bg-white'">
+        <h3 class="font-extrabold text-base" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ bookForm.mode === 'work' ? 'Book a work block' : 'Mark time away' }}</h3>
+        <div class="space-y-3">
+          <div class="flex gap-1.5">
+            <button v-for="m in [['work','🎯 Work'],['🌴 Leave','🌴 Leave'],['🤒 Absent','🤒 Absent']]" :key="m[0]" type="button"
+              @click="bookForm.mode = m[0]"
+              class="flex-1 text-xs font-bold px-2 py-1.5 rounded-lg border cursor-pointer transition-colors"
+              :class="bookForm.mode === m[0] ? (isDarkMode ? 'bg-blue-950/80 border-blue-600 text-blue-200' : 'bg-blue-50 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
+              {{ m[1] }}
+            </button>
+          </div>
+          <label v-if="bookForm.mode === 'work'" class="block">
+            <span class="text-[11px] font-bold text-gray-500">Task / work item</span>
+            <select v-model="bookForm.work_item" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'">
+              <option value="">— Ad-hoc (no linked task) —</option>
+              <option v-for="t in plannerData.assigned_tasks" :key="t.ref" :value="t.ref">{{ t.subject }}</option>
+            </select>
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Date</span>
+              <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Start</span>
+              <input type="time" v-model="bookForm.start_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">End</span>
+              <input type="time" v-model="bookForm.end_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+          </div>
+          <label class="block"><span class="text-[11px] font-bold text-gray-500">Notes (optional)</span>
+            <input type="text" v-model="bookForm.deliverable_notes" placeholder="What will you get done?" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" @click="showBookModal = false" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'">Cancel</button>
+          <button type="button" @click="submitBooking" :disabled="plannerBusy" class="text-xs font-bold px-4 py-2 rounded-xl bg-[#1B64DA] hover:bg-blue-600 text-white cursor-pointer disabled:opacity-50">Book block</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- ========================================== -->
+  <!-- PLANNER: BLOCK DETAIL / SESSION LOG DRAWER -->
+  <!-- ========================================== -->
+  <transition enter-active-class="transition ease-out duration-150" enter-from-class="translate-x-full" enter-to-class="translate-x-0" leave-active-class="transition ease-in duration-100" leave-from-class="translate-x-0" leave-to-class="translate-x-full">
+    <div v-if="showBlockDrawer && activeBlock" class="fixed inset-y-0 right-0 z-[60] w-full max-w-md shadow-2xl overflow-y-auto" :class="isDarkMode ? 'bg-[#1E1F22] border-l border-gray-800' : 'bg-white'" role="dialog" aria-modal="true" aria-label="Work block detail">
+      <div class="p-5 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-[11px] font-bold uppercase text-gray-400">{{ activeBlock.work_date }} · {{ hhmm(activeBlock.start_time) }}–{{ hhmm(activeBlock.end_time) }}</div>
+            <h3 class="font-extrabold text-base mt-0.5" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ activeBlock.task_subject || activeBlock.work_item_label || activeBlock.deliverable_notes || 'Work block' }}</h3>
+            <div class="text-[11px] text-gray-400 mt-0.5">{{ activeBlock.project_name || activeBlock.project || 'No project' }} · {{ activeBlock.status }}</div>
+          </div>
+          <button type="button" @click="showBlockDrawer = false" aria-label="Close" class="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-600'">✕</button>
+        </div>
+
+        <!-- planned vs actual bar -->
+        <div class="rounded-2xl p-3.5 border" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+          <div class="flex items-center justify-between text-[11px] font-bold mb-1.5">
+            <span class="text-gray-500">Planned {{ fmtHrs(activeBlock.duration_hours) }}h</span>
+            <span class="text-emerald-500">Actual {{ fmtHrs(activeBlock.actual_hours) }}h</span>
+          </div>
+          <div class="h-2.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+            <div class="h-full rounded-full" :class="activeBlock.actual_hours > activeBlock.duration_hours ? 'bg-rose-500' : 'bg-emerald-500'"
+              :style="{ width: Math.min(100, activeBlock.duration_hours ? (activeBlock.actual_hours / activeBlock.duration_hours * 100) : 0) + '%' }"></div>
+          </div>
+          <div class="text-[11px] mt-1.5" :class="activeBlock.variance_hours < 0 ? 'text-amber-500' : (activeBlock.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
+            Variance {{ activeBlock.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(activeBlock.variance_hours) }}h
+          </div>
+        </div>
+
+        <!-- sessions list -->
+        <div>
+          <h4 class="text-xs font-bold mb-2" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">Real sessions ({{ activeBlock.sessions.length }})</h4>
+          <div v-if="!activeBlock.sessions.length" class="text-[11px] text-gray-400 py-3">No sessions logged yet.</div>
+          <ul class="space-y-1.5">
+            <li v-for="(s, i) in activeBlock.sessions" :key="i" class="flex items-center justify-between text-[11px] p-2 rounded-lg" :class="isDarkMode ? 'bg-[#2B2D30]' : 'bg-gray-50'">
+              <span :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ s.session_date }}<span v-if="s.from_time"> · {{ hhmm(s.from_time) }}–{{ hhmm(s.to_time) }}</span></span>
+              <span class="font-bold text-emerald-500">{{ fmtHrs(s.hours) }}h</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- live stopwatch against this block -->
+        <button type="button" @click="trackPlannerBlock(activeBlock)" :disabled="isTracking"
+          class="w-full inline-flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer disabled:opacity-50"
+          :class="isDarkMode ? 'bg-red-950/60 border border-red-800 text-red-300 hover:bg-red-950' : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span>
+          {{ isTracking ? 'Timer already running…' : 'Start stopwatch for this block' }}
+        </button>
+
+        <!-- add session -->
+        <div class="rounded-2xl p-3.5 border space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+          <h4 class="text-xs font-bold" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">Log a real session manually</h4>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="block"><span class="text-[10px] font-bold text-gray-500">Date</span>
+              <input type="date" v-model="sessionForm.session_date" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+            <label class="block"><span class="text-[10px] font-bold text-gray-500">From</span>
+              <input type="time" v-model="sessionForm.from_time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+            <label class="block"><span class="text-[10px] font-bold text-gray-500">To</span>
+              <input type="time" v-model="sessionForm.to_time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="block flex-1"><span class="text-[10px] font-bold text-gray-500">or hours</span>
+              <input type="number" step="0.25" min="0" v-model="sessionForm.hours" placeholder="e.g. 1.5" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+            <label class="block flex-[2]"><span class="text-[10px] font-bold text-gray-500">Notes</span>
+              <input type="text" v-model="sessionForm.notes" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+          </div>
+          <button type="button" @click="submitSession" :disabled="plannerBusy" class="w-full text-xs font-bold px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50">Add session</button>
+        </div>
+
+        <div class="flex justify-between gap-2 pt-1">
+          <button type="button" @click="cancelActiveBlock" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-amber-300 hover:bg-gray-800' : 'text-amber-700 hover:bg-amber-50'">Cancel block</button>
+          <button type="button" v-if="!activeBlock.actual_hours" @click="removeActiveBlock" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-rose-300 hover:bg-gray-800' : 'text-rose-600 hover:bg-rose-50'">Delete</button>
+        </div>
+      </div>
+    </div>
+  </transition>
 
   <!-- ========================================== -->
   <!-- 5. MOBILE STICKY BOTTOM APP NAVIGATION BAR -->
@@ -1038,7 +1392,7 @@
 </div>
 
 <script>
-  const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue;
+  const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
   const app = createApp({
     setup() {
@@ -1078,7 +1432,8 @@
         { id: 'timeline', label: 'Timeline', icon: '📅' },
         { id: 'attendance', label: 'Attendance', icon: '👥' },
         { id: 'client_portal', label: 'Client', icon: '🛡️' },
-        { id: 'raven', label: 'Raven', icon: '💬' }
+        { id: 'raven', label: 'Raven', icon: '💬' },
+        { id: 'planner', label: 'Planner', icon: '📅' }
       ]);
 
             // Nature / Type Options with High-Fidelity Vector SVGs
@@ -1126,12 +1481,16 @@
       };
 
       // 2. Stopwatch Tracker State
+      const showTrackerPopup = ref(false);
       const isTracking = ref(false);
       const trackerSeconds = ref(0);
       const trackerTimer = ref(null);
       const trackerNotes = ref('');
       const selectedNature = ref('Planned Work');
       const selectedProject = ref('');
+      // When the tracker was started from a Planner block, its logged time is
+      // recorded as a real Work Session against that block (feeds actual_hours).
+      const trackerBlockName = ref(null);
 
       // 3. User & Filter State (Permission Scoped)
       const session = window.OMNITRACK_SESSION || { user: 'hardiksharma80912@gmail.com', user_fullname: 'Hardik Sharma', is_manager: true };
@@ -1432,8 +1791,36 @@
         } else {
           isTracking.value = false;
           if (trackerTimer.value) clearInterval(trackerTimer.value);
-          const hrs = (trackerSeconds.value / 3600) || 0.1;
-          
+          const hrs = Math.round(((trackerSeconds.value / 3600) || 0.01) * 100) / 100;
+          const boundBlock = trackerBlockName.value;
+          trackerBlockName.value = null;
+
+          if (boundBlock) {
+            // Recorded against a Planner block -> a real Work Session (the timesheet).
+            try {
+              const now = new Date();
+              const from = new Date(now.getTime() - trackerSeconds.value * 1000);
+              const pad = (n) => String(n).padStart(2, '0');
+              await postJSON('log_work_session', {
+                block_name: boundBlock,
+                session_date: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()),
+                from_time: pad(from.getHours()) + ':' + pad(from.getMinutes()),
+                to_time: pad(now.getHours()) + ':' + pad(now.getMinutes()),
+                hours: hrs,
+                notes: trackerNotes.value || `Stopwatch session (${selectedNature.value})`,
+                logged_via: 'Stopwatch'
+              });
+              showToast(`Logged ${hrs.toFixed(2)}h against the planned block`, 'success');
+              trackerNotes.value = '';
+              if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+              const refreshed = (plannerData.value.blocks || []).find(x => x.name === boundBlock);
+              if (refreshed && showBlockDrawer.value) activeBlock.value = refreshed;
+            } catch (err) {
+              showToast('Could not log session: ' + (err && err.message || err), 'danger');
+            }
+            return;
+          }
+
           try {
             await fetch('/api/method/omnitrack.api.quick_timer_punch', {
               method: 'POST',
@@ -1448,10 +1835,23 @@
             showToast(`Logged ${hrs.toFixed(2)} hrs successfully!`, 'success');
             trackerNotes.value = '';
             fetchWorkstationData(selectedEmployee.value);
+            if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') fetchPlannerData();
           } catch (err) {
             showToast('Timer punch recorded locally.', 'success');
           }
         }
+      };
+
+      // Start the header stopwatch bound to a specific Planner block.
+      const trackPlannerBlock = (b) => {
+        if (isTracking.value) { showToast('Stop the current timer first', 'danger'); return; }
+        trackerBlockName.value = b.name;
+        trackerNotes.value = b.task_subject || b.work_item_label || b.deliverable_notes || '';
+        selectedProject.value = b.project || '';
+        selectedNature.value = (b.task_nature || '').includes('Unplanned') ? '⚠️ Unplanned Ops' : '🎯 Planned Work';
+        showBlockDrawer.value = false;
+        showTrackerPopup.value = true;
+        toggleTrack();
       };
 
       const trackBlock = (block) => {
@@ -1490,6 +1890,319 @@
         }
       };
 
+      // ============================================
+      // PLANNER — Calendar work-block self-booking
+      // ============================================
+      const PLANNER_HOUR_PX = 44;
+      const plannerGridScroll = ref(null);
+      const scrollPlannerToMorning = () => {
+        nextTick(() => {
+          if (plannerGridScroll.value) plannerGridScroll.value.scrollTop = 7 * PLANNER_HOUR_PX;
+        });
+      };
+      const plannerView = ref('week');
+      const plannerNatureOptions = ['🎯 Planned', '⚠️ Unplanned', '🚫 Out-of-Office', '🌴 Leave', '🤒 Absent'];
+      const showNatureFilter = ref(false);
+      const natureFilter = ref([]); // empty = show all
+      const natureFilterLabel = computed(() =>
+        natureFilter.value.length === 0 ? 'All types'
+          : natureFilter.value.length === 1 ? natureFilter.value[0]
+          : natureFilter.value.length + ' types');
+      const setNatureFilter = (v) => { if (v === 'all') natureFilter.value = []; showNatureFilter.value = false; };
+      const toggleNatureFilter = (n) => {
+        const i = natureFilter.value.indexOf(n);
+        if (i >= 0) natureFilter.value.splice(i, 1); else natureFilter.value.push(n);
+      };
+      const _blockNature = (b) => (b.task_nature && b.task_nature.trim()) ? b.task_nature.trim() : '🎯 Planned';
+      const plannerAnchor = ref('');
+      const plannerBusy = ref(false);
+      const pickedTask = ref(null);
+      const plannerData = ref({
+        week_start: '', week_end: '', days: [], blocks: [], assigned_tasks: [],
+        totals: { planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, block_count: 0 }
+      });
+      const showBookModal = ref(false);
+      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '' });
+      const showBlockDrawer = ref(false);
+      const activeBlock = ref(null);
+      const sessionForm = ref({ session_date: '', from_time: '', to_time: '', hours: '', notes: '' });
+
+      const csrfToken = session.csrf_token || '';
+      const postJSON = async (method, body) => {
+        const res = await fetch('/api/method/omnitrack.api.' + method, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': csrfToken },
+          body: JSON.stringify(body || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data && (data._server_messages || data.message)) || 'Request failed');
+        return data.message;
+      };
+
+      const fmtHrs = (n) => {
+        const v = Math.round((parseFloat(n) || 0) * 100) / 100;
+        return (Math.abs(v % 1) < 0.005) ? String(Math.round(v)) : v.toFixed(2).replace(/0$/, '');
+      };
+      const _mins = (t) => {
+        if (!t) return 0;
+        const p = String(t).split(':');
+        return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+      };
+      const hhmm = (t) => t ? String(t).slice(0, 5) : '';
+      const _utc = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+      const _iso = (dt) => dt.toISOString().split('T')[0];
+      const addDays = (iso, n) => { const d = _utc(iso); d.setUTCDate(d.getUTCDate() + n); return _iso(d); };
+      const mondayOf = (iso) => { const dow = (_utc(iso).getUTCDay() + 6) % 7; return addDays(iso, -dow); };
+      const todayISO = () => { const n = new Date(); return _iso(new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()))); };
+      plannerAnchor.value = todayISO();
+
+      // Visible hour window: always the full day, 12a–11p.
+      const plannerRange = computed(() => ({ lo: 0, hi: 24 }));
+      const plannerHours = computed(() => {
+        const arr = [];
+        for (let h = plannerRange.value.lo; h < plannerRange.value.hi; h++) arr.push(h);
+        return arr;
+      });
+      const plannerDays = computed(() => {
+        if (plannerView.value === 'day') return [plannerAnchor.value];
+        const mon = mondayOf(plannerAnchor.value);
+        return Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+      });
+      const plannerRangeLabel = computed(() => {
+        const opts = { month: 'short', day: 'numeric', timeZone: 'UTC' };
+        if (plannerView.value === 'day') return _utc(plannerAnchor.value).toLocaleDateString(undefined, { weekday: 'long', ...opts });
+        const d = plannerDays.value;
+        return _utc(d[0]).toLocaleDateString(undefined, opts) + ' – ' + _utc(d[6]).toLocaleDateString(undefined, opts);
+      });
+      const dowLabel = (iso) => _utc(iso).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
+      const domLabel = (iso) => _utc(iso).getUTCDate();
+      const hourLabel = (h) => (h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p');
+
+      const blocksForDay = (iso) => (plannerData.value.blocks || []).filter(b =>
+        b.work_date === iso &&
+        (natureFilter.value.length === 0 || natureFilter.value.includes(_blockNature(b))));
+      const _gridBottomPx = () => plannerHours.value.length * PLANNER_HOUR_PX;
+      const blockTop = (b) => {
+        const px = (_mins(b.start_time) - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
+        return Math.min(Math.max(0, px), Math.max(0, _gridBottomPx() - 22));
+      };
+      const blockHeight = (b) => {
+        let dur = _mins(b.end_time) - _mins(b.start_time);
+        if (dur <= 0) dur = (parseFloat(b.duration_hours) || 1) * 60; // crosses midnight / no end
+        const px = Math.max(22, dur / 60 * PLANNER_HOUR_PX);
+        return Math.min(px, Math.max(22, _gridBottomPx() - blockTop(b))); // never overflow the grid
+      };
+      const blockClass = (b) => {
+        if (b.status === 'Cancelled') return isDarkMode.value ? 'bg-gray-800 border-gray-700 text-gray-500 line-through' : 'bg-gray-100 border-gray-300 text-gray-400 line-through';
+        if (b.status === 'Completed') return 'bg-emerald-600 border-emerald-500 text-white';
+        if (b.status === 'In Progress') return 'bg-blue-600 border-blue-500 text-white';
+        return isDarkMode.value ? 'bg-blue-950/80 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-800';
+      };
+
+      // ---- Drag to reschedule / resize a block ---------------------------------
+      const SNAP_MIN = 15;
+      const plannerDrag = ref(null);
+      const _blockDragEndedAt = ref(0);
+      const _snap = (m) => Math.round(m / SNAP_MIN) * SNAP_MIN;
+      const _minsToHHMM = (m) => {
+        m = ((_snap(m) % 1440) + 1440) % 1440;
+        return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+      };
+      const dragStyle = (b) => {
+        const d = plannerDrag.value;
+        if (d && d.name === b.name && d.moved) {
+          const top = (d.curStart - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
+          const h = Math.max(22, (d.curEnd - d.curStart) / 60 * PLANNER_HOUR_PX);
+          return { top: top + 'px', height: h + 'px', zIndex: 40, opacity: '0.9', boxShadow: '0 8px 24px rgba(0,0,0,.25)' };
+        }
+        return { top: blockTop(b) + 'px', height: blockHeight(b) + 'px' };
+      };
+      const dragTimeLabel = (b) => {
+        const d = plannerDrag.value;
+        if (d && d.name === b.name && d.moved) return _minsToHHMM(d.curStart) + '–' + _minsToHHMM(d.curEnd);
+        return hhmm(b.start_time) + '–' + hhmm(b.end_time);
+      };
+      const onBlockDragMove = (ev) => {
+        const d = plannerDrag.value; if (!d) return;
+        const dy = ev.clientY - d.startY;
+        const dx = ev.clientX - d.startX;
+        if (!d.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) d.moved = true;
+        const dMin = _snap(dy / PLANNER_HOUR_PX * 60);
+        const dur = d.origEnd - d.origStart;
+        if (d.mode === 'move') {
+          let ns = Math.max(0, Math.min(1440 - dur, d.origStart + dMin));
+          d.curStart = ns; d.curEnd = ns + dur;
+          if (plannerView.value === 'week' && d.colW > 0) {
+            const dCol = Math.round(dx / d.colW);
+            d.curDayIdx = Math.max(0, Math.min(plannerDays.value.length - 1, d.origDayIdx + dCol));
+          }
+        } else {
+          d.curEnd = Math.max(d.origStart + SNAP_MIN, Math.min(1440, d.origEnd + dMin));
+        }
+      };
+      const endBlockDrag = async () => {
+        window.removeEventListener('pointermove', onBlockDragMove);
+        const d = plannerDrag.value;
+        plannerDrag.value = null;
+        if (!d || !d.moved) return;
+        _blockDragEndedAt.value = Date.now();
+        const changed = d.curStart !== d.origStart || d.curEnd !== d.origEnd || d.curDayIdx !== d.origDayIdx;
+        if (!changed) return;
+        try {
+          await postJSON('update_work_block', {
+            block_name: d.name,
+            work_date: plannerDays.value[d.curDayIdx],
+            start_time: _minsToHHMM(d.curStart),
+            end_time: _minsToHHMM(d.curEnd),
+          });
+          await fetchPlannerData();
+        } catch (e) {
+          await fetchPlannerData();
+          alert('Could not reschedule block: ' + (e && e.message || e));
+        }
+      };
+      const startBlockDrag = (ev, b, mode) => {
+        if (b.status === 'Cancelled') return;
+        if (ev.button !== undefined && ev.button !== 0) return;
+        ev.preventDefault();
+        const col = ev.currentTarget.closest('[data-day-col]');
+        const s = _mins(b.start_time);
+        let e = _mins(b.end_time);
+        if (e <= s) e = s + (parseFloat(b.duration_hours) || 1) * 60;
+        const idx = plannerDays.value.indexOf(b.work_date);
+        plannerDrag.value = {
+          name: b.name, mode,
+          startX: ev.clientX, startY: ev.clientY,
+          colW: col ? col.getBoundingClientRect().width : 0,
+          origStart: s, origEnd: e, origDayIdx: idx,
+          curStart: s, curEnd: e, curDayIdx: idx, moved: false,
+        };
+        window.addEventListener('pointermove', onBlockDragMove);
+        window.addEventListener('pointerup', endBlockDrag, { once: true });
+      };
+      const onBlockClick = (b) => {
+        if (Date.now() - _blockDragEndedAt.value < 300) return; // just finished a drag
+        openBlockDrawer(b);
+      };
+
+      const fetchPlannerData = async () => {
+        try {
+          const ws = mondayOf(plannerAnchor.value);
+          const url = `/api/method/omnitrack.api.get_planner_data?week_start=${ws}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data && data.message) plannerData.value = data.message;
+        } catch (e) { console.error('planner fetch', e); }
+      };
+
+      const plannerShift = (dir) => {
+        plannerAnchor.value = addDays(plannerAnchor.value, dir * (plannerView.value === 'day' ? 1 : 7));
+        fetchPlannerData();
+      };
+      const plannerToday = () => { plannerAnchor.value = todayISO(); fetchPlannerData(); };
+      watch(plannerView, () => fetchPlannerData());
+
+      const pickTask = (t) => { pickedTask.value = (pickedTask.value && pickedTask.value.ref === t.ref) ? null : t; };
+
+      const openBookModal = (iso, hour) => {
+        const hh = String(hour).padStart(2, '0');
+        bookForm.value = {
+          mode: 'work',
+          work_item: pickedTask.value ? pickedTask.value.ref : '',
+          work_date: iso,
+          start_time: hh + ':00',
+          end_time: String(Math.min(23, hour + 1)).padStart(2, '0') + ':00',
+          deliverable_notes: ''
+        };
+        showBookModal.value = true;
+      };
+
+      const submitBooking = async () => {
+        if (!bookForm.value.start_time || !bookForm.value.end_time) { showToast('Set a start and end time', 'danger'); return; }
+        plannerBusy.value = true;
+        try {
+          const isAway = bookForm.value.mode !== 'work';
+          const picked = isAway ? null : (plannerData.value.assigned_tasks || []).find(t => t.ref === bookForm.value.work_item);
+          await postJSON('book_work_block', {
+            work_date: bookForm.value.work_date,
+            start_time: bookForm.value.start_time,
+            end_time: bookForm.value.end_time,
+            work_item: isAway ? null : (bookForm.value.work_item || null),
+            work_item_label: picked ? picked.subject : (isAway ? bookForm.value.mode : null),
+            task_nature: isAway ? bookForm.value.mode : '🎯 Planned',
+            deliverable_notes: bookForm.value.deliverable_notes || (isAway ? bookForm.value.mode : null)
+          });
+          showBookModal.value = false;
+          pickedTask.value = null;
+          showToast('Work block booked', 'success');
+          await fetchPlannerData();
+        } catch (e) { showToast('Could not book block', 'danger'); }
+        finally { plannerBusy.value = false; }
+      };
+
+      const openBlockDrawer = (b) => {
+        activeBlock.value = b;
+        sessionForm.value = { session_date: b.work_date, from_time: '', to_time: '', hours: '', notes: '' };
+        showBlockDrawer.value = true;
+      };
+
+      const submitSession = async () => {
+        const f = sessionForm.value;
+        if (!f.hours && !(f.from_time && f.to_time)) { showToast('Enter hours or a from/to time', 'danger'); return; }
+        plannerBusy.value = true;
+        try {
+          await postJSON('log_work_session', {
+            block_name: activeBlock.value.name,
+            session_date: f.session_date || activeBlock.value.work_date,
+            from_time: f.from_time || null,
+            to_time: f.to_time || null,
+            hours: f.hours || null,
+            notes: f.notes || null
+          });
+          showToast('Session logged', 'success');
+          await fetchPlannerData();
+          const refreshed = (plannerData.value.blocks || []).find(x => x.name === activeBlock.value.name);
+          if (refreshed) activeBlock.value = refreshed;
+          sessionForm.value = { session_date: activeBlock.value.work_date, from_time: '', to_time: '', hours: '', notes: '' };
+        } catch (e) { showToast('Could not log session', 'danger'); }
+        finally { plannerBusy.value = false; }
+      };
+
+      const cancelActiveBlock = async () => {
+        plannerBusy.value = true;
+        try {
+          await postJSON('update_work_block', { block_name: activeBlock.value.name, status: 'Cancelled' });
+          showBlockDrawer.value = false;
+          showToast('Block cancelled', 'info');
+          await fetchPlannerData();
+        } catch (e) { showToast('Could not cancel block', 'danger'); }
+        finally { plannerBusy.value = false; }
+      };
+
+      const removeActiveBlock = async () => {
+        plannerBusy.value = true;
+        try {
+          await postJSON('delete_work_block', { block_name: activeBlock.value.name });
+          showBlockDrawer.value = false;
+          showToast('Block deleted', 'info');
+          await fetchPlannerData();
+        } catch (e) { showToast('Could not delete block', 'danger'); }
+        finally { plannerBusy.value = false; }
+      };
+
+      const onPlannerKeydown = (e) => {
+        if (e.key !== 'Escape') return;
+        if (showBookModal.value) showBookModal.value = false;
+        else if (showBlockDrawer.value) showBlockDrawer.value = false;
+        else if (showTrackerPopup.value) showTrackerPopup.value = false;
+        else if (showNatureFilter.value) showNatureFilter.value = false;
+      };
+      watch([showBookModal, showBlockDrawer, showTrackerPopup, showNatureFilter], (vals) => {
+        if (vals.some(Boolean)) document.addEventListener('keydown', onPlannerKeydown);
+        else document.removeEventListener('keydown', onPlannerKeydown);
+      });
+      watch(activeTab, (t) => { if (t === 'planner') { fetchPlannerData(); scrollPlannerToMorning(); } });
+
       onMounted(() => {
         applyTheme(isDarkMode.value);
         fetchWorkstationData(selectedEmployee.value);
@@ -1508,6 +2221,7 @@
         mobileTabs,
         isDarkMode,
         toggleTheme,
+        showTrackerPopup,
         isTracking,
         trackerSeconds,
         trackerNotes,
@@ -1547,7 +2261,50 @@
         onEmployeeChange,
         toggleTrack,
         trackBlock,
-        saveNewPlannedTask
+        saveNewPlannedTask,
+        plannerView,
+        plannerNatureOptions,
+        showNatureFilter,
+        natureFilter,
+        natureFilterLabel,
+        setNatureFilter,
+        toggleNatureFilter,
+        plannerBusy,
+        pickedTask,
+        plannerData,
+        plannerHours,
+        plannerGridScroll,
+        plannerDays,
+        plannerRangeLabel,
+        showBookModal,
+        bookForm,
+        showBlockDrawer,
+        activeBlock,
+        sessionForm,
+        fmtHrs,
+        hhmm,
+        dowLabel,
+        domLabel,
+        hourLabel,
+        blocksForDay,
+        blockTop,
+        blockHeight,
+        blockClass,
+        plannerDrag,
+        dragStyle,
+        dragTimeLabel,
+        startBlockDrag,
+        onBlockClick,
+        trackPlannerBlock,
+        plannerShift,
+        plannerToday,
+        pickTask,
+        openBookModal,
+        submitBooking,
+        openBlockDrawer,
+        submitSession,
+        cancelActiveBlock,
+        removeActiveBlock
       };
     }
   });

@@ -53,9 +53,42 @@
     {
       "fieldname": "duration_hours",
       "fieldtype": "Float",
-      "label": "Duration (Hours)",
+      "label": "Planned Duration (Hours)",
       "read_only": 1,
       "in_list_view": 1
+    },
+    {
+      "fieldname": "sb_actuals",
+      "fieldtype": "Section Break",
+      "label": "Actual Work Sessions & Variance"
+    },
+    {
+      "description": "Each real work session logged against this planned block. A task can be booked across many blocks; a block can be worked in many sessions.",
+      "fieldname": "sessions",
+      "fieldtype": "Table",
+      "label": "Work Sessions",
+      "options": "OmniTrack Work Session"
+    },
+    {
+      "fieldname": "cb_actuals",
+      "fieldtype": "Column Break"
+    },
+    {
+      "description": "Sum of all logged work sessions.",
+      "fieldname": "actual_hours",
+      "fieldtype": "Float",
+      "label": "Actual Hours",
+      "precision": "2",
+      "read_only": 1,
+      "in_list_view": 1
+    },
+    {
+      "description": "Actual minus planned. Positive = overran the plan.",
+      "fieldname": "variance_hours",
+      "fieldtype": "Float",
+      "label": "Variance (Hours)",
+      "precision": "2",
+      "read_only": 1
     },
     {
       "fieldname": "sb_task_details",
@@ -65,7 +98,7 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office",
+      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
       "label": "Task Nature",
       "default": "\ud83c\udfaf Planned",
       "in_list_view": 1
@@ -91,9 +124,20 @@
       "in_list_view": 1
     },
     {
+      "description": "Generic source id of the assigned work this block was booked from (ERPNext Task name or a ToDo name). Lets plan-vs-actual roll up on sites without ERPNext.",
+      "fieldname": "work_item",
+      "fieldtype": "Data",
+      "label": "Work Item Ref"
+    },
+    {
+      "fieldname": "work_item_label",
+      "fieldtype": "Data",
+      "label": "Work Item"
+    },
+    {
       "fieldname": "status",
       "fieldtype": "Select",
-      "options": "Draft\nIn Progress\nCompleted\nCancelled",
+      "options": "Draft\nPlanned\nIn Progress\nCompleted\nCancelled",
       "label": "Status",
       "default": "Draft",
       "in_list_view": 1

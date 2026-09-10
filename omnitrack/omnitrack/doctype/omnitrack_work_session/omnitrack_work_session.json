@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "creation": "2026-09-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "session_date",
+  "from_time",
+  "to_time",
+  "hours",
+  "cb_session",
+  "logged_via",
+  "task_nature",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "session_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "from_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "From"
+  },
+  {
+   "fieldname": "to_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "To"
+  },
+  {
+   "description": "Actual time worked in this session. Auto-filled from From/To when both are set.",
+   "fieldname": "hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Hours",
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb_session",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Manual",
+   "fieldname": "logged_via",
+   "fieldtype": "Select",
+   "label": "Logged Via",
+   "options": "Manual\nStopwatch\nImport"
+  },
+  {
+   "fieldname": "task_nature",
+   "fieldtype": "Select",
+   "label": "Nature",
+   "options": "🎯 Planned\n⚠️ Unplanned\n🔄 Review & Sync\n☕ Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Notes"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "OmniTrack",
+ "name": "OmniTrack Work Session",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -21,6 +21,12 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 - **Zero Monkey Patching**: Standard hooks, DocEvents, and Permission Queries only.
 - **REST & HMAC Security**: All inter-bench live sync endpoints must sign and verify payloads via SHA-256 HMAC.
 
+## Deployment-Specific Gotchas (learned the hard way)
+- **`ommnomi.local` has no ERPNext/HRMS.** No `Project`, `Task`, `Timesheet`, `Employee`, `Leave` doctypes — only core Frappe `ToDo`. Assigned work is sourced from `ToDo` (ids carry a `todo:` prefix). Guard every optional-doctype reference with `frappe.db.exists("DocType", "<name>")` or the page 500s on that site while working fine on ERPNext sites.
+- **CSRF token on `www/` pages: never read `frappe.local.session.data.csrf_token` directly.** For Administrator / freshly-created sessions it is `None`, which renders as the literal string `"None"` (or `""`) into the page and makes client POSTs fail. Use `from frappe.sessions import get_csrf_token; ctx.csrf_token = get_csrf_token()` — it generates *and persists* a token so `X-Frappe-CSRF-Token` validates. (`omnitrack/www/omnitrack.py`.)
+- **Frappe returns HTTP 417 for *any* server-side `frappe.throw` / `ValidationError`, not only CSRF failures.** When a whitelisted call 417s, read `response.exception` / `_server_messages` before assuming it is a token problem — it is usually a Select-field option mismatch or a validation error.
+- **Select-field option changes need `bench --site <site> migrate`.** Editing `options` in `planned_work_block.json` (e.g. adding `🌴 Leave` / `🤒 Absent` to `task_nature`) does nothing until migrate syncs the DocType; until then inserts with the new value throw "cannot be … It should be one of …".
+
 ## Jinja2 & Vue.js 3 Template Rules
 - **Escape Vue Mustache Syntax**: When building single-page applications or portals inside Frappe's `www/` directory (e.g., `omnitrack.html`), always wrap Vue 3 template tags in Jinja2 `{% raw %} ... {% endraw %}` blocks to prevent Jinja evaluation collisions and **Server Error 417**.
 - **Responsive & Zero-Overflow UI**: All PWA UI components must use Vue 3 with responsive styling, Frappe UI design tokens, and no horizontal or vertical layout overflow.
