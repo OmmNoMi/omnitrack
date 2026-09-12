@@ -48,3 +48,24 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 ## Confidential Data Protection
 - Never commit raw customer timesheet CSVs or personal timelog dumps to git. Strict `.gitignore` rules must remain active for all `.csv`, `Empire_NoMi*`, and `media_*` files.
 
+## Temporal Governance & Workstation Invariants
+1. **Timesheet Modification Horizon**:
+   - An `OmniTrack User` can only log, edit, or adjust timesheet entries and real work sessions for **today and yesterday** (`session_date >= add_days(nowdate(), -1)`).
+   - Any timesheet entry, adjustment, or back-fill prior to yesterday strictly requires an `OmniTrack Manager` (or System Manager / Administrator).
+   - Enforce in Python backend (`permissions.check_timesheet_date_permission`, `api.log_work_session`, `PlannedWorkBlock.validate()`, and `Timesheet` DocEvents) and in the frontend workstation drawer.
+
+2. **Past Planned Work Blocks Lock (Historical Plan Immutability)**:
+   - In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Administrator) can create, modify, reschedule, move, or delete planned work blocks.
+   - Historical plan commitments are permanently immutable once their calendar day has elapsed.
+   - Enforce in `book_work_block`, `update_work_block`, `delete_work_block`, `PlannedWorkBlock.validate()`, and `PlannedWorkBlock.on_trash()`.
+
+3. **Workstation Session Terminology & UX Protocol**:
+   - Action terminology for starting a timesheet session against a task/block is strictly **"Start Session"** with a Play icon (`▶`). Never use meeting/video metaphors such as "Join Focus Session".
+   - A session started by mistake or abandoned can be thrown away without creating an empty timesheet using the 2-step **Discard** action.
+   - Stopping a session with an empty line log must prompt for confirmation (`Stop anyway`) to prevent accidental blank timesheets.
+   - On session stop, immediately snapshot elapsed time and reset the live stopwatch display to `00:00:00` so a standby HUD is never mistaken for an active running session.
+
+4. **Web & Template Cache Clearing**:
+   - Whenever editing Frappe portal/web views (`www/*.html`), always clear the site cache (`bench --site [sitename] clear-cache`) and re-verify before claiming fixes.
+
+
