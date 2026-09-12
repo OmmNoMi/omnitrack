@@ -3056,7 +3056,7 @@
         if (d && d.name === b.name && d.moved) {
           const top = (d.curStart - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
           const h = Math.max(22, (d.curEnd - d.curStart) / 60 * PLANNER_HOUR_PX);
-          return {
+          return Object.assign(blockStyle(b), {
             top: top + 'px',
             height: h + 'px',
             left: '2px',
@@ -3064,14 +3064,14 @@
             zIndex: 40,
             opacity: '0.92',
             boxShadow: '0 8px 24px rgba(0,0,0,.3)'
-          };
+          });
         }
-        return {
+        return Object.assign(blockStyle(b), {
           top: segTop(seg) + 'px',
           height: segHeight(seg) + 'px',
           left: 'calc(' + baseLeft + '% + 2px)',
           width: 'calc(' + baseWidth + '% - 4px)'
-        };
+        });
       };
       const segTimeTitle = (seg) => {
         const b = seg.block;
@@ -3082,11 +3082,77 @@
         return hhmm(b.start_time) + '–' + hhmm(b.end_time);
       };
 
+      // ---- Block visual language ------------------------------------------------
+      // Non-working  → dotted border, very light fill (never project-coloured).
+      // Planned      → light project tint + solid project border.
+      // Logged/done  → solid dark project colour.
+      // Past, never logged → project-tinted diagonal hatch (the plan was not followed).
+      const PROJECT_HUES = [217, 262, 155, 24, 340, 187, 47, 291, 0, 120];
+      const projectHue = (b) => {
+        const key = String((b && (b.project || b.project_name)) || 'ad-hoc');
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+        return PROJECT_HUES[Math.abs(hash) % PROJECT_HUES.length];
+      };
+      const blockVisualState = (b) => {
+        if (!b) return 'planned';
+        if (b.status === 'Cancelled') return 'cancelled';
+        if (b.is_away || isNonWorkingNature(b.task_nature)) return 'away';
+        const logged = parseFloat(b.actual_hours) || 0;
+        if (b.status === 'Completed' || logged > 0) return 'logged';
+        const today = todayDate.value || todayISO();
+        const date = b.work_date || '';
+        if (date && date < today) return 'missed';
+        if (date === today) {
+          const endMin = _mins(b.end_time);
+          if (endMin > 0 && nowMinute.value >= endMin) return 'missed';
+        }
+        return 'planned';
+      };
+      // Structural classes only — the colour itself comes from blockStyle() so an
+      // arbitrary project hue never depends on a Tailwind class existing.
       const blockClass = (b) => {
-        if (b.status === 'Cancelled') return isDarkMode.value ? 'bg-gray-800 border-gray-700 text-gray-500 line-through' : 'bg-gray-100 border-gray-300 text-gray-400 line-through';
-        if (b.status === 'Completed') return 'bg-emerald-600 border-emerald-500 text-white';
-        if (b.status === 'In Progress') return 'bg-blue-600 border-blue-500 text-white';
-        return isDarkMode.value ? 'bg-blue-950/80 border-blue-700 text-blue-100' : 'bg-blue-50 border-blue-300 text-blue-800';
+        const st = blockVisualState(b);
+        if (st === 'cancelled') return 'border-dotted line-through ' + (isDarkMode.value ? 'text-gray-500' : 'text-gray-400');
+        if (st === 'away') return 'border-dotted border-2';
+        if (st === 'logged') return 'border-solid text-white';
+        if (st === 'missed') return 'border-solid border-dashed';
+        return 'border-solid';
+      };
+      const blockStyle = (b) => {
+        const st = blockVisualState(b);
+        const dark = isDarkMode.value;
+        const h = projectHue(b);
+        if (st === 'cancelled') {
+          return dark
+            ? { background: '#1f2937', borderColor: '#374151' }
+            : { background: '#f3f4f6', borderColor: '#d1d5db' };
+        }
+        if (st === 'away') {
+          // Non-working is deliberately colour-neutral (amber/rose), not project-tinted.
+          const hue = String(b.task_nature || '').includes('Absent') ? 0 : 38;
+          return dark
+            ? { background: `hsl(${hue} 60% 14% / .55)`, borderColor: `hsl(${hue} 50% 40%)`, color: `hsl(${hue} 80% 80%)` }
+            : { background: `hsl(${hue} 90% 96%)`, borderColor: `hsl(${hue} 70% 70%)`, color: `hsl(${hue} 60% 30%)` };
+        }
+        if (st === 'logged') {
+          return dark
+            ? { background: `hsl(${h} 55% 34%)`, borderColor: `hsl(${h} 60% 46%)`, color: '#fff' }
+            : { background: `hsl(${h} 62% 40%)`, borderColor: `hsl(${h} 65% 30%)`, color: '#fff' };
+        }
+        if (st === 'missed') {
+          const stripe = dark ? `hsl(${h} 40% 40% / .55)` : `hsl(${h} 55% 55% / .40)`;
+          const base = dark ? `hsl(${h} 35% 16%)` : `hsl(${h} 80% 97%)`;
+          return {
+            backgroundColor: base,
+            backgroundImage: `repeating-linear-gradient(45deg, ${stripe} 0 4px, transparent 4px 9px)`,
+            borderColor: dark ? `hsl(${h} 40% 42%)` : `hsl(${h} 50% 62%)`,
+            color: dark ? `hsl(${h} 60% 78%)` : `hsl(${h} 55% 32%)`
+          };
+        }
+        return dark
+          ? { background: `hsl(${h} 50% 18%)`, borderColor: `hsl(${h} 55% 45%)`, color: `hsl(${h} 70% 85%)` }
+          : { background: `hsl(${h} 90% 95%)`, borderColor: `hsl(${h} 60% 55%)`, color: `hsl(${h} 60% 30%)` };
       };
 
       // ---- Drag to reschedule / resize a block ---------------------------------
@@ -3103,9 +3169,9 @@
         if (d && d.name === b.name && d.moved) {
           const top = (d.curStart - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
           const h = Math.max(22, (d.curEnd - d.curStart) / 60 * PLANNER_HOUR_PX);
-          return { top: top + 'px', height: h + 'px', zIndex: 40, opacity: '0.9', boxShadow: '0 8px 24px rgba(0,0,0,.25)' };
+          return Object.assign(blockStyle(b), { top: top + 'px', height: h + 'px', zIndex: 40, opacity: '0.9', boxShadow: '0 8px 24px rgba(0,0,0,.25)' });
         }
-        return { top: blockTop(b) + 'px', height: blockHeight(b) + 'px' };
+        return Object.assign(blockStyle(b), { top: blockTop(b) + 'px', height: blockHeight(b) + 'px' });
       };
       const dragTimeLabel = (target) => {
         const d = plannerDrag.value;
@@ -3667,6 +3733,8 @@
         isPastCol,
         pastShadeStyle,
         officeBandStyle,
+        blockStyle,
+        blockVisualState,
         officeStart,
         officeEnd,
         hasAwayBlocksInView,
