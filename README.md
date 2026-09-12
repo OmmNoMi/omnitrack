@@ -25,9 +25,10 @@
 **OmniTrack** is an enterprise-grade Frappe Framework and ERPNext application engineered by **OmmNoMi Automation LLP**. It provides complete operational infrastructure for:
 
 * **Discontinuous Split-Shift Management**: Seamlessly plan, track, and log morning, afternoon, and evening work intervals without forcing artificial full-day contiguous blocks.
+* **Workstation Desk Remote HUD**: 2-Pane live timesheet interface with high-contrast digital stopwatch, activity nature defaults, and incremental subtask lines logger.
 * **Autonomous Cross-Site Data Synchronization**: Bidirectional, HMAC-SHA256 authenticated sync of Tasks, ToDos, Timesheets, and Attendance records across independent Frappe sites.
 * **Task Variance & Velocity Engine**: Real-time variance tracking (`Expected Hours` vs `Actual Hours` vs `Δ Variance`), automated check-in hashing, and deadline management.
-* **Granular Role-Based Access Control**: Tailored workspaces for Administrators, Delivery Managers, Field Workers, Compliance Auditors, and External Clients.
+* **Granular Role-Based Access Control**: 6 dedicated role profiles (`OmniTrack Admin`, `OmniTrack Manager`, `OmniTrack User`, `OmniTrack Client`, `OmniTrack Auditor`, `OmniTrack Sync Agent`) with project team and customer scoping.
 
 ---
 
@@ -35,13 +36,31 @@
 
 | DocType | Type | Description |
 | :--- | :--- | :--- |
-| **`Planned Work Block`** | Core Transaction | Tracks discontinuous split shifts with AM/PM support and check-in token generation. |
+| **`Planned Work Block`** | Core Transaction | Tracks discontinuous split shifts, calendar work blocks, and task estimations. |
+| **`OmniTrack Work Session`** | Child Table | De-facto timesheet logging session intervals, net hours, and bullet deliverables. |
 | **`OmniTrack Settings`** | Single Configuration | Central controls for auto-attendance synthesis, VAPID Web Push, and sync thresholds. |
 | **`OmniTrack Remote Connection`** | Integration | Remote Frappe site connections with HMAC-SHA256 signature verification. |
 | **`OmniTrack Workspace`** | Configuration | Client portal workspace definitions and white-labeling rules. |
 | **`OmniTrack Context Link`** | Cross-Reference | Maps tasks to custom parent records (Projects, Sales Orders, Issues). |
 | **`OmniTrack Linked Document`** | Child Table | Tracks individual document links across remote sites. |
 | **`OmniTrack Push Subscription`** | System | Manages Web Push notification subscriptions. |
+
+---
+
+## 👥 Role Profiles & Access Control
+
+| Role | Desk Access | Target Audience & Functional Scope |
+| :--- | :---: | :--- |
+| **`OmniTrack Admin`** | Yes | Full control plane over settings, work blocks, timesheets, and remote connections. |
+| **`OmniTrack Manager`** | Yes | Team-wide planning, calendar allocation, project velocity, and timesheet review. |
+| **`OmniTrack User`** | Yes | Personal work blocks, live stopwatch tracking, timesheet logging, and task ToDos. |
+| **`OmniTrack Client`** | Yes | Read-only transparency restricted strictly to their customer projects and public deliverables. |
+| **`OmniTrack Auditor`** | Yes | Read-only compliance oversight across all work sessions, logs, and attendance records. |
+| **`OmniTrack Sync Agent`** | No | Headless service account for automated background sync and site-to-site replication. |
+
+> **Temporal Governance Rules**:
+> 1. **Timesheet Horizon**: `OmniTrack User` can only log, edit, or modify timesheets/work sessions for **today and yesterday** (`session_date >= add_days(nowdate(), -1)`). Adjustments prior to yesterday strictly require an `OmniTrack Manager` (or System Manager/Admin).
+> 2. **Past Planned Blocks Lock**: In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Admin) can modify, reschedule, move, or delete planned work blocks. Historical plan commitments are permanently immutable once their calendar day has passed.
 
 ---
 

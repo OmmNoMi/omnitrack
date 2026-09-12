@@ -102,3 +102,91 @@ booking their day against real commitments instead of typing notes.
 ### Planner calendar — remaining open items
 - **"Time logged based on timesheets" (user ask):** on sites with an ERPNext/HRMS `Timesheet`, actual hours should come from Timesheet detail rows rather than only the manual Work Session child table. Needs design: the Work Session table is the de-facto timesheet on `ommnomi.local` (no Timesheet doctype there).
 - **Manager Delegation in Calendar:** Allow team managers to switch target employee directly within the calendar view to plan or review blocks on behalf of team members.
+
+### Planner calendar — shipped 2026-09-12 (Track 2: live verification + UX)
+- ✅ **Unbalanced template fixed (app-blanking).** `www/omnitrack.html` was missing 5
+  `</div>`s (1 in the Desk Remote HUD card, 4 at the end of the Planner tab), so every
+  tab section after `activeTab === 'dashboard'` was parsed *inside* the dashboard `v-if`
+  and `<main>` rendered as a single `<!---->`. Whole app looked blank with **no console
+  error**. Guard: `python3` tag-balance scan over the template (see below).
+- ✅ **`getBlockTimingInfo` implemented.** Template called `.pillClass`/`.label` in 4
+  places but the function was never defined → `TypeError` blanked the Vue app.
+- ✅ **Time padding at the source.** Frappe `Time` fields arrive as `timedelta`, and
+  `str(timedelta)` drops the leading zero ("7:30:55"), so the old
+  `String(t).slice(0,5)` rendered "07:30:" with a dangling colon. Added `_time_str()`
+  in `api.py` (always `HH:MM:SS`) + a parsing `hhmm()` in the template. Regression test
+  `test_planner_times_are_zero_padded` asserts the invariant over the **whole**
+  `get_planner_data` payload (mutation-verified).
+- ✅ **`1fr` → `minmax(0, 1fr)`** on all three planner grids (+ `min-w-0`/`overflow-hidden`
+  on the all-day cell). `1fr` is `minmax(auto, 1fr)`, so the away-badge cell grew to its
+  content width and pushed the all-day band a whole column left of its real date.
+- ✅ **Assigned-task card shows planned / logged / expected** (estimate no longer hidden at 0).
+- ✅ **Readable gridlines**: hour borders gray-300/gray-700 + a dashed half-hour tick.
+- ✅ **Drag across the grid to book a range** (15-min snap, ghost with `HH:MM–HH:MM`);
+  a plain click still books a single hour.
+- ✅ **Google-Calendar "now" line** (red, today's column, 30s tick) and **past time shaded**
+  so the eye avoids booking behind it.
+- ✅ **Office hours 10:00–18:00, user-editable** (per-browser `localStorage`); away/leave
+  days stretch as a band across that span instead of only a chip in the all-day row.
+- ✅ **Top resize handle** (`resize-start`) — start time is now draggable, not just end.
+- ✅ **Book modal shows full task detail** (subject wraps, project/priority/due/status +
+  planned·logged·expected) because a native `<select>` truncates long subjects.
+- ✅ **Block visual language**: non-working = dotted + neutral light fill; planned = light
+  project tint + solid project border; logged/completed = solid dark project colour;
+  past-and-never-logged = subtle project-tinted diagonal hatch. Colours are inline
+  `hsl()` from a project-name hash, so no Tailwind class needs to pre-exist.
+- ✅ **Removed the duplicate floating tracker HUD** — the header pill already shows the
+  live stopwatch.
+
+- **The past is read-only** — `isPastSlot(iso, endMin)` / `isBlockLocked(block)` drive every edit
+  affordance: block drag + both resize handles, the two book-modal entry points (amber
+  `pastBookingHint` banner instead of a silent refusal), and the block drawer's stopwatch,
+  "Log a real session manually" form, Cancel block and Delete (replaced by a 🔒 note).
+  `submitSession` / `cancelActiveBlock` / `removeActiveBlock` also guard in JS, so a stale
+  drawer cannot mutate history.
+- **Desk Remote HUD dedupe + session log** — the left column is now a real card (the
+  `justify-between` dead gap is gone), the duplicate ping dot and "🔴 Recording Live" caption
+  are dropped (the red dot + red clock already say it), and the right side collapsed from
+  icon + title + badge + subtitle to "Session Log" + a count. Lines render newest-first
+  (`sessionNotesNewestFirst` keeps the original index for numbering and removal), the per-row
+  ✓ gave way to a single numbered pill, `/` focuses the add-line input from anywhere (skipped
+  while typing in a field), and adding a line scrolls the list back to the top.
+
+- **Desk Remote HUD is one timesheet, not two cards (2026-09-12).** "Current Session" and
+  "Session Log" were two bordered cards inside one card, reading as unrelated panels; they are
+  now two panes of a single bordered card split by a vertical divider. Same pass: custom
+  accessible listbox dropdowns replaced both native `<select>`s (Project, Activity Nature), the
+  bound block's title/date/project/nature/planned-vs-logged/notes are shown in a context panel
+  (`trackerBoundBlock`), the timer hero was calmed (one small dot, `text-xl`, no `ring-4`), the
+  header was reordered to timer → + Task → theme → employee switcher, the stale header
+  quick-tracker popup (duplicate nature chips + notes input) was deleted so the header pill and
+  Shift+T both call `openSessionCard()`, and the log got `/` focus, newest-line-#1 numbering and
+  ↑/↓ roving-focus rows with Enter/Delete to remove a line.
+- **Planner chrome compacted (2026-09-12).** The range label moved inside the prev/next chevron
+  group with a fixed width so switching Day/4 Days/Week cannot shift the buttons; the full-width
+  "🏢 Office hours" banner was replaced by a compact pair of time inputs in the toolbar plus two
+  emerald hairlines (`officeMarks`) drawn on every day column at office start/end; the
+  Day/4 Days/Week segmented control is now a single tab stop with roving `tabindex` and
+  ←/→/↑/↓/Home/End selection (`onPlannerViewKey`).
+- **Bug — `saveNewPlannedTask` reports success from its `catch` block.** A failed POST still shows
+  "Task created and assigned." Move the success toast into the try path and surface the real error.
+- **Blocked — no project selection possible on this site.** There is no `Project` (or `Task`)
+  DocType installed (no ERPNext), and all `Planned Work Block` rows have NULL `project` /
+  `legacy_project_id`, so the Project dropdown can only offer "General Work (Internal)". It now
+  says why in an empty-state row. Revisit if ERPNext Projects is ever installed.
+
+### Planner calendar — remaining open items (added 2026-09-12)
+- **No template-balance guard.** A missing `</div>` silently blanks the app with no
+  console error. Wire the tag-balance scan into pre-commit + CI over `www/*.html`.
+- **No regression test for `getBlockTimingInfo` / grid tracks.** Per "fixes must stay
+  fixed": assert every template helper referenced in `www/omnitrack.html` is exported
+  from `setup()`, and that planner grids use `minmax(0, 1fr)`.
+- **`if (m.kpis) dashboardKPIs.value = m.kpis;`** replaces the whole initial shape, so a
+  partial payload throws `Cannot read properties of undefined (reading 'today')`. Merge
+  per-key instead.
+- **Planner has no loading state.** First paint shows zeros while `fetchPlannerData`
+  is in flight, which reads as "no data" rather than "loading".
+- **Office hours are per-browser only.** Should move to an OmniTrack Settings / Employee
+  shift field so they are shared and per-employee.
+- **Test record `PWB-2026-00012`** ("Test leave — verifying all-day away band",
+  2026-09-11) was created to exercise the away band; delete if not wanted.

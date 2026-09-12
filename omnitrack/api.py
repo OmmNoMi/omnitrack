@@ -700,13 +700,8 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 	return doc.as_dict()
 
 def _is_planner_manager(user=None):
-	user = user or frappe.session.user
-	roles = frappe.get_roles(user)
-	return (
-		any(r in ["System Manager", "HR Manager", "OmniTrack Manager", "OmniTrack Admin", "Administrator"] for r in roles)
-		or user == "Administrator"
-		or "hardik" in (user or "").lower()
-	)
+	from omnitrack.permissions import is_omnitrack_manager
+	return is_omnitrack_manager(user)
 
 
 def _resolve_planner_user(employee):
@@ -1166,6 +1161,9 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	if not frappe.db.exists("DocType", "Planned Work Block"):
 		frappe.throw(_("Planned Work Block DocType is not available."))
 
+	if work_date and getdate(work_date) < getdate(nowdate()):
+		frappe.throw(_("Cannot plan or book work blocks in the past."), frappe.ValidationError)
+
 	has_task = frappe.db.exists("DocType", "Task")
 	if work_item and not work_item.startswith("todo:") and has_task and frappe.db.exists("Task", work_item):
 		task = task or work_item
@@ -1192,7 +1190,7 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	doc.work_item = work_item
 	doc.work_item_label = work_item_label
 	doc.project = project
-	doc.task_nature = task_nature or "\U0001f3af Planned"
+	doc.task_nature = task_nature or "🎯 Planned"
 	doc.deliverable_notes = deliverable_notes or work_item_label
 	doc.status = "Planned"
 	if frappe.db.exists("User", target):
@@ -1209,6 +1207,11 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 	doc = frappe.get_doc("Planned Work Block", block_name)
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to edit this work block."), frappe.PermissionError)
+
+	from omnitrack.permissions import check_planned_block_past_lock
+	# In the past, NO ONE changes planned work blocks
+	check_planned_block_past_lock(doc, new_work_date=work_date)
+
 	if work_date:
 		doc.work_date = work_date
 	if start_time:
@@ -1242,9 +1245,15 @@ def delete_work_block(block_name):
 	doc = frappe.get_doc("Planned Work Block", block_name)
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to delete this work block."), frappe.PermissionError)
+
+	from omnitrack.permissions import check_planned_block_past_lock
+	# Past planned work blocks cannot be deleted by anyone
+	check_planned_block_past_lock(doc)
+
 	if flt(doc.actual_hours) > 0:
 		frappe.throw(_("This block has logged work sessions. Cancel it instead of deleting."))
 	doc.flags.ignore_permissions = True
+	doc.flags.ignore_past_block_lock = True
 	frappe.delete_doc("Planned Work Block", block_name, force=True)
 	return {"status": "success"}
 
@@ -1259,6 +1268,11 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		frappe.throw(_("Not permitted to log time on this work block."), frappe.PermissionError)
 
 	base_date = session_date or doc.work_date or nowdate()
+
+	from omnitrack.permissions import check_timesheet_date_permission
+	# OmniTrack Users can only log timesheets for today and yesterday; earlier dates require Manager
+	check_timesheet_date_permission(base_date, frappe.session.user)
+
 	is_overnight = False
 	if from_time and to_time:
 		try:

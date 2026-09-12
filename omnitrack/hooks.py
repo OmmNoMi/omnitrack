@@ -32,6 +32,10 @@ doc_events = {
 	"Employee Checkin": {
 		"after_insert": "omnitrack.synthesizer.on_checkin_event",
 		"on_update": "omnitrack.synthesizer.on_checkin_event"
+	},
+	"Timesheet": {
+		"validate": "omnitrack.permissions.validate_timesheet_permission",
+		"on_trash": "omnitrack.permissions.validate_timesheet_trash_event"
 	}
 }
 

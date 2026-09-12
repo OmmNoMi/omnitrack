@@ -127,7 +127,7 @@
       <div>
         <div class="flex items-center gap-1.5 sm:gap-2">
           <span class="font-bold text-sm sm:text-base tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">OmniTrack</span>
-          <span class="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] sm:text-xs font-bold" :class="isDarkMode ? 'bg-blue-950/80 text-blue-300 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-100'">
+          <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] sm:text-xs font-bold" :class="isDarkMode ? 'bg-blue-950/80 text-blue-300 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-100'">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>PAI: {{ paciRatio }}%</span>
           </span>
@@ -141,91 +141,106 @@
     <!-- Header Controls: Employee Switcher & Theme Mode -->
     <div class="flex items-center gap-2 flex-shrink-0">
       
-      <!-- Viewing Employee Dropdown -->
-      <div class="relative flex items-center">
-        <select 
-          v-model="selectedEmployee" 
-          @change="onEmployeeChange"
-          class="text-xs font-bold rounded-full pl-7 sm:pl-8 pr-6 sm:pr-8 py-1.5 sm:py-2 outline-none cursor-pointer border transition-colors shadow-xs appearance-none max-w-[150px] sm:max-w-[220px] truncate"
-          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-blue-300' : 'bg-blue-50/90 border-blue-200 text-blue-900'">
-          <option :value="currentUserFullName">👤 {{ currentUserFullName }} (You)</option>
-          <option v-if="isManager" value="All">🌐 All Members</option>
-          <template v-if="isManager">
-            <option v-for="m in filteredTeamMembers" :key="m.name" :value="m.full_name || m.name">
-              👤 {{ m.full_name || m.name }}
-            </option>
-          </template>
-        </select>
-        <svg class="w-3.5 h-3.5 text-blue-500 absolute left-2.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-        <svg class="w-3.5 h-3.5 text-gray-400 absolute right-2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
+      <!-- Header stopwatch: click (or Shift+T) jumps to the session timesheet -->
+      <button
+        @click="openSessionCard"
+        title="Open the current session timesheet (Shift+T)"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-mono font-bold transition-colors cursor-pointer"
+        :class="isTracking ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300' : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')">
+        <span class="w-2 h-2 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
+        <span>{{ formattedTime }}</span>
+      </button>
 
-      <!-- Compact Header Stopwatch + Popup -->
-      <div class="relative">
+      <!-- Desktop Quick New Task Button -->
+      <button 
+        @click="openNewTaskModal"
+        aria-label="Create a new task"
+        title="Create a new task"
+        class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#1B64DA] hover:bg-blue-600 text-white transition-all shadow-xs cursor-pointer active:scale-95">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Task</span>
+      </button>
+
+      <!-- Mobile: one menu button instead of three misaligned controls -->
+      <div class="sm:hidden relative" data-appmenu>
         <button
-          @click="showTrackerPopup = !showTrackerPopup"
-          :title="isTracking ? 'Recording — open tracker' : 'Open quick tracker'"
-          class="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full border text-xs font-mono font-bold transition-colors cursor-pointer"
-          :class="isTracking ? 'bg-red-50 border-red-300 text-red-700 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300' : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')">
-          <span class="w-2 h-2 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
-          <span>{{ formattedTime }}</span>
+          type="button"
+          @click="showAppMenu = !showAppMenu"
+          :aria-expanded="showAppMenu"
+          aria-haspopup="menu"
+          aria-label="Menu"
+          class="p-2 rounded-full border transition-colors cursor-pointer flex items-center justify-center"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-gray-100 border-gray-200 text-gray-700'">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
         </button>
-
-        <transition enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0 -translate-y-1" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0 -translate-y-1">
-          <div v-if="showTrackerPopup" class="absolute right-0 mt-2 w-80 z-50 rounded-2xl border shadow-2xl p-4 space-y-3" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="dialog" aria-label="Quick tracker">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
-                <span class="font-mono text-lg font-extrabold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ formattedTime }}</span>
-              </div>
-              <span class="text-[10px] font-bold uppercase" :class="isTracking ? 'text-red-500' : 'text-gray-400'">{{ isTracking ? 'Recording' : 'Ready' }}</span>
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button v-for="opt in natureOptions" :key="opt.id" @click="selectedNature = opt.label"
-                class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer"
-                :class="selectedNature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
-                <span v-html="opt.svgIcon" class="w-3 h-3 flex items-center justify-center"></span>
-                <span>{{ opt.label }}</span>
-                <span v-if="!opt.is_working" 
-                  class="text-[8px] font-black px-1 rounded-full uppercase tracking-wider"
-                  :class="selectedNature === opt.label ? (isDarkMode ? 'bg-rose-900 text-rose-200' : 'bg-rose-200 text-rose-900') : (isDarkMode ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60' : 'bg-rose-100 text-rose-700 border border-rose-200')">
-                  Non-Paid
-                </span>
-              </button>
-            </div>
-            <input type="text" v-model="trackerNotes" :placeholder="'Logging task for ' + currentEmployeeFirstName + '...'"
-              class="w-full text-xs rounded-xl px-3 py-2 outline-none border" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'">
-            <select v-model="selectedProject" class="w-full text-xs rounded-xl px-3 py-2 outline-none border" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-white border-gray-300 text-gray-700'">
-              <option value="">General Work</option>
-              <option v-for="p in projects" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
-            </select>
-            <button @click="toggleTrack" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white cursor-pointer active:scale-95"
-              :class="isTracking ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1B64DA] hover:bg-blue-700'">
-              <svg v-if="!isTracking" class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-              <svg v-else class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-              <span>{{ isTracking ? 'Stop Tracking' : 'Start Timer' }}</span>
+        <div v-if="showAppMenu" class="absolute right-0 mt-2 w-60 z-50 rounded-2xl border shadow-xl p-2 space-y-1" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="menu">
+          <button type="button" role="menuitem" @click="showAppMenu = false; openNewTaskModal()"
+            class="w-full text-left text-xs font-bold px-2.5 py-2 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+            ➕ New task
+          </button>
+          <button type="button" role="menuitem" @click="showAppMenu = false; openSessionCard()"
+            class="w-full text-left text-xs font-bold px-2.5 py-2 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+            📝 Session timesheet
+          </button>
+          <button type="button" role="menuitem" @click="showAppMenu = false; toggleTheme()"
+            class="w-full text-left text-xs font-bold px-2.5 py-2 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+            {{ isDarkMode ? '☀️ Light mode' : '🌙 Dark mode' }}
+          </button>
+          <div class="border-t my-1" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'"></div>
+          <div class="px-2.5 pt-1 pb-0.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Viewing</span>
+          </div>
+          <div class="max-h-48 overflow-y-auto" role="group" aria-label="Viewing timesheets for">
+            <button type="button" role="menuitemradio" v-for="opt in dropdownItems('employee')" :key="'me-' + opt.value"
+              :aria-checked="opt.value === selectedEmployee ? 'true' : 'false'"
+              @click="showAppMenu = false; pickDropdown('employee', opt)"
+              class="w-full flex items-center justify-between gap-2 text-xs font-bold px-2.5 py-2 rounded-lg cursor-pointer text-left"
+              :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
+              <span class="truncate">{{ opt.label }}</span>
+              <span v-if="opt.value === selectedEmployee" class="text-blue-500 shrink-0">✓</span>
             </button>
           </div>
-        </transition>
+        </div>
       </div>
 
       <!-- Google Material Light/Dark Mode Switcher -->
       <button
         @click="toggleTheme"
         :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-        class="p-2 rounded-full border transition-colors cursor-pointer flex items-center justify-center"
+        class="hidden sm:flex p-2 rounded-full border transition-colors cursor-pointer items-center justify-center"
         :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-amber-300 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'">
         <svg v-if="isDarkMode" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
       </button>
 
-      <!-- Desktop Quick New Task Button -->
-      <button 
-        @click="openNewTaskModal"
-        class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#1B64DA] hover:bg-blue-600 text-white transition-all shadow-xs cursor-pointer active:scale-95">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span>+ Task</span>
-      </button>
+      <!-- Viewing Employee dropdown (desktop; mobile uses the menu) — custom listbox, not a native select -->
+      <div class="relative hidden sm:flex items-center" data-dropdown>
+        <button type="button"
+          @click="toggleDropdown('employee')"
+          @keydown="onDropdownKey($event, 'employee')"
+          :aria-expanded="openDropdown === 'employee' ? 'true' : 'false'"
+          aria-haspopup="listbox"
+          aria-label="Viewing timesheets for"
+          class="flex items-center gap-1.5 text-xs font-bold rounded-full pl-2.5 pr-2.5 py-2 border transition-colors shadow-xs cursor-pointer max-w-[220px] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-blue-300 hover:bg-gray-700' : 'bg-blue-50/90 border-blue-200 text-blue-900 hover:bg-blue-100'">
+          <svg class="w-3.5 h-3.5 shrink-0 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+          <span class="truncate">{{ dropdownLabel('employee') }}</span>
+          <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="openDropdown === 'employee' ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <ul v-if="openDropdown === 'employee'" role="listbox" aria-label="Viewing timesheets for"
+          class="absolute right-0 top-full z-50 mt-1.5 w-60 py-1 max-h-72 overflow-y-auto rounded-2xl border shadow-xl"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-white border-gray-200'">
+          <li v-for="(opt, oi) in dropdownItems('employee')" :key="'emp-' + opt.value"
+            role="option" :aria-selected="opt.value === selectedEmployee ? 'true' : 'false'"
+            @click="pickDropdown('employee', opt)"
+            @pointerenter="dropdownIdx = oi"
+            class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer"
+            :class="oi === dropdownIdx ? (isDarkMode ? 'bg-blue-500/20 text-white' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')">
+            <span class="truncate">{{ opt.label }}</span>
+            <span v-if="opt.value === selectedEmployee" class="text-blue-500 font-bold shrink-0">✓</span>
+          </li>
+        </ul>
+      </div>
 
     </div>
 
@@ -281,25 +296,9 @@
   </nav>
 
   <!-- ========================================== -->
-  <!-- 3. MOBILE QUICK-ACTION TAB CAROUSEL        -->
-  <!-- ========================================== -->
-  <div class="md:hidden border-b px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
-    <button 
-      v-for="t in mobileTabs" 
-      :key="t.id"
-      @click="activeTab = t.id"
-      class="px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer"
-      :class="activeTab === t.id ? (isDarkMode ? 'bg-blue-600 text-white shadow-xs' : 'bg-[#1B64DA] text-white shadow-xs') : (isDarkMode ? 'bg-[#2B2D30] text-gray-300' : 'bg-gray-100 text-gray-700')">
-      <span>{{ t.icon }}</span>
-      <span>{{ t.label }}</span>
-      <span v-if="t.badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-white font-mono">{{ t.badge }}</span>
-    </button>
-  </div>
-
-  <!-- ========================================== -->
   <!-- 4. MAIN WORKSPACE CONTAINER                -->
   <!-- ========================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6 pb-28 md:pb-8" :class="isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]'">
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6 pb-20 md:pb-8" :class="isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]'">
 
     <!-- ======================================== -->
     <!-- ======================================== -->
@@ -307,350 +306,244 @@
     <!-- ======================================== -->
     <div v-if="activeTab === 'dashboard'" class="space-y-6">
 
-      <!-- 1. Top Executive KPI Cards: Day, Week, Month -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
+      <!-- 1. Active Timesheet Card ("Desk Remote HUD") — first: it is what you act on -->
+      <div class="rounded-3xl p-5 sm:p-6 border shadow-sm transition-all duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
         
-        <!-- Today Card: Today's Hours & Commitment -->
-        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
-          <div>
-            <div class="flex items-center justify-between gap-2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-xs shadow-blue-500/50"></span>
-                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today's Hours & Commitment</h3>
-              </div>
-              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full" :class="dashboardKPIs.today.todo_completed_pct >= 100 ? (isDarkMode ? 'bg-emerald-950 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (dashboardKPIs.today.todo_completed_pct > 0 ? (isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'))">
-                {{ dashboardKPIs.today.todo_completed_pct }}% ToDo Done
-              </span>
-            </div>
-
-            <!-- Big Primary Metric: Worked Hours -->
-            <div class="mt-1">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
-              <div class="flex items-baseline gap-1.5 mt-0.5">
-                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.today.actual_hours || 0).toFixed(1) }}h</span>
-              </div>
-            </div>
-
-            <!-- Progress Bar towards Planned or Target -->
-            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Daily ToDo Completion Progress">
-              <div class="h-full rounded-full transition-all duration-500"
-                :class="dashboardKPIs.today.todo_completed_pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'"
-                :style="{ width: Math.min(100, Math.round(dashboardKPIs.today.todo_completed_pct || ((dashboardKPIs.today.actual_hours || 0) / (dashboardKPIs.today.planned_hours || dashboardKPIs.today.target_hours || 8)) * 100)) + '%' }"></div>
-            </div>
-
-            <!-- Secondary Metrics: Planned, Target & Variance Pill Grid -->
-            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.today.planned_hours || 0).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.today.target_hours || 8).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="dashboardKPIs.today.variance_hours >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
-                <div class="font-mono font-bold mt-0.5">{{ dashboardKPIs.today.variance_hours >= 0 ? '+' : '' }}{{ Number(dashboardKPIs.today.variance_hours || 0).toFixed(1) }}h</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card Footer -->
-          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-            <span class="flex items-center gap-1">
-              <span>🎯</span>
-              <span>{{ dashboardKPIs.today.completed_count }}/{{ dashboardKPIs.today.block_count }} Sessions</span>
-            </span>
-            <span v-if="dashboardKPIs.today.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
-              <span>☕</span>
-              <span>{{ Number(dashboardKPIs.today.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
-            </span>
-            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
-              <span>⚡</span>
-              <span>Standard Day</span>
-            </span>
-          </div>
-        </div>
-
-        <!-- This Week Card: Weekly Velocity -->
-        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
-          <div>
-            <div class="flex items-center justify-between gap-2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-xs shadow-indigo-500/50"></span>
-                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Weekly Velocity</h3>
-              </div>
-              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                {{ dashboardKPIs.week.adherence_pct }}% Adherence
-              </span>
-            </div>
-
-            <!-- Big Primary Metric: Worked Hours -->
-            <div class="mt-1">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
-              <div class="flex items-baseline gap-1.5 mt-0.5">
-                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.week.actual_hours || 0).toFixed(1) }}h</span>
-              </div>
-            </div>
-
-            <!-- Progress Bar towards Weekly Adherence -->
-            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Weekly Velocity Adherence">
-              <div class="bg-indigo-500 h-full rounded-full transition-all duration-500"
-                :style="{ width: Math.min(100, dashboardKPIs.week.adherence_pct || 0) + '%' }"></div>
-            </div>
-
-            <!-- Secondary Metrics: Planned, Target & Variance Grid -->
-            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.week.planned_hours || 0).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.week.target_hours || 40).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="dashboardKPIs.week.variance_hours >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
-                <div class="font-mono font-bold mt-0.5">{{ dashboardKPIs.week.variance_hours >= 0 ? '+' : '' }}{{ Number(dashboardKPIs.week.variance_hours || 0).toFixed(1) }}h</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card Footer -->
-          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-            <span class="flex items-center gap-1">
-              <span>⚖️</span>
-              <span>{{ dashboardKPIs.week.block_count }} Active Blocks</span>
-            </span>
-            <span v-if="dashboardKPIs.week.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
-              <span>🌴</span>
-              <span>{{ Number(dashboardKPIs.week.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
-            </span>
-            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
-              <span>📅</span>
-              <span>Full Work Week</span>
-            </span>
-          </div>
-        </div>
-
-        <!-- This Month Card: Monthly Capacity -->
-        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
-          <div>
-            <div class="flex items-center justify-between gap-2 pb-2">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50"></span>
-                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Monthly Capacity</h3>
-              </div>
-              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                {{ dashboardKPIs.month.capacity_pct }}% Utilized
-              </span>
-            </div>
-
-            <!-- Big Primary Metric: Worked Hours -->
-            <div class="mt-1">
-              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
-              <div class="flex items-baseline gap-1.5 mt-0.5">
-                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.month.actual_hours || 0).toFixed(1) }}h</span>
-              </div>
-            </div>
-
-            <!-- Progress Bar towards Target Capacity -->
-            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Capacity Utilization against Target">
-              <div class="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                :style="{ width: Math.min(100, dashboardKPIs.month.capacity_pct || 0) + '%' }"></div>
-            </div>
-
-            <!-- Secondary Metrics: Planned, Target & Variance Grid -->
-            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.month.planned_hours || 0).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
-                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.month.target_hours || dashboardKPIs.month.capacity_hours || 160).toFixed(1) }}h</div>
-              </div>
-              <div class="p-1.5 rounded-xl" :class="(dashboardKPIs.month.actual_hours - dashboardKPIs.month.planned_hours) >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
-                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
-                <div class="font-mono font-bold mt-0.5">{{ (dashboardKPIs.month.actual_hours - dashboardKPIs.month.planned_hours) >= 0 ? '+' : '' }}{{ Number((dashboardKPIs.month.actual_hours || 0) - (dashboardKPIs.month.planned_hours || 0)).toFixed(1) }}h</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card Footer -->
-          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-            <span class="flex items-center gap-1">
-              <span>📋</span>
-              <span>{{ dashboardKPIs.month.month || 'This Month' }}</span>
-            </span>
-            <span v-if="dashboardKPIs.month.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
-              <span>🌴</span>
-              <span>{{ Number(dashboardKPIs.month.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
-            </span>
-            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
-              <span>🎯</span>
-              <span>Full Capacity</span>
-            </span>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- 2. Active Timesheet Card ("Desk Remote HUD") -->
-      <div class="rounded-3xl p-5 sm:p-6 border shadow-md transition-all duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
-        
-        <!-- Remote HUD Header: Live Stopwatch & Main Action -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+        <!-- One timesheet, two panes: its lines on the left, the session meta on the right. -->
+        <div ref="sessionCardRef" class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x transition-all scroll-mt-28 px-0.5"
+          :class="[isDarkMode ? 'divide-gray-800' : 'divide-gray-200', sessionCardFlash ? 'ring-2 ring-blue-500/60' : '']">
           
-          <div class="flex items-center gap-3.5">
-            <!-- Digital Stopwatch Box -->
-            <div class="flex items-center gap-3 px-4 py-2 rounded-2xl border font-mono text-2xl sm:text-3xl font-black transition-all shadow-inner"
-              :class="isTracking ? (isDarkMode ? 'bg-red-950/60 border-red-800 text-red-300 ring-2 ring-red-500/30' : 'bg-red-50 border-red-200 text-red-700 ring-2 ring-red-500/20') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900')">
-              <span class="w-3.5 h-3.5 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record shadow-xs shadow-red-500/60' : 'bg-gray-400'"></span>
-              <span>{{ formattedTime }}</span>
-            </div>
-
-            <!-- Context Status & Title -->
-            <div class="flex flex-col min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-black tracking-wider uppercase" :class="isTracking ? 'text-red-500 animate-pulse' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
-                  {{ isTracking ? '🔴 Active Session' : '⚪ Standby' }}
-                </span>
-                <span v-if="trackerBlockName" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold">
-                  Bound to Calendar Block
-                </span>
+          <!-- LEFT PANE: the lines of this session — Shift+S lands here, Tab reaches Stop & Save -->
+          <div class="lg:col-span-6 flex flex-col pb-5 lg:pb-0 lg:pr-6">
+            
+            <div class="flex-1 min-h-0 flex flex-col">
+              <!-- Header -->
+              <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Session Log</h4>
+                <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border"
+                  :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-600'"
+                  :aria-label="sessionNotesList.length + ' lines logged'">{{ sessionNotesList.length }}</span>
               </div>
-              <span class="text-xs sm:text-sm font-bold truncate max-w-md mt-0.5" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
-                {{ trackerNotes || 'Enter focus activity below or start timer...' }}
-              </span>
+
+              <!-- Running Lines List -->
+              <div ref="sessionNotesScroll" class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1">
+                <!-- chronological: the line you just typed lands at the bottom, next to the input -->
+                <div 
+                  v-for="row in sessionNotesRows" 
+                  :key="row.i"
+                  data-log-row
+                  tabindex="0"
+                  @keydown="onLogRowKey($event, row)"
+                  :aria-label="'Line ' + row.n + ': ' + row.t + '. Press Enter to remove.'"
+                  class="flex items-center justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                  :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700/80 text-gray-200' : 'bg-white border-gray-200/90 text-gray-800 shadow-2xs'">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="font-mono text-[10px] font-bold w-5 h-5 shrink-0 rounded-md inline-flex items-center justify-center select-none"
+                      :class="isDarkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-600'">{{ row.n }}</span>
+                    <span class="truncate font-medium">{{ row.t }}</span>
+                  </div>
+                  <button 
+                    type="button"
+                    @click="removeSessionPoint(row.i)"
+                    title="Remove this line"
+                    aria-label="Remove line"
+                    class="text-gray-400 hover:text-red-500 p-0.5 rounded-md transition-colors cursor-pointer shrink-0">
+                    ✕
+                  </button>
+                </div>
+
+                <!-- Empty State prompt -->
+                <div v-if="sessionNotesList.length === 0" class="text-center py-6 border border-dashed rounded-xl" :class="isDarkMode ? 'border-gray-800 text-gray-500' : 'border-gray-300 text-gray-400'">
+                  <div class="text-xs font-medium">No lines yet — press <kbd class="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-800 border text-[10px] font-mono text-gray-600 dark:text-gray-300">/</kbd> to start</div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <!-- Prominent Primary Action Button -->
-          <button 
-            type="button"
-            @click="toggleTrack"
-            aria-label="Toggle focus timer recording"
-            class="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-xs sm:text-sm font-bold text-white transition-all shadow-md cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-            :class="isTracking ? 'bg-red-600 hover:bg-red-700 ring-4 ring-red-500/20' : 'bg-[#1B64DA] hover:bg-blue-700 ring-4 ring-blue-500/20'">
-            <svg v-if="!isTracking" class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-            <svg v-else class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
-            <span>{{ isTracking ? 'Stop & Save Timesheet' : 'Start Session' }}</span>
-          </button>
-        </div>
-
-        <!-- Timer Controls Grid: Nature Selection, Task Deliverable & Project -->
-        <div class="space-y-4 pt-4">
-          
-          <!-- Nature Selection Row -->
-          <div>
-            <label class="block text-[11px] font-bold uppercase tracking-wider mb-2 text-gray-500 dark:text-gray-400">Activity Nature</label>
-            <div class="flex items-center gap-2 flex-wrap">
-              <button 
-                v-for="opt in natureOptions" 
-                :key="opt.id"
-                type="button"
-                @click="selectedNature = opt.label; syncActiveSession();"
-                :aria-pressed="selectedNature === opt.label"
-                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                :class="selectedNature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-300 hover:bg-[#333333]' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100')">
-                <span v-html="opt.svgIcon" class="w-3.5 h-3.5 flex items-center justify-center" aria-hidden="true"></span>
-                <span>{{ opt.label }}</span>
-                <span v-if="!opt.is_working" 
-                  class="text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-                  :class="selectedNature === opt.label ? (isDarkMode ? 'bg-rose-900 text-rose-200' : 'bg-rose-200 text-rose-900') : (isDarkMode ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60' : 'bg-rose-100 text-rose-700 border border-rose-200')">
-                  Non-Paid
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Dual Form Row: What are you working on? & Which Project? -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="md:col-span-2">
-              <label class="block text-[11px] font-bold uppercase tracking-wider mb-1.5 text-gray-500 dark:text-gray-400">Deliverable / Task Title</label>
-              <div class="relative">
+            <!-- Single-Line Add Input Bar at the Bottom -->
+            <div class="flex items-center gap-2 pt-3 border-t mt-2.5" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
+              <div class="relative flex-1">
                 <input 
                   type="text" 
-                  v-model="trackerNotes" 
-                  @input="syncActiveSession"
-                  placeholder="e.g. Higher Ed Onboarding & Client Training Session..." 
-                  class="w-full text-xs font-medium rounded-xl pl-3.5 pr-10 py-2.5 outline-none border transition-colors shadow-xs"
-                  :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
-                <button 
-                  v-if="trackerNotes" 
-                  type="button" 
-                  @click="trackerNotes = ''; syncActiveSession();" 
-                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-xs cursor-pointer"
-                  title="Clear task title">
-                  ✕
-                </button>
+                  ref="sessionPointInput"
+                  v-model="newSessionPoint" 
+                  @keyup.enter="addSessionPoint"
+                  @keydown.up.prevent="focusLogRow(sessionNotesList.length - 1)"
+                  aria-label="Add a timesheet line"
+                  placeholder="What did you just complete? Enter to add…" 
+                  class="w-full text-xs rounded-xl pl-3.5 pr-9 py-2 outline-none border transition-colors shadow-xs focus:ring-2"
+                  :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/25' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20'">
+                <kbd v-if="!newSessionPoint" title="Press / or Shift+S anywhere to jump here"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
+                  :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-400' : 'bg-gray-100 border-gray-200 text-gray-500'">/</kbd>
               </div>
+              <button 
+                type="button" 
+                @click="addSessionPoint"
+                tabindex="-1"
+                :disabled="!newSessionPoint.trim()"
+                class="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-all cursor-pointer select-none disabled:opacity-40 shadow-xs active:scale-95 shrink-0"
+                :class="isDarkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#1A73E8] hover:bg-blue-700'">
+                <span>Add</span>
+              </button>
             </div>
 
-            <div>
-              <label class="block text-[11px] font-bold uppercase tracking-wider mb-1.5 text-gray-500 dark:text-gray-400">Assigned Project</label>
-              <select 
-                v-model="selectedProject" 
-                @change="syncActiveSession"
-                class="w-full text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer"
-                :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-white border-gray-300 text-gray-700'">
-                <option value="">General Work (Internal)</option>
-                <option v-for="p in projects" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
-              </select>
-            </div>
           </div>
 
-          <!-- Structured Deliverables Checklist / Scratchpad Section -->
-          <div class="rounded-2xl p-4 border transition-colors" :class="isDarkMode ? 'bg-[#25262A]/60 border-gray-800' : 'bg-gray-50/70 border-gray-200'">
-            <div class="flex items-center justify-between gap-2 flex-wrap mb-2.5">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                <h4 class="text-xs font-bold" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">Session Deliverables & Completed Items</h4>
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold" :class="isDarkMode ? 'bg-[#2B2D30] text-blue-300' : 'bg-blue-100 text-blue-700'">
-                  {{ sessionNotesList.length }} items
+          <!-- RIGHT PANE: the same session's meta — timer, bound block, title, project -->
+          <div class="lg:col-span-6 flex flex-col gap-3.5 pt-5 lg:pt-0 lg:pl-6">
+            <div>
+              <!-- Header / Status Context -->
+              <div class="flex items-center justify-between gap-2 pb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Current Session</h3>
+                <span v-if="trackerBlockName" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold truncate max-w-[170px]" title="Bound to Calendar Block">
+                  📅 Bound to Block
                 </span>
               </div>
-              <span class="text-[11px] text-gray-400">Logged automatically into your timesheet upon save</span>
-            </div>
 
-            <!-- Clean Tag / Checklist Row -->
-            <div v-if="sessionNotesList.length > 0" class="flex flex-wrap gap-2 mb-3">
-              <div 
-                v-for="(point, pIdx) in sessionNotesList" 
-                :key="pIdx"
-                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all shadow-2xs"
-                :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-800'">
-                <span class="text-blue-500 font-bold select-none">✓</span>
-                <span class="break-words max-w-sm">{{ point }}</span>
+              <!-- Timer & Main Action Hero Bar -->
+              <div class="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border mt-3 transition-colors"
+                :class="isDarkMode ? 'bg-[#25262A] border-gray-800' : 'bg-gray-50 border-gray-200'">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="w-2 h-2 rounded-full shrink-0" :class="isTracking ? 'bg-red-500 animate-pulse' : 'bg-gray-400'"></span>
+                  <div class="font-mono text-xl font-bold tracking-tight tabular-nums"
+                    :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                    {{ formattedTime }}
+                  </div>
+                  <span v-if="!isTracking" class="text-[10px] uppercase font-bold tracking-wider text-gray-400">standby</span>
+                </div>
+
                 <button 
                   type="button"
-                  @click="removeSessionPoint(pIdx)"
-                  title="Remove this item"
-                  aria-label="Remove item"
-                  class="text-gray-400 hover:text-red-500 p-0.5 rounded-md transition-colors cursor-pointer select-none">
-                  ✕
+                  @click="toggleTrack"
+                  :aria-label="isTracking ? 'Stop active session and save timesheet' : 'Start session and begin recording timesheet'"
+                  class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white transition-colors cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 shrink-0"
+                  :class="isTracking 
+                    ? 'bg-red-600 hover:bg-red-700 focus-visible:ring-red-500' 
+                    : 'bg-[#1A73E8] hover:bg-blue-700 focus-visible:ring-blue-500'">
+                  <svg v-if="!isTracking" class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                  <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
+                  <span>{{ isTracking ? 'Stop & Save' : 'Start Session' }}</span>
                 </button>
               </div>
             </div>
 
-            <!-- Intuitive Single-Line Add Item Input Bar -->
-            <div class="flex items-center gap-2">
-              <input 
-                type="text" 
-                v-model="newSessionPoint" 
-                @keyup.enter="addSessionPoint"
-                placeholder="+ Add what you accomplished (e.g. 'Drafted milestone report', 'Completed API audit')..."
-                class="flex-1 text-xs rounded-xl px-3.5 py-2.5 outline-none border transition-colors"
-                :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
-              <button 
-                type="button"
-                @click="addSessionPoint"
-                :disabled="!newSessionPoint.trim()"
-                class="px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all cursor-pointer select-none disabled:opacity-40 shadow-xs active:scale-95"
-                :class="isDarkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#1B64DA] hover:bg-blue-700'">
-                Add Item
-              </button>
+            <!-- What this session is bound to: the block's own title, timing and notes -->
+            <div v-if="trackerBoundBlock" class="rounded-xl border px-3 py-2.5 space-y-1"
+              :class="isDarkMode ? 'bg-blue-950/20 border-blue-900/50' : 'bg-blue-50/60 border-blue-200/70'">
+              <div class="flex items-start justify-between gap-2">
+                <div class="text-xs font-bold leading-snug" :class="isDarkMode ? 'text-blue-200' : 'text-blue-900'">
+                  {{ trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || 'Work block' }}
+                </div>
+                <span class="text-[10px] font-mono font-bold shrink-0" :class="isDarkMode ? 'text-blue-300' : 'text-blue-700'">
+                  {{ hhmm(trackerBoundBlock.start_time) }}–{{ hhmm(trackerBoundBlock.end_time) }}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-medium" :class="isDarkMode ? 'text-blue-300/80' : 'text-blue-700/80'">
+                <span>📅 {{ trackerBoundBlock.work_date }}</span>
+                <span v-if="trackerBoundBlock.project_name || trackerBoundBlock.project">🗂 {{ trackerBoundBlock.project_name || trackerBoundBlock.project }}</span>
+                <span v-if="trackerBoundBlock.task_nature">🏷 {{ trackerBoundBlock.task_nature }}</span>
+                <span>⏱ planned {{ fmtHrs(trackerBoundBlock.duration_hours) }} · logged {{ fmtHrs(trackerBoundBlock.actual_hours) }}</span>
+              </div>
+              <p v-if="trackerBoundBlock.deliverable_notes" class="text-[11px] leading-snug whitespace-pre-line max-h-16 overflow-y-auto"
+                :class="isDarkMode ? 'text-gray-300' : 'text-gray-600'">{{ trackerBoundBlock.deliverable_notes }}</p>
+            </div>
+
+            <!-- Form: Deliverable Title & Dropdowns -->
+            <div class="space-y-3">
+              <!-- Deliverable / Task Title -->
+              <div>
+                <label class="block text-[11px] font-bold uppercase tracking-wider mb-1 text-gray-500 dark:text-gray-400">Deliverable / Task Title</label>
+                <div class="relative">
+                  <input 
+                    type="text" 
+                    v-model="trackerNotes" 
+                    @input="syncActiveSession"
+                    placeholder="e.g. Higher Ed Onboarding & Client Training Session..." 
+                    class="w-full text-xs sm:text-sm font-medium rounded-xl pl-3.5 pr-8 py-2.5 outline-none border transition-colors shadow-xs"
+                    :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
+                  <button 
+                    v-if="trackerNotes" 
+                    type="button" 
+                    @click="trackerNotes = ''; syncActiveSession();" 
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-xs cursor-pointer"
+                    title="Clear title">
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <!-- Two Dropdowns: Project & Activity Nature (Dropdown with default value!) -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <!-- Assigned Project -->
+                <div>
+                  <label class="block text-[11px] font-bold uppercase tracking-wider mb-1 text-gray-500 dark:text-gray-400">Project</label>
+                  <div class="relative" data-dropdown>
+                    <button type="button"
+                      @click="toggleDropdown('project')"
+                      @keydown="onDropdownKey($event, 'project')"
+                      :aria-expanded="openDropdown === 'project' ? 'true' : 'false'"
+                      aria-haspopup="listbox"
+                      class="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-700'">
+                      <span class="truncate">{{ dropdownLabel('project') }}</span>
+                      <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="openDropdown === 'project' ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <ul v-if="openDropdown === 'project'" role="listbox" aria-label="Project"
+                      class="absolute z-40 left-0 right-0 mt-1 py-1 max-h-52 overflow-y-auto rounded-xl border shadow-lg"
+                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-white border-gray-200'">
+                      <li v-if="dropdownItems('project').length <= 1" class="px-3 py-2 text-[11px] text-gray-400 leading-snug">
+                        No projects on this site yet — the Project DocType (ERPNext Projects) isn't installed, so only General Work is available.
+                      </li>
+                      <li v-for="(opt, oi) in dropdownItems('project')" :key="opt.value"
+                        role="option" :aria-selected="opt.value === selectedProject ? 'true' : 'false'"
+                        @click="pickDropdown('project', opt)"
+                        @pointerenter="dropdownIdx = oi"
+                        class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer"
+                        :class="oi === dropdownIdx ? (isDarkMode ? 'bg-blue-500/20 text-white' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')">
+                        <span class="truncate">{{ opt.label }}</span>
+                        <span v-if="opt.value === selectedProject" class="text-blue-500 font-bold">✓</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <!-- Activity Nature (Dropdown with default value!) -->
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Activity Nature</label>
+                    <span v-if="isNonWorkingNature(selectedNature)" class="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                      Non-Paid
+                    </span>
+                  </div>
+                  <div class="relative" data-dropdown>
+                    <button type="button"
+                      @click="toggleDropdown('nature')"
+                      @keydown="onDropdownKey($event, 'nature')"
+                      :aria-expanded="openDropdown === 'nature' ? 'true' : 'false'"
+                      aria-haspopup="listbox"
+                      class="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-700'">
+                      <span class="truncate">{{ dropdownLabel('nature') }}</span>
+                      <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="openDropdown === 'nature' ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <ul v-if="openDropdown === 'nature'" role="listbox" aria-label="Activity nature"
+                      class="absolute z-40 left-0 right-0 mt-1 py-1 max-h-52 overflow-y-auto rounded-xl border shadow-lg"
+                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-white border-gray-200'">
+                      <li v-for="(opt, oi) in dropdownItems('nature')" :key="opt.value"
+                        role="option" :aria-selected="opt.value === selectedNature ? 'true' : 'false'"
+                        @click="pickDropdown('nature', opt)"
+                        @pointerenter="dropdownIdx = oi"
+                        class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer"
+                        :class="oi === dropdownIdx ? (isDarkMode ? 'bg-blue-500/20 text-white' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')">
+                        <span class="truncate">{{ opt.label }}</span>
+                        <span v-if="opt.nonWorking" class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0"
+                          :class="isDarkMode ? 'bg-rose-950 text-rose-300' : 'bg-rose-100 text-rose-700'">Non-Paid</span>
+                        <span v-else-if="opt.value === selectedNature" class="text-blue-500 font-bold">✓</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -658,7 +551,7 @@
 
       </div>  <!-- /Desk Remote HUD card -->
 
-      <!-- Attention Needed: Overdue & Underplanned Tasks (WCAG 2.1 AA Compliant) -->
+      <!-- 2. Attention Needed: Overdue & Underplanned Tasks (WCAG 2.1 AA Compliant) -->
       <section v-if="attentionTasks && attentionTasks.length > 0" 
         aria-labelledby="attention-tasks-heading"
         class="rounded-3xl border-2 p-4 sm:p-5 transition-all shadow-sm"
@@ -780,9 +673,15 @@
           
           <!-- Selected Date Display with Explicit 'Today' Button -->
           <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-            <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
-              {{ selectedDashboardDateLabel }}
-            </h2>
+            <!-- Named section: a bare date read like a duplicate of the planner header -->
+            <div>
+              <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                Your Day
+              </h2>
+              <p class="text-[11px] font-semibold mt-0.5" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+                {{ selectedDashboardDateLabel }} · planned blocks and what you logged
+              </p>
+            </div>
 
             <!-- Explicit Today Button (Google Meet / Frappe Pattern) -->
             <button 
@@ -1181,6 +1080,195 @@
 
       </div>
 
+      <!-- 4. Statistics last: the day's numbers, after the things you act on -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4">
+        
+        <!-- Today Card: Today's Hours & Commitment -->
+        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
+          <div>
+            <div class="flex items-center justify-between gap-2 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-xs shadow-blue-500/50"></span>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today's Hours & Commitment</h3>
+              </div>
+              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full" :class="dashboardKPIs.today.todo_completed_pct >= 100 ? (isDarkMode ? 'bg-emerald-950 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (dashboardKPIs.today.todo_completed_pct > 0 ? (isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'))">
+                {{ dashboardKPIs.today.todo_completed_pct }}% ToDo Done
+              </span>
+            </div>
+
+            <!-- Big Primary Metric: Worked Hours -->
+            <div class="mt-1">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
+              <div class="flex items-baseline gap-1.5 mt-0.5">
+                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.today.actual_hours || 0).toFixed(1) }}h</span>
+              </div>
+            </div>
+
+            <!-- Progress Bar towards Planned or Target -->
+            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Daily ToDo Completion Progress">
+              <div class="h-full rounded-full transition-all duration-500"
+                :class="dashboardKPIs.today.todo_completed_pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500'"
+                :style="{ width: Math.min(100, Math.round(dashboardKPIs.today.todo_completed_pct || ((dashboardKPIs.today.actual_hours || 0) / (dashboardKPIs.today.planned_hours || dashboardKPIs.today.target_hours || 8)) * 100)) + '%' }"></div>
+            </div>
+
+            <!-- Secondary Metrics: Planned, Target & Variance Pill Grid -->
+            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.today.planned_hours || 0).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.today.target_hours || 8).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="dashboardKPIs.today.variance_hours >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
+                <div class="font-mono font-bold mt-0.5">{{ dashboardKPIs.today.variance_hours >= 0 ? '+' : '' }}{{ Number(dashboardKPIs.today.variance_hours || 0).toFixed(1) }}h</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+            <span class="flex items-center gap-1">
+              <span>🎯</span>
+              <span>{{ dashboardKPIs.today.completed_count }}/{{ dashboardKPIs.today.block_count }} Sessions</span>
+            </span>
+            <span v-if="dashboardKPIs.today.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
+              <span>☕</span>
+              <span>{{ Number(dashboardKPIs.today.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
+            </span>
+            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+              <span>⚡</span>
+              <span>Standard Day</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- This Week Card: Weekly Velocity -->
+        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
+          <div>
+            <div class="flex items-center justify-between gap-2 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-xs shadow-indigo-500/50"></span>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Weekly Velocity</h3>
+              </div>
+              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                {{ dashboardKPIs.week.adherence_pct }}% Adherence
+              </span>
+            </div>
+
+            <!-- Big Primary Metric: Worked Hours -->
+            <div class="mt-1">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
+              <div class="flex items-baseline gap-1.5 mt-0.5">
+                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.week.actual_hours || 0).toFixed(1) }}h</span>
+              </div>
+            </div>
+
+            <!-- Progress Bar towards Weekly Adherence -->
+            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Weekly Velocity Adherence">
+              <div class="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                :style="{ width: Math.min(100, dashboardKPIs.week.adherence_pct || 0) + '%' }"></div>
+            </div>
+
+            <!-- Secondary Metrics: Planned, Target & Variance Grid -->
+            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.week.planned_hours || 0).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.week.target_hours || 40).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="dashboardKPIs.week.variance_hours >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
+                <div class="font-mono font-bold mt-0.5">{{ dashboardKPIs.week.variance_hours >= 0 ? '+' : '' }}{{ Number(dashboardKPIs.week.variance_hours || 0).toFixed(1) }}h</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+            <span class="flex items-center gap-1">
+              <span>⚖️</span>
+              <span>{{ dashboardKPIs.week.block_count }} Active Blocks</span>
+            </span>
+            <span v-if="dashboardKPIs.week.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
+              <span>🌴</span>
+              <span>{{ Number(dashboardKPIs.week.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
+            </span>
+            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+              <span>📅</span>
+              <span>Full Work Week</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- This Month Card: Monthly Capacity -->
+        <div class="rounded-3xl p-4 sm:p-5 border shadow-xs transition-all duration-200 relative overflow-hidden flex flex-col justify-between" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
+          <div>
+            <div class="flex items-center justify-between gap-2 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50"></span>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Monthly Capacity</h3>
+              </div>
+              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                {{ dashboardKPIs.month.capacity_pct }}% Utilized
+              </span>
+            </div>
+
+            <!-- Big Primary Metric: Worked Hours -->
+            <div class="mt-1">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Worked Hours</div>
+              <div class="flex items-baseline gap-1.5 mt-0.5">
+                <span class="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-gray-900 dark:text-white">{{ Number(dashboardKPIs.month.actual_hours || 0).toFixed(1) }}h</span>
+              </div>
+            </div>
+
+            <!-- Progress Bar towards Target Capacity -->
+            <div class="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden mt-3" title="Capacity Utilization against Target">
+              <div class="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                :style="{ width: Math.min(100, dashboardKPIs.month.capacity_pct || 0) + '%' }"></div>
+            </div>
+
+            <!-- Secondary Metrics: Planned, Target & Variance Grid -->
+            <div class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t text-center text-[10.5px]" :class="isDarkMode ? 'border-gray-800/80' : 'border-gray-100'">
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Planned</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.month.planned_hours || 0).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="isDarkMode ? 'bg-gray-800/40' : 'bg-gray-50'">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Target</div>
+                <div class="font-mono font-bold text-gray-700 dark:text-gray-200 mt-0.5">{{ Number(dashboardKPIs.month.target_hours || dashboardKPIs.month.capacity_hours || 160).toFixed(1) }}h</div>
+              </div>
+              <div class="p-1.5 rounded-xl" :class="(dashboardKPIs.month.actual_hours - dashboardKPIs.month.planned_hours) >= 0 ? (isDarkMode ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDarkMode ? 'bg-amber-950/40 text-amber-300' : 'bg-amber-50 text-amber-700')">
+                <div class="text-[9.5px] uppercase font-bold text-gray-400">Variance</div>
+                <div class="font-mono font-bold mt-0.5">{{ (dashboardKPIs.month.actual_hours - dashboardKPIs.month.planned_hours) >= 0 ? '+' : '' }}{{ Number((dashboardKPIs.month.actual_hours || 0) - (dashboardKPIs.month.planned_hours || 0)).toFixed(1) }}h</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="flex items-center justify-between text-[11px] font-medium pt-3 text-gray-500 dark:text-gray-400 border-t mt-3" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+            <span class="flex items-center gap-1">
+              <span>📋</span>
+              <span>{{ dashboardKPIs.month.month || 'This Month' }}</span>
+            </span>
+            <span v-if="dashboardKPIs.month.non_working_hours > 0" class="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold">
+              <span>🌴</span>
+              <span>{{ Number(dashboardKPIs.month.non_working_hours || 0).toFixed(1) }}h Non-Working</span>
+            </span>
+            <span v-else class="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+              <span>🎯</span>
+              <span>Full Capacity</span>
+            </span>
+          </div>
+        </div>
+
+      </div>
+
     </div>
 
 
@@ -1397,12 +1485,12 @@
         </div>
 
         <!-- Calendar -->
-        <div class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+        <div class="-mx-3 sm:mx-0 rounded-none sm:rounded-3xl border-x-0 sm:border-x border shadow-xs transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
           <!-- toolbar (WCAG 2.1 AA Compliant Google Calendar Pattern) -->
           <div class="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 border-b transition-colors" :class="isDarkMode ? 'border-gray-800 bg-[#25262A]' : 'border-gray-200 bg-gray-50/60'">
             
             <!-- Left: Today Button, Period Navigation Chevrons, Date Range -->
-            <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div class="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <!-- Jump to Today Button -->
               <button 
                 type="button" 
@@ -1414,7 +1502,7 @@
               </button>
 
               <!-- Grouped Navigation Chevrons -->
-              <div class="inline-flex items-center rounded-xl border p-0.5 shadow-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-white border-gray-300'" role="group" aria-label="Calendar period navigation">
+              <div class="flex flex-1 sm:flex-none items-center justify-between sm:justify-start rounded-xl border p-0.5 shadow-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-white border-gray-300'" role="group" aria-label="Calendar period navigation">
                 <button 
                   type="button" 
                   @click="plannerShift(-1)" 
@@ -1423,6 +1511,12 @@
                   :class="isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-700'">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
+                <div class="w-[1px] h-4" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" aria-hidden="true"></div>
+                <!-- The range label lives between the chevrons; fixed width so
+                     switching day/week never shifts the buttons sideways. -->
+                <h3 class="text-sm font-extrabold tracking-tight text-center px-2 tabular-nums whitespace-nowrap flex-1 sm:flex-none sm:w-[168px]" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
+                  {{ plannerRangeLabel }}
+                </h3>
                 <div class="w-[1px] h-4" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" aria-hidden="true"></div>
                 <button 
                   type="button" 
@@ -1434,25 +1528,21 @@
                 </button>
               </div>
 
-              <!-- Date Heading associated with the chevrons -->
-              <h3 class="text-sm sm:text-base font-extrabold tracking-tight ml-1" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
-                {{ plannerRangeLabel }}
-              </h3>
             </div>
 
             <!-- Right: Nature Filter & View Switcher (Day / 4 Days / Week) -->
-            <div class="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
               <!-- Nature filter (multi-select) -->
               <div class="relative">
                 <button type="button" @click="showNatureFilter = !showNatureFilter"
-                  class="text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  class="text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer flex items-center justify-between gap-1.5 w-[124px] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                   :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'"
                   :aria-expanded="showNatureFilter" aria-haspopup="true">
-                  <span>{{ natureFilterLabel }}</span>
+                  <span class="truncate">{{ natureFilterLabel }}</span>
                   <svg class="w-3.5 h-3.5 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.5 7.5l4.5 4.5 4.5-4.5z"/></svg>
                 </button>
                 <transition enter-active-class="transition ease-out duration-100" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100" leave-active-class="transition ease-in duration-75" leave-from-class="opacity-100" leave-to-class="opacity-0">
-                  <div v-if="showNatureFilter" class="absolute right-0 mt-2 w-52 z-50 rounded-2xl border shadow-xl p-2" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="menu">
+                  <div v-if="showNatureFilter" class="absolute left-0 sm:left-auto sm:right-0 mt-2 w-52 z-50 rounded-2xl border shadow-xl p-2" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" role="menu">
                     <button type="button" @click="setNatureFilter('all')" class="w-full text-left text-xs font-bold px-2 py-1.5 rounded-lg cursor-pointer" :class="isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-700'">
                       {{ natureFilter.length === 0 ? '✓ ' : '' }}All types
                     </button>
@@ -1465,12 +1555,24 @@
                 </transition>
               </div>
 
+              <!-- Office hours: thin markers on every day column, not a banner -->
+              <div class="hidden sm:flex items-center gap-1 px-2 py-1 rounded-xl border text-[11px]" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-400' : 'bg-white border-gray-300 text-gray-500'" title="Office hours — marked on each day and used for away-day bands">
+                <span aria-hidden="true">🏢</span>
+                <input type="time" v-model="officeStart" step="900" aria-label="Office start time"
+                  class="text-[11px] font-mono bg-transparent outline-none w-[88px] focus-visible:ring-2 focus-visible:ring-blue-600 rounded" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">
+                <span aria-hidden="true">–</span>
+                <input type="time" v-model="officeEnd" step="900" aria-label="Office end time"
+                  class="text-[11px] font-mono bg-transparent outline-none w-[88px] focus-visible:ring-2 focus-visible:ring-blue-600 rounded" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">
+              </div>
+
               <!-- View Switcher: Day / 4 Days / Week (Segmented Pill) -->
-              <div class="flex items-center rounded-xl p-0.5 border shadow-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-gray-100 border-gray-300'" role="radiogroup" aria-label="Calendar view density">
+              <div class="flex items-center rounded-xl p-0.5 border shadow-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-gray-100 border-gray-300'" role="radiogroup" aria-label="Calendar view density" @keydown="onPlannerViewKey">
                 <button 
                   type="button" 
                   @click="setUserPlannerView('day')" 
                   role="radio" 
+                  data-planner-view
+                  :tabindex="plannerView === 'day' ? 0 : -1"
                   :aria-checked="plannerView === 'day'"
                   class="text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" 
                   :class="plannerView === 'day' ? (isDarkMode ? 'bg-[#2B2D30] text-white shadow-xs' : 'bg-white text-gray-900 shadow-xs font-extrabold') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900')">
@@ -1480,6 +1582,8 @@
                   type="button" 
                   @click="setUserPlannerView('4days')" 
                   role="radio" 
+                  data-planner-view
+                  :tabindex="plannerView === '4days' ? 0 : -1"
                   :aria-checked="plannerView === '4days'"
                   class="text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" 
                   :class="plannerView === '4days' ? (isDarkMode ? 'bg-[#2B2D30] text-white shadow-xs' : 'bg-white text-gray-900 shadow-xs font-extrabold') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900')">
@@ -1489,6 +1593,8 @@
                   type="button" 
                   @click="setUserPlannerView('week')" 
                   role="radio" 
+                  data-planner-view
+                  :tabindex="plannerView === 'week' ? 0 : -1"
                   :aria-checked="plannerView === 'week'"
                   class="text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" 
                   :class="plannerView === 'week' ? (isDarkMode ? 'bg-[#2B2D30] text-white shadow-xs' : 'bg-white text-gray-900 shadow-xs font-extrabold') : (isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900')">
@@ -1498,27 +1604,14 @@
             </div>
           </div>
 
+          <div v-if="pastBookingHint" class="px-3 py-2 text-[11px] font-semibold flex items-center gap-2" :class="isDarkMode ? 'bg-amber-950/60 text-amber-200' : 'bg-amber-50 text-amber-800'" role="status">
+            <span>🔒 {{ pastBookingHint }}</span>
+          </div>
           <div v-if="pickedTask" class="px-3 py-2 text-[11px] flex items-center gap-2" :class="isDarkMode ? 'bg-blue-950/50 text-blue-200' : 'bg-blue-50 text-blue-700'">
             <span>📌 Booking <b>{{ pickedTask.subject }}</b> — click a time slot to place it.</span>
             <button type="button" @click="pickedTask = null" class="underline cursor-pointer">clear</button>
           </div>
 
-          <!-- office hours: drives the away-day band; remembered per browser -->
-          <div class="px-3 py-2 flex items-center gap-2 flex-wrap text-[11px] border-t" :class="isDarkMode ? 'border-gray-800 text-gray-400' : 'border-gray-100 text-gray-500'">
-            <span class="font-bold uppercase tracking-wider">🏢 Office hours</span>
-            <label class="flex items-center gap-1">
-              <span class="sr-only">Office start time</span>
-              <input type="time" v-model="officeStart" step="900" aria-label="Office start time"
-                class="text-[11px] rounded-lg px-1.5 py-1 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'">
-            </label>
-            <span>→</span>
-            <label class="flex items-center gap-1">
-              <span class="sr-only">Office end time</span>
-              <input type="time" v-model="officeEnd" step="900" aria-label="Office end time"
-                class="text-[11px] rounded-lg px-1.5 py-1 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'">
-            </label>
-            <span class="opacity-70">· leave & absence days are blocked out across this span</span>
-          </div>
 
           <!-- grid -->
           <div class="overflow-x-auto">
@@ -1550,12 +1643,15 @@
                 </div>
               </div>
               <!-- hour rows (full 24h, scrollable; opens scrolled to ~7a) -->
-              <div ref="plannerGridScroll" class="overflow-y-auto" style="max-height: 60vh; scrollbar-gutter: stable;">
+              <div ref="plannerGridScroll" class="overflow-y-auto overscroll-contain"
+                @touchstart="onPlannerTouchStart" @touchend="onPlannerTouchEnd"
+                style="max-height: 60vh; scrollbar-gutter: stable;">
               <div class="relative" :style="{ height: (plannerHours.length * 44) + 'px' }">
                 <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', minmax(0, 1fr))' }">
                   <!-- hour gutter -->
                   <div class="relative">
                     <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-1 text-[10px] text-right -translate-y-1/2" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
+                    <div v-for="m in officeMarks" :key="'oml-' + m.kind" class="absolute left-0 right-1 text-[8px] font-bold text-right -translate-y-1/2 text-emerald-600 dark:text-emerald-400" :style="{ top: m.top }" :title="m.title">🏢</div>
                   </div>
                   <!-- day columns -->
                   <div v-for="d in plannerDays" :key="d" data-day-col class="relative border-l" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">
@@ -1573,8 +1669,13 @@
                     </div>
                     <!-- past time is shaded, so the eye avoids booking behind the now-line -->
                     <div class="absolute left-0 right-0 pointer-events-none z-0" :class="isDarkMode ? 'bg-black/35' : 'bg-gray-900/[0.07]'" :style="pastShadeStyle(d)" aria-hidden="true"></div>
+                    <!-- office start/end: two hairlines instead of a banner above the grid -->
+                    <div v-for="m in officeMarks" :key="'om-' + d + m.kind"
+                      class="absolute left-0 right-0 border-t-2 pointer-events-none z-0"
+                      :class="isDarkMode ? 'border-emerald-500/40' : 'border-emerald-500/50'"
+                      :style="{ top: m.top }" :aria-hidden="true"></div>
                     <div v-for="(h, i) in plannerHours" :key="h"
-                      class="absolute left-0 right-0 border-t cursor-cell transition-colors touch-none"
+                      class="absolute left-0 right-0 border-t cursor-cell transition-colors touch-pan-y"
                       :class="[isDarkMode ? 'border-gray-700 hover:bg-blue-950/30' : 'border-gray-300 hover:bg-blue-50/60']"
                       :style="{ top: (i * 44) + 'px', height: '44px' }"
                       role="button"
@@ -1607,9 +1708,13 @@
                       @click.stop="onBlockClick(seg.block)"
                       @keydown.enter.prevent="openBlockDrawer(seg.block)"
                       @keydown.space.prevent="openBlockDrawer(seg.block)"
-                      :title="'Drag to reschedule · click to open · ' + segTimeTitle(seg)"
-                      class="absolute rounded-lg px-2 py-1 text-left overflow-hidden border touch-none select-none hover:z-20 transition-[left,width] duration-75"
-                      :class="[blockClass(seg.block), (plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab']"
+                      @pointerenter="showBlockHover($event, seg)"
+                      @pointerleave="hideBlockHover"
+                      @focus="showBlockHover($event, seg)"
+                      @blur="hideBlockHover"
+                      :aria-label="(seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block') + ' ' + segTimeTitle(seg)"
+                      class="absolute rounded-lg px-2 py-1 text-left overflow-hidden border touch-pan-y select-none hover:z-20 transition-[left,width] duration-75"
+                      :class="[blockClass(seg.block), isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab')]"
                       :style="segStyle(seg)">
                       <!-- recorded (timesheet) time filling up from the bottom of the planned block -->
                       <div v-if="seg.block.actual_hours > 0 && seg.block.status !== 'Cancelled' && !seg.block.is_away"
@@ -1627,10 +1732,10 @@
                         {{ fmtHrs(seg.block.actual_hours) }}/{{ fmtHrs(seg.block.duration_hours) }}h
                         <span v-if="seg.block.variance_hours" :class="seg.block.variance_hours < 0 ? 'text-amber-200' : 'text-rose-200'">({{ seg.block.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(seg.block.variance_hours) }})</span>
                       </div>
-                      <div @pointerdown.stop="startBlockDrag($event, seg.block, 'resize-start')"
+                      <div v-if="!isBlockLocked(seg.block)" @pointerdown.stop="startBlockDrag($event, seg.block, 'resize-start')"
                         class="absolute left-0 right-0 top-0 h-2 cursor-ns-resize" aria-hidden="true"
                         title="Drag to change the start time"></div>
-                      <div @pointerdown.stop="startBlockDrag($event, seg.block, 'resize')"
+                      <div v-if="!isBlockLocked(seg.block)" @pointerdown.stop="startBlockDrag($event, seg.block, 'resize')"
                         class="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize" aria-hidden="true"
                         title="Drag to change the end time"></div>
                     </button>
@@ -1642,6 +1747,27 @@
           </div>  <!-- /overflow-x-auto -->
         </div>  <!-- /planner calendar card -->
       </div>  <!-- /planner two-column grid -->
+          <!-- hover card: full detail without opening the drawer -->
+          <div v-if="hoverCard" class="fixed z-50 w-64 rounded-2xl border shadow-2xl p-3 space-y-1.5 pointer-events-none"
+            :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'"
+            :style="{ left: hoverCard.left + 'px', top: hoverCard.top + 'px' }"
+            role="tooltip">
+            <div class="text-xs font-extrabold leading-snug break-words">{{ hoverCard.block.task_subject || hoverCard.block.work_item_label || hoverCard.block.deliverable_notes || 'Work block' }}</div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider" :class="getBlockTimingInfo(hoverCard.block).pillClass">{{ getBlockTimingInfo(hoverCard.block).label }}</span>
+              <span class="text-[10px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">{{ hoverStateText }}</span>
+              <span v-if="isBlockLocked(hoverCard.block)" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider" :class="isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'">🔒 Read-only</span>
+            </div>
+            <div class="text-[11px] font-mono font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">{{ hoverCard.block.work_date }} · {{ segTimeTitle(hoverCard.seg) }}</div>
+            <div class="flex flex-wrap gap-x-2 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+              <span>planned <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(hoverCard.block.duration_hours) }}h</b></span>
+              <span>· logged <b class="text-emerald-500">{{ fmtHrs(hoverCard.block.actual_hours) }}h</b></span>
+            </div>
+            <div v-if="hoverCard.block.project_name || hoverCard.block.project" class="text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">📁 {{ hoverCard.block.project_name || hoverCard.block.project }}</div>
+            <div v-if="hoverCard.block.task_nature" class="text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">{{ hoverCard.block.task_nature }}</div>
+            <div v-if="hoverCard.block.deliverable_notes && hoverCard.block.deliverable_notes !== (hoverCard.block.task_subject || hoverCard.block.work_item_label)" class="text-[11px] leading-snug break-words max-h-20 overflow-hidden" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">{{ hoverCard.block.deliverable_notes }}</div>
+            <div class="text-[10px] pt-0.5" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'">{{ isBlockLocked(hoverCard.block) ? 'In the past — click to view, editing is locked' : 'Click to open · drag to move · drag an edge to change start/end' }}</div>
+          </div>
     </div>  <!-- /TAB 8: PLANNER -->
     <!-- The live tracker lives in the header pill only — no floating HUD (duplicate UI). -->
 
@@ -1779,16 +1905,30 @@
           </ul>
         </div>
 
-        <!-- live stopwatch against this block -->
-        <button type="button" @click="trackPlannerBlock(activeBlock)" :disabled="isTracking"
+        <!-- Banner for past planned blocks: plan is immutable -->
+        <div v-if="isPastBlock(activeBlock)" class="flex items-start gap-2 text-[11px] font-semibold rounded-xl px-3 py-2 border"
+          :class="isDarkMode ? 'bg-gray-800/60 border-gray-700 text-gray-300' : 'bg-gray-50 border-gray-200 text-gray-600'" role="status">
+          <span>🔒</span>
+          <span>Planned work blocks in the past are immutable commitments and cannot be rescheduled or deleted.</span>
+        </div>
+
+        <!-- Banner if historical timesheet is locked for non-managers -->
+        <div v-if="!canLogTimesheet(activeBlock)" class="flex items-start gap-2 text-[11px] font-semibold rounded-xl px-3 py-2 border"
+          :class="isDarkMode ? 'bg-amber-950/40 border-amber-800 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'" role="status">
+          <span>⏳</span>
+          <span>Historical Timesheet: OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for earlier dates.</span>
+        </div>
+
+        <!-- Live stopwatch against this block (only for current/future blocks today) -->
+        <button type="button" v-if="!isPastBlock(activeBlock)" @click="trackPlannerBlock(activeBlock)" :disabled="isTracking"
           class="w-full inline-flex items-center justify-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer disabled:opacity-50"
           :class="isDarkMode ? 'bg-red-950/60 border border-red-800 text-red-300 hover:bg-red-950' : 'bg-red-50 border border-red-200 text-red-700 hover:bg-red-100'">
           <span class="w-2 h-2 rounded-full bg-red-500"></span>
           {{ isTracking ? 'Timer already running…' : 'Start stopwatch for this block' }}
         </button>
 
-        <!-- add session -->
-        <div class="rounded-2xl p-3.5 border space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+        <!-- Log session manually (allowed for today & yesterday for users, all dates for managers) -->
+        <div v-if="canLogTimesheet(activeBlock)" class="rounded-2xl p-3.5 border space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
           <h4 class="text-xs font-bold" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">Log a real session manually</h4>
           <div class="grid grid-cols-3 gap-2">
             <label class="block"><span class="text-[10px] font-bold text-gray-500">Date</span>
@@ -1807,7 +1947,7 @@
           <button type="button" @click="submitSession" :disabled="plannerBusy" class="w-full text-xs font-bold px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50">Add session</button>
         </div>
 
-        <div class="flex justify-between gap-2 pt-1">
+        <div v-if="!isPastBlock(activeBlock)" class="flex justify-between gap-2 pt-1">
           <button type="button" @click="cancelActiveBlock" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-amber-300 hover:bg-gray-800' : 'text-amber-700 hover:bg-amber-50'">Cancel block</button>
           <button type="button" v-if="!activeBlock.actual_hours" @click="removeActiveBlock" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-rose-300 hover:bg-gray-800' : 'text-rose-600 hover:bg-rose-50'">Delete</button>
         </div>
@@ -1823,59 +1963,61 @@
     <!-- Dashboard Tab -->
     <button 
       @click="activeTab = 'dashboard'"
-      class="flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer"
-      :class="activeTab === 'dashboard' ? 'text-blue-500 font-bold' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
+      class="flex-1 basis-0 flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all cursor-pointer"
+      :class="activeTab === 'dashboard' ? 'text-blue-500' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-      <span class="text-[10px] mt-0.5">Dashboard</span>
+      <span class="text-[10px] font-semibold mt-0.5">Dashboard</span>
     </button>
 
     <!-- Planner Tab -->
     <button 
       @click="activeTab = 'planner'"
-      class="flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer"
-      :class="activeTab === 'planner' ? 'text-blue-500 font-bold' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
+      class="flex-1 basis-0 flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all cursor-pointer"
+      :class="activeTab === 'planner' ? 'text-blue-500' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/></svg>
-      <span class="text-[10px] mt-0.5">Planner</span>
+      <span class="text-[10px] font-semibold mt-0.5">Planner</span>
     </button>
 
     <!-- Floating Quick Start/Stop Timer Button in Center -->
     <button 
-      @click="toggleTrack"
-      class="w-12 h-12 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all -mt-5 ring-4 cursor-pointer"
+      @click="openSessionCard"
+      class="relative shrink-0 w-14 h-14 rounded-full flex flex-col items-center justify-center shadow-xl active:scale-90 transition-all -mt-6 ring-4 cursor-pointer"
       :class="[
-        isTracking ? 'bg-red-600 ring-red-400/30 animate-pulse text-white' : 'bg-[#1B64DA] hover:bg-blue-600 text-white',
+        isTracking ? 'bg-red-600 ring-red-400/30 text-white' : 'bg-[#1B64DA] hover:bg-blue-600 text-white',
         isDarkMode ? 'ring-[#1E1F22]' : 'ring-white'
       ]"
-      :title="isTracking ? 'Stop Tracking' : 'Start Focus Timer'">
-      <svg v-if="!isTracking" class="w-5 h-5 fill-current ml-0.5" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-      <svg v-else class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+      aria-label="Open the current session timesheet"
+      :title="isTracking ? 'Open the session timesheet — recording ' + formattedTime : 'Open the session timesheet'">
+      <!-- Hours:minutes only — no icon, no seconds: readable at a glance on a phone. -->
+      <span v-if="isTracking" class="text-[13px] font-mono font-extrabold leading-none tabular-nums">{{ formattedTime.slice(0, 5) }}</span>
+      <span v-else class="text-[11px] font-extrabold uppercase tracking-wide leading-none">Log</span>
     </button>
 
     <!-- Timesheets Tab -->
     <button 
       @click="activeTab = 'timesheets'"
-      class="flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer"
-      :class="activeTab === 'timesheets' ? 'text-blue-500 font-bold' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
+      class="flex-1 basis-0 flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all cursor-pointer"
+      :class="activeTab === 'timesheets' ? 'text-blue-500' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      <span class="text-[10px] mt-0.5">Timesheets</span>
+      <span class="text-[10px] font-semibold mt-0.5">Timesheets</span>
     </button>
 
     <!-- Team Attendance Tab (or + Task Modal if non-manager) -->
     <button 
       v-if="isManager"
       @click="activeTab = 'attendance'"
-      class="flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer"
-      :class="activeTab === 'attendance' ? 'text-blue-500 font-bold' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
+      class="flex-1 basis-0 flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all cursor-pointer"
+      :class="activeTab === 'attendance' ? 'text-blue-500' : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-      <span class="text-[10px] mt-0.5">Team</span>
+      <span class="text-[10px] font-semibold mt-0.5">Team</span>
     </button>
     <button 
       v-else
       @click="openNewTaskModal"
-      class="flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer"
+      class="flex-1 basis-0 flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all cursor-pointer"
       :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
       <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      <span class="text-[10px] mt-0.5">+ Task</span>
+      <span class="text-[10px] font-semibold mt-0.5">+ Task</span>
     </button>
 
   </nav>
@@ -2476,8 +2618,190 @@
         if (!pt) return;
         sessionNotesList.value.push(pt);
         newSessionPoint.value = '';
+        // newest sits at the bottom of the list — keep it in view
+        nextTick(() => { if (sessionNotesScroll.value) sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight; });
         syncActiveSession();
         triggerHaptic([25]);
+      };
+
+      // Chronological order: #1 is the first line of the session and the newest
+      // sits last, right above the input. row.i is the real array index.
+      const sessionNotesRows = computed(() =>
+        (sessionNotesList.value || []).map((t, i) => ({ i: i, t: t, n: i + 1 }))
+      );
+      // --- custom dropdowns (native <select> popups can't be styled) ---
+      const trackerBoundBlock = computed(() => {
+        const nm = trackerBlockName.value;
+        if (!nm) return null;
+        return (workBlocks.value || []).find((b) => b.name === nm) || null;
+      });
+      const showAppMenu = ref(false);
+      const openDropdown = ref('');
+      const dropdownIdx = ref(-1);
+      const projectItems = computed(() => {
+        const list = [{ value: '', label: 'General Work (Internal)' }];
+        (projects.value || []).forEach((pr) => list.push({ value: pr.name, label: pr.project_name || pr.name }));
+        return list;
+      });
+      // "Viewing" switcher shares the generic custom-listbox plumbing below.
+      const employeeItems = computed(() => {
+        const list = [{ value: currentUserFullName.value, label: '👤 ' + currentUserFullName.value + ' (You)' }];
+        if (isManager.value) {
+          list.push({ value: 'All', label: '🌐 All Members' });
+          (filteredTeamMembers.value || []).forEach((m) => {
+            const nm = m.full_name || m.name;
+            list.push({ value: nm, label: '👤 ' + nm });
+          });
+        }
+        return list;
+      });
+      const natureItems = computed(() =>
+        (natureOptions || []).map((o) => ({ value: o.label, label: o.label, nonWorking: !o.is_working }))
+      );
+      const dropdownItems = (id) =>
+        (id === 'project' ? projectItems.value : (id === 'employee' ? employeeItems.value : natureItems.value));
+      const dropdownCurrent = (id) =>
+        (id === 'project' ? selectedProject.value : (id === 'employee' ? selectedEmployee.value : selectedNature.value));
+      const dropdownLabel = (id) => {
+        const hit = dropdownItems(id).find((o) => o.value === dropdownCurrent(id));
+        if (hit) return hit.label;
+        if (id === 'project') return 'General Work (Internal)';
+        if (id === 'employee') return selectedEmployee.value || 'Viewing';
+        return 'Select activity…';
+      };
+      const closeDropdown = () => { openDropdown.value = ''; dropdownIdx.value = -1; };
+      const toggleDropdown = (id) => {
+        if (openDropdown.value === id) { closeDropdown(); return; }
+        openDropdown.value = id;
+        dropdownIdx.value = Math.max(0, dropdownItems(id).findIndex((o) => o.value === dropdownCurrent(id)));
+      };
+      const pickDropdown = (id, opt) => {
+        if (id === 'employee') {
+          closeDropdown();
+          if (opt.value === selectedEmployee.value) return;
+          selectedEmployee.value = opt.value;
+          onEmployeeChange();
+          return;
+        }
+        if (id === 'project') selectedProject.value = opt.value; else selectedNature.value = opt.value;
+        closeDropdown();
+        syncActiveSession();
+      };
+      const onDropdownKey = (ev, id) => {
+        const items = dropdownItems(id);
+        const k = ev.key;
+        if (k === 'Escape') { if (openDropdown.value === id) { ev.stopPropagation(); closeDropdown(); } return; }
+        if (k === 'Enter' || k === ' ' || k === 'Spacebar') {
+          ev.preventDefault();
+          if (openDropdown.value !== id) { toggleDropdown(id); return; }
+          const opt = items[dropdownIdx.value];
+          if (opt) pickDropdown(id, opt);
+          return;
+        }
+        if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Home' || k === 'End') {
+          ev.preventDefault();
+          if (openDropdown.value !== id) { toggleDropdown(id); return; }
+          const last = items.length - 1;
+          if (k === 'Home') dropdownIdx.value = 0;
+          else if (k === 'End') dropdownIdx.value = last;
+          else if (k === 'ArrowDown') dropdownIdx.value = dropdownIdx.value >= last ? 0 : dropdownIdx.value + 1;
+          else dropdownIdx.value = dropdownIdx.value <= 0 ? last : dropdownIdx.value - 1;
+        }
+      };
+      const _appMenuOutside = (ev) => {
+        if (!showAppMenu.value) return;
+        if (!ev.target.closest || !ev.target.closest('[data-appmenu]')) showAppMenu.value = false;
+      };
+      const _dropdownOutside = (ev) => {
+        if (!openDropdown.value) return;
+        if (!ev.target.closest || !ev.target.closest('[data-dropdown]')) closeDropdown();
+      };
+
+      const sessionPointInput = ref(null);
+      const sessionNotesScroll = ref(null);
+      const focusSessionPointInput = () => {
+        const el = sessionPointInput.value;
+        if (el && el.focus) { el.focus(); el.select && el.select(); }
+      };
+      const _logRows = () => {
+        const box = sessionNotesScroll.value;
+        return box ? Array.from(box.querySelectorAll('[data-log-row]')) : [];
+      };
+      const focusLogRow = (idx) => {
+        const rows = _logRows();
+        if (!rows.length) return;
+        const el = rows[Math.max(0, Math.min(rows.length - 1, idx))];
+        if (el) el.focus();
+      };
+      // ↑/↓ walk the log, Enter or Delete removes the focused line, Esc goes back to typing.
+      const onLogRowKey = (ev, row) => {
+        const rows = _logRows();
+        const at = rows.indexOf(ev.currentTarget);
+        if (ev.key === 'ArrowUp') { ev.preventDefault(); if (at > 0) focusLogRow(at - 1); return; }
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          if (at < rows.length - 1) focusLogRow(at + 1); else focusSessionPointInput();
+          return;
+        }
+        if (ev.key === 'Escape') { ev.preventDefault(); focusSessionPointInput(); return; }
+        if (ev.key === 'Enter' || ev.key === 'Delete' || ev.key === 'Backspace') {
+          ev.preventDefault();
+          removeSessionPoint(row.i);
+          nextTick(() => {
+            const left = _logRows();
+            if (!left.length) focusSessionPointInput();
+            else focusLogRow(Math.min(at, left.length - 1));
+          });
+        }
+      };
+
+      const sessionCardRef = ref(null);
+      const sessionCardFlash = ref(false);
+      // The header timer is a shortcut back to the session timesheet (Shift+T).
+      const openSessionCard = () => {
+        showTrackerPopup.value = false;
+        activeTab.value = 'dashboard';
+        nextTick(() => {
+          const el = sessionCardRef.value;
+          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          sessionCardFlash.value = true;
+          setTimeout(() => { sessionCardFlash.value = false; }, 1600);
+          focusSessionPointInput();
+        });
+      };
+      // Global shortcuts. Shift+T new task · Shift+P plan a block · Shift+S jump to the
+      // session-log input (then Tab reaches Stop & Save) · Cmd/Ctrl+S stops and saves ·
+      // "/" also jumps to the add-line input.
+      const _typingIn = (t) => {
+        const tag = t && t.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(t && t.isContentEditable);
+      };
+      const planBlockShortcut = () => {
+        activeTab.value = 'planner';
+        const iso = todayDate.value || todayISO();
+        const hour = Math.min(22, new Date().getHours());
+        nextTick(() => { openBookModal(iso, hour); });
+      };
+      const _slashFocus = (ev) => {
+        // Cmd/Ctrl+S saves the session instead of the browser page.
+        if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 's') {
+          ev.preventDefault();
+          if (isTracking.value) toggleTrack();
+          else showToast('No session is running', 'info');
+          return;
+        }
+        if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        if (ev.shiftKey && !_typingIn(ev.target)) {
+          const k = String(ev.key || '').toLowerCase();
+          if (k === 't') { ev.preventDefault(); openNewTaskModal(); return; }
+          if (k === 'p') { ev.preventDefault(); planBlockShortcut(); return; }
+          if (k === 's') { ev.preventDefault(); openSessionCard(); return; }
+        }
+        if (ev.key !== '/') return;
+        if (_typingIn(ev.target)) return;
+        if (!sessionPointInput.value) return;
+        ev.preventDefault();
+        focusSessionPointInput();
       };
 
       const removeSessionPoint = (idx) => {
@@ -2742,13 +3066,20 @@
       const trackPlannerBlock = (b) => {
         if (isTracking.value) { showToast('Stop the current timer first', 'danger'); return; }
         trackerBlockName.value = b.name;
-        trackerNotes.value = b.task_subject || b.work_item_label || b.deliverable_notes || '';
+        let rawN = b.task_subject || b.work_item_label || b.deliverable_notes || '';
+        if (rawN.includes('•')) {
+          const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+          trackerNotes.value = parts[0] || '';
+          sessionNotesList.value = parts.slice(1);
+        } else {
+          trackerNotes.value = rawN;
+          sessionNotesList.value = [];
+        }
         selectedProject.value = b.project || '';
         selectedNature.value = getNatureBadge(b.task_nature).label;
         showBlockDrawer.value = false;
-        showTrackerPopup.value = true;
-        sessionNotesList.value = [];
         toggleTrack();
+        openSessionCard();
       };
 
       const trackBlock = (block) => {
@@ -2757,10 +3088,17 @@
           return;
         }
         trackerBlockName.value = block.name;
-        trackerNotes.value = block.task_subject || block.deliverable_notes || '';
+        let rawN = block.task_subject || block.deliverable_notes || '';
+        if (rawN.includes('•')) {
+          const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+          trackerNotes.value = parts[0] || '';
+          sessionNotesList.value = parts.slice(1);
+        } else {
+          trackerNotes.value = rawN;
+          sessionNotesList.value = [];
+        }
         selectedProject.value = block.project || '';
         selectedNature.value = getNatureBadge(block.task_nature).label;
-        sessionNotesList.value = [];
         toggleTrack();
       };
 
@@ -3141,19 +3479,80 @@
             : { background: `hsl(${h} 62% 40%)`, borderColor: `hsl(${h} 65% 30%)`, color: '#fff' };
         }
         if (st === 'missed') {
-          const stripe = dark ? `hsl(${h} 40% 40% / .55)` : `hsl(${h} 55% 55% / .40)`;
-          const base = dark ? `hsl(${h} 35% 16%)` : `hsl(${h} 80% 97%)`;
+          // The hatch must read as texture behind the text, never compete with it:
+          // thin, low-contrast stripes on a light base.
+          const stripe = dark ? `hsl(${h} 35% 55% / .18)` : `hsl(${h} 45% 45% / .14)`;
+          const base = dark ? `hsl(${h} 30% 15%)` : `hsl(${h} 70% 98%)`;
           return {
             backgroundColor: base,
-            backgroundImage: `repeating-linear-gradient(45deg, ${stripe} 0 4px, transparent 4px 9px)`,
-            borderColor: dark ? `hsl(${h} 40% 42%)` : `hsl(${h} 50% 62%)`,
-            color: dark ? `hsl(${h} 60% 78%)` : `hsl(${h} 55% 32%)`
+            backgroundImage: `repeating-linear-gradient(45deg, ${stripe} 0 2px, transparent 2px 10px)`,
+            borderColor: dark ? `hsl(${h} 40% 45%)` : `hsl(${h} 45% 65%)`,
+            color: dark ? `hsl(${h} 55% 82%)` : `hsl(${h} 60% 28%)`
           };
         }
         return dark
           ? { background: `hsl(${h} 50% 18%)`, borderColor: `hsl(${h} 55% 45%)`, color: `hsl(${h} 70% 85%)` }
           : { background: `hsl(${h} 90% 95%)`, borderColor: `hsl(${h} 60% 55%)`, color: `hsl(${h} 60% 30%)` };
       };
+
+      // ---- Past is read-only ----------------------------------------------------
+      // History should not be rewritten by a stray drag: anything that already
+      // happened is locked, only now-and-later can be moved or booked.
+      const isPastSlot = (iso, endMin) => {
+        const today = todayDate.value || todayISO();
+        if (!iso) return false;
+        if (iso < today) return true;
+        if (iso > today) return false;
+        return (endMin || 0) <= nowMinute.value;
+      };
+      const yesterdayDate = computed(() => addDays(todayDate.value || todayISO(), -1));
+      const isPastBlock = (b) => {
+        if (!b) return false;
+        const today = todayDate.value || todayISO();
+        return (b.work_date || '') < today;
+      };
+      const canLogTimesheet = (b) => {
+        if (!b) return false;
+        if (isManager.value) return true;
+        const dt = b.work_date || todayDate.value || todayISO();
+        return dt >= yesterdayDate.value;
+      };
+      const isBlockLocked = (b) => {
+        if (!b) return false;
+        let e = _mins(b.end_time);
+        if (!(e > 0)) e = _mins(b.start_time);
+        return isPastSlot(b.work_date, e);
+      };
+
+      // ---- Hover card: read a block without opening the drawer ------------------
+      const STATE_TEXT = {
+        planned: 'Planned — not started',
+        logged: 'Time logged',
+        missed: 'Past · no time logged',
+        away: 'Non-working',
+        cancelled: 'Cancelled'
+      };
+      const hoverCard = ref(null);
+      const showBlockHover = (ev, seg) => {
+        if (plannerDrag.value || slotSel.value) return;
+        const b = (seg && seg.block) || seg;
+        if (!b) return;
+        const r = ev.currentTarget.getBoundingClientRect();
+        hoverCard.value = {
+          block: b,
+          seg: seg,
+          state: blockVisualState(b),
+          // Fixed-position so the scroll container cannot clip it; flipped when it
+          // would run off the right edge.
+          left: Math.min(r.right + 10, window.innerWidth - 280),
+          top: Math.max(8, Math.min(r.top, window.innerHeight - 190))
+        };
+      };
+      const hideBlockHover = () => { hoverCard.value = null; };
+      const hoverStateText = computed(() => {
+        const hc = hoverCard.value;
+        return hc ? (STATE_TEXT[hc.state] || hc.state) : '';
+      });
 
       // ---- Drag to reschedule / resize a block ---------------------------------
       const SNAP_MIN = 15;
@@ -3226,6 +3625,7 @@
       };
       const startBlockDrag = (ev, b, mode) => {
         if (b.status === 'Cancelled') return;
+        if (isBlockLocked(b)) return;   // the past is read-only
         if (ev.button !== undefined && ev.button !== 0) return;
         ev.preventDefault();
         const col = ev.currentTarget.closest('[data-day-col]');
@@ -3359,6 +3759,25 @@
       const _loadOffice = (key, fallback) => {
         try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
       };
+      const plannerViewOrder = ['day', '4days', 'week'];
+      // Segmented control = one tab stop; ←/→ move the selection (WAI-ARIA radiogroup).
+      const onPlannerViewKey = (ev) => {
+        const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+        if (keys.indexOf(ev.key) === -1) return;
+        ev.preventDefault();
+        const cur = Math.max(0, plannerViewOrder.indexOf(plannerView.value));
+        let next = cur;
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % plannerViewOrder.length;
+        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + plannerViewOrder.length) % plannerViewOrder.length;
+        else if (ev.key === 'Home') next = 0;
+        else next = plannerViewOrder.length - 1;
+        setUserPlannerView(plannerViewOrder[next]);
+        nextTick(() => {
+          const group = ev.currentTarget;
+          const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-planner-view]') : [];
+          if (btns[next]) btns[next].focus();
+        });
+      };
       const officeStart = ref(_loadOffice('omnitrack_office_start', '10:00'));
       const officeEnd = ref(_loadOffice('omnitrack_office_end', '18:00'));
       watch([officeStart, officeEnd], () => {
@@ -3376,6 +3795,39 @@
           top: (((a - lo) / 60) * 44) + 'px',
           height: (((b - a) / 60) * 44) + 'px'
         };
+      });
+      // Touch: a horizontal swipe across the grid moves a period, the way a phone
+      // calendar behaves. Vertical pans stay with the scroller (cells are touch-pan-y).
+      const _swipe = { x: 0, y: 0, t: 0, ok: false };
+      const onPlannerTouchStart = (ev) => {
+        const t = ev.touches && ev.touches.length === 1 ? ev.touches[0] : null;
+        _swipe.ok = !!t;
+        if (!t) return;
+        _swipe.x = t.clientX; _swipe.y = t.clientY; _swipe.t = Date.now();
+      };
+      const onPlannerTouchEnd = (ev) => {
+        if (!_swipe.ok) return;
+        _swipe.ok = false;
+        const t = ev.changedTouches && ev.changedTouches[0];
+        if (!t) return;
+        const dx = t.clientX - _swipe.x;
+        const dy = t.clientY - _swipe.y;
+        if (Date.now() - _swipe.t > 700) return;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+        if (slotSel.value || plannerDrag.value) return;
+        plannerShift(dx < 0 ? 1 : -1);
+      };
+
+      // Office bounds as two hairlines on the grid; the old banner ate a whole row.
+      const officeMarks = computed(() => {
+        const lo = plannerRange.value.lo * 60;
+        let a = _mins(officeStart.value);
+        let b = _mins(officeEnd.value);
+        if (!(b > a)) { a = 10 * 60; b = 18 * 60; }
+        return [
+          { kind: 'start', top: (((a - lo) / 60) * 44) + 'px', title: 'Office starts ' + _minToHHMM(a) },
+          { kind: 'end', top: (((b - lo) / 60) * 44) + 'px', title: 'Office ends ' + _minToHHMM(b) }
+        ];
       });
       const isPastCol = (iso) => iso < (todayDate.value || todayISO());
       // How much of a column is in the past: whole column for past days, up to the
@@ -3396,7 +3848,16 @@
         return list.find((t) => t.ref === ref) || null;
       });
 
+      const pastBookingHint = ref('');
+      const _rejectPast = (iso, endMin) => {
+        if (!isPastSlot(iso, endMin)) return false;
+        pastBookingHint.value = 'That slot is in the past — work blocks can only be booked from now on.';
+        setTimeout(() => { pastBookingHint.value = ''; }, 3500);
+        return true;
+      };
+
       const openBookModalRange = (iso, startMin, endMin) => {
+        if (_rejectPast(iso, endMin)) return;
         bookForm.value = {
           mode: 'work',
           work_item: pickedTask.value ? pickedTask.value.ref : '',
@@ -3410,6 +3871,7 @@
 
       const openBookModal = (iso, hour) => {
         if (Date.now() - _slotSelEndedAt < 300) return; // a range drag just ended
+        if (_rejectPast(iso, (hour + 1) * 60)) return;
         const hh = String(hour).padStart(2, '0');
         bookForm.value = {
           mode: 'work',
@@ -3474,7 +3936,13 @@
       };
 
       const submitSession = async () => {
+        if (!activeBlock.value) return;
         const f = sessionForm.value;
+        const targetDate = f.session_date || activeBlock.value.work_date || todayDate.value;
+        if (!isManager.value && targetDate < yesterdayDate.value) {
+          showToast('OmniTrack Users can only log or modify timesheets for today and yesterday. Contact a Manager for earlier dates.', 'warning');
+          return;
+        }
         if (!f.hours && !(f.from_time && f.to_time)) { showToast('Enter hours or a from/to time', 'danger'); return; }
         plannerBusy.value = true;
         try {
@@ -3491,29 +3959,31 @@
           const refreshed = (plannerData.value.blocks || []).find(x => x.name === activeBlock.value.name);
           if (refreshed) activeBlock.value = refreshed;
           sessionForm.value = { session_date: activeBlock.value.work_date, from_time: '', to_time: '', hours: '', notes: '' };
-        } catch (e) { showToast('Could not log session', 'danger'); }
+        } catch (e) { showToast('Could not log session: ' + (e && e.message || e), 'danger'); }
         finally { plannerBusy.value = false; }
       };
 
       const cancelActiveBlock = async () => {
+        if (isPastBlock(activeBlock.value)) { showToast('Planned work blocks in the past cannot be changed or cancelled', 'warning'); return; }
         plannerBusy.value = true;
         try {
           await postJSON('update_work_block', { block_name: activeBlock.value.name, status: 'Cancelled' });
           showBlockDrawer.value = false;
           showToast('Block cancelled', 'info');
           await fetchPlannerData();
-        } catch (e) { showToast('Could not cancel block', 'danger'); }
+        } catch (e) { showToast('Could not cancel block: ' + (e && e.message || e), 'danger'); }
         finally { plannerBusy.value = false; }
       };
 
       const removeActiveBlock = async () => {
+        if (isPastBlock(activeBlock.value)) { showToast('Past planned work blocks cannot be deleted', 'warning'); return; }
         plannerBusy.value = true;
         try {
           await postJSON('delete_work_block', { block_name: activeBlock.value.name });
           showBlockDrawer.value = false;
           showToast('Block deleted', 'info');
           await fetchPlannerData();
-        } catch (e) { showToast('Could not delete block', 'danger'); }
+        } catch (e) { showToast('Could not delete block: ' + (e && e.message || e), 'danger'); }
         finally { plannerBusy.value = false; }
       };
 
@@ -3552,6 +4022,7 @@
         if (e.key !== 'Escape') return;
         if (showBookModal.value) showBookModal.value = false;
         else if (showBlockDrawer.value) showBlockDrawer.value = false;
+        else if (showAppMenu.value) showAppMenu.value = false;
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
@@ -3562,6 +4033,9 @@
       watch(activeTab, (t) => { if (t === 'planner') { fetchPlannerData(); scrollPlannerToMorning(); } });
 
       onMounted(() => {
+        document.addEventListener('keydown', _slashFocus);
+        document.addEventListener('pointerdown', _dropdownOutside);
+        document.addEventListener('pointerdown', _appMenuOutside);
         applyTheme(isDarkMode.value);
         startNowClock();
         fetchWorkstationData(selectedEmployee.value);
@@ -3583,11 +4057,18 @@
               if (elapsed < 86400) { // within 24h
                 isTracking.value = true;
                 trackerSeconds.value = elapsed;
-                selectedNature.value = parsed.selectedNature || '🎯 Planned Work';
+                selectedNature.value = parsed.selectedNature || 'Planned Work';
                 selectedProject.value = parsed.selectedProject || '';
-                trackerNotes.value = parsed.trackerNotes || '';
+                let rawN = parsed.trackerNotes || '';
+                if (rawN.includes('•')) {
+                  const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+                  trackerNotes.value = parts[0] || '';
+                  sessionNotesList.value = (!parsed.sessionNotesList || parsed.sessionNotesList.length === 0) ? parts.slice(1) : parsed.sessionNotesList;
+                } else {
+                  trackerNotes.value = rawN;
+                  sessionNotesList.value = parsed.sessionNotesList || [];
+                }
                 trackerBlockName.value = parsed.trackerBlockName || null;
-                sessionNotesList.value = parsed.sessionNotesList || [];
                 trackerTimer.value = setInterval(() => {
                   trackerSeconds.value = Math.floor((Date.now() - parsed.startTime) / 1000);
                 }, 1000);
@@ -3613,6 +4094,9 @@
       });
 
       onUnmounted(() => {
+        document.removeEventListener('keydown', _slashFocus);
+        document.removeEventListener('pointerdown', _dropdownOutside);
+        document.removeEventListener('pointerdown', _appMenuOutside);
         if (_nowTimer) { clearInterval(_nowTimer); _nowTimer = null; }
         if (trackerTimer.value) clearInterval(trackerTimer.value);
         window.removeEventListener('resize', handleResize);
@@ -3684,6 +4168,25 @@
         pastFocusBlocks,
         dashboardKPIs,
         sessionNotesList,
+        sessionNotesRows,
+        sessionCardRef,
+        sessionCardFlash,
+        openSessionCard,
+        trackerBoundBlock,
+        showAppMenu,
+        openDropdown,
+        dropdownIdx,
+        dropdownItems,
+        dropdownLabel,
+        toggleDropdown,
+        pickDropdown,
+        onDropdownKey,
+        closeDropdown,
+        sessionPointInput,
+        sessionNotesScroll,
+        focusSessionPointInput,
+        focusLogRow,
+        onLogRowKey,
         newSessionPoint,
         triggerHaptic,
         syncActiveSession,
@@ -3735,8 +4238,22 @@
         officeBandStyle,
         blockStyle,
         blockVisualState,
+        isBlockLocked,
+        isPastBlock,
+        canLogTimesheet,
+        yesterdayDate,
+        isPastSlot,
+        pastBookingHint,
+        hoverCard,
+        showBlockHover,
+        hideBlockHover,
+        hoverStateText,
         officeStart,
         officeEnd,
+        officeMarks,
+        onPlannerTouchStart,
+        onPlannerTouchEnd,
+        onPlannerViewKey,
         hasAwayBlocksInView,
         timedSegmentsForDay,
         segTop,

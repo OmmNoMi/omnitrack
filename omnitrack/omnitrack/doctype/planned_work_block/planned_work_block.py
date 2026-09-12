@@ -6,10 +6,53 @@ from frappe.utils import flt
 
 class PlannedWorkBlock(Document):
 	def validate(self):
+		self.validate_past_plan_immutability()
+		self.validate_timesheet_session_horizons()
 		self.resolve_project_from_task()
 		self.calculate_duration()
 		self.roll_up_sessions()
 		self.generate_cryptographic_hash()
+
+	def validate_past_plan_immutability(self):
+		"""Rule: In the past (work_date < today), NO ONE can change or reschedule planned work blocks."""
+		if getattr(self.flags, "ignore_past_block_lock", False):
+			return
+
+		today = frappe.utils.getdate(frappe.utils.nowdate())
+
+		if not self.is_new():
+			db_date = frappe.utils.getdate(self.get_db_value("work_date") or self.work_date)
+			if db_date < today:
+				plan_fields = ("work_date", "start_time", "end_time", "task", "project", "task_nature", "deliverable_notes")
+				for f in plan_fields:
+					if self.has_value_changed(f):
+						frappe.throw(
+							frappe._("Planned work blocks in the past cannot be modified or rescheduled."),
+							frappe.ValidationError
+						)
+			elif self.has_value_changed("work_date") and self.work_date and frappe.utils.getdate(self.work_date) < today:
+				frappe.throw(
+					frappe._("Cannot reschedule or move a planned work block into the past."),
+					frappe.ValidationError
+				)
+
+	def validate_timesheet_session_horizons(self):
+		"""Rule: OmniTrack Users can only log or modify timesheet sessions for today and yesterday."""
+		if getattr(self.flags, "ignore_permissions", False):
+			return
+		from omnitrack.permissions import check_timesheet_date_permission
+		for sess in (self.sessions or []):
+			if sess.get("session_date"):
+				check_timesheet_date_permission(sess.session_date)
+
+	def on_trash(self):
+		if not getattr(self.flags, "ignore_past_block_lock", False):
+			if self.work_date and frappe.utils.getdate(self.work_date) < frappe.utils.getdate(frappe.utils.nowdate()):
+				frappe.throw(
+					frappe._("Past planned work blocks cannot be deleted."),
+					frappe.ValidationError
+				)
+
 
 	def resolve_project_from_task(self):
 		"""

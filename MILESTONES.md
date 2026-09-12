@@ -18,13 +18,18 @@ This document defines the formal milestones, delivery targets, and functional sc
 
 ---
 
-## 🚀 Milestone v1.1.0 — Enterprise Cross-Site Replication Engine
-**Target Release:** Q2 2026 • **Status:** In Progress
+## 🚀 Milestone v1.1.0 — Enterprise Cross-Site Replication & Workstation Engine
+**Target Release:** Q2 2026 • **Status:** Active / Shipped Core Workstation
 
 ### Objectives:
 - [x] Queue & Hash Tracking: `OmniTrack Task Sync` with UUID and SHA-256 payload integrity hashing.
 - [x] Secure REST Synchronization: HMAC-SHA256 request signing and secret verification.
 - [x] Conflict Resolution Policies: Source Wins, Target Wins, Latest Timestamp, and Manual Review.
+- [x] **Responsive 2-Pane Workstation Timesheet HUD**: Session context, digital stopwatch (`00:43:34`), Activity Nature default dropdown, and incremental subtask lines logger.
+- [x] **Multi-Tier Project & Client RBAC**: Scoped permissions for `Project User`, project owners, and external clients (`Customer`/`Contact`) on blocks, tasks, and timesheets.
+- [x] **Temporal Governance & Role Boundaries**: Today & Yesterday timesheet horizon for OmniTrack Users; manager-only historical adjustments; immutable lock on past planned work blocks.
+- [x] **Automated Regression Suite (22 Unit Tests)**: Comprehensive test suite in `test_planned_work_block.py` covering split shifts, project permissions, midnight session splits, temporal governance rules, and KPI rollups (100% passing).
+- [x] **Streamlined Executive KPI Cards**: Decoupled hero metrics (`Worked Hours`), 3-metric pillar grids (`Planned` \| `Target` \| `Variance`), and zero parameter repetition.
 - [ ] Automated Background Sync Worker: Retry queue and exponential backoff scheduler.
 - [ ] Bidirectional Timesheet & Project Replication across Master/Satellite topologies.
 

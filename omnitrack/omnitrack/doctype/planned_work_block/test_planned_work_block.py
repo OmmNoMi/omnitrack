@@ -296,6 +296,161 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		self.assertGreater(kpis["month"]["target_hours"], 0)
 		self.assertIn("capacity_pct", kpis["month"])
 
+	def test_user_can_log_session_today_and_yesterday(self):
+		from unittest.mock import patch
+		from omnitrack.api import log_work_session
+		today = frappe.utils.nowdate()
+		yesterday = frappe.utils.add_days(today, -1)
+
+		b = _block(work_date=today, start_time="10:00:00", end_time="12:00:00", employee="test1@example.com").insert()
+
+		frappe.set_user("test1@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack User"]):
+				res_today = log_work_session(
+					block_name=b.name,
+					session_date=today,
+					from_time="10:00:00",
+					to_time="11:00:00",
+					hours=1.0,
+					notes="Session today"
+				)
+				self.assertEqual(res_today["status"], "success")
+
+				# User logging on yesterday succeeds
+				res_yesterday = log_work_session(
+					block_name=b.name,
+					session_date=yesterday,
+					from_time="11:00:00",
+					to_time="12:00:00",
+					hours=1.0,
+					notes="Session yesterday"
+				)
+				self.assertEqual(res_yesterday["status"], "success")
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_user_cannot_log_session_before_yesterday(self):
+		from unittest.mock import patch
+		from omnitrack.api import log_work_session
+		today = frappe.utils.nowdate()
+		two_days_ago = frappe.utils.add_days(today, -2)
+
+		b = _block(work_date=today, start_time="14:00:00", end_time="16:00:00", employee="test1@example.com").insert()
+
+		frappe.set_user("test1@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack User"]):
+				with self.assertRaises(frappe.PermissionError):
+					log_work_session(
+						block_name=b.name,
+						session_date=two_days_ago,
+						hours=1.0,
+						notes="Attempting historical log"
+					)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_manager_can_log_session_before_yesterday(self):
+		from unittest.mock import patch
+		from omnitrack.api import log_work_session
+		today = frappe.utils.nowdate()
+		three_days_ago = frappe.utils.add_days(today, -3)
+
+		b = _block(work_date=today, start_time="14:00:00", end_time="16:00:00", employee="test1@example.com").insert()
+
+		frappe.set_user("test2@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack Manager"]):
+				res = log_work_session(
+					block_name=b.name,
+					session_date=three_days_ago,
+					hours=1.5,
+					notes="Manager approved historical adjustment"
+				)
+				self.assertEqual(res["status"], "success")
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_no_one_can_modify_past_planned_work_block(self):
+		from omnitrack.api import update_work_block
+		today = frappe.utils.nowdate()
+		past_date = frappe.utils.add_days(today, -2)
+
+		# Create a past block
+		past_block = _block(work_date=past_date, start_time="09:00:00", end_time="11:00:00")
+		past_block.flags.ignore_past_block_lock = True
+		past_block.insert()
+
+		# Neither user nor manager nor admin can reschedule or modify a past planned block
+		with self.assertRaises(frappe.ValidationError):
+			update_work_block(block_name=past_block.name, start_time="10:00:00")
+
+		with self.assertRaises(frappe.ValidationError):
+			update_work_block(block_name=past_block.name, work_date=today)
+
+	def test_no_one_can_book_planned_work_block_in_past(self):
+		from omnitrack.api import book_work_block
+		today = frappe.utils.nowdate()
+		past_date = frappe.utils.add_days(today, -1)
+
+		with self.assertRaises(frappe.ValidationError):
+			book_work_block(
+				work_date=past_date,
+				start_time="09:00:00",
+				end_time="10:00:00",
+				deliverable_notes="Trying to plan yesterday"
+			)
+
+	def test_no_one_can_delete_past_planned_work_block(self):
+		from omnitrack.api import delete_work_block
+		today = frappe.utils.nowdate()
+		past_date = frappe.utils.add_days(today, -3)
+
+		past_block = _block(work_date=past_date, start_time="09:00:00", end_time="11:00:00")
+		past_block.flags.ignore_past_block_lock = True
+		past_block.insert()
+
+		with self.assertRaises(frappe.ValidationError):
+			delete_work_block(block_name=past_block.name)
+
+	def test_timesheet_permission_validator(self):
+		from unittest.mock import patch
+		from omnitrack.permissions import validate_timesheet_permission
+		today = frappe.utils.nowdate()
+		two_days_ago = frappe.utils.add_days(today, -2)
+
+		mock_ts_past = frappe._dict({
+			"start_date": two_days_ago,
+			"time_logs": [frappe._dict({"from_time": f"{two_days_ago} 10:00:00"})],
+			"flags": frappe._dict()
+		})
+
+		mock_ts_today = frappe._dict({
+			"start_date": today,
+			"time_logs": [frappe._dict({"from_time": f"{today} 10:00:00"})],
+			"flags": frappe._dict()
+		})
+
+		frappe.set_user("test1@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack User"]):
+				with self.assertRaises(frappe.PermissionError):
+					validate_timesheet_permission(mock_ts_past)
+
+				# Saving today timesheet succeeds
+				validate_timesheet_permission(mock_ts_today)
+		finally:
+			frappe.set_user("Administrator")
+
+		# Manager saving past timesheet succeeds
+		frappe.set_user("test2@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack Manager"]):
+				validate_timesheet_permission(mock_ts_past)
+		finally:
+			frappe.set_user("Administrator")
+
 	def tearDown(self):
 		frappe.db.rollback()
 

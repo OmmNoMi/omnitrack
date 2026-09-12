@@ -31,12 +31,27 @@
 ### 2.3 OmniTrack Remote Connection (`omnitrack_remote_connection`)
 * **Site-to-Site Integration**: Configurable remote URL, API Key/Secret, bidirectional event queueing, and HMAC-SHA256 payload verification.
 
+### 2.4 OmniTrack Work Session (`omnitrack_work_session`)
+* **Session Timesheet Child Table**: Captures discrete work session intervals (`from_time`, `to_time`, `hours`, `notes`), overnight session midnight splits, and incremental subtask accomplishment logs.
+
 ---
 
 ## 3. Security & Governance
 
 * **GPL-3.0 Open Source**: Unrestricted freedom to inspect, modify, and deploy.
-* **Granular RBAC**: 6 dedicated role profiles (`OmniTrack Admin`, `OmniTrack Manager`, `OmniTrack User`, `OmniTrack Client`, `OmniTrack Auditor`, `OmniTrack Sync Agent`).
+* **Granular RBAC**: 6 dedicated role profiles:
+  - `OmniTrack Admin`: Complete system control over settings, work blocks, timesheets, and remote connections.
+  - `OmniTrack Manager`: Team-wide planning, calendar allocation, project velocity, and timesheet review.
+  - `OmniTrack User`: Personal work blocks, live stopwatch tracking, timesheet logging, and task ToDos.
+  - `OmniTrack Client`: Read-only transparency restricted strictly to their customer projects and public deliverables.
+  - `OmniTrack Auditor`: Read-only compliance oversight across all work sessions, logs, and attendance records.
+  - `OmniTrack Sync Agent`: Headless service account for automated background sync and site-to-site replication.
+* **Temporal Governance & Audit Invariants**:
+  - **Timesheet Horizon (Today & Yesterday Only for Users)**: `OmniTrack User` can only log, edit, or adjust timesheet entries and work sessions for **today and yesterday** (`session_date >= add_days(nowdate(), -1)`). Historical logging or modifications prior to yesterday strictly require an `OmniTrack Manager` (or System Manager/Admin).
+  - **Past Planned Work Blocks Lock (Historical Plan Immutability)**: In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Administrator) can create, move, reschedule, or delete planned work blocks. Plan commitments are permanently locked once their calendar day has elapsed.
+* **Multi-Tier Scoping Invariants**:
+  - `Project User` and project owners automatically inherit read/write permissions over all work blocks and sessions linked to their projects.
+  - External clients (`Customer`/`Contact`) are strictly restricted to blocks matching their Customer link and tasks marked as public deliverables (`custom_is_public_deliverable = 1`).
 * **Zero Overhead**: Fully asynchronous queue processing ensuring zero impact on transaction latency.
 
 ---
