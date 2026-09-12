@@ -43,6 +43,10 @@ permission_query_conditions = {
 	"Planned Work Block": "omnitrack.permissions.get_work_block_permission_query_conditions"
 }
 
+has_permission = {
+	"Planned Work Block": "omnitrack.permissions.has_work_block_permission"
+}
+
 # Scheduled Tasks
 # ---------------
 scheduler_events = {

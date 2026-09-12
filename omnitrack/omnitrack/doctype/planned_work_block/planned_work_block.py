@@ -6,9 +6,27 @@ from frappe.utils import flt
 
 class PlannedWorkBlock(Document):
 	def validate(self):
+		self.resolve_project_from_task()
 		self.calculate_duration()
 		self.roll_up_sessions()
 		self.generate_cryptographic_hash()
+
+	def resolve_project_from_task(self):
+		"""
+		Every Timesheet and Planned Work Block is connected to a Project.
+		If a task is linked (or specified via work_item), its Project is automatically inherited.
+		"""
+		if not self.task and self.work_item:
+			w_item = str(self.work_item).strip()
+			if w_item.startswith("task:"):
+				self.task = w_item.split(":", 1)[1]
+			elif frappe.db.exists("DocType", "Task") and frappe.db.exists("Task", w_item):
+				self.task = w_item
+
+		if self.task and frappe.db.exists("DocType", "Task"):
+			task_project = frappe.db.get_value("Task", self.task, "project")
+			if task_project:
+				self.project = task_project
 
 	def calculate_duration(self):
 		if self.start_time and self.end_time:

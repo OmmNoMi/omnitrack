@@ -13,6 +13,19 @@ frappe.ui.form.on('Planned Work Block', {
 					}
 				});
 			}, __('Actions'));
+		} else if (frm.doc.timesheet) {
+			frm.add_custom_button(__('View Timesheet'), function() {
+				frappe.set_route('Form', 'Timesheet', frm.doc.timesheet);
+			}, __('Actions'));
+		}
+	},
+	task: function(frm) {
+		if (frm.doc.task) {
+			frappe.db.get_value('Task', frm.doc.task, 'project', (r) => {
+				if (r && r.project) {
+					frm.set_value('project', r.project);
+				}
+			});
 		}
 	},
 	start_time: function(frm) {

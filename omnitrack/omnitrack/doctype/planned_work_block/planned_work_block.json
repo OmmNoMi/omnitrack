@@ -98,7 +98,7 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
+      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udd04 Review & Sync\n\u2615 Break\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
       "label": "Task Nature",
       "default": "\ud83c\udfaf Planned",
       "in_list_view": 1

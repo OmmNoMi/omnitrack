@@ -239,16 +239,41 @@ def get_team_heatmap_data(days=14):
 	return {"days": days, "team": team_data}
 
 @frappe.whitelist()
-def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliverable_notes=None, work_nature=None):
+def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None,
+					  deliverable_notes=None, work_nature=None,
+					  duration_hours=None, notes=None, task_nature=None):
 	"""
-	Quick Stopwatch Punch API from Desktop / Mobile HUD.
+	Quick Stopwatch Punch API from Desktop / Mobile HUD / Workstation.
 	Creates/Completes a Planned Work Block and triggers attendance synthesis.
 	"""
 	user = frappe.session.user
 	today = nowdate()
 	now_t = nowtime()
+
+	deliverable_notes = deliverable_notes or notes
+	work_nature = work_nature or task_nature
+	if work_nature:
+		wn_lower = str(work_nature).lower()
+		if "unplanned" in wn_lower:
+			work_nature = "⚠️ Unplanned"
+		elif "break" in wn_lower:
+			work_nature = "☕ Break"
+		elif "leave" in wn_lower:
+			work_nature = "🌴 Leave"
+		elif "absent" in wn_lower:
+			work_nature = "🤒 Absent"
+		elif "out-of-office" in wn_lower or "out of office" in wn_lower:
+			work_nature = "🚫 Out-of-Office"
+		elif "review" in wn_lower or "sync" in wn_lower:
+			work_nature = "🔄 Review & Sync"
+		elif "planned" in wn_lower:
+			work_nature = "🎯 Planned"
+
 	dur_secs = flt(duration_seconds)
-	dur_hours = max(round(dur_secs / 3600.0, 2), 0.01) if dur_secs > 0 else 0.5
+	if dur_secs <= 0 and duration_hours is not None:
+		dur_secs = flt(duration_hours) * 3600.0
+
+	dur_hours = flt(duration_hours) if duration_hours is not None and flt(duration_hours) > 0 else (max(round(dur_secs / 3600.0, 2), 0.01) if dur_secs > 0 else 0.5)
 
 	if action in ("stop", "punch_out", "save_block"):
 		# Calculate start time
@@ -272,6 +297,14 @@ def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliv
 		block.flags.ignore_permissions = True
 		block.insert()
 
+		# Auto-create Timesheet connected to Project if Timesheet DocType exists
+		ts_name = None
+		if frappe.db.exists("DocType", "Timesheet"):
+			try:
+				ts_name = create_timesheet_from_work_block(block.name)
+			except Exception:
+				pass
+
 		# Also log Employee Checkin if Employee exists
 		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
 		if emp and frappe.db.exists("DocType", "Employee Checkin"):
@@ -286,6 +319,7 @@ def quick_timer_punch(action, duration_seconds=0, project=None, task=None, deliv
 			"status": "success",
 			"message": f"Logged {dur_hours} hours for {user}",
 			"block": block.name,
+			"timesheet": ts_name or block.timesheet,
 			"cryptographic_hash": block.cryptographic_hash
 		}
 
@@ -311,35 +345,88 @@ def get_active_tasks_and_projects():
 
 @frappe.whitelist()
 def create_timesheet_from_work_block(block_name):
-	"""Converts a Planned Work Block into a Timesheet document."""
+	"""Converts a Planned Work Block into a Timesheet document.
+	Every Timesheet is connected to one Project (parent_project).
+	The project is inherited from the work block, which in turn inherits it from the linked Task.
+	"""
 	if not frappe.db.exists("DocType", "Planned Work Block"):
 		frappe.throw(_("Planned Work Block DocType is not available."))
 
 	block = frappe.get_doc("Planned Work Block", block_name)
+	if not frappe.db.exists("DocType", "Timesheet"):
+		return None
+
 	if block.timesheet and frappe.db.exists("Timesheet", block.timesheet):
 		return block.timesheet
+
+	# Resolve project and task from block
+	project = block.project
+	task = block.task
+	if not task and block.work_item:
+		w_item = str(block.work_item).strip()
+		if w_item.startswith("task:"):
+			task = w_item.split(":", 1)[1]
+		elif frappe.db.exists("DocType", "Task") and frappe.db.exists("Task", w_item):
+			task = w_item
+
+	if not project and task and frappe.db.exists("DocType", "Task"):
+		project = frappe.db.get_value("Task", task, "project")
+		if project and block.project != project:
+			block.project = project
+			block.db_set("project", project)
 
 	ts = frappe.new_doc("Timesheet")
 	user_emp = frappe.db.get_value("Employee", {"user_id": block.employee}, "name") if frappe.db.exists("DocType", "Employee") else None
 	ts.employee = user_emp or block.employee
 	
-	company = frappe.db.get_single_value("Global Defaults", "default_company")
+	company = frappe.db.get_single_value("Global Defaults", "default_company") if frappe.db.exists("DocType", "Global Defaults") else None
 	if not company and frappe.db.exists("DocType", "Company"):
 		comps = frappe.get_all("Company", limit=1)
 		if comps:
 			company = comps[0].name
 	ts.company = company
 
-	row = {
-		"from_time": f"{block.work_date} {block.start_time}",
-		"to_time": f"{block.work_date} {block.end_time}",
-		"hours": block.duration_hours,
-		"project": block.project,
-		"task": block.task,
-		"activity_type": "Execution",
-		"description": block.deliverable_notes or f"OmniTrack Block {block.name} ({block.cryptographic_hash or ''})"
-	}
-	ts.append("time_logs", row)
+	# Every Timesheet is connected to one Project (parent_project)
+	if project:
+		ts.parent_project = project
+		if hasattr(ts, "project"):
+			ts.project = project
+		if frappe.db.exists("DocType", "Project"):
+			cust = frappe.db.get_value("Project", project, "customer")
+			if cust:
+				ts.customer = cust
+
+	is_away = any(m in (block.task_nature or "").lower() for m in ("leave", "absent", "out-of-office", "out of office", "break"))
+	activity = "Break" if "break" in (block.task_nature or "").lower() else ("Leave / Absence" if is_away else "Execution")
+
+	if block.sessions:
+		for sess in block.sessions:
+			s_from = f"{sess.session_date} {sess.from_time or '00:00:00'}"
+			s_to = f"{sess.session_date} {sess.to_time or '00:00:00'}"
+			row = {
+				"from_time": s_from,
+				"to_time": s_to,
+				"hours": flt(sess.hours),
+				"project": project,
+				"task": task,
+				"activity_type": activity,
+				"is_billable": 0 if is_away else 1,
+				"description": sess.notes or block.deliverable_notes or f"OmniTrack Session ({block.name})"
+			}
+			ts.append("time_logs", row)
+	else:
+		row = {
+			"from_time": f"{block.work_date} {block.start_time}",
+			"to_time": f"{block.work_date} {block.end_time}",
+			"hours": block.duration_hours,
+			"project": project,
+			"task": task,
+			"activity_type": activity,
+			"is_billable": 0 if is_away else 1,
+			"description": block.deliverable_notes or f"OmniTrack Block {block.name} ({block.cryptographic_hash or ''})"
+		}
+		ts.append("time_logs", row)
+
 	ts.flags.ignore_permissions = True
 	ts.insert()
 
@@ -428,7 +515,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 
 		work_blocks = frappe.db.sql(f"""
 			SELECT name, employee, work_date, start_time, end_time, 
-			       duration_hours, project, task, status, task_nature, 
+			       duration_hours, actual_hours, variance_hours, project, task, 
+			       work_item, work_item_label, status, task_nature, 
 			       unplanned_reason, deliverable_notes, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id
 			FROM `tabPlanned Work Block`
@@ -441,7 +529,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			"Planned Work Block",
 			fields=[
 				"name", "employee", "work_date", "start_time", "end_time", 
-				"duration_hours", "project", "task", "status", "task_nature", 
+				"duration_hours", "actual_hours", "variance_hours", "project", "task", 
+				"work_item", "work_item_label", "status", "task_nature", 
 				"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
 				"billing_status", "associate_name", "appsheet_id"
 			],
@@ -460,6 +549,11 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			b["task_subject"] = frappe.db.get_value("Task", b.task, "subject") or b.task
 		else:
 			b["task_subject"] = b.deliverable_notes or f"Block {b.name}"
+
+		nature = (b.get("task_nature") or "").lower()
+		b["is_away"] = any(m in nature for m in ("leave", "absent", "out-of-office", "out of office", "break"))
+		b["is_working"] = not b["is_away"]
+		b["is_paid"] = not b["is_away"]
 
 	# 2. Live Projects
 	projects = frappe.get_all(
@@ -537,12 +631,18 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		limit=15
 	) if frappe.db.exists("DocType", "OmniTrack Attendance Synthesizer Log") else []
 
+	assigned_info = get_assigned_tasks(employee=employee)
+	assigned_tasks = assigned_info.get("tasks", [])
+	attention_tasks = assigned_info.get("attention_tasks", [])
+
 	return {
 		"current_user": current_user,
 		"current_user_fullname": frappe.utils.get_fullname(current_user) or current_user,
 		"work_blocks": work_blocks,
 		"projects": projects,
 		"tasks": tasks,
+		"assigned_tasks": assigned_tasks,
+		"attention_tasks": attention_tasks,
 		"team_members": team_members,
 		"paci": {
 			"ratio": paci_ratio,
@@ -550,6 +650,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			"unplanned_hours": round(unplanned_hours, 1),
 			"total_hours": round(total_hours, 1)
 		},
+		"kpis": get_dashboard_kpis(employee=employee),
 		"heatmap": heatmap,
 		"synthesizer_logs": syn_logs,
 		"today_date": today
@@ -633,6 +734,117 @@ def _week_bounds(week_start=None):
 
 
 @frappe.whitelist()
+def get_dashboard_kpis(employee=None):
+	"""Returns clean Day, Week, and Month KPI rollups for the OmniTrack Dashboard."""
+	import calendar
+	target = _resolve_planner_user(employee) if employee else frappe.session.user
+	today = getdate(nowdate())
+	monday, sunday = _week_bounds(None)
+
+	days_in_month = calendar.monthrange(today.year, today.month)[1]
+	first_of_month = today.replace(day=1)
+	end_of_month = today.replace(day=days_in_month)
+
+	workdays = sum(1 for d in range(1, days_in_month + 1) if today.replace(day=d).weekday() < 5)
+	monthly_capacity_hours = round(workdays * 8.0, 1)
+
+	blocks_month = frappe.get_all(
+		"Planned Work Block",
+		filters={
+			"employee": target,
+			"work_date": ["between", [str(first_of_month), str(end_of_month)]]
+		},
+		fields=["name", "work_date", "start_time", "end_time", "duration_hours", "actual_hours", "task_nature", "status", "project", "task", "deliverable_notes"],
+		order_by="work_date desc, start_time desc",
+		limit=1000
+	) if frappe.db.exists("DocType", "Planned Work Block") else []
+
+	away_markers = ("leave", "absent", "out-of-office", "out of office", "break")
+	for b in blocks_month:
+		nature = (b.get("task_nature") or "").lower()
+		b["is_away"] = any(m in nature for m in away_markers)
+		b["is_working"] = not b["is_away"]
+		b["is_paid"] = not b["is_away"]
+
+	# Standard daily and weekly working targets
+	daily_target_hours = 8.0
+	weekly_target_hours = 40.0
+
+	# 1. Today
+	today_str = str(today)
+	today_blocks = [b for b in blocks_month if str(b.work_date) == today_str]
+	today_work = [b for b in today_blocks if not b["is_away"]]
+	today_non_working = [b for b in today_blocks if b["is_away"]]
+	today_planned = round(sum(flt(b.duration_hours) for b in today_work), 2)
+	today_actual = round(sum(flt(b.actual_hours) for b in today_work), 2)
+	today_non_working_hours = round(sum(flt(b.actual_hours or b.duration_hours) for b in today_non_working), 2)
+	today_variance = round(today_actual - today_planned, 2)
+	today_away = len(today_non_working)
+	today_completed = sum(1 for b in today_work if b.status == "Completed")
+	today_todo_pct = round((today_completed / len(today_work) * 100), 1) if today_work else 0.0
+
+	# 2. This Week (Mon..Sun)
+	m_str, s_str = str(monday), str(sunday)
+	week_blocks = [b for b in blocks_month if m_str <= str(b.work_date) <= s_str]
+	week_work = [b for b in week_blocks if not b["is_away"]]
+	week_non_working = [b for b in week_blocks if b["is_away"]]
+	week_planned = round(sum(flt(b.duration_hours) for b in week_work), 2)
+	week_actual = round(sum(flt(b.actual_hours) for b in week_work), 2)
+	week_non_working_hours = round(sum(flt(b.actual_hours or b.duration_hours) for b in week_non_working), 2)
+	week_variance = round(week_actual - week_planned, 2)
+	week_adherence = round((min(week_actual, week_planned) / week_planned * 100), 1) if week_planned else 0.0
+	week_away = len(week_non_working)
+
+	# 3. This Month
+	month_work = [b for b in blocks_month if not b["is_away"]]
+	month_non_working = [b for b in blocks_month if b["is_away"]]
+	month_planned = round(sum(flt(b.duration_hours) for b in month_work), 2)
+	month_actual = round(sum(flt(b.actual_hours) for b in month_work), 2)
+	month_non_working_hours = round(sum(flt(b.actual_hours or b.duration_hours) for b in month_non_working), 2)
+	month_capacity_pct = round((month_actual / monthly_capacity_hours * 100), 1) if monthly_capacity_hours else 0.0
+	month_away = len(month_non_working)
+
+	return {
+		"employee": target,
+		"today": {
+			"date": today_str,
+			"target_hours": daily_target_hours,
+			"planned_hours": today_planned,
+			"actual_hours": today_actual,
+			"non_working_hours": today_non_working_hours,
+			"variance_hours": today_variance,
+			"away_count": today_away,
+			"block_count": len(today_work),
+			"completed_count": today_completed,
+			"todo_completed_pct": today_todo_pct,
+		},
+		"week": {
+			"start": m_str,
+			"end": s_str,
+			"target_hours": weekly_target_hours,
+			"planned_hours": week_planned,
+			"actual_hours": week_actual,
+			"non_working_hours": week_non_working_hours,
+			"variance_hours": week_variance,
+			"adherence_pct": week_adherence,
+			"away_count": week_away,
+			"block_count": len(week_work),
+		},
+		"month": {
+			"month": today.strftime("%B %Y"),
+			"target_hours": monthly_capacity_hours,
+			"capacity_hours": monthly_capacity_hours,
+			"planned_hours": month_planned,
+			"actual_hours": month_actual,
+			"non_working_hours": month_non_working_hours,
+			"capacity_pct": month_capacity_pct,
+			"away_count": month_away,
+			"block_count": len(month_work),
+		}
+	}
+
+
+@frappe.whitelist()
 def get_assigned_tasks(employee=None):
 	"""Assigned work for the target user, annotated with hours already booked / logged.
 
@@ -705,33 +917,142 @@ def get_assigned_tasks(employee=None):
 
 	# Annotate with hours already booked / logged for this user
 	if items and frappe.db.exists("DocType", "Planned Work Block"):
-		refs = list(items.keys())
 		for b in frappe.get_all(
 			"Planned Work Block",
-			filters={"work_item": ["in", refs], "employee": target},
-			fields=["work_item", "duration_hours", "actual_hours"],
+			filters={"employee": target},
+			fields=["work_item", "task", "duration_hours", "actual_hours"],
 			limit=2000,
 		):
-			it = items.get(b.work_item)
+			ref = b.work_item or b.task
+			it = items.get(ref)
 			if it:
 				it["booked_hours"] = round(it.get("booked_hours", 0.0) + flt(b.duration_hours), 2)
 				it["logged_hours"] = round(it.get("logged_hours", 0.0) + flt(b.actual_hours), 2)
 
+	today_str = nowdate()
+	today_date_obj = getdate(today_str)
 	rows = []
+	attention_rows = []
+
 	for it in items.values():
 		it.setdefault("booked_hours", 0.0)
 		it.setdefault("logged_hours", 0.0)
+		estimate = flt(it.get("estimate_hours", 0.0))
+		booked = flt(it.get("booked_hours", 0.0))
+		logged = flt(it.get("logged_hours", 0.0))
+		due = str(it.get("due_date") or "").strip()
+		priority = (it.get("priority") or "").lower()
+
+		deficit = max(0.0, round(estimate - booked, 2)) if estimate > 0 else 0.0
+		it["deficit_hours"] = deficit
+
+		is_overdue = False
+		is_due_today = False
+		days_overdue = 0
+		if due and due != "None" and len(due) >= 10:
+			try:
+				due_date_obj = getdate(due[:10])
+				if due_date_obj < today_date_obj:
+					is_overdue = True
+					days_overdue = (today_date_obj - due_date_obj).days
+				elif due_date_obj == today_date_obj:
+					is_due_today = True
+			except Exception:
+				pass
+
+		it["is_overdue"] = is_overdue
+		it["is_due_today"] = is_due_today
+		it["days_overdue"] = days_overdue
+		it["is_unplanned"] = bool(booked <= 0.0)
+		it["is_underplanned"] = bool(estimate > 0 and booked < estimate)
+
+		# Classify urgency and reason for attention banner
+		if is_overdue:
+			if it["is_unplanned"]:
+				it["attention_level"] = "critical"
+				it["attention_badge"] = "Overdue & Unplanned"
+				it["attention_reason"] = f"Overdue by {days_overdue} day{'s' if days_overdue != 1 else ''} and not scheduled in calendar"
+			elif it["is_underplanned"]:
+				it["attention_level"] = "critical"
+				it["attention_badge"] = f"Overdue & {deficit}h Short"
+				it["attention_reason"] = f"Overdue by {days_overdue} day{'s' if days_overdue != 1 else ''} with only {booked}h of {estimate}h planned"
+			elif booked > 0 and logged < booked:
+				it["attention_level"] = "warning"
+				it["attention_badge"] = "Overdue Pending"
+				it["attention_reason"] = f"Overdue by {days_overdue} day{'s' if days_overdue != 1 else ''}; planned but execution pending"
+			else:
+				it["attention_level"] = "warning"
+				it["attention_badge"] = "Overdue"
+				it["attention_reason"] = f"Overdue by {days_overdue} day{'s' if days_overdue != 1 else ''}"
+		elif is_due_today:
+			if it["is_unplanned"]:
+				it["attention_level"] = "critical"
+				it["attention_badge"] = "Due Today (Unplanned)"
+				it["attention_reason"] = "Due today but zero hours booked in calendar"
+			elif it["is_underplanned"]:
+				it["attention_level"] = "warning"
+				it["attention_badge"] = f"Due Today ({deficit}h Short)"
+				it["attention_reason"] = f"Due today with {deficit}h remaining unbooked"
+		elif it["is_underplanned"] and (priority in ["urgent", "high"] or deficit >= 3.0):
+			it["attention_level"] = "warning"
+			it["attention_badge"] = f"{deficit}h Underplanned"
+			it["attention_reason"] = f"High priority with {deficit}h deficit between estimate ({estimate}h) and planned ({booked}h)"
+		elif it["is_unplanned"] and priority in ["urgent", "high"]:
+			it["attention_level"] = "warning"
+			it["attention_badge"] = f"{it.get('priority')} Unplanned"
+			it["attention_reason"] = f"{it.get('priority')} priority task with zero hours scheduled in calendar"
+		else:
+			it["attention_level"] = None
+			it["attention_badge"] = None
+			it["attention_reason"] = None
+
 		rows.append(it)
+		if it.get("attention_level"):
+			attention_rows.append(it)
+
+	attention_order = {"critical": 0, "warning": 1}
+	attention_rows.sort(key=lambda x: (
+		attention_order.get(x.get("attention_level"), 2),
+		-x.get("days_overdue", 0),
+		x.get("due_date") or "9999-12-31"
+	))
 	rows.sort(key=lambda x: (x.get("due_date") or "9999-12-31", x.get("subject") or ""))
-	return {"user": target, "tasks": rows}
+	return {"user": target, "tasks": rows, "attention_tasks": attention_rows}
+
+
+def _time_str(val):
+	"""Serialize a Frappe Time field as zero-padded HH:MM:SS.
+
+	Time fields come back as ``datetime.timedelta``, whose ``str()`` drops the
+	leading zero on single-digit hours ("7:30:55"), which breaks any consumer
+	that slices the first five characters. Always emit "07:30:55".
+	"""
+	if val in (None, ""):
+		return ""
+	if isinstance(val, timedelta):
+		total = int(val.total_seconds())
+		h, rem = divmod(total, 3600)
+		m, sec = divmod(rem, 60)
+		return f"{h:02d}:{m:02d}:{sec:02d}"
+	if isinstance(val, str):
+		parts = val.split(":")
+		if parts and parts[0].isdigit():
+			parts[0] = parts[0].zfill(2)
+			return ":".join(parts)
+		return val
+	return str(val)
 
 
 @frappe.whitelist()
-def get_planner_data(employee=None, week_start=None):
-	"""Everything the Planner calendar needs: the week's Planned Work Blocks (plan + logged
+def get_planner_data(employee=None, week_start=None, start_date=None, end_date=None):
+	"""Everything the Planner calendar needs: the range's Planned Work Blocks (plan + logged
 	sessions) plus the target user's assigned tasks and a plan-vs-actual rollup."""
 	target = _resolve_planner_user(employee)
-	monday, sunday = _week_bounds(week_start)
+	if start_date and end_date:
+		monday = getdate(start_date)
+		sunday = getdate(end_date)
+	else:
+		monday, sunday = _week_bounds(week_start)
 
 	blocks = []
 	if frappe.db.exists("DocType", "Planned Work Block"):
@@ -739,7 +1060,7 @@ def get_planner_data(employee=None, week_start=None):
 			"Planned Work Block",
 			filters={
 				"employee": target,
-				"work_date": ["between", [str(monday), str(sunday)]],
+				"work_date": ["between", [str(monday - timedelta(days=1)), str(sunday)]],
 			},
 			fields=[
 				"name", "work_date", "start_time", "end_time", "duration_hours",
@@ -751,8 +1072,8 @@ def get_planner_data(employee=None, week_start=None):
 		)
 		proj_names = {}
 		for b in raw:
-			b["start_time"] = str(b.get("start_time") or "")
-			b["end_time"] = str(b.get("end_time") or "")
+			b["start_time"] = _time_str(b.get("start_time"))
+			b["end_time"] = _time_str(b.get("end_time"))
 			b["work_date"] = str(b.get("work_date") or "")
 			if b.get("project") and b["project"] not in proj_names:
 				proj_names[b["project"]] = frappe.db.get_value("Project", b["project"], "project_name") or b["project"]
@@ -764,8 +1085,8 @@ def get_planner_data(employee=None, week_start=None):
 			b["sessions"] = [
 				{
 					"session_date": str(s.session_date or ""),
-					"from_time": str(s.from_time or ""),
-					"to_time": str(s.to_time or ""),
+					"from_time": _time_str(s.from_time),
+					"to_time": _time_str(s.to_time),
 					"hours": flt(s.hours),
 					"notes": s.notes,
 					"logged_via": s.logged_via,
@@ -779,20 +1100,28 @@ def get_planner_data(employee=None, week_start=None):
 			]
 			blocks.append(b)
 
-	# Leave / absence / out-of-office days are not "work" — flag them and keep
+	# Leave / absence / out-of-office / break are non-working & non-paid — flag them and keep
 	# them out of the plan-vs-actual maths.
-	away_markers = ("leave", "absent", "out-of-office", "out of office")
+	away_markers = ("leave", "absent", "out-of-office", "out of office", "break")
 	for b in blocks:
 		nature = (b.get("task_nature") or "").lower()
 		b["is_away"] = any(m in nature for m in away_markers)
+		b["is_working"] = not b["is_away"]
+		b["is_paid"] = not b["is_away"]
 
-	work_blocks = [b for b in blocks if not b["is_away"]]
+	# Totals are scoped strictly to the requested span (monday..sunday)
+	week_blocks = [b for b in blocks if str(monday) <= b["work_date"] <= str(sunday)]
+	work_blocks = [b for b in week_blocks if not b["is_away"]]
+	non_work_blocks = [b for b in week_blocks if b["is_away"]]
 	planned_total = round(sum(flt(b["duration_hours"]) for b in work_blocks), 2)
 	actual_total = round(sum(flt(b["actual_hours"]) for b in work_blocks), 2)
+	non_working_total = round(sum(flt(b["actual_hours"] or b["duration_hours"]) for b in non_work_blocks), 2)
 	adherence = round((min(actual_total, planned_total) / planned_total * 100), 1) if planned_total else 0.0
 
-	days = [str(monday + timedelta(days=i)) for i in range(7)]
+	num_days = (sunday - monday).days + 1
+	days = [str(monday + timedelta(days=i)) for i in range(max(1, num_days))]
 
+	assigned_info = get_assigned_tasks(employee)
 	return {
 		"user": target,
 		"is_manager": _is_planner_manager(),
@@ -800,14 +1129,16 @@ def get_planner_data(employee=None, week_start=None):
 		"week_end": str(sunday),
 		"days": days,
 		"blocks": blocks,
-		"assigned_tasks": get_assigned_tasks(employee).get("tasks", []),
+		"assigned_tasks": assigned_info.get("tasks", []),
+		"attention_tasks": assigned_info.get("attention_tasks", []),
 		"totals": {
 			"planned_hours": planned_total,
 			"actual_hours": actual_total,
+			"non_working_hours": non_working_total,
 			"variance_hours": round(actual_total - planned_total, 2),
 			"adherence_pct": adherence,
 			"block_count": len(work_blocks),
-			"away_count": len(blocks) - len(work_blocks),
+			"away_count": len(non_work_blocks),
 		},
 	}
 
@@ -838,8 +1169,10 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	has_task = frappe.db.exists("DocType", "Task")
 	if work_item and not work_item.startswith("todo:") and has_task and frappe.db.exists("Task", work_item):
 		task = task or work_item
-	if task and not project and has_task:
-		project = frappe.db.get_value("Task", task, "project")
+	if task and has_task:
+		task_proj = frappe.db.get_value("Task", task, "project")
+		if task_proj:
+			project = task_proj
 	if not work_item_label:
 		if task and has_task:
 			work_item_label = frappe.db.get_value("Task", task, "subject")
@@ -925,21 +1258,64 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to log time on this work block."), frappe.PermissionError)
 
-	if not hours and from_time and to_time:
-		hours = _duration_hours(from_time, to_time)
-	hours = flt(hours)
-	if hours <= 0:
-		frappe.throw(_("Session hours must be greater than zero."))
+	base_date = session_date or doc.work_date or nowdate()
+	is_overnight = False
+	if from_time and to_time:
+		try:
+			diff = time_diff_in_hours(to_time, from_time)
+			if diff < 0:
+				is_overnight = True
+		except Exception:
+			pass
 
-	doc.append("sessions", {
-		"session_date": session_date or doc.work_date or nowdate(),
-		"from_time": from_time,
-		"to_time": to_time,
-		"hours": hours,
-		"notes": notes,
-		"logged_via": logged_via or "Manual",
-		"task_nature": doc.task_nature,
-	})
+	if is_overnight:
+		def _t_mins(t_val):
+			try:
+				p = str(t_val).split(":")
+				return int(p[0]) * 60 + int(p[1])
+			except Exception:
+				return 0
+
+		s_mins = _t_mins(from_time)
+		e_mins = _t_mins(to_time)
+		h1 = max(round((1440 - s_mins) / 60.0, 2), 0.01)
+		h2 = max(round(e_mins / 60.0, 2), 0.01)
+
+		doc.append("sessions", {
+			"session_date": base_date,
+			"from_time": from_time,
+			"to_time": "23:59:59",
+			"hours": h1,
+			"notes": f"{notes} (pt 1)" if notes else "Overnight session (pt 1)",
+			"logged_via": logged_via or "Manual",
+			"task_nature": doc.task_nature,
+		})
+		next_date = str(getdate(base_date) + timedelta(days=1))
+		doc.append("sessions", {
+			"session_date": next_date,
+			"from_time": "00:00:00",
+			"to_time": to_time,
+			"hours": h2,
+			"notes": f"{notes} (pt 2)" if notes else "Overnight session (pt 2)",
+			"logged_via": logged_via or "Manual",
+			"task_nature": doc.task_nature,
+		})
+	else:
+		if not hours and from_time and to_time:
+			hours = _duration_hours(from_time, to_time)
+		hours = flt(hours)
+		if hours <= 0:
+			frappe.throw(_("Session hours must be greater than zero."))
+
+		doc.append("sessions", {
+			"session_date": base_date,
+			"from_time": from_time,
+			"to_time": to_time,
+			"hours": hours,
+			"notes": notes,
+			"logged_via": logged_via or "Manual",
+			"task_nature": doc.task_nature,
+		})
 	doc.flags.ignore_permissions = True
 	doc.save()
 	return {

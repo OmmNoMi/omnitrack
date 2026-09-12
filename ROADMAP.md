@@ -91,13 +91,14 @@ booking their day against real commitments instead of typing notes.
 - ✅ Book modal has a Work / 🌴 Leave / 🤒 Absent toggle; `submitBooking` passes
   `task_nature`; `bench --site ommnomi.local migrate` run so the new Select options exist.
 
-### Planner calendar — still open after 2026-09-10
-- **Away blocks still render as a timed bar**, not an all-day band; no `away_count` chip
-  on the summary cards yet. Leave/Absent modal still asks for start/end times.
-- **`quick_timer_punch` param mismatch:** the frontend's non-block stopwatch path posts
-  `{task_nature, notes, duration_hours, project}` but the API signature is
-  `quick_timer_punch(action, duration_seconds=0, ...)` — `action` is required and never
-  sent, so that path silently relies on the `except` fallback. Reconcile the signature.
-- **Regression test:** `test_planned_work_block.py` covers the rollup invariant
-  (`actual_hours == sum(sessions.hours)`, `variance_hours == actual - planned`,
-  midnight-split duration). Keep extending as calendar logic grows.
+### Planner calendar — shipped 2026-09-12 (Track 1)
+- ✅ **All-Day Away / Leave Bands**: Rendered in a dedicated top banner row above the 24h scrollable hour grid; `away_count` badge surfaced on summary cards; Leave/Absent modal prompts only for date & reason (omits start/end time pickers).
+- ✅ **Smart Overlapping Block Sub-Lanes**: Greedy interval graph coloring packs concurrent/overlapping blocks side-by-side into dynamic width/left sub-lanes with zero visual collision.
+- ✅ **Midnight-Crossing Segment Visuals**: Blocks spanning across midnight render as a tail segment on Day N (start→24:00) and a head continuation segment on Day N+1 (00:00→end) with continuation markers.
+- ✅ **`quick_timer_punch` Reconciled**: Reconciled API signature with default `action="stop"`, flexible `duration_hours` / `duration_seconds`, DocType Select-option normalization (`work_nature`), and CSRF token propagation.
+- ✅ **Backend Overnight Session Splitting**: `log_work_session` detects sessions crossing midnight and automatically splits them into distinct `OmniTrack Work Session` child rows for Day N and Day N+1.
+- ✅ **Automated Test Coverage**: `test_planned_work_block.py` expanded to 7 tests covering midnight session splits, flexible quick punches, and `away_count` rollups.
+
+### Planner calendar — remaining open items
+- **"Time logged based on timesheets" (user ask):** on sites with an ERPNext/HRMS `Timesheet`, actual hours should come from Timesheet detail rows rather than only the manual Work Session child table. Needs design: the Work Session table is the de-facto timesheet on `ommnomi.local` (no Timesheet doctype there).
+- **Manager Delegation in Calendar:** Allow team managers to switch target employee directly within the calendar view to plan or review blocks on behalf of team members.
