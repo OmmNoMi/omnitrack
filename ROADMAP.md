@@ -190,3 +190,43 @@ booking their day against real commitments instead of typing notes.
   shift field so they are shared and per-employee.
 - **Test record `PWB-2026-00012`** ("Test leave — verifying all-day away band",
   2026-09-11) was created to exercise the away band; delete if not wanted.
+
+### Dashboard & session UX pass (2026-09-13)
+
+Shipped in `www/omnitrack.html`:
+- Mobile FAB opens the session timesheet (HH:MM label, no icon/seconds); bottom nav no
+  longer shifts (`flex-1 basis-0`, constant label weight).
+- Full-width mobile planner toolbar; edge-to-edge calendar card; `touch-pan-y` cells plus
+  horizontal swipe to move the period; nature filter widened and re-anchored (`left-0`).
+- Custom "Viewing" listbox replaces the native `<select>` (desktop listbox + mobile
+  `menuitemradio` list).
+- Session Log is chronological (newest last) and scrolls to the bottom on add.
+- Idle state: the HUD card is gone when nothing runs, the clock resets to 00:00:00 on stop,
+  and the header pill / FAB / hamburger "timesheet" item starts an unplanned session
+  (tooltip now says "Start an unplanned session" when idle).
+- "Your Day" heading: title switches to the date when you leave today; subtitle summarises
+  blocks / planned h / logged h.
+- Day strip is one tab stop (`role="radiogroup"`, roving tabindex, Arrow/Home/End, rolls
+  over into the previous/next week) and fits 375px; "Today" appears only when you are away
+  from today, on the side today lies on.
+- Focus block cards: the card and title are no longer click targets — Start/Stop lives on
+  the button only. Active card is calm (left accent, one clock) and carries a
+  "You are working on this" indicator instead of a duplicate scratchpad input.
+- Stop guards: stopping a session with an empty log asks once ("Stop anyway"), and a
+  **Discard** action (two-step) abandons a mis-started session without writing a timesheet.
+- Planned blocks that are not in the past can be rescheduled: a Reschedule button on the
+  dashboard cards opens the block drawer, which now has a date/start/end form posting to
+  `update_work_block`.
+
+- `Shift+D` jumps to the day view (scrolled just under the sticky header) and focuses the
+  selected day, so ← → picks a day and Tab reaches its Start Session button.
+- The week arrows now carry the selection with them (same weekday, one week over) and keep
+  keyboard focus on it, instead of shifting the strip with nothing selected in view.
+
+Open items from this pass:
+- `getBlockTimingInfo is not a function` + 500s still appear in the cumulative console
+  buffer; a fresh reload shows the function defined and all requests 200, so they look like
+  stale entries from earlier loads — not yet proven.
+- `bench --site … clear-website-cache` is needed for `www/*.html` edits to reach the
+  browser; document in AGENTS.md.
+- No regression test yet for the new stop/discard guards or the day-strip roving focus.

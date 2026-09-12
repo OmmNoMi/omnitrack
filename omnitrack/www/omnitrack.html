@@ -413,6 +413,19 @@
                   <span v-if="!isTracking" class="text-[10px] uppercase font-bold tracking-wider text-gray-400">standby</span>
                 </div>
 
+                <div class="flex items-center gap-1.5 shrink-0">
+                <!-- A mis-started session has to be abandonable without writing a timesheet. -->
+                <button
+                  type="button"
+                  v-if="isTracking"
+                  @click="discardSession"
+                  :aria-label="discardConfirm ? 'Confirm discard: throw this session away without saving' : 'Discard this session without saving'"
+                  :title="discardConfirm ? 'Press again to discard' : 'Discard without saving'"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+                  :class="discardConfirm ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' : (isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <span>{{ discardConfirm ? 'Discard?' : 'Discard' }}</span>
+                </button>
                 <button 
                   type="button"
                   @click="toggleTrack"
@@ -425,6 +438,7 @@
                   <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
                   <span>{{ isTracking ? 'Stop & Save' : 'Start Session' }}</span>
                 </button>
+                </div>
               </div>
             </div>
 
@@ -673,7 +687,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
           
           <!-- Selected Date Display with Explicit 'Today' Button -->
-          <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap" data-day-section>
             <!-- Title says which day you are looking at; subtitle says what is in it -->
             <div>
               <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
@@ -682,31 +696,36 @@
               <p class="text-[11px] font-semibold mt-0.5" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
                 {{ dashboardDaySummary }}
               </p>
+              <p class="text-[10px] mt-1 hidden sm:block" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'">
+                Press <kbd class="px-1.5 py-0.5 rounded border font-mono text-[10px]" :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-600'">Shift</kbd>
+                + <kbd class="px-1.5 py-0.5 rounded border font-mono text-[10px]" :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-600'">D</kbd>
+                from anywhere, then ← → to pick a day
+              </p>
             </div>
           </div>
 
           <!-- Google Meet Horizontal 7-Day Picker Strip (Today Centered in Middle) -->
-          <div class="flex items-center gap-1 sm:gap-2 self-start sm:self-auto overflow-x-auto no-scrollbar py-1"
+          <div class="flex items-center gap-1 sm:gap-2 w-full sm:w-auto self-start sm:self-auto overflow-x-auto no-scrollbar py-1"
             aria-label="Pick a day" data-day-strip @keydown="onDashboardDayKey">
-            <!-- Jump to today: same control group, obviously a button -->
+            <!-- Today only appears when you are away from it, on the side it lies on -->
             <button
               type="button"
+              v-if="todayDirection === 'left'"
               @click="resetDashboardToToday"
               aria-label="Jump to today"
               title="Jump to today"
-              class="inline-flex items-center gap-1.5 shrink-0 text-xs font-bold px-3 py-2 mr-1 rounded-2xl border transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 active:scale-95 shadow-xs"
-              :class="selectedDashboardDate === todayDate && dashboardWeekOffset === 0 ? (isDarkMode ? 'bg-blue-950 border-blue-700 text-blue-300' : 'bg-blue-50 border-blue-300 text-blue-700') : (isDarkMode ? 'bg-[#25262A] border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100')">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              <span>Today</span>
+              class="inline-flex items-center gap-1.5 shrink-0 text-xs font-bold px-2.5 sm:px-3 py-2 rounded-2xl border transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 active:scale-95 shadow-xs mr-0.5 sm:mr-1"
+              :class="isDarkMode ? 'bg-[#25262A] border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg><span>Today</span>
             </button>
 
             <!-- the 7 day buttons are the radiogroup; Today and the arrows are plain buttons -->
-            <div class="flex items-center gap-1 sm:gap-2" role="radiogroup" aria-label="Day of the week">
+            <div class="flex items-center gap-0.5 sm:gap-2 min-w-0" role="radiogroup" aria-label="Day of the week">
             <!-- Prev Week Arrow -->
             <button 
               type="button"
               @click="shiftDashboardWeek(-1)"
-              class="p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              class="p-1 sm:p-2 shrink-0 rounded-full transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               :class="isDarkMode ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-200 text-gray-600'"
               title="Previous 7 days"
               aria-label="Previous 7 days">
@@ -724,7 +743,7 @@
               :aria-checked="d.isSelected ? 'true' : 'false'"
               :aria-label="d.dateStr"
               :tabindex="d.isSelected ? 0 : -1"
-              class="flex flex-col items-center justify-center min-w-[38px] sm:min-w-[44px] py-1.5 px-1 rounded-2xl text-center transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              class="flex flex-col items-center justify-center min-w-[34px] sm:min-w-[44px] py-1.5 px-0.5 sm:px-1 rounded-2xl text-center transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               :class="d.isSelected ? 'bg-[#1B64DA] text-white font-bold shadow-md scale-105 ring-2 ring-blue-500/30' : (isDarkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-100 text-gray-700')">
               <span class="text-[10px] font-bold tracking-tight opacity-80">{{ d.dow }}</span>
               <span class="text-xs sm:text-sm font-extrabold mt-0.5" :class="d.isToday && !d.isSelected ? 'text-blue-500 font-black' : ''">{{ d.dayNum }}</span>
@@ -735,13 +754,23 @@
             <button 
               type="button"
               @click="shiftDashboardWeek(1)"
-              class="p-1.5 sm:p-2 rounded-full transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              class="p-1 sm:p-2 shrink-0 rounded-full transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               :class="isDarkMode ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-200 text-gray-600'"
               title="Next 7 days"
               aria-label="Next 7 days">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             </div>
+            <button
+              type="button"
+              v-if="todayDirection === 'right'"
+              @click="resetDashboardToToday"
+              aria-label="Jump to today"
+              title="Jump to today"
+              class="inline-flex items-center gap-1.5 shrink-0 text-xs font-bold px-2.5 sm:px-3 py-2 rounded-2xl border transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 active:scale-95 shadow-xs ml-0.5 sm:ml-1"
+              :class="isDarkMode ? 'bg-[#25262A] border-gray-700 text-gray-200 hover:bg-gray-800' : 'bg-white border-gray-300 text-gray-800 hover:bg-gray-100'">
+              <span>Today</span><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
 
           <!-- Define Task Action -->
@@ -830,6 +859,15 @@
                         :class="stopConfirmName === b.name ? 'bg-red-600 border-red-600 text-white hover:bg-red-700' : (isDarkMode ? 'border-red-800 text-red-300 hover:bg-red-950/40' : 'border-red-300 text-red-700 hover:bg-red-50')">
                         <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
                         <span>{{ stopConfirmName === b.name ? 'Stop anyway' : 'Stop & save' }}</span>
+                      </button>
+                      <button
+                        type="button"
+                        @click.stop="discardSession"
+                        :aria-label="discardConfirm ? 'Confirm discard: throw this session away without saving' : 'Discard this session without saving'"
+                        :title="discardConfirm ? 'Press again to discard' : 'Discard without saving'"
+                        class="inline-flex items-center justify-center px-3 py-2.5 rounded-full text-xs font-bold border cursor-pointer transition-all active:scale-95 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+                        :class="discardConfirm ? 'bg-amber-500 border-amber-500 text-white' : (isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
+                        {{ discardConfirm ? 'Discard?' : 'Discard' }}
                       </button>
                     </template>
                     <template v-else>
@@ -2230,8 +2268,33 @@
         return date + ' · ' + n + ' · ' + planned.toFixed(1) + 'h planned · ' + logged.toFixed(1) + 'h logged';
       });
 
+      // Which way today lies from what you are looking at — '' when you are on it.
+      const todayDirection = computed(() => {
+        const t = todayDate.value;
+        const sel = selectedDashboardDate.value;
+        if (!t || !sel) return '';
+        if (sel !== t) return t < sel ? 'left' : 'right';
+        if (dashboardWeekOffset.value > 0) return 'left';
+        if (dashboardWeekOffset.value < 0) return 'right';
+        return '';
+      });
+
       const shiftDashboardWeek = (delta) => {
         dashboardWeekOffset.value += delta;
+        // Carry the selection with the window: the same weekday, one week over.
+        // Otherwise the strip moves and nothing in it looks selected.
+        const cur = selectedDashboardDate.value;
+        if (cur) {
+          const [y, m, d] = cur.split('-').map(Number);
+          const dt = new Date(y, m - 1, d);
+          dt.setDate(dt.getDate() + delta * 7);
+          const pad = (n) => String(n).padStart(2, '0');
+          selectedDashboardDate.value = dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+        }
+        nextTick(() => {
+          const day = document.querySelector('[data-day-strip] [data-day-btn][aria-checked="true"]');
+          if (day && document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-day-strip]')) day.focus({ preventScroll: true });
+        });
       };
 
       const selectDashboardDate = (dt) => {
@@ -2822,7 +2885,26 @@
           focusSessionPointInput();
         });
       };
-      // Global shortcuts. Shift+T new task · Shift+P plan a block · Shift+S jump to the
+      // Shift+D: jump to the day view and land on the selected day, so the arrow keys
+      // pick a day and Tab reaches that day's Start Session button straight away.
+      const openDayView = () => {
+        activeTab.value = 'dashboard';
+        nextTick(() => {
+          // land just under the sticky header, not centred half off-screen
+          const sect = document.querySelector('[data-day-section]') || document.querySelector('[data-day-strip]');
+          if (sect) {
+            const header = document.querySelector('header.sticky');
+            const offset = (header ? header.getBoundingClientRect().height : 0) + 16;
+            const y = sect.getBoundingClientRect().top + window.scrollY - offset;
+            window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+          }
+          const day = document.querySelector('[data-day-strip] [data-day-btn][aria-checked="true"]');
+          if (day) day.focus({ preventScroll: true });
+        });
+      };
+
+      // Global shortcuts. Shift+T new task · Shift+P plan a block · Shift+D the day view ·
+      // Shift+S jump to the
       // session-log input (then Tab reaches Stop & Save) · Cmd/Ctrl+S stops and saves ·
       // "/" also jumps to the add-line input.
       const _typingIn = (t) => {
@@ -2849,6 +2931,7 @@
           if (k === 't') { ev.preventDefault(); openNewTaskModal(); return; }
           if (k === 'p') { ev.preventDefault(); planBlockShortcut(); return; }
           if (k === 's') { ev.preventDefault(); openSessionCard(); return; }
+          if (k === 'd') { ev.preventDefault(); openDayView(); return; }
         }
         if (ev.key !== '/') return;
         if (_typingIn(ev.target)) return;
@@ -3049,6 +3132,35 @@
       const onEmployeeChange = () => {
         fetchWorkstationData(selectedEmployee.value);
         showToast(`Viewing ${selectedEmployee.value === 'All' ? 'All Team Members' : selectedEmployee.value}`, 'info');
+      };
+
+      // A session started by mistake (or abandoned because something else came up)
+      // must be throwable away. Two-step, because it drops the elapsed time.
+      const discardConfirm = ref(false);
+      let _discardTimer = null;
+      const discardSession = () => {
+        if (!isTracking.value) return;
+        if (!discardConfirm.value) {
+          discardConfirm.value = true;
+          showToast('Discard this session? Press Discard again — nothing will be saved.', 'warning');
+          if (_discardTimer) clearTimeout(_discardTimer);
+          _discardTimer = setTimeout(() => { discardConfirm.value = false; }, 6000);
+          return;
+        }
+        if (_discardTimer) clearTimeout(_discardTimer);
+        discardConfirm.value = false;
+        triggerHaptic([40, 30, 40]);
+        isTracking.value = false;
+        if (trackerTimer.value) clearInterval(trackerTimer.value);
+        trackerTimer.value = null;
+        localStorage.removeItem('omnitrack_active_session');
+        trackerSeconds.value = 0;
+        trackerBlockName.value = null;
+        trackerNotes.value = '';
+        sessionNotesList.value = [];
+        newSessionPoint.value = '';
+        stopConfirmName.value = '';
+        showToast('Session discarded — no timesheet was created', 'info');
       };
 
       const toggleTrack = async () => {
@@ -4246,6 +4358,9 @@
         timelineMembers,
         onEmployeeChange,
         toggleTrack,
+        openDayView,
+        discardSession,
+        discardConfirm,
         trackBlock,
         saveNewPlannedTask,
         // Google Meet Dashboard & Agenda
@@ -4254,6 +4369,7 @@
         dashboardWeekDays,
         selectedDashboardDateLabel,
         dashboardDayTitle,
+        todayDirection,
         dashboardDaySummary,
         shiftDashboardWeek,
         selectDashboardDate,
