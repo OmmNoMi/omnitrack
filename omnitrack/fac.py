@@ -97,7 +97,7 @@ def get_my_workspace(employee=None, work_date=None):
 
 	# 3. Fetch assigned tasks
 	assigned_tasks = get_assigned_tasks(target_user)
-	task_list = list(assigned_tasks.values()) if isinstance(assigned_tasks, dict) else []
+	task_list = assigned_tasks.get("tasks", []) if isinstance(assigned_tasks, dict) else (assigned_tasks if isinstance(assigned_tasks, list) else [])
 
 	return {
 		"user": target_user,
@@ -228,7 +228,8 @@ def log_work_session(
 	session_date=None,
 	task_nature=None,
 	auto_create_block_if_missing=True,
-	logged_via="AI Assistant"
+	logged_via="AI Assistant",
+	employee=None
 ):
 	"""Log a real work session against a planned block, or auto-book and log time.
 
@@ -249,12 +250,13 @@ def log_work_session(
 		task_nature (str, optional): "🎯 Planned", "⚠️ Unplanned", "☕ Break".
 		auto_create_block_if_missing (bool): Auto-creates a block if none is targeted.
 		logged_via (str): Source label (e.g. "AI Assistant", "Cursor", "Claude").
+		employee (str, optional): Target employee/user (defaults to current human user, e.g. Nomeshwer).
 
 	Returns:
 		dict: Session result with updated block and timesheet details.
 	"""
 	notes = _require_session_notes(notes)
-	target_user = frappe.session.user
+	target_user = _resolve_planner_user(employee)
 	target_date = session_date or nowdate()
 
 	# Enforce 2-day modification horizon
@@ -311,6 +313,18 @@ def log_work_session(
 		else:
 			frappe.throw(_("No matching Planned Work Block found. Specify block_name or allow auto_create_block_if_missing."))
 
+	# Normalize logged_via to valid OmniTrack options ('Manual', 'Stopwatch', 'Import', 'AI Assistant')
+	valid_logged_via = {"Manual", "Stopwatch", "Import", "AI Assistant"}
+	if logged_via not in valid_logged_via:
+		if "stopwatch" in (logged_via or "").lower() or "timer" in (logged_via or "").lower():
+			normalized_logged_via = "Stopwatch"
+		elif "import" in (logged_via or "").lower():
+			normalized_logged_via = "Import"
+		else:
+			normalized_logged_via = "Manual"
+	else:
+		normalized_logged_via = logged_via
+
 	# Log session into the block
 	from omnitrack.api import log_work_session as api_log_work_session
 	api_log_work_session(
@@ -320,7 +334,7 @@ def log_work_session(
 		hours=dur_hours,
 		session_date=target_date,
 		notes=notes,
-		logged_via=logged_via
+		logged_via=normalized_logged_via
 	)
 
 	# Fetch updated block metrics
@@ -357,7 +371,8 @@ def quick_create_task(
 	book_block=False,
 	block_start="10:00:00",
 	block_end=None,
-	work_date=None
+	work_date=None,
+	employee=None
 ):
 	"""Creates a new Task or ToDo, assigns it to the user, and optionally books a block.
 
@@ -371,6 +386,7 @@ def quick_create_task(
 		block_start (str): Start time for booked block (default "10:00:00").
 		block_end (str, optional): End time (auto-calculated from expected_time if omitted).
 		work_date (str, optional): Work date for the booked block (default today).
+		employee (str, optional): Target employee (defaults to current human user, e.g. Nomeshwer).
 
 	Returns:
 		dict: Created task details and optional booked block name.
@@ -378,7 +394,7 @@ def quick_create_task(
 	if not subject or not str(subject).strip():
 		frappe.throw(_("Task subject cannot be empty."))
 
-	user = frappe.session.user
+	user = _resolve_planner_user(employee)
 	has_task_doctype = frappe.db.exists("DocType", "Task")
 	task_name = None
 
@@ -458,9 +474,10 @@ def quick_timer_action(
 	project=None,
 	notes=None,
 	block_name=None,
-	nature="🎯 Planned"
+	nature="🎯 Planned",
+	employee=None
 ):
-	"""Controls live stopwatch session for the current user.
+	"""Controls live stopwatch session for the target user (defaults to human operator).
 
 	Terminology invariant:
 	- Starting is strictly "Start Session" (Play ▶).
@@ -474,11 +491,12 @@ def quick_timer_action(
 		notes (str, optional): Session notes (required for "stop").
 		block_name (str, optional): Target Planned Work Block.
 		nature (str): Work nature (default "🎯 Planned").
+		employee (str, optional): Target employee (defaults to current human user, e.g. Nomeshwer).
 
 	Returns:
 		dict: Action result.
 	"""
-	user = frappe.session.user
+	user = _resolve_planner_user(employee)
 	action = str(action).lower().strip()
 
 	if action == "status":
@@ -489,6 +507,7 @@ def quick_timer_action(
 		elapsed = int((datetime.now().timestamp() * 1000 - start_ms) / 1000) if start_ms else 0
 		return {
 			"status": "running",
+			"user": user,
 			"elapsed_seconds": max(0, elapsed),
 			"elapsed_formatted": f"{elapsed // 3600:02d}:{(elapsed % 3600) // 60:02d}:{elapsed % 60:02d}",
 			"project": active.get("selectedProject"),
@@ -506,10 +525,10 @@ def quick_timer_action(
 			"trackerBlockName": block_name or None,
 			"status": "active"
 		}
-		sync_active_session(session_data)
+		sync_active_session(session_data, user=user)
 		return {
 			"status": "success",
-			"message": "Session started.",
+			"message": f"Session started for {user}.",
 			"session": session_data
 		}
 
@@ -533,20 +552,21 @@ def quick_timer_action(
 			task=task,
 			notes=session_notes,
 			session_date=nowdate(),
-			logged_via="AI Assistant (Stopwatch)"
+			logged_via="Stopwatch",
+			employee=user
 		)
 		# Clear active session
-		sync_active_session(None)
+		sync_active_session(None, user=user)
 		return {
 			"status": "success",
-			"message": f"Stopped session and logged {elapsed_hours} hour(s).",
+			"message": f"Stopped session and logged {elapsed_hours} hour(s) for {user}.",
 			"log_result": res
 		}
 
 	elif action == "discard":
 		# Discard active session with zero timesheet creation
-		sync_active_session(None)
-		return {"status": "success", "message": "Active session discarded."}
+		sync_active_session(None, user=user)
+		return {"status": "success", "message": f"Active session discarded for {user}."}
 
 	else:
 		frappe.throw(_("Invalid timer action '{0}'. Choose 'start', 'stop', 'discard', or 'status'.").format(action))
@@ -709,6 +729,10 @@ def get_fac_tools():
 					"auto_create_block_if_missing": {
 						"type": "boolean",
 						"description": "Auto-creates a planned block if none matches. Defaults to true."
+					},
+					"employee": {
+						"type": "string",
+						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
 					}
 				}
 			},
@@ -716,7 +740,7 @@ def get_fac_tools():
 		},
 		{
 			"name": "omnitrack_quick_create_task",
-			"description": "Creates an ERPNext Task (or ToDo), assigns it to the current user, and optionally books a planned work block immediately.",
+			"description": "Creates an ERPNext Task (or ToDo), assigns it to the user, and optionally books a planned work block immediately.",
 			"inputSchema": {
 				"type": "object",
 				"required": ["subject"],
@@ -748,6 +772,10 @@ def get_fac_tools():
 					"block_start": {
 						"type": "string",
 						"description": "Start time for booked block (default '10:00:00')."
+					},
+					"employee": {
+						"type": "string",
+						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
 					}
 				}
 			},
@@ -780,6 +808,10 @@ def get_fac_tools():
 					"block_name": {
 						"type": "string",
 						"description": "Planned Work Block ID."
+					},
+					"employee": {
+						"type": "string",
+						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
 					}
 				}
 			},

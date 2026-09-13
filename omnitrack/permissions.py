@@ -7,11 +7,60 @@ def is_omnitrack_manager(user=None):
 	"""Returns True if the user has elevated manager / admin privileges in OmniTrack."""
 	if not user:
 		user = frappe.session.user
-	if user == "Administrator" or "hardik" in (user or "").lower():
+	if user == "Administrator":
 		return True
 	roles = frappe.get_roles(user)
 	manager_roles = {"System Manager", "HR Manager", "OmniTrack Manager", "OmniTrack Admin"}
 	return bool(set(roles) & manager_roles)
+
+
+def can_access_user_data(target_user, session_user=None):
+	"""Generic permission check: Can session_user view/manage target_user's OmniTrack data?
+
+	Rules:
+	1. A user can ALWAYS access their own data.
+	2. Administrator or users with manager roles (OmniTrack Manager/Admin, System Manager, HR Manager)
+	   have access to all users they manage.
+	3. Standard users can access any Employee they have Frappe read permissions for (e.g. User Permissions).
+	4. A manager can access employees who report to them in the Employee hierarchy.
+	5. Otherwise, access is denied.
+	"""
+	if not session_user:
+		session_user = frappe.session.user
+	if not session_user or session_user == "Guest":
+		return False
+	if session_user == "Administrator":
+		return True
+
+	# Self access
+	if target_user == session_user:
+		return True
+
+	# Manager roles grant elevated cross-user access
+	if is_omnitrack_manager(session_user):
+		return True
+
+	# Check Frappe Employee permissions
+	if frappe.db.exists("DocType", "Employee"):
+		target_emp = frappe.db.get_value("Employee", {"user_id": target_user}, "name")
+		if not target_emp and frappe.db.exists("Employee", target_user):
+			target_emp = target_user
+
+		if target_emp:
+			# Check native Frappe read permission on Employee (respects User Permissions)
+			if frappe.has_permission("Employee", "read", target_emp, user=session_user):
+				return True
+
+			# Check organizational hierarchy (Reports To)
+			session_emp = frappe.db.get_value("Employee", {"user_id": session_user}, "name")
+			if session_emp and frappe.db.get_value("Employee", target_emp, "reports_to") == session_emp:
+				return True
+
+	# Check native Frappe read permission on User
+	if frappe.has_permission("User", "read", target_user, user=session_user):
+		return True
+
+	return False
 
 
 def check_timesheet_date_permission(session_date, user=None):

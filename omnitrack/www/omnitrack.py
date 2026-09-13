@@ -18,8 +18,8 @@ def get_context(context):
 	ctx.title = "OmniTrack Workstation"
 	ctx.user = user
 	ctx.user_fullname = frappe.utils.get_fullname(user) or user
-	user_roles = frappe.get_roles(user)
-	ctx.is_manager = 1 if (any(r in ["System Manager", "HR Manager", "OmniTrack Manager", "Administrator"] for r in user_roles) or user == "Administrator" or "hardik" in user.lower()) else 0
+	from omnitrack.permissions import is_omnitrack_manager
+	ctx.is_manager = 1 if is_omnitrack_manager(user) else 0
 	# Bundle URLs carried a hard-coded version, so a rebuilt HUD bundle never
 	# reached the browser. Key the query on the built file's mtime instead:
 	# changes bust the cache, unchanged builds keep it.

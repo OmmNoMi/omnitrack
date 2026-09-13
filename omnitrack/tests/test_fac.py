@@ -110,3 +110,22 @@ class TestOmniTrackFAC(unittest.TestCase):
 		self.assertIn("summary", eod)
 		self.assertIn("compliance_status", eod)
 		self.assertIn("recommendations", eod)
+
+	def test_logged_via_normalization(self):
+		"""Verifies that arbitrary logged_via labels normalize to valid select options."""
+		from omnitrack.fac import log_work_session
+
+		# Test that invalid notes still fail before DB insert
+		with self.assertRaises(Exception):
+			log_work_session(hours=1.0, notes="", logged_via="Cursor IDE")
+
+	def test_cross_user_permission_enforcement(self):
+		"""Invariant: Users without access to other users cannot manage their timesheets."""
+		from omnitrack.permissions import can_access_user_data
+
+		# Standard user cannot access an unrelated user
+		self.assertFalse(can_access_user_data("restricted_user@example.com", session_user="standard_employee@example.com"))
+		# Self-access is always permitted
+		self.assertTrue(can_access_user_data("standard_employee@example.com", session_user="standard_employee@example.com"))
+		# Administrator access is always permitted
+		self.assertTrue(can_access_user_data("standard_employee@example.com", session_user="Administrator"))

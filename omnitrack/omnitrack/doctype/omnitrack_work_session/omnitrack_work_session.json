@@ -52,7 +52,7 @@
    "fieldname": "logged_via",
    "fieldtype": "Select",
    "label": "Logged Via",
-   "options": "Manual\nStopwatch\nImport"
+   "options": "Manual\nStopwatch\nImport\nAI Assistant"
   },
   {
    "fieldname": "task_nature",

@@ -5,6 +5,18 @@ All notable changes to **OmniTrack** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-13
+
+### Added
+- **Frappe Assistant Core (FAC) Integration**: Exposes 6 domain tools (`omnitrack_get_my_workspace`, `omnitrack_plan_work_blocks`, `omnitrack_log_work_session`, `omnitrack_quick_create_task`, `omnitrack_quick_timer_action`, `omnitrack_get_eod_reconciliation`) via Model Context Protocol (MCP) and whitelisted Frappe API methods.
+- **Generic Permission-Based Cross-User Management**: Authorized users (managers, administrators, or users granted Frappe User Permissions / reporting hierarchy) can manage workstations, schedule blocks, create tasks, and log timesheets on behalf of any employee within their permitted scope.
+- **Defensive ERPNext Timesheet Synchronization**: Automatically resolves and maps `Employee` records from user accounts, fallbacks for `Activity Type` records (`Execution`, `Break`, `Leave / Absence`), and ensures proper `from_time`/`to_time` intervals so duration hours are reliably preserved by the ERPNext timesheet controller.
+- **Work Session Source Tagging**: Added `AI Assistant` to the `OmniTrack Work Session` `logged_via` Select field options and introduced automatic normalization of external client source labels.
+
+### Fixed
+- **Workstation Permission Queries**: Purged legacy hardcoded username filtering from `get_workstation_data`, `permissions.py`, and `www/omnitrack.py` in favor of generic Frappe role and user permission scoping.
+- **Workstation Task List Parsing**: Corrected dictionary extraction in `get_my_workspace` so task rows and attention items are cleanly mapped for assistant context.
+
 ## [1.1.0] - 2026-09-13
 
 ### Added

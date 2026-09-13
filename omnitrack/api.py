@@ -428,6 +428,16 @@ def create_timesheet_from_work_block(block_name):
 	else:
 		ts = frappe.new_doc("Timesheet")
 		user_emp = frappe.db.get_value("Employee", {"user_id": block.employee}, "name") if frappe.db.exists("DocType", "Employee") else None
+		if not user_emp and frappe.db.exists("DocType", "Employee"):
+			if "+" in (block.employee or "") and "@" in (block.employee or ""):
+				parts = block.employee.split("@")
+				base_emp_email = f"{parts[0].split('+')[0]}@{parts[1]}"
+				user_emp = frappe.db.get_value("Employee", {"user_id": base_emp_email}, "name")
+			if not user_emp:
+				if frappe.db.exists("Employee", block.employee):
+					user_emp = block.employee
+				else:
+					user_emp = frappe.db.get_value("Employee", {"prefered_contact_email": block.employee}, "name")
 		ts.employee = user_emp or block.employee
 		
 		company = frappe.db.get_single_value("Global Defaults", "default_company") if frappe.db.exists("DocType", "Global Defaults") else None
@@ -448,16 +458,36 @@ def create_timesheet_from_work_block(block_name):
 				ts.customer = cust
 
 	is_away = any(m in (block.task_nature or "").lower() for m in ("leave", "absent", "out-of-office", "out of office", "break"))
-	activity = "Break" if "break" in (block.task_nature or "").lower() else ("Leave / Absence" if is_away else "Execution")
+	desired_activity = "Break" if "break" in (block.task_nature or "").lower() else ("Leave / Absence" if is_away else "Execution")
+	activity = desired_activity
+	if frappe.db.exists("DocType", "Activity Type"):
+		if not frappe.db.exists("Activity Type", desired_activity):
+			fallback_act = frappe.db.get_value("Activity Type", {"disabled": 0}, "name")
+			activity = fallback_act or desired_activity
+
+	from datetime import datetime, timedelta
 
 	if block.sessions:
 		for sess in block.sessions:
-			s_from = f"{sess.session_date} {sess.from_time or '00:00:00'}"
-			s_to = f"{sess.session_date} {sess.to_time or '00:00:00'}"
+			base_date = sess.session_date or block.work_date or nowdate()
+			start_t = sess.from_time or block.start_time or "09:00:00"
+			s_from = f"{base_date} {start_t}"
+			dur = flt(sess.hours)
+			if sess.to_time and str(sess.to_time) != str(sess.from_time):
+				s_to = f"{base_date} {sess.to_time}"
+			else:
+				try:
+					fmt = "%Y-%m-%d %H:%M:%S" if len(str(start_t).split(":")) == 3 else "%Y-%m-%d %H:%M"
+					dt_f = datetime.strptime(s_from, fmt)
+					dt_t = dt_f + timedelta(hours=dur if dur > 0 else 0.5)
+					s_to = dt_t.strftime("%Y-%m-%d %H:%M:%S")
+				except Exception:
+					s_to = s_from
+
 			row = {
 				"from_time": s_from,
 				"to_time": s_to,
-				"hours": flt(sess.hours),
+				"hours": dur,
 				"project": project,
 				"task": task,
 				"activity_type": activity,
@@ -466,10 +496,25 @@ def create_timesheet_from_work_block(block_name):
 			}
 			ts.append("time_logs", row)
 	else:
+		base_date = block.work_date or nowdate()
+		start_t = block.start_time or "09:00:00"
+		s_from = f"{base_date} {start_t}"
+		dur = flt(block.duration_hours)
+		if block.end_time and str(block.end_time) != str(block.start_time):
+			s_to = f"{base_date} {block.end_time}"
+		else:
+			try:
+				fmt = "%Y-%m-%d %H:%M:%S" if len(str(start_t).split(":")) == 3 else "%Y-%m-%d %H:%M"
+				dt_f = datetime.strptime(s_from, fmt)
+				dt_t = dt_f + timedelta(hours=dur if dur > 0 else 1.0)
+				s_to = dt_t.strftime("%Y-%m-%d %H:%M:%S")
+			except Exception:
+				s_to = s_from
+
 		row = {
-			"from_time": f"{block.work_date} {block.start_time}",
-			"to_time": f"{block.work_date} {block.end_time}",
-			"hours": block.duration_hours,
+			"from_time": s_from,
+			"to_time": s_to,
+			"hours": dur,
 			"project": project,
 			"task": task,
 			"activity_type": activity,
@@ -520,13 +565,13 @@ def process_offline_sync(data=None):
 
 
 @frappe.whitelist(allow_guest=True)
-def sync_active_session(session_data=None):
+def sync_active_session(session_data=None, user=None):
 	"""
 	Synchronizes the in-flight stopwatch session across devices (Desktop, Mobile PWA, Tablet).
 	Persists to high-speed Redis cache and durable database storage (tabDefaultValue).
 	"""
-	user = frappe.session.user
-	if not user or user == "Guest":
+	target_user = user or _resolve_planner_user() or frappe.session.user
+	if not target_user or target_user == "Guest":
 		return {"status": "ignored", "reason": "Guest"}
 
 	if isinstance(session_data, str):
@@ -537,17 +582,17 @@ def sync_active_session(session_data=None):
 
 	# If session_data is empty or status is stopped/cleared, delete the active session
 	if not session_data or session_data.get("status") in ("stopped", "cleared", "discarded"):
-		frappe.cache.hdel("omnitrack:active_session", user)
-		frappe.defaults.clear_default("omnitrack_active_session", parent=user)
-		frappe.db.set_default("omnitrack_active_session", None, parent=user)
+		frappe.cache.hdel("omnitrack:active_session", target_user)
+		frappe.defaults.clear_default("omnitrack_active_session", parent=target_user)
+		frappe.db.set_default("omnitrack_active_session", None, parent=target_user)
 		frappe.db.sql(
 			"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
-			{"user": user}
+			{"user": target_user}
 		)
-		frappe.clear_cache(user=user)
+		frappe.clear_cache(user=target_user)
 		frappe.db.commit()
 		try:
-			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": user}, user=user)
+			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": target_user}, user=target_user)
 		except Exception:
 			pass
 		return {"status": "cleared"}
@@ -586,7 +631,7 @@ def get_active_session(user=None):
 	Returns the currently in-flight active session for the user across devices.
 	Automatically expires sessions older than 24 hours.
 	"""
-	target_user = user or frappe.session.user
+	target_user = user or _resolve_planner_user() or frappe.session.user
 	if not target_user or target_user == "Guest":
 		return None
 
@@ -630,48 +675,23 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	Supplies real live database records to the OmniTrack Vue.js Workstation PWA.
 	Enforces standard Frappe role-based permissions and user scoping.
 	"""
-	current_user = frappe.session.user
-	user_roles = frappe.get_roles(current_user)
-	is_manager = any(r in ["System Manager", "HR Manager", "OmniTrack Manager", "Administrator"] for r in user_roles) or current_user == "Administrator" or "hardik" in current_user.lower()
-	current_user_fullname = frappe.utils.get_fullname(current_user) or current_user
-
-	# Role & User Permission Guard: If not manager, lock to current user
-	if not is_manager:
-		employee = current_user
-	elif not employee:
-		employee = current_user
-
+	# Generic User & Permission Resolution
+	target_user = _resolve_planner_user(employee)
 	today = nowdate()
 	target_date = work_date or today
 
 	# 1. Planned Work Blocks (Live from DB)
-	if employee and employee != "All":
+	if target_user and target_user != "All":
 		has_employee = frappe.db.exists("DocType", "Employee")
-		user_emp = (frappe.db.get_value("Employee", employee, "user_id") if has_employee else None) or employee
-		emp_fullname = frappe.db.get_value("User", employee, "full_name") or (frappe.db.get_value("Employee", employee, "employee_name") if has_employee else None) or employee
-		first_name = emp_fullname.split(" ")[0]
-		name_part = employee.split("@")[0].split(" ")[0]
+		user_emp = (frappe.db.get_value("Employee", {"user_id": target_user}, "name") if has_employee else None) or target_user
+		emp_fullname = frappe.db.get_value("User", target_user, "full_name") or (frappe.db.get_value("Employee", user_emp, "employee_name") if has_employee else None) or target_user
 
-		alias_conditions = ["employee = %(emp)s", "employee = %(user_emp)s", "associate_name = %(emp)s", "associate_name = %(emp_fullname)s"]
+		where_clause = "employee = %(target_user)s OR employee = %(user_emp)s OR associate_name = %(emp_fullname)s"
 		params = {
-			"emp": employee, 
-			"user_emp": user_emp, 
+			"target_user": target_user,
+			"user_emp": user_emp,
 			"emp_fullname": emp_fullname
 		}
-
-		target_lower = employee.lower()
-		if "hardik" in target_lower or "admin" in target_lower:
-			alias_conditions.extend(["associate_name LIKE '%%eager%%'", "associate_name LIKE '%%hardik%%'", "(employee = 'Administrator' AND (associate_name IS NULL OR associate_name = '' OR associate_name LIKE '%%eager%%'))"])
-		elif "meenaxi" in target_lower:
-			alias_conditions.extend(["associate_name LIKE '%%meenaxi%%'", "employee LIKE '%%meenaxi%%'"])
-		elif "nomeshwer" in target_lower or "devoted" in target_lower:
-			alias_conditions.extend(["associate_name LIKE '%%devoted%%'", "associate_name LIKE '%%nomeshwer%%'", "employee LIKE '%%nomeshwer%%'"])
-		else:
-			params["like_first"] = f"%{first_name}%"
-			params["like_name"] = f"%{name_part}%"
-			alias_conditions.extend(["associate_name LIKE %(like_first)s", "associate_name LIKE %(like_name)s", "employee LIKE %(like_first)s"])
-
-		where_clause = " OR ".join(alias_conditions)
 
 		work_blocks = frappe.db.sql(f"""
 			SELECT name, employee, work_date, start_time, end_time, 
@@ -905,22 +925,63 @@ def _is_planner_manager(user=None):
 	return is_omnitrack_manager(user)
 
 
-def _resolve_planner_user(employee):
-	"""Non-managers are always locked to themselves. Managers may target another user."""
-	current_user = frappe.session.user
-	if not _is_planner_manager(current_user):
-		return current_user
-	if not employee or employee in ("All", current_user):
-		return current_user
-	# Accept a User id, an Employee id, or a full name
+def _resolve_planner_user(employee=None):
+	"""Resolves the target user and strictly enforces permission boundaries.
+
+	Rules:
+	1. If employee is not specified, defaults to the session user. If the session user
+	   has no Employee record (e.g. an API/service account), falls back to the user's owner.
+	2. If employee is specified:
+	   - Resolves target via User ID, Employee ID, employee_name, or full_name.
+	   - If target == session_user: Allowed.
+	   - If target != session_user: Checks can_access_user_data(target, session_user).
+	     If the session user can see/access the target, it is ALLOWED.
+	     If the session user cannot access the target, raises frappe.PermissionError!
+	"""
+	from omnitrack.permissions import can_access_user_data
+
+	session_user = frappe.session.user
+	if not session_user or session_user == "Guest":
+		frappe.throw(_("Authentication required."), frappe.PermissionError)
+
+	# Default target if unspecified
+	if not employee or employee in ("All", "me", session_user):
+		target_user = session_user
+		if frappe.db.exists("DocType", "Employee"):
+			if not frappe.db.exists("Employee", {"user_id": target_user}):
+				owner = frappe.db.get_value("User", target_user, "owner")
+				if owner and owner not in ("Administrator", target_user) and frappe.db.exists("User", owner):
+					if frappe.db.exists("Employee", {"user_id": owner}):
+						target_user = owner
+		return target_user
+
+	# Resolve employee argument
+	target_user = None
 	if frappe.db.exists("User", employee):
-		return employee
-	if frappe.db.exists("DocType", "Employee"):
-		uid = frappe.db.get_value("Employee", employee, "user_id")
-		if uid:
-			return uid
-	uid = frappe.db.get_value("User", {"full_name": employee}, "name")
-	return uid or current_user
+		target_user = employee
+	elif frappe.db.exists("DocType", "Employee"):
+		target_user = (
+			frappe.db.get_value("Employee", employee, "user_id")
+			or frappe.db.get_value("Employee", {"employee_name": employee}, "user_id")
+			or frappe.db.get_value("Employee", {"prefered_contact_email": employee}, "user_id")
+		)
+		if not target_user and frappe.db.exists("Employee", employee):
+			target_user = employee
+
+	if not target_user:
+		target_user = frappe.db.get_value("User", {"full_name": employee}, "name")
+
+	if not target_user:
+		frappe.throw(_("Could not resolve employee or user '{0}'.").format(employee), frappe.DoesNotExistError)
+
+	# Generic permission enforcement: Can session_user access target_user?
+	if not can_access_user_data(target_user, session_user):
+		frappe.throw(
+			_("You do not have permission to view or manage timesheet data for {0}.").format(employee),
+			frappe.PermissionError
+		)
+
+	return target_user
 
 
 def _week_bounds(week_start=None):
