@@ -7,10 +7,9 @@
 </p>
 
 <p align="center">
-  <span style="font-family:'Roboto',sans-serif;font-weight:900;font-size:1.6rem;">
-    <span style="color:#4285f4;">Omm</span><span style="color:#34a853;">No</span><span style="color:#ea4335;">M</span><span style="color:#fbbc05;">i</span>
-  </span> 
-  <b style="font-size:1.6rem;">OmniTrack</b>
+  <a href="https://github.com/OmmNoMi/omnitrack">
+    <img src="omnitrack/public/images/ommnomi_header.svg" height="36" alt="OmmNoMi OmniTrack">
+  </a>
 </p>
 
 <p align="center">
@@ -35,7 +34,7 @@ Traditional enterprise timesheets are broken. Associates scramble to fill out fi
 
 **OmniTrack transforms this entire paradigm.**
 
-Engineered by **OmmNoMi Automation**, OmniTrack is a production-grade workforce governance ecosystem that bridges high-level project planning with sub-second execution reality. It gives leadership mathematically truthful **Plan Adherence (PAI)** metrics while giving associates a sleek, distraction-free **Workstation Portal** designed for deep focus.
+Engineered by <span style="font-family:'Roboto',sans-serif;font-weight:900;"><span style="color:#4285f4;">Omm</span><span style="color:#34a853;">No</span><span style="color:#ea4335;">M</span><span style="color:#fbbc05;">i</span></span> <b>Automation</b>, OmniTrack is a production-grade workforce governance ecosystem that bridges high-level project planning with sub-second execution reality. It gives leadership mathematically truthful **Plan Adherence (PAI)** metrics while giving associates a sleek, distraction-free **Workstation Portal** designed for deep focus.
 
 ```
        PLANNED COMMITMENT                            REAL-TIME EXECUTION                         TRUTHFUL HARVEST
@@ -236,9 +235,9 @@ Distributed under the **GNU General Public License v3.0 (GPLv3)**. See [license.
 ---
 
 <p align="center">
-  <span style="font-family:'Roboto',sans-serif;font-weight:900;">
-    <span style="color:#4285f4;">Omm</span><span style="color:#34a853;">No</span><span style="color:#ea4335;">M</span><span style="color:#fbbc05;">i</span>
-  </span> Automation LLP<br>
+  <a href="https://ommnomi.in">
+    <img src="omnitrack/public/images/ommnomi_brand.svg" height="28" alt="OmmNoMi Automation LLP">
+  </a><br>
   <i>Architecting Next-Generation Operational Ecosystems</i><br>
   Mahunag · Karsog · Mandi, Himachal Pradesh, India<br>
   🌐 <a href="https://ommnomi.in">https://ommnomi.in</a> • 📧 <a href="mailto:omnitrack@ommnomi.com">omnitrack@ommnomi.com</a>
