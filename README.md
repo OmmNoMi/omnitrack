@@ -164,6 +164,12 @@ Professional trust requires clear, tamper-proof ground rules:
 * **Automatic Attendance from Actual Work**: Generates clean HR attendance records directly from validated work sessions and check-in logs—with smart midnight cutoffs that respect night owls and graveyard shifts.
 * **Dual-Mode Engine**: Operates independently on pure Frappe Framework or with full ERPNext Project, Task, and Timesheet integration.
 
+### 6. 🤖 Ambient AI Assistant & Frappe Assistant Core (FAC) Bridge
+* **Any Employee, Any LLM**: Manage schedules and log work naturally from Cursor, VS Code, Claude Desktop, ChatGPT, Raycast, or Slack/Telegram bots.
+* **Purpose-Built MCP Tools**: Exposes 6 native domain tools (`omnitrack_get_my_workspace`, `omnitrack_plan_work_blocks`, `omnitrack_log_work_session`, `omnitrack_quick_create_task`, `omnitrack_quick_timer_action`, `omnitrack_get_eod_reconciliation`).
+* **Zero Form-Filling**: Transform git commits, terminal actions, and conversational summaries directly into compliant ERPNext timesheets with mandatory deliverable notes.
+* **Built-in Invariant Safeguards**: AI agents are strictly bounded by OmniTrack's 2-day modification horizon and immutable past planned blocks.
+
 ---
 
 ## 👥 Enterprise Role Profiles & Matrix
@@ -263,6 +269,7 @@ For deep technical specifications, mathematical proofs, and architectural audits
 * [⏱️ Domain Model Canonical Specification](docs/DOMAIN_MODEL.md) — Entity lifecycles, vocabulary discipline, and measured ground truth.
 * [⏱️ Split-Shift & Midnight Spanning Attendance Engine](docs/SPLIT_SHIFT_ENGINE.md) — Mathematical formulas and midnight cutoff logic.
 * [🌐 Cross-Site Synchronization](docs/CROSS_SITE_SYNC.md) — HMAC-SHA256 signature verification and replication protocols.
+* [🤖 AI Assistant & Frappe Assistant Core (FAC) Guide](docs/OMNITRACK_FAC_INTEGRATION.md) — Conversational timesheets, work block planning, and multi-LLM setup for Claude Desktop, Cursor, ChatGPT, and Slack bots.
 * [🛠️ Developer Guide](docs/DEVELOPMENT_GUIDE.md) — Local development, test harnesses, and code conventions.
 
 ---

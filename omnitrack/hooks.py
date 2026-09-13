@@ -64,3 +64,7 @@ scheduler_events = {
 }
 
 commands = ["omnitrack.commands.commands"]
+
+# Frappe Assistant Core (FAC) MCP Tools Integration
+# -------------------------------------------------
+fac_tools = "omnitrack.fac.get_fac_tools"
