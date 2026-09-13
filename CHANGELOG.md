@@ -2,43 +2,51 @@
 
 All notable changes to **OmniTrack** will be documented in this file.
 
-## [1.2.0] - 2026-09-12
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.0] - 2026-09-13
+
 ### Added
-- **Timesheet Horizon Governance**: Enforced temporal restriction where an `OmniTrack User` can only log, edit, or modify timesheets/work sessions for **today and yesterday** (`session_date >= add_days(nowdate(), -1)`). All historical entries and modifications prior to yesterday strictly require an `OmniTrack Manager` (or System Manager/Administrator).
-- **Past Planned Work Blocks Immutable Lock**: In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Admin) can create, move, reschedule, or delete planned work blocks. Historical plan commitments are permanently immutable once their calendar day has elapsed.
-- **Expanded Test Suite (22 Unit Tests)**: Added test cases covering user timesheet date boundaries, manager historical timesheet override, past block modification/reschedule locks, past block booking rejection, past block deletion protection, and standard `Timesheet` DocEvent validation (100% passing).
+- **Canonical Domain Model Codification**: Formally codified the 4-tier domain hierarchy (`Project` ──< `Task` ──< `Planned Work Block` ──< `OmniTrack Work Session`) grounded in the *"For Whom / What / When / Did"* operational taxonomy.
+- **Dual-Mode Runtime Engine**: First-class support for both **Mode A (Pure Frappe Standalone)** using native Frappe `User`, `ToDo`, and `work_item`, and **Mode B (ERPNext Enterprise)** with bidirectional linkage to `tabProject`, `tabTask`, `tabTimesheet`, and `tabEmployee`.
+- **2-Pane Focus Workstation (`/omnitrack`)**: Ergonomic split-interface featuring active session timer on the left and rapid progressive micro-line milestone logger on the right (<kbd>Enter</kbd> to log).
+- **Full-Focus Elevation Mode (<kbd>Shift + S</kbd>)**: Elevates the running timer into a distraction-free modal dialog for deep-work focus.
+- **Interval Union Overlap Algorithm**: Resolves overlapping calendar blocks via greedy interval union ($\mu \circ \bigcup$), ensuring aggregate daily commitment hours can never exceed 24.0h.
+- **Official OmmNoMi Vector Branding**: Integrated official SVG vector lockups across documentation to guarantee crisp, theme-aware rendering on GitHub dark and light modes.
+- **Spec-Compliant HTML5 Tree Verification**: Automated `scripts/check_www_html.py` using `html5lib` to prevent nested interactive controls from breaking Frappe in-DOM templates.
 
 ### Changed
-- **Workstation Drawer Temporal Awareness**: Drawer clearly demarcates past planned blocks with an immutable commitment notice (`🔒 Planned work blocks in the past are immutable commitments and cannot be rescheduled or deleted`), and provides historical warning banner when timesheet entries are restricted to managers (`⏳ Historical Timesheet: OmniTrack Users can only log or modify timesheets for today and yesterday`).
-
-## [1.1.0] - 2026-09-12
-### Added
-- **2-Pane Left-and-Right Workstation Timesheet HUD**: Left pane handles session context, digital stopwatch (`00:43:34`), Start/Stop action, task title, project picker, and activity nature dropdown; Right pane features incremental subtask lines logger (`+ Add Line` / <kbd>Enter</kbd>) for progressive logging every 5–10 minutes.
-- **Project Inheritance & Multi-Tier Permissions**: Strict project association and permission inheritance from Tasks/Blocks to Timesheets (`permissions.py`), providing scoped access for `Project User`, project owners, and external clients (`Customer`/`Contact`).
-- **15 Automated Unit Tests**: Comprehensive regression suite in `test_planned_work_block.py` covering split shifts, project permissions, midnight session splits, quick timer punches, and dashboard KPI calculations (100% passing).
-- **Centered Date Picker Strip**: Planner date strip centers around Today (3 days past, Today in center, 3 days future) with a dedicated `Today` jump button.
-- **Project-Hued Block Visual Language**: Dynamic calendar styling based on project hues and visual states (`planned`, `logged`, `missed`, `away`, `cancelled`).
-
-### Changed
-- **Executive KPI Cards Streamlined**: Eliminated parameter repetition across dashboard cards; hero strictly displays `Worked Hours` without fraction clutter; secondary metrics standardized into `Planned` | `Target` | `Variance`.
-- **Card Standard Renaming**: Renamed top cards to `Today's Hours & Commitment` (% ToDo Done), `Weekly Velocity` (% Adherence), and `Monthly Capacity` (% Utilized).
-- **Clean Footer Badges**: Removed redundant `0.0h Non-Working` badges; contextual badges (`Standard Day`, `Full Work Week`, `Full Capacity`) display when non-working time is zero.
-- **Action Terminology & Play Icon**: Renamed "Join Focus Session" (with video camera icon) to "Start Session" with a crisp Play icon (`▶`), properly reflecting task session initiation.
-- **Activity Nature Dropdown**: Replaced 6 bulky buttons with a standard `<select>` dropdown defaulted to `Planned Work`.
-- **Non-Working & Non-Paid Logic**: Classified `Break`, `Leave`, `Absent`, and `Out-of-Office` strictly as non-working and non-paid.
+- **De-Jargonized Human-Centric Terminology**: Replaced intimidating gaming/aerospace acronyms ("HUD") with "Focus Workstation", and replaced complex LaTeX formulas with intuitive "Promise vs. Reality" Plan Adherence scoring.
+- **Positioning for Remote Teams & Multi-Client Agencies**: Redesigned README with clear persona value propositions for remote managers, multi-client agencies, freelancers, and clients demanding transparency.
+- **Strict Plan vs. Actual Separation**: Unbound stopwatch sessions are authentically classified under `task_nature = 'Unplanned Work'`, eliminating retroactive plan fabrication.
 
 ### Fixed
-- **Bullet Concatenation Fix**: Auto-separates legacy concatenated bullet points (`•`) from task titles into distinct subtask lines upon block load and `localStorage` session recovery.
-- **Overnight Session Splitting**: `log_work_session` automatically splits sessions crossing midnight into separate child timesheets for Day N and Day N+1.
+- **Stop Button Resurrection Loop**: Fixed session stop state persistence in `api.py` and `omnitrack.html` by explicitly clearing user cache and default values upon session completion.
+- **Child Session Enrichment**: Bulk-load `tabOmniTrack Work Session` child rows in `get_workstation_data`, ensuring the timeline accurately renders logged execution bars.
+- **WHATWG HTML5 Parser Button Nesting**: Fixed button nesting in workstation filter dropdown trigger to prevent early tag ejection.
+
+## [1.0.2] - 2026-09-13
+
+### Added
+- **Workstation Timesheet Adjust & Session Validation**: Added validation rules for session note entries and duration clamping.
+- **Frappe UI Dialog Abstractions**: Native dialog wrappers for work block scheduling and cancellation.
+
+### Changed
+- **Cross-Device Sync Reliability**: Real-time event broadcasting over Frappe Socket.IO (`omnitrack_session_synced`) paired with explicit Redis cache eviction.
+
+## [1.0.1] - 2026-09-04
+
+### Added
+- **GitHub Actions CI/CD Workflows**: Automated test runners, pull request labelers, release drafters, and issue templates.
+- **Open-Source Governance & Community Guidelines**: Added `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md`, and `SUPPORT.md`.
 
 ## [1.0.0] - 2026-09-04
+
 ### Added
-- Initial release of OmniTrack (Universal Workforce, Task Sync & Split-Shift Engine).
-- 100% Configuration-Driven Architecture via `OmniTrack Settings`.
-- Frappe-native Discontinuous Split-Shift Engine (`Planned Work Block`).
-- Plan Adherence Index (PAI >= 85%) & Task Estimation Variance Engine.
-- Multi-tier Declarative Role Governance (`OmniTrack User Entitlement`).
-- Subdomain SaaS Multi-Tenant Workspaces (`OmniTrack Workspace`) with white-label branding.
-- Site-to-Site Live Sync Engine (`OmniTrack Remote Connection`) with Field-Level Merges.
-- Automated ERPNext Attendance Synthesizer & GitHub-style activity heatmaps.
-- Web & Mobile PWA Push Notification Engine with Leave-Aware Silencing.
+- **Initial Release**: Production release of OmniTrack (Universal Workforce, Task Sync & Split-Shift Engine).
+- **Split-Shift Engine**: Discontinuous morning/evening shifts with automatic midnight boundary crossing.
+- **Plan Adherence Index (PAI)**: Real-time execution tracking comparing planned calendar commitments against actual logged hours.
+- **Anti-Fraud Temporal Governance**: 2-day user timesheet edit horizon and historical plan immutability.
+- **Zero-Trust Cross-Site Sync**: Cryptographic HMAC-SHA256 signed replication between parent and branch Frappe sites.
+- **Autonomous Attendance Synthesis**: Directly generates standard Frappe/ERPNext `Attendance` records from verified work sessions.

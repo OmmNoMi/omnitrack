@@ -114,7 +114,7 @@ Below are the forensic findings and the resulting engineering resolutions adopte
   plannedH = planned.reduce((t, r) => t + (r.e - r.s) / 60, 0);
   gapH = Math.max(0, plannedH - loggedH);
   ```
-  On a single test day with duplicate concurrent blocks (e.g., 18 identical `14:00–16:00` blocks), this resulted in `36.0h` planned in a 2-hour window, yielding an impossible **`86.6h unlogged`** gap on a 24-hour calendar day.
+  Verified against the live `ommnomi.local` database on 2026-09-13: a single day held **18 byte-identical `In Progress` 14:00–16:00 blocks** plus **6 identical 12:58:15 blocks**. Those 18 rows alone contribute `36.0h` of "planned" time drawn from a two-hour window, driving the Day-at-a-glance legend into double-digit "unlogged" hours on a 24-hour calendar day (**`75.1h` observed on screen**).
 * **Architectural Resolution (The Interval Union Algorithm)**:
   Daily planned capacity and timeline coverage cannot be computed via naive scalar addition of intervals. OmniTrack implements an **Interval Union Algorithm** ($\mu \circ \bigcup$):
   $$\text{Effective Planned Hours} = \mu \left( \bigcup_{i=1}^{n} [s_i, e_i] \right) \le 24.0\text{ hours}$$
@@ -138,7 +138,7 @@ Below are the forensic findings and the resulting engineering resolutions adopte
   $$\text{Unlogged Gap} = \max(0, \text{Scheduled Commitment} - \text{Total Actual Logged Hours})$$
 
 ### Contradiction 5: Identity Entity Semantics (`User` vs. `Employee`)
-* **Forensic Finding**: `Planned Work Block.employee` held a Frappe `User` link (email), whereas `OmniTrack Shift Split Assignment.employee` held an ERPNext HRMS `Employee` link (`HR-EMP-#####`), causing cross-doctype join failures on standalone Frappe sites.
+* **Forensic Finding**: `Planned Work Block.employee` is a `Link` to Frappe `User` (an email), whereas `OmniTrack Shift Split Assignment.employee` is a `Link` to the ERPNext HRMS `Employee` doctype. Same field name, same module, two different targets. On `ommnomi.local` the `Employee` doctype is **not installed and holds no rows**, so that link has no resolvable target at all — any cross-doctype join through it fails on a standalone Frappe site.
 * **Architectural Resolution (Universal Identity Bridge)**:
   All user-facing OmniTrack DocTypes store the canonical Frappe `User` (`frappe.session.user`). An identity resolver `get_associated_employee(user)` dynamically resolves the corresponding `Employee` record when HRMS/ERPNext is installed, providing complete transparency across both environments.
 
