@@ -713,6 +713,47 @@ class TestPlannedWorkBlock(FrappeTestCase):
 			b_mgr = frappe.get_doc("Planned Work Block", res_mgr["block"])
 			self.assertEqual(str(b_mgr.work_date), two_days_ago)
 
+	def test_timesheet_without_a_description_is_refused(self):
+		"""An hour with nothing written against it cannot be read by a manager, and
+		on a client invoice it looks like time billed for no work. Every save path
+		must refuse it — including payloads that carry only bullet scaffolding."""
+		from omnitrack.api import quick_timer_punch
+
+		for empty in ("", "   ", None, "\u2022 \n\u2022 ", "ab", "- - -"):
+			with self.subTest(notes=empty):
+				with self.assertRaises(frappe.ValidationError):
+					quick_timer_punch(
+						action="stop",
+						duration_hours=1.0,
+						deliverable_notes=empty,
+					)
+
+		# The same call with a real description still goes through, so the guard
+		# refuses emptiness rather than refusing everything.
+		res = quick_timer_punch(
+			action="stop",
+			duration_hours=1.0,
+			deliverable_notes="Reconciled the September invoice batch",
+		)
+		self.assertEqual(res["status"], "success")
+		block = frappe.get_doc("Planned Work Block", res["block"])
+		self.assertEqual(block.deliverable_notes, "Reconciled the September invoice batch")
+
+	def test_log_work_session_without_a_description_is_refused(self):
+		"""Same rule from the planner side: a session logged against a block is the
+		billable record, so it cannot be blank either."""
+		from omnitrack.api import log_work_session
+
+		blk = _block(deliverable_notes="Planned block for the session guard")
+		blk.insert()
+
+		with self.assertRaises(frappe.ValidationError):
+			log_work_session(block_name=blk.name, hours=1.0, notes="")
+
+		log_work_session(blk.name, hours=1.0, notes="Wrote the migration rollback plan")
+		blk.reload()
+		self.assertEqual(len(blk.sessions), 1)
+
 	def tearDown(self):
 		frappe.db.rollback()
 

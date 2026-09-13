@@ -238,6 +238,22 @@ def get_team_heatmap_data(days=14):
 		})
 	return {"days": days, "team": team_data}
 
+def _require_session_notes(notes):
+	"""A timesheet with no description is not a record of anything — it is an hour
+	with nothing attached to it. Refuse the write rather than inventing a
+	placeholder, so the number in the report always has work behind it."""
+	text = str(notes or "")
+	# Strip the bullet/whitespace scaffolding the HUD wraps each line in, so a
+	# payload of "\u2022 \n\u2022 " does not pass as a description.
+	for ch in ("\u2022", "-", "*"):
+		text = text.replace(ch, " ")
+	if len(text.strip()) < 3:
+		frappe.throw(_("Add at least one line describing what you did before saving this timesheet. "
+					   "A manager — and often the client being billed — reads this text, and an hour "
+					   "with nothing written against it looks like an hour that was not worked."))
+	return str(notes).strip()
+
+
 @frappe.whitelist()
 def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None,
 					  deliverable_notes=None, work_nature=None,
@@ -302,7 +318,7 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		block.duration_hours = dur_hours
 		block.project = project
 		block.task = task
-		block.deliverable_notes = deliverable_notes or f"Stopwatch log recorded from Desk Navbar ({dur_hours} hrs)"
+		block.deliverable_notes = _require_session_notes(deliverable_notes)
 		block.status = "Completed"
 		block.task_nature = work_nature or "🎯 Planned"
 		block.flags.ignore_permissions = True
@@ -1384,6 +1400,8 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 	doc = frappe.get_doc("Planned Work Block", block_name)
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to log time on this work block."), frappe.PermissionError)
+
+	notes = _require_session_notes(notes)
 
 	base_date = session_date or doc.work_date or nowdate()
 

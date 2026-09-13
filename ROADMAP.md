@@ -99,6 +99,11 @@ booking their day against real commitments instead of typing notes.
 - ✅ **Backend Overnight Session Splitting**: `log_work_session` detects sessions crossing midnight and automatically splits them into distinct `OmniTrack Work Session` child rows for Day N and Day N+1.
 - ✅ **Automated Test Coverage**: `test_planned_work_block.py` expanded to 7 tests covering midnight session splits, flexible quick punches, and `away_count` rollups.
 
+### Frappe UI Component Standardization — shipped 2026-09-13
+- ✅ **Component Abstractions Added**: `<f-card>`, `<f-dropdown>`, and enhanced `<f-input>` registered into Vue component ecosystem matching official Frappe UI component specifications (sizes, themes, variants, keyboard accessibility, dark mode).
+- ✅ **Active Timesheet Card & Session Log Standardized**: Outer card wrapped in `<f-card>`, line item counts and indices rendered via `<f-badge>`, deliverable task title input refactored to `<f-input>`, and project and activity nature selectors refactored to `<f-dropdown>`.
+- ✅ **Template Size & Complexity Reduced**: Replaced ~70 lines of verbose, duplicated raw Tailwind markup with clean, declarative, reusable components while preserving 100% of shortcut ergonomics (`/`, `Enter`, `Shift+Enter`, `Cmd+S`) and cross-device sync.
+
 ### Planner calendar — remaining open items
 - **"Time logged based on timesheets" (user ask):** on sites with an ERPNext/HRMS `Timesheet`, actual hours should come from Timesheet detail rows rather than only the manual Work Session child table. Needs design: the Work Session table is the de-facto timesheet on `ommnomi.local` (no Timesheet doctype there).
 - **Manager Delegation in Calendar:** Allow team managers to switch target employee directly within the calendar view to plan or review blocks on behalf of team members.
@@ -300,3 +305,100 @@ Open items from this pass:
   status now counts as active (only an explicit non-active status refuses), and the
   echoed-back record is re-stamped with `status: 'active'` so the next load sees a
   current-shape payload.
+
+### Adjust modal + shortcut discoverability (2026-09-13, later)
+
+- **Fixed: an adjusted timesheet could fail silently.** The unbound branch of
+  `submitAdjustedTimesheet` used a bare `fetch()` and never checked the response, so a
+  rejected save still showed "Logged successfully" and wiped the running session. It now
+  goes through `postJSON` (which throws on a non-OK response); on failure the clock is
+  deliberately left running and the toast says so, with the real Frappe message unwrapped
+  out of `_server_messages` by a new `_errText` helper.
+- **The two blue footer buttons were indistinguishable.** "Update Running Clock" and
+  "Save & Log Timesheet" sat side by side in the same colour — clicking the wrong one
+  looks exactly like "it didn't save and it keeps running". They are now
+  "Fix start, keep running" (outline/grey) and "Stop & log 13h 18m" (solid blue, states
+  the duration it will write).
+- **Stop & Save → "Stop ⌘S".** Everything typed in the session log is already persisted
+  as it is typed, so "Save" implied work was at risk. The button carries the real
+  platform modifier (⌘ on Mac, Ctrl elsewhere) and names the shortcut in its title and
+  aria-label.
+- **Discard and Adjust got shortcuts of their own**, since a labelled key is the only
+  kind anyone discovers: `⌘/Ctrl+D` discards (safe — `discardSession` still asks once and
+  only throws the session away on the second press) and `⌘/Ctrl+E` opens Adjust. Both are
+  `preventDefault`-ed away from the browser's own bindings, both refuse with "No session
+  is running" when idle, and both carry a `⌘D` / `⌘E` chip on the button plus the
+  shortcut in the title and aria-label.
+- **Shortcut legend** moved out of the left pane to one quiet line under the whole card,
+  ordered the way the work flows: `/` → `Shift+Enter` → `Enter` → `⌘S` → `⌘E` → `⌘D` → `Shift+S/P/T/D`.
+  Hidden below `lg`, along with the button's ⌘S chip — none of it is pressable on a phone.
+
+### Keyboard affordances stay on the keyboard (done)
+
+A phone has no `/` key, so the shortcut hints were noise on mobile — and the
+long placeholder naming Enter/Shift+Enter was clipped mid-sentence at 375px.
+
+- Session-log empty state now reads "write your first one below" under `lg`,
+  and keeps "press `/` to start" from `lg` up.
+- The `/` chip inside the add-line box is `hidden lg:block`, and the right
+  padding reserved for it (`pr-9`) is now `pr-3.5 lg:pr-9` so the phone gets
+  the width back.
+- Placeholder shortened to "What did you just complete?" everywhere; the
+  Enter / Shift+Enter rules live in the desktop shortcut legend under the card.
+
+Verified at 375px (all hidden, no overflow, live session untouched) and at
+1334px (all present, `pr` back to 36px).
+
+### Frappe UI Modals & FDialog Abstraction (2026-09-13, shipped)
+
+Expanded Frappe UI component architecture to modal dialogs across OmniTrack:
+- **`FDialog` (`<f-dialog>`):** Reusable modal dialog abstraction with accessible ARIA
+  dialog semantics (`role="dialog"`, `aria-modal="true"`), smooth backdrop blur transitions,
+  automatic Escape key dismissal, `@click.self` backdrop closing, custom header slot /
+  header icon support, configurable sizes (`sm`, `md`, `lg`, `xl`), and dark mode theme parity.
+- **Refactored 3 Heavy Modals to `<f-dialog>`:**
+  1. **Book Work Block Modal (`showBookModal`):** Streamlined using `<f-dialog size="sm">`
+     and `<f-button>`.
+  2. **Define Planned Task Dialog (`showNewTaskModal`):** Streamlined using `<f-dialog size="md">`,
+     `<f-input>`, and `<f-button>`.
+  3. **Adjust Timesheet Timing Dialog (`showAdjustModal`):** Streamlined using `<f-dialog size="md">`,
+     integrating duration hero card, quick nudge chips, and action buttons.
+- **Strict Tag Balance & Regression Verification:** Fully validated with 28 passing unit tests
+  in `test_planned_work_block.py` including `test_omnitrack_html_tag_balance`.
+
+
+### A timesheet with no description cannot be saved (done)
+
+An hour with nothing written against it is not a record. A manager reading it
+cannot tell what was done, and once that hour reaches a client's invoice it
+reads as time billed for no work. So this is a rule, not a confirmation.
+
+Server (`api.py::_require_session_notes`, the real invariant): `quick_timer_punch`
+on stop and `log_work_session` both throw unless the notes carry ≥3 characters
+of substance. Bullet/dash scaffolding is stripped first, so `"• \n• "` does not
+pass. The old `deliverable_notes or "Stopwatch log recorded from Desk Navbar"`
+placeholder is gone — that fallback was manufacturing exactly the empty record
+this rule exists to prevent.
+
+Client: Stop, the planner's stop-this-block button, the Adjust modal (its own
+notes box satisfies the rule) and the planner session modal all refuse early,
+before the clock is torn down, so a refused stop loses nothing. The session-log
+empty state says the rule while the clock is running, and Stop's tooltip says
+why it will refuse.
+
+Covered by `test_timesheet_without_a_description_is_refused` and
+`test_log_work_session_without_a_description_is_refused`; mutation-verified
+(disabling the guard fails 7 assertions). 30 tests pass.
+
+### Day at a glance reads as two lines (done)
+
+The planned and logged lanes existed but stacked into one anonymous band, and
+were flat blue/emerald while the planner grid next to them colours by project.
+
+- A label gutter outside the scroller names the two lines, PLANNED over LOGGED,
+  and stays put while the day scrolls.
+- Both lanes now use the planner's colour language via `projectHue`: hollow
+  tinted bar = planned, solid bar of the same hue = logged. A short or missing
+  session shows as bare outline.
+- Off-plan time stays rose in the logged lane — the one thing the project hue
+  must not disguise — and the legend gained an "Off plan" swatch.

@@ -309,18 +309,18 @@
     <div v-if="activeTab === 'dashboard'" class="space-y-6">
 
       <!-- 1. Active Timesheet Card ("Desk Remote HUD") — only while a session runs -->
-      <div v-if="isTracking" class="rounded-3xl p-5 sm:p-6 border shadow-sm transition-all duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
+      <f-card v-if="isTracking" :highlight="sessionCardFlash" class="transition-all duration-200">
         
         <!-- One timesheet, two panes: its lines on the left, the session meta on the right. -->
         <div ref="sessionCardRef" class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x transition-all scroll-mt-28 px-0.5"
-          :class="[isDarkMode ? 'divide-gray-800' : 'divide-gray-200', sessionCardFlash ? 'ring-2 ring-blue-500/60' : '']">
+          :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-200'">
           
           <!-- LEFT PANE: the lines of this session — Shift+S lands here, Tab reaches Stop & Save -->
           <div class="lg:col-span-6 flex flex-col pb-5 lg:pb-0 lg:pr-6">
             
             <div class="flex-1 min-h-0 flex flex-col">
               <!-- Header -->
-              <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
+              <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-gray-200/80 dark:border-gray-800">
                 <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Session Log</h4>
                 <f-badge
                   theme="gray"
@@ -338,11 +338,9 @@
                   tabindex="0"
                   @keydown="onLogRowKey($event, row)"
                   :aria-label="'Line ' + row.n + ': ' + row.t + '. Press Enter to remove.'"
-                  class="flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                  :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700/80 text-gray-200' : 'bg-white border-gray-200/90 text-gray-800 shadow-2xs'">
+                  class="flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200">
                   <div class="flex items-start gap-2 min-w-0">
-                    <span class="font-mono text-[10px] font-bold w-5 h-5 shrink-0 rounded-md inline-flex items-center justify-center select-none"
-                      :class="isDarkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-600'">{{ row.n }}</span>
+                    <f-badge theme="blue" size="xs" variant="subtle" class="!w-5 !h-5 !p-0 shrink-0 select-none">{{ row.n }}</f-badge>
                     <!-- a line can be a paragraph now, so keep the author's breaks -->
                     <span class="font-medium min-w-0 whitespace-pre-line break-words">{{ row.t }}</span>
                   </div>
@@ -359,8 +357,13 @@
                 </div>
 
                 <!-- Empty State prompt -->
-                <div v-if="sessionNotesList.length === 0" class="text-center py-6 border border-dashed rounded-xl" :class="isDarkMode ? 'border-gray-800 text-gray-500' : 'border-gray-300 text-gray-400'">
-                  <div class="text-xs font-medium">No lines yet — press <kbd class="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-800 border text-[10px] font-mono text-gray-600 dark:text-gray-300">/</kbd> to start</div>
+                <div v-if="sessionNotesList.length === 0" class="text-center py-6 border border-dashed rounded-xl border-gray-300 text-gray-400 dark:border-gray-800 dark:text-gray-500">
+                  <!-- The `/` key is a keyboard affordance: on a phone there is no key
+                       to press, so point at the box instead of at a shortcut. -->
+                  <div class="text-xs font-medium lg:hidden">No lines yet — write your first one below</div>
+                  <div class="text-xs font-medium hidden lg:block">No lines yet — press <kbd class="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-800 border text-[10px] font-mono text-gray-600 dark:text-gray-300">/</kbd> to start</div>
+                  <!-- Say the rule up front, so Stop is never a surprise refusal. -->
+                  <div v-if="isTracking" class="text-[11px] mt-1.5">At least one line is needed to save this session</div>
                 </div>
               </div>
             </div>
@@ -377,11 +380,11 @@
                   @keydown.up="onSessionPointUp"
                   aria-label="Add a timesheet line"
                   aria-describedby="session-point-hint"
-                  placeholder="What did you just complete? Enter to add, Shift+Enter for a new line…"
-                  class="w-full text-xs rounded-xl pl-3.5 pr-9 py-2 outline-none border transition-colors shadow-xs focus:ring-2 resize-none overflow-y-auto leading-5 max-h-40 block"
+                  placeholder="What did you just complete?"
+                  class="w-full text-xs rounded-xl pl-3.5 pr-3.5 lg:pr-9 py-2 outline-none border transition-colors shadow-xs focus:ring-2 resize-none overflow-y-auto leading-5 max-h-40 block"
                   :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/25' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20'"></textarea>
                 <kbd v-if="!newSessionPoint" title="Press / or Shift+S anywhere to jump here"
-                  class="absolute right-2 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
+                  class="hidden lg:block absolute right-2 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
                   :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-400' : 'bg-gray-100 border-gray-200 text-gray-500'">/</kbd>
               </div>
               <f-button 
@@ -433,13 +436,18 @@
                   :theme="discardConfirm ? 'amber' : 'gray'"
                   size="sm"
                   @click="discardSession"
-                  :aria-label="discardConfirm ? 'Confirm discard: throw this session away without saving' : 'Discard this session without saving'"
-                  :title="discardConfirm ? 'Press again to discard' : 'Discard without saving'"
+                  :aria-label="(discardConfirm ? 'Confirm discard: throw this session away without saving' : 'Discard this session without saving') + '. Keyboard shortcut ' + (isMacLike ? 'Command' : 'Control') + ' D'"
+                  :title="discardConfirm ? 'Press again to discard (' + modKey + 'D)' : 'Discard without saving (' + modKey + 'D)'"
                   class="font-bold py-2 px-3">
                   <template #prefix>
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </template>
                   <span>{{ discardConfirm ? 'Discard?' : 'Discard' }}</span>
+                  <template #suffix>
+                    <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-1 rounded border"
+                      :class="isDarkMode ? 'border-gray-600 bg-gray-800 text-gray-300' : 'border-gray-300 bg-gray-100 text-gray-500'"
+                      aria-hidden="true">{{ modKey }}D</kbd>
+                  </template>
                 </f-button>
 
                 <!-- Adjust timing button: allows ±5m or custom start/end datetime adjustment -->
@@ -451,13 +459,18 @@
                   theme="gray"
                   size="sm"
                   @click="openAdjustModal"
-                  aria-label="Adjust start and end datetime of this timesheet"
-                  title="Adjust start/end time (±5 min or backdate)"
+                  :aria-label="'Adjust start and end datetime of this timesheet. Keyboard shortcut ' + (isMacLike ? 'Command' : 'Control') + ' E'"
+                  :title="'Adjust start/end time — ±5 min or backdate (' + modKey + 'E)'"
                   class="font-bold py-2 px-3">
                   <template #prefix>
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   </template>
                   <span>Adjust</span>
+                  <template #suffix>
+                    <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-1 rounded border"
+                      :class="isDarkMode ? 'border-gray-600 bg-gray-800 text-gray-300' : 'border-gray-300 bg-gray-100 text-gray-500'"
+                      aria-hidden="true">{{ modKey }}E</kbd>
+                  </template>
                 </f-button>
 
                 <f-button
@@ -468,7 +481,7 @@
                   :theme="isTracking ? 'red' : 'blue'"
                   size="sm"
                   :aria-label="(isTracking ? 'Stop the active session and file its timesheet' : 'Start session and begin recording timesheet') + '. Keyboard shortcut ' + (isMacLike ? 'Command' : 'Control') + ' S'"
-                  :title="isTracking ? 'Stop the session (' + modKey + 'S) — your lines are already saved' : 'Start a session (' + modKey + 'S)'"
+                  :title="!isTracking ? 'Start a session (' + modKey + 'S)' : (sessionHasLines ? 'Stop the session (' + modKey + 'S) — your lines are already saved' : 'Add at least one line before stopping — a timesheet with no description cannot be saved')"
                   class="font-bold py-2 px-3.5">
                   <template #prefix>
                     <svg v-if="!isTracking" class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
@@ -512,61 +525,43 @@
               <!-- Deliverable / Task Title -->
               <div>
                 <label class="block text-[11px] font-bold uppercase tracking-wider mb-1 text-gray-500 dark:text-gray-400">Deliverable / Task Title</label>
-                <div class="relative">
-                  <input 
-                    type="text" 
-                    v-model="trackerNotes" 
-                    @input="syncActiveSession"
-                    placeholder="e.g. Higher Ed Onboarding & Client Training Session..." 
-                    class="w-full text-xs sm:text-sm font-medium rounded-xl pl-3.5 pr-8 py-2.5 outline-none border transition-colors shadow-xs"
-                    :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
-                  <button 
-                    v-if="trackerNotes" 
-                    type="button" 
-                    @click="trackerNotes = ''; syncActiveSession();" 
-                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-xs cursor-pointer"
-                    title="Clear title">
-                    ✕
-                  </button>
-                </div>
+                <f-input 
+                  v-model="trackerNotes" 
+                  @input="syncActiveSession"
+                  placeholder="e.g. Higher Ed Onboarding & Client Training Session..." 
+                  size="md"
+                  aria-label="Deliverable or task title">
+                  <template #suffix v-if="trackerNotes">
+                    <f-button 
+                      type="button" 
+                      variant="ghost"
+                      theme="gray"
+                      size="xs"
+                      @click="trackerNotes = ''; syncActiveSession();" 
+                      class="!p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      title="Clear title"
+                      aria-label="Clear title">
+                      ✕
+                    </f-button>
+                  </template>
+                </f-input>
               </div>
 
-              <!-- Two Dropdowns: Project & Activity Nature (Dropdown with default value!) -->
+              <!-- Two Dropdowns: Project & Activity Nature (Frappe UI FDropdown) -->
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <!-- Assigned Project -->
                 <div>
                   <label class="block text-[11px] font-bold uppercase tracking-wider mb-1 text-gray-500 dark:text-gray-400">Project</label>
-                  <div class="relative" data-dropdown>
-                    <button type="button"
-                      @click="toggleDropdown('project')"
-                      @keydown="onDropdownKey($event, 'project')"
-                      :aria-expanded="openDropdown === 'project' ? 'true' : 'false'"
-                      aria-haspopup="listbox"
-                      class="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-700'">
-                      <span class="truncate">{{ dropdownLabel('project') }}</span>
-                      <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="openDropdown === 'project' ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
-                    </button>
-                    <ul v-if="openDropdown === 'project'" role="listbox" aria-label="Project"
-                      class="absolute z-40 left-0 right-0 mt-1 py-1 max-h-52 overflow-y-auto rounded-xl border shadow-lg"
-                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-white border-gray-200'">
-                      <li v-if="dropdownItems('project').length <= 1" class="px-3 py-2 text-[11px] text-gray-400 leading-snug">
-                        No projects on this site yet — the Project DocType (ERPNext Projects) isn't installed, so only General Work is available.
-                      </li>
-                      <li v-for="(opt, oi) in dropdownItems('project')" :key="opt.value"
-                        role="option" :aria-selected="opt.value === selectedProject ? 'true' : 'false'"
-                        @click="pickDropdown('project', opt)"
-                        @pointerenter="dropdownIdx = oi"
-                        class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer"
-                        :class="oi === dropdownIdx ? (isDarkMode ? 'bg-blue-500/20 text-white' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')">
-                        <span class="truncate">{{ opt.label }}</span>
-                        <span v-if="opt.value === selectedProject" class="text-blue-500 font-bold">✓</span>
-                      </li>
-                    </ul>
-                  </div>
+                  <f-dropdown
+                    v-model="selectedProject"
+                    :options="dropdownItems('project')"
+                    placeholder="General Work (Internal)"
+                    aria-label="Project"
+                    @change="syncActiveSession"
+                  />
                 </div>
 
-                <!-- Activity Nature (Dropdown with default value!) -->
+                <!-- Activity Nature -->
                 <div>
                   <div class="flex items-center justify-between mb-1">
                     <label class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Activity Nature</label>
@@ -574,33 +569,13 @@
                       Non-Paid
                     </span>
                   </div>
-                  <div class="relative" data-dropdown>
-                    <button type="button"
-                      @click="toggleDropdown('nature')"
-                      @keydown="onDropdownKey($event, 'nature')"
-                      :aria-expanded="openDropdown === 'nature' ? 'true' : 'false'"
-                      aria-haspopup="listbox"
-                      class="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-700'">
-                      <span class="truncate">{{ dropdownLabel('nature') }}</span>
-                      <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="openDropdown === 'nature' ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
-                    </button>
-                    <ul v-if="openDropdown === 'nature'" role="listbox" aria-label="Activity nature"
-                      class="absolute z-40 left-0 right-0 mt-1 py-1 max-h-52 overflow-y-auto rounded-xl border shadow-lg"
-                      :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-white border-gray-200'">
-                      <li v-for="(opt, oi) in dropdownItems('nature')" :key="opt.value"
-                        role="option" :aria-selected="opt.value === selectedNature ? 'true' : 'false'"
-                        @click="pickDropdown('nature', opt)"
-                        @pointerenter="dropdownIdx = oi"
-                        class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer"
-                        :class="oi === dropdownIdx ? (isDarkMode ? 'bg-blue-500/20 text-white' : 'bg-blue-50 text-blue-700') : (isDarkMode ? 'text-gray-300' : 'text-gray-700')">
-                        <span class="truncate">{{ opt.label }}</span>
-                        <span v-if="opt.nonWorking" class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0"
-                          :class="isDarkMode ? 'bg-rose-950 text-rose-300' : 'bg-rose-100 text-rose-700'">Non-Paid</span>
-                        <span v-else-if="opt.value === selectedNature" class="text-blue-500 font-bold">✓</span>
-                      </li>
-                    </ul>
-                  </div>
+                  <f-dropdown
+                    v-model="selectedNature"
+                    :options="dropdownItems('nature')"
+                    placeholder="Select activity nature"
+                    aria-label="Activity nature"
+                    @change="syncActiveSession"
+                  />
                 </div>
               </div>
             </div>
@@ -622,6 +597,10 @@
           <span aria-hidden="true">·</span>
           <span><kbd class="font-mono font-bold">{{ modKey }}S</kbd> stop the session</span>
           <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">{{ modKey }}E</kbd> adjust its times</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">{{ modKey }}D</kbd> discard it</span>
+          <span aria-hidden="true">·</span>
           <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">S</kbd> session</span>
           <span aria-hidden="true">·</span>
           <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">P</kbd> plan</span>
@@ -631,7 +610,7 @@
           <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">D</kbd> day</span>
         </p>
 
-      </div>  <!-- /Desk Remote HUD card -->
+      </f-card>  <!-- /Desk Remote HUD card -->
 
       <!-- 2. Attention Needed: Overdue & Underplanned Tasks (WCAG 2.1 AA Compliant) -->
       <section v-if="attentionTasks && attentionTasks.length > 0" 
@@ -862,8 +841,9 @@
             <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
               <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Day at a glance</h4>
               <div class="flex items-center gap-3 text-[11px] font-semibold">
-                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm border border-blue-400 bg-blue-500/20" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Planned {{ dayTimeline.plannedH.toFixed(1) }}h</span></span>
-                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-emerald-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Logged {{ dayTimeline.loggedH.toFixed(1) }}h</span></span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm border border-gray-400 bg-gray-400/20" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Planned {{ dayTimeline.plannedH.toFixed(1) }}h</span></span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-gray-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Logged {{ dayTimeline.loggedH.toFixed(1) }}h</span></span>
+                <span class="inline-flex items-center gap-1.5" title="Time logged when nothing was planned for it"><span class="w-3 h-2 rounded-sm bg-rose-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Off plan</span></span>
                 <span v-if="dayTimeline.gapH > 0.05" class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-amber-400" aria-hidden="true"></span><span class="text-amber-600 dark:text-amber-400">{{ dayTimeline.gapH.toFixed(1) }}h unlogged</span></span>
                 <div class="inline-flex items-center rounded-full p-0.5 border" role="radiogroup" aria-label="Hours visible across the timeline"
                   :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-100 border-gray-200'">
@@ -876,7 +856,17 @@
                 </div>
               </div>
             </div>
-            <div class="overflow-x-auto no-scrollbar -mx-1 px-1">
+            <!-- Two named lines, not one band: what was planned, and under it what was
+                 actually logged. The gutter sits outside the scroller so the labels
+                 stay put while the day scrolls. -->
+            <div class="flex gap-2">
+            <div class="shrink-0 w-[52px] select-none text-[9px] font-bold uppercase tracking-wider"
+              :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" aria-hidden="true">
+              <div class="h-7 leading-7">Planned</div>
+              <div class="h-5 leading-5 mt-1.5">Logged</div>
+              <div class="h-4 mt-0.5"></div>
+            </div>
+            <div class="overflow-x-auto no-scrollbar flex-1 min-w-0 -mr-1 pr-1">
             <div class="relative" role="img" :style="{ width: timelineTrackWidth }"
               :aria-label="dayTimeline.plannedH.toFixed(1) + ' hours planned and ' + dayTimeline.loggedH.toFixed(1) + ' hours logged on ' + selectedDashboardDateLabel">
               <!-- hour grid -->
@@ -887,9 +877,8 @@
               <!-- planned lane -->
               <div class="relative h-7">
                 <div v-for="(r, i) in dayTimeline.planned" :key="'p' + i"
-                  class="absolute top-0 h-7 rounded-md border text-[10px] font-bold px-1.5 leading-7 truncate cursor-pointer"
-                  :class="isDarkMode ? 'bg-blue-950/50 border-blue-800 text-blue-200 hover:bg-blue-900/60' : 'bg-blue-50 border-blue-300 text-blue-800 hover:bg-blue-100'"
-                  :style="{ left: r.left, width: r.width }"
+                  class="absolute top-0 h-7 rounded-md border text-[10px] font-bold px-1.5 leading-7 truncate cursor-pointer hover:brightness-95"
+                  :style="Object.assign({ left: r.left, width: r.width }, timelinePlannedStyle(r.block))"
                   tabindex="0"
                   :aria-label="(r.block.task_subject || r.block.deliverable_notes || 'Work block') + ' ' + formatBlockRange(r.block)"
                   @mouseenter="showBlockHover($event, r, 'timeline')"
@@ -900,11 +889,10 @@
                   @click="openBlockDrawer(r.block)">{{ r.block.task_subject || r.block.deliverable_notes || 'Block' }}</div>
               </div>
               <!-- logged lane -->
-              <div class="relative h-4 mt-1">
+              <div class="relative h-5 mt-1.5">
                 <div v-for="(r, i) in dayTimeline.logged" :key="'l' + i"
-                  class="absolute top-0 h-4 rounded-md"
-                  :class="r.onPlan ? 'bg-emerald-500' : 'bg-rose-500'"
-                  :style="{ left: r.left, width: r.width }"
+                  class="absolute top-0 h-5 rounded-md"
+                  :style="Object.assign({ left: r.left, width: r.width }, timelineLoggedStyle(r))"
                   :title="(r.onPlan ? 'Logged' : 'Logged outside any plan') + ' · ' + fmtHrs(r.hours) + 'h' + (r.notes ? ' · ' + r.notes : '')"></div>
                 <div v-if="!dayTimeline.logged.length"
                   class="absolute inset-0 rounded-md border border-dashed flex items-center justify-center text-[10px] font-semibold"
@@ -915,6 +903,7 @@
                 <span v-for="t in dayTimeline.ticks" :key="'lb' + t.m"
                   class="absolute -translate-x-1/2 text-[9px] font-mono text-gray-400" :style="{ left: t.left }">{{ t.label }}</span>
               </div>
+            </div>
             </div>
             </div>
           </div>
@@ -1978,69 +1967,72 @@
   <!-- ========================================== -->
   <!-- PLANNER: BOOK WORK BLOCK MODAL             -->
   <!-- ========================================== -->
-  <transition enter-active-class="transition ease-out duration-150" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition ease-in duration-100" leave-from-class="opacity-100" leave-to-class="opacity-0">
-    <div v-if="showBookModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" @click.self="showBookModal = false" role="dialog" aria-modal="true" aria-label="Book work block">
-      <div class="w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4" :class="isDarkMode ? 'bg-[#1E1F22] border border-gray-800' : 'bg-white'">
-        <h3 class="font-extrabold text-base" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ bookForm.mode === 'work' ? 'Book a work block' : 'Mark time away' }}</h3>
-        <div class="space-y-3">
-          <div class="flex gap-1.5">
-            <button v-for="m in [['work','🎯 Work'],['🌴 Leave','🌴 Leave'],['🤒 Absent','🤒 Absent']]" :key="m[0]" type="button"
-              @click="bookForm.mode = m[0]"
-              class="flex-1 text-xs font-bold px-2 py-1.5 rounded-lg border cursor-pointer transition-colors"
-              :class="bookForm.mode === m[0] ? (isDarkMode ? 'bg-blue-950/80 border-blue-600 text-blue-200' : 'bg-blue-50 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
-              {{ m[1] }}
-            </button>
-          </div>
-          <label v-if="bookForm.mode === 'work'" class="block">
-            <span class="text-[11px] font-bold text-gray-500">Task / work item</span>
-            <select v-model="bookForm.work_item" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'">
-              <option value="">— Ad-hoc (no linked task) —</option>
-              <option v-for="t in plannerData.assigned_tasks" :key="t.ref" :value="t.ref">
-                {{ t.subject }}{{ t.project_name ? ' · [' + t.project_name + ']' : (t.project ? ' · [' + t.project + ']' : '') }}
-              </option>
-            </select>
-          </label>
-          <!-- full detail of the picked task: the native <select> truncates long subjects -->
-          <div v-if="bookForm.mode === 'work' && bookFormTask" class="rounded-xl border px-3 py-2 space-y-1"
-            :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="text-xs font-bold leading-snug break-words" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">{{ bookFormTask.subject }}</div>
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-              <span v-if="bookFormTask.project_name || bookFormTask.project">📁 {{ bookFormTask.project_name || bookFormTask.project }}</span>
-              <span v-if="bookFormTask.priority">· {{ bookFormTask.priority }}</span>
-              <span v-if="bookFormTask.due_date">· due {{ bookFormTask.due_date }}</span>
-              <span v-if="bookFormTask.status">· {{ bookFormTask.status }}</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-x-2 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-              <span>planned <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(bookFormTask.booked_hours) }}h</b></span>
-              <span>· logged <b class="text-emerald-500">{{ fmtHrs(bookFormTask.logged_hours) }}h</b></span>
-              <span>· expected <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(bookFormTask.estimate_hours) }}h</b></span>
-            </div>
-            <div v-if="bookFormTask.description" class="text-[11px] leading-snug break-words max-h-24 overflow-y-auto" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">{{ bookFormTask.description }}</div>
-          </div>
-          <!-- Date & Time: when work, show Start & End; when away, show Date only (All-Day) -->
-          <div v-if="bookForm.mode === 'work'" class="grid grid-cols-3 gap-2">
-            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Date</span>
-              <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Start</span>
-              <input type="time" v-model="bookForm.start_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">End</span>
-              <input type="time" v-model="bookForm.end_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-          </div>
-          <div v-else class="space-y-1">
-            <label class="block"><span class="text-[11px] font-bold text-gray-500">Date</span>
-              <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day away event on the calendar banner.</div>
-          </div>
-          <label class="block"><span class="text-[11px] font-bold text-gray-500">Notes (optional)</span>
-            <input type="text" v-model="bookForm.deliverable_notes" :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : 'Reason / coverage details'" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-        </div>
-        <div class="flex justify-end gap-2 pt-1">
-          <button type="button" @click="showBookModal = false" class="text-xs font-bold px-4 py-2 rounded-xl cursor-pointer" :class="isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'">Cancel</button>
-          <button type="button" @click="submitBooking" :disabled="plannerBusy" class="text-xs font-bold px-4 py-2 rounded-xl bg-[#1B64DA] hover:bg-blue-600 text-white cursor-pointer disabled:opacity-50">{{ bookForm.mode === 'work' ? 'Book block' : 'Mark away' }}</button>
-        </div>
+  <f-dialog
+    v-model="showBookModal"
+    :title="bookForm.mode === 'work' ? 'Book a work block' : 'Mark time away'"
+    size="sm"
+    z-index="z-[60]"
+  >
+    <div class="space-y-3">
+      <div class="flex gap-1.5">
+        <button v-for="m in [['work','🎯 Work'],['🌴 Leave','🌴 Leave'],['🤒 Absent','🤒 Absent']]" :key="m[0]" type="button"
+          @click="bookForm.mode = m[0]"
+          class="flex-1 text-xs font-bold px-2 py-1.5 rounded-lg border cursor-pointer transition-colors"
+          :class="bookForm.mode === m[0] ? (isDarkMode ? 'bg-blue-950/80 border-blue-600 text-blue-200' : 'bg-blue-50 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
+          {{ m[1] }}
+        </button>
       </div>
+      <label v-if="bookForm.mode === 'work'" class="block">
+        <span class="text-[11px] font-bold text-gray-500">Task / work item</span>
+        <select v-model="bookForm.work_item" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'">
+          <option value="">— Ad-hoc (no linked task) —</option>
+          <option v-for="t in plannerData.assigned_tasks" :key="t.ref" :value="t.ref">
+            {{ t.subject }}{{ t.project_name ? ' · [' + t.project_name + ']' : (t.project ? ' · [' + t.project + ']' : '') }}
+          </option>
+        </select>
+      </label>
+      <!-- full detail of the picked task: the native <select> truncates long subjects -->
+      <div v-if="bookForm.mode === 'work' && bookFormTask" class="rounded-xl border px-3 py-2 space-y-1"
+        :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+        <div class="text-xs font-bold leading-snug break-words" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">{{ bookFormTask.subject }}</div>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+          <span v-if="bookFormTask.project_name || bookFormTask.project">📁 {{ bookFormTask.project_name || bookFormTask.project }}</span>
+          <span v-if="bookFormTask.priority">· {{ bookFormTask.priority }}</span>
+          <span v-if="bookFormTask.due_date">· due {{ bookFormTask.due_date }}</span>
+          <span v-if="bookFormTask.status">· {{ bookFormTask.status }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-2 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+          <span>planned <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(bookFormTask.booked_hours) }}h</b></span>
+          <span>· logged <b class="text-emerald-500">{{ fmtHrs(bookFormTask.logged_hours) }}h</b></span>
+          <span>· expected <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(bookFormTask.estimate_hours) }}h</b></span>
+        </div>
+        <div v-if="bookFormTask.description" class="text-[11px] leading-snug break-words max-h-24 overflow-y-auto" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">{{ bookFormTask.description }}</div>
+      </div>
+      <!-- Date & Time: when work, show Start & End; when away, show Date only (All-Day) -->
+      <div v-if="bookForm.mode === 'work'" class="grid grid-cols-3 gap-2">
+        <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Date</span>
+          <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+        <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Start</span>
+          <input type="time" v-model="bookForm.start_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+        <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">End</span>
+          <input type="time" v-model="bookForm.end_time" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+      </div>
+      <div v-else class="space-y-1">
+        <label class="block"><span class="text-[11px] font-bold text-gray-500">Date</span>
+          <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+        <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day away event on the calendar banner.</div>
+      </div>
+      <label class="block"><span class="text-[11px] font-bold text-gray-500">Notes (optional)</span>
+        <input type="text" v-model="bookForm.deliverable_notes" :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : 'Reason / coverage details'" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
     </div>
-  </transition>
+
+    <template #actions>
+      <div class="flex justify-end gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showBookModal = false">Cancel</f-button>
+        <f-button variant="solid" theme="blue" size="sm" @click="submitBooking" :disabled="plannerBusy">{{ bookForm.mode === 'work' ? 'Book block' : 'Mark away' }}</f-button>
+      </div>
+    </template>
+  </f-dialog>
 
   <!-- ========================================== -->
   <!-- PLANNER: BLOCK DETAIL / SESSION LOG DRAWER -->
@@ -2241,254 +2233,235 @@
   <!-- ========================================== -->
   <!-- DEFINE PLANNED TASK MODAL DIALOG           -->
   <!-- ========================================== -->
-  <transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-    <div v-if="showNewTaskModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs">
-      
-      <div class="rounded-t-3xl sm:rounded-3xl shadow-2xl border max-w-lg w-full p-5 sm:p-6 space-y-4 transition-colors max-h-[90vh] overflow-y-auto" :class="isDarkMode ? 'bg-[#1E1E1E] border-[#2A2A2A] text-white' : 'bg-white border-gray-200 text-gray-900'">
-        
-        <div class="flex items-center justify-between pb-3 border-b" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-500 font-bold">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            </div>
-            <div>
-              <h3 class="font-extrabold text-sm sm:text-base">Define Planned Task</h3>
-              <p class="text-[10px] text-gray-500 dark:text-gray-400">Assign work blocks directly to team members</p>
-            </div>
-          </div>
-          <button @click="showNewTaskModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold cursor-pointer touch-target flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">✕</button>
-        </div>
+  <f-dialog
+    v-model="showNewTaskModal"
+    title="Define Planned Task"
+    subtitle="Assign work blocks directly to team members"
+    size="md"
+  >
+    <template #header-icon>
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+    </template>
 
-        <div class="space-y-3.5 text-xs">
-          <!-- Deliverable Notes -->
-          <div>
-            <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Deliverable Notes *</label>
-            <input 
-              type="text" 
-              v-model="newTaskForm.notes" 
-              placeholder="e.g. Implement Cold-Chain Telemetry Logging API" 
-              class="w-full rounded-xl px-3.5 py-2.5 outline-none border transition-colors shadow-xs"
-              :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white placeholder-gray-500 focus:border-blue-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
-          </div>
-
-          <!-- Assignee & Project Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-bold mb-1 flex items-center justify-between" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
-                <span>Assign To (Team Member) *</span>
-                <span class="text-[10px] text-blue-500 font-semibold">Authorized</span>
-              </label>
-              <select v-model="newTaskForm.assignee" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors cursor-pointer text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-                <option v-for="m in teamMembers" :key="m.name" :value="m.name || m.full_name">
-                  👤 {{ m.full_name }} ({{ m.role || 'Team Member' }})
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Project *</label>
-              <select v-model="newTaskForm.project" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors cursor-pointer text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-                <option value="">General Work</option>
-                <option v-for="p in projects" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Work Nature SVG Selection Pills -->
-          <div>
-            <label class="block font-bold mb-1.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Nature *</label>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button 
-                v-for="opt in natureOptions" 
-                :key="opt.id"
-                type="button"
-                @click="newTaskForm.nature = opt.label"
-                class="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer select-none active:scale-95"
-                :class="newTaskForm.nature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-400 hover:bg-[#333333]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100')">
-                <span v-html="opt.svgIcon" class="w-3.5 h-3.5 flex items-center justify-center"></span>
-                <span>{{ opt.label }}</span>
-                <span v-if="!opt.is_working" 
-                  class="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-                  :class="newTaskForm.nature === opt.label ? (isDarkMode ? 'bg-rose-900 text-rose-200' : 'bg-rose-200 text-rose-900') : (isDarkMode ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60' : 'bg-rose-100 text-rose-700 border border-rose-200')">
-                  Non-Paid
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Work Date & Duration Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Date</label>
-              <input type="date" v-model="newTaskForm.date" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-            </div>
-
-            <div>
-              <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Duration (Hours)</label>
-              <input type="number" step="0.5" min="0.5" max="24" v-model="newTaskForm.duration" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-3 pt-3 border-t" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
-          <button @click="showNewTaskModal = false" class="px-4 py-2.5 rounded-full text-xs font-bold transition-colors cursor-pointer" :class="isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'">
-            Cancel
-          </button>
-          <button @click="saveNewPlannedTask" class="px-5 py-2.5 rounded-full text-xs font-bold bg-[#1B64DA] hover:bg-blue-700 text-white transition-all shadow-md cursor-pointer active:scale-95 flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            <span>Assign & Save Task</span>
-          </button>
-        </div>
-
+    <div class="space-y-3.5 text-xs">
+      <!-- Deliverable Notes -->
+      <div>
+        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Deliverable Notes *</label>
+        <f-input
+          size="md"
+          v-model="newTaskForm.notes"
+          placeholder="e.g. Implement Cold-Chain Telemetry Logging API"
+        />
       </div>
 
+      <!-- Assignee & Project Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold mb-1 flex items-center justify-between" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+            <span>Assign To (Team Member) *</span>
+            <span class="text-[10px] text-blue-500 font-semibold">Authorized</span>
+          </label>
+          <select v-model="newTaskForm.assignee" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors cursor-pointer text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
+            <option v-for="m in teamMembers" :key="m.name" :value="m.name || m.full_name">
+              👤 {{ m.full_name }} ({{ m.role || 'Team Member' }})
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Project *</label>
+          <select v-model="newTaskForm.project" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors cursor-pointer text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
+            <option value="">General Work</option>
+            <option v-for="p in projects" :key="p.name" :value="p.name">{{ p.project_name || p.name }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Work Nature SVG Selection Pills -->
+      <div>
+        <label class="block font-bold mb-1.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Nature *</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button 
+            v-for="opt in natureOptions" 
+            :key="opt.id"
+            type="button"
+            @click="newTaskForm.nature = opt.label"
+            class="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer select-none active:scale-95"
+            :class="newTaskForm.nature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-400 hover:bg-[#333333]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100')">
+            <span v-html="opt.svgIcon" class="w-3.5 h-3.5 flex items-center justify-center"></span>
+            <span>{{ opt.label }}</span>
+            <span v-if="!opt.is_working" 
+              class="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+              :class="newTaskForm.nature === opt.label ? (isDarkMode ? 'bg-rose-900 text-rose-200' : 'bg-rose-200 text-rose-900') : (isDarkMode ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60' : 'bg-rose-100 text-rose-700 border border-rose-200')">
+              Non-Paid
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Work Date & Duration Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Date</label>
+          <input type="date" v-model="newTaskForm.date" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Duration (Hours)</label>
+          <input type="number" step="0.5" min="0.5" max="24" v-model="newTaskForm.duration" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
+        </div>
+      </div>
     </div>
-  </transition>
+
+    <template #actions>
+      <div class="flex items-center justify-end gap-3 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showNewTaskModal = false">
+          Cancel
+        </f-button>
+        <f-button variant="solid" theme="blue" size="sm" @click="saveNewPlannedTask">
+          <template #prefix>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+          </template>
+          Assign & Save Task
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
 
   <!-- ========================================== -->
   <!-- ADJUST TIMESHEET TIMING MODAL DIALOG       -->
   <!-- ========================================== -->
-  <transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-    <div v-if="showAdjustModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs" @click.self="showAdjustModal = false" role="dialog" aria-modal="true" aria-label="Adjust Timesheet Timing">
-      
-      <div class="rounded-t-3xl sm:rounded-3xl shadow-2xl border max-w-lg w-full p-5 sm:p-6 space-y-4 transition-colors max-h-[90vh] overflow-y-auto" :class="isDarkMode ? 'bg-[#1E1E1E] border-[#2A2A2A] text-white' : 'bg-white border-gray-200 text-gray-900'">
-        
-        <div class="flex items-center justify-between pb-3 border-b" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-500 font-bold">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </div>
-            <div>
-              <h3 class="font-extrabold text-sm sm:text-base">Adjust Timesheet Timing</h3>
-              <p class="text-[10px] text-gray-500 dark:text-gray-400">Fine-tune start/end times or backdate running session</p>
-            </div>
-          </div>
-          <button @click="showAdjustModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold cursor-pointer touch-target flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Close dialog">✕</button>
+  <f-dialog
+    v-model="showAdjustModal"
+    title="Adjust Timesheet Timing"
+    subtitle="Fine-tune start/end times or backdate running session"
+    size="md"
+  >
+    <template #header-icon>
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </template>
+
+    <!-- Duration Hero Badge Card -->
+    <div class="p-3.5 rounded-2xl border flex items-center justify-between" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
+      <div>
+        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Calculated Duration</div>
+        <div class="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight">{{ adjustDurationFormatted }}</div>
+      </div>
+      <f-badge :theme="adjustDurationMinutes > 0 ? 'green' : 'red'" variant="subtle" size="xs">
+        {{ adjustDurationMinutes > 0 ? '✓ Valid Duration' : 'Invalid Range' }}
+      </f-badge>
+    </div>
+
+    <div class="space-y-4 text-xs">
+      <!-- Session Date -->
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Session Date *</label>
+          <span v-if="!isManager" class="text-[10px] text-gray-400">Allowed: Today & Yesterday</span>
         </div>
-
-        <!-- Duration Hero Badge Card -->
-        <div class="p-3.5 rounded-2xl border flex items-center justify-between" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
-          <div>
-            <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Calculated Duration</div>
-            <div class="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight">{{ adjustDurationFormatted }}</div>
-          </div>
-          <f-badge :theme="adjustDurationMinutes > 0 ? 'green' : 'red'" variant="subtle" size="xs">
-            {{ adjustDurationMinutes > 0 ? '✓ Valid Duration' : 'Invalid Range' }}
-          </f-badge>
-        </div>
-
-        <div class="space-y-4 text-xs">
-          <!-- Session Date -->
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Session Date *</label>
-              <span v-if="!isManager" class="text-[10px] text-gray-400">Allowed: Today & Yesterday</span>
-            </div>
-            <input
-              type="date"
-              v-model="adjustForm.work_date"
-              :min="minTimesheetDate"
-              :max="todayDate"
-              class="w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
-            />
-          </div>
-
-          <!-- Start Time (From) + Quick Nudge Chips -->
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Start Time (From) *</label>
-              <span class="text-[10px] text-gray-400">Quick adjust</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <input
-                type="time"
-                step="60"
-                v-model="adjustForm.from_time"
-                class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
-              />
-              <div class="flex items-center gap-1">
-                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
-                <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
-                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
-              </div>
-            </div>
-          </div>
-
-          <!-- End Time (To) + Quick Nudge Chips -->
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">End Time (To) *</label>
-              <span class="text-[10px] text-gray-400">Quick adjust</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <input
-                type="time"
-                step="60"
-                v-model="adjustForm.to_time"
-                class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
-              />
-              <div class="flex items-center gap-1">
-                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('to', -5)" title="Finished 5m earlier">-5m</f-button>
-                <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('to', 5)" title="Finished 5m later">+5m</f-button>
-                <f-button size="xs" variant="outline" theme="green" @click="setAdjustEndNow" title="Set End Time to Right Now">Now</f-button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Notes / Activity Log -->
-          <div>
-            <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Notes / Activity Log</label>
-            <textarea
-              v-model="adjustForm.notes"
-              rows="3"
-              placeholder="What did you work on during this period?"
-              class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
-            ></textarea>
-          </div>
-        </div>
-
-        <!-- Footer Actions -->
-        <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
-          <f-button variant="ghost" theme="gray" size="sm" @click="showAdjustModal = false">
-            Cancel
-          </f-button>
-          
-          <div class="flex items-center gap-2">
-            <!-- Two blue buttons side by side read as the same button. Say plainly which
-                 one stops the clock and which one leaves it running. -->
-            <f-button
-              v-if="isTracking"
-              variant="outline"
-              theme="gray"
-              size="sm"
-              @click="applyAdjustedStartTime"
-              title="Correct the start time and carry on timing — nothing is written to your timesheet">
-              Fix start, keep running
-            </f-button>
-
-            <f-button
-              variant="solid"
-              theme="blue"
-              size="sm"
-              @click="submitAdjustedTimesheet"
-              :disabled="adjustDurationMinutes <= 0"
-              :title="isTracking ? 'Stop the clock and write this to your timesheet' : 'Write this to your timesheet'">
-              <template #prefix>
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-              </template>
-              {{ isTracking ? 'Stop & log ' + adjustDurationShort : 'Log ' + adjustDurationShort }}
-            </f-button>
-          </div>
-        </div>
-
+        <input
+          type="date"
+          v-model="adjustForm.work_date"
+          :min="minTimesheetDate"
+          :max="todayDate"
+          class="w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+        />
       </div>
 
+      <!-- Start Time (From) + Quick Nudge Chips -->
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Start Time (From) *</label>
+          <span class="text-[10px] text-gray-400">Quick adjust</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input
+            type="time"
+            step="60"
+            v-model="adjustForm.from_time"
+            class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+          />
+          <div class="flex items-center gap-1">
+            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
+            <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
+            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- End Time (To) + Quick Nudge Chips -->
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">End Time (To) *</label>
+          <span class="text-[10px] text-gray-400">Quick adjust</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input
+            type="time"
+            step="60"
+            v-model="adjustForm.to_time"
+            class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+          />
+          <div class="flex items-center gap-1">
+            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('to', -5)" title="Finished 5m earlier">-5m</f-button>
+            <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('to', 5)" title="Finished 5m later">+5m</f-button>
+            <f-button size="xs" variant="outline" theme="green" @click="setAdjustEndNow" title="Set End Time to Right Now">Now</f-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes / Activity Log -->
+      <div>
+        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Notes / Activity Log</label>
+        <textarea
+          v-model="adjustForm.notes"
+          rows="3"
+          placeholder="What did you work on during this period?"
+          class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
+        ></textarea>
+      </div>
     </div>
-  </transition>
+
+    <!-- Footer Actions -->
+    <template #actions>
+      <div class="flex flex-wrap items-center justify-between gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showAdjustModal = false">
+          Cancel
+        </f-button>
+        
+        <div class="flex items-center gap-2">
+          <!-- Two blue buttons side by side read as the same button. Say plainly which
+               one stops the clock and which one leaves it running. -->
+          <f-button
+            v-if="isTracking"
+            variant="outline"
+            theme="gray"
+            size="sm"
+            @click="applyAdjustedStartTime"
+            title="Correct the start time and carry on timing — nothing is written to your timesheet">
+            Fix start, keep running
+          </f-button>
+
+          <f-button
+            variant="solid"
+            theme="blue"
+            size="sm"
+            @click="submitAdjustedTimesheet"
+            :disabled="adjustDurationMinutes <= 0"
+            :title="isTracking ? 'Stop the clock and write this to your timesheet' : 'Write this to your timesheet'">
+            <template #prefix>
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+            </template>
+            {{ isTracking ? 'Stop & log ' + adjustDurationShort : 'Log ' + adjustDurationShort }}
+          </f-button>
+        </div>
+      </div>
+    </template>
+  </f-dialog>
 
 </div>
 
@@ -2636,29 +2609,288 @@
       type: { type: String, default: 'text' },
       placeholder: { type: String, default: '' },
       disabled: { type: Boolean, default: false },
-      size: { type: String, default: 'sm' }
+      size: { type: String, default: 'sm' },
+      ariaLabel: { type: String, default: null }
     },
-    emits: ['update:modelValue'],
+    emits: ['update:modelValue', 'input', 'keydown'],
     computed: {
       classes() {
-        const base = 'w-full text-xs rounded-xl outline-none border transition-colors shadow-xs focus:ring-2';
+        const base = 'w-full text-xs font-medium rounded-xl outline-none border transition-colors shadow-xs focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed';
         const sizes = {
-          sm: 'py-2 pl-3.5 pr-9',
-          md: 'py-2.5 pl-4 pr-10'
-        }[this.size] || 'py-2 pl-3.5 pr-9';
-        const theme = 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20 dark:bg-[#1E1F22] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/25';
+          sm: 'py-2 pl-3.5 ' + (this.$slots.suffix ? 'pr-8' : 'pr-3.5'),
+          md: 'py-2.5 pl-4 ' + (this.$slots.suffix ? 'pr-9' : 'pr-4'),
+          lg: 'py-3 pl-4.5 ' + (this.$slots.suffix ? 'pr-10' : 'pr-4.5')
+        }[this.size] || 'py-2 pl-3.5 pr-3.5';
+        const theme = 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/25';
         return [base, sizes, theme].join(' ');
       }
     },
     template: `
-      <input
-        :type="type"
-        :value="modelValue"
-        :placeholder="placeholder"
-        :disabled="disabled"
-        :class="classes"
-        @input="$emit('update:modelValue', $event.target.value)"
-      />
+      <div class="relative w-full flex items-center">
+        <input
+          :type="type"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :disabled="disabled"
+          :aria-label="ariaLabel"
+          :class="classes"
+          @input="$emit('update:modelValue', $event.target.value); $emit('input', $event)"
+          @keydown="$emit('keydown', $event)"
+        />
+        <div v-if="$slots.suffix" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+          <slot name="suffix"></slot>
+        </div>
+      </div>
+    `
+  };
+
+  const FCard = {
+    name: 'FCard',
+    props: {
+      title: { type: String, default: null },
+      subtitle: { type: String, default: null },
+      highlight: { type: Boolean, default: false },
+      padded: { type: Boolean, default: true }
+    },
+    computed: {
+      classes() {
+        const base = 'rounded-3xl border shadow-sm transition-all duration-200 bg-white border-gray-200 text-gray-900 dark:bg-[#1E1F22] dark:border-gray-800 dark:text-white';
+        const p = this.padded ? 'p-5 sm:p-6' : '';
+        const h = this.highlight ? 'ring-2 ring-blue-500/60' : '';
+        return [base, p, h].filter(Boolean).join(' ');
+      }
+    },
+    template: `
+      <div :class="classes">
+        <div v-if="title || $slots.header" class="flex items-center justify-between pb-3 mb-3 border-b border-gray-100 dark:border-gray-800">
+          <div>
+            <h3 v-if="title" class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ title }}</h3>
+            <p v-if="subtitle" class="text-[11px] text-gray-400 dark:text-gray-500">{{ subtitle }}</p>
+          </div>
+          <slot name="header"></slot>
+        </div>
+        <slot></slot>
+      </div>
+    `
+  };
+
+  const FDropdown = {
+    name: 'FDropdown',
+    props: {
+      modelValue: [String, Number],
+      options: { type: Array, default: () => [] },
+      placeholder: { type: String, default: 'Select option' },
+      disabled: { type: Boolean, default: false },
+      ariaLabel: { type: String, default: 'Select' }
+    },
+    emits: ['update:modelValue', 'change'],
+    data() {
+      return {
+        isOpen: false,
+        focusedIdx: -1
+      };
+    },
+    computed: {
+      selectedOption() {
+        return this.options.find(o => (typeof o === 'object' ? o.value : o) === this.modelValue);
+      },
+      displayLabel() {
+        if (!this.selectedOption) return this.placeholder;
+        return typeof this.selectedOption === 'object' ? this.selectedOption.label : this.selectedOption;
+      }
+    },
+    mounted() {
+      document.addEventListener('pointerdown', this.onOutside);
+    },
+    unmounted() {
+      document.removeEventListener('pointerdown', this.onOutside);
+    },
+    methods: {
+      onOutside(e) {
+        if (this.$el && !this.$el.contains(e.target)) {
+          this.isOpen = false;
+        }
+      },
+      toggle() {
+        if (this.disabled) return;
+        this.isOpen = !this.isOpen;
+        if (this.isOpen) {
+          const idx = this.options.findIndex(o => (typeof o === 'object' ? o.value : o) === this.modelValue);
+          this.focusedIdx = Math.max(0, idx);
+        }
+      },
+      select(opt) {
+        const val = typeof opt === 'object' ? opt.value : opt;
+        this.$emit('update:modelValue', val);
+        this.$emit('change', val);
+        this.isOpen = false;
+      },
+      onKeydown(e) {
+        if (this.disabled) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (!this.isOpen) { this.isOpen = true; this.focusedIdx = 0; return; }
+          this.focusedIdx = (this.focusedIdx + 1) % this.options.length;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (!this.isOpen) { this.isOpen = true; this.focusedIdx = this.options.length - 1; return; }
+          this.focusedIdx = (this.focusedIdx - 1 + this.options.length) % this.options.length;
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          if (this.isOpen && this.focusedIdx >= 0 && this.options[this.focusedIdx]) {
+            e.preventDefault();
+            this.select(this.options[this.focusedIdx]);
+          }
+        } else if (e.key === 'Escape') {
+          if (this.isOpen) {
+            e.preventDefault();
+            this.isOpen = false;
+          }
+        }
+      }
+    },
+    template: `
+      <div class="relative w-full" data-f-dropdown>
+        <button
+          type="button"
+          :disabled="disabled"
+          @click="toggle"
+          @keydown="onKeydown"
+          :aria-expanded="isOpen ? 'true' : 'false'"
+          :aria-label="ariaLabel"
+          aria-haspopup="listbox"
+          class="w-full flex items-center justify-between gap-2 text-xs font-medium rounded-xl px-3 py-2.5 outline-none border transition-colors shadow-xs cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500/40 bg-white border-gray-300 text-gray-700 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-gray-200"
+        >
+          <span class="truncate">{{ displayLabel }}</span>
+          <svg class="w-3 h-3 shrink-0 fill-current opacity-50 transition-transform" :class="isOpen ? 'rotate-180' : ''" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+
+        <ul
+          v-if="isOpen"
+          role="listbox"
+          :aria-label="ariaLabel"
+          class="absolute z-40 left-0 right-0 mt-1 py-1 max-h-52 overflow-y-auto rounded-xl border shadow-lg bg-white border-gray-200 dark:bg-[#2B2D30] dark:border-gray-700"
+        >
+          <li v-if="options.length === 0" class="px-3 py-2 text-[11px] text-gray-400">
+            No options available
+          </li>
+          <li
+            v-for="(opt, i) in options"
+            :key="typeof opt === 'object' ? opt.value : opt"
+            role="option"
+            :aria-selected="(typeof opt === 'object' ? opt.value : opt) === modelValue ? 'true' : 'false'"
+            @click="select(opt)"
+            @pointerenter="focusedIdx = i"
+            class="flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer select-none"
+            :class="i === focusedIdx ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/20 dark:text-white' : 'text-gray-700 dark:text-gray-300'"
+          >
+            <span class="truncate">{{ typeof opt === 'object' ? opt.label : opt }}</span>
+            <slot name="item-extra" :option="opt">
+              <span v-if="typeof opt === 'object' && opt.nonWorking" class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0 bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">Non-Paid</span>
+              <span v-else-if="(typeof opt === 'object' ? opt.value : opt) === modelValue" class="text-blue-500 font-bold">✓</span>
+            </slot>
+          </li>
+        </ul>
+      </div>
+    `
+  };
+
+  const FDialog = {
+    name: 'FDialog',
+    props: {
+      modelValue: { type: Boolean, default: false },
+      title: { type: String, default: null },
+      subtitle: { type: String, default: null },
+      size: { type: String, default: 'md' },
+      zIndex: { type: String, default: 'z-50' },
+      dismissible: { type: Boolean, default: true },
+      ariaLabel: { type: String, default: null }
+    },
+    emits: ['update:modelValue', 'close'],
+    computed: {
+      sizeClass() {
+        return {
+          sm: 'max-w-md',
+          md: 'max-w-lg',
+          lg: 'max-w-2xl',
+          xl: 'max-w-4xl'
+        }[this.size] || 'max-w-lg';
+      }
+    },
+    mounted() {
+      this._keyHandler = (e) => {
+        if (e.key === 'Escape' && this.dismissible && this.modelValue) {
+          this.close();
+        }
+      };
+      window.addEventListener('keydown', this._keyHandler);
+    },
+    unmounted() {
+      if (this._keyHandler) {
+        window.removeEventListener('keydown', this._keyHandler);
+      }
+    },
+    methods: {
+      close() {
+        if (!this.dismissible) return;
+        this.$emit('update:modelValue', false);
+        this.$emit('close');
+      }
+    },
+    template: `
+      <transition
+        enter-active-class="transition ease-out duration-200"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition ease-in duration-150"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="modelValue"
+          :class="['fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs', zIndex]"
+          @click.self="dismissible && close()"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="title || ariaLabel || 'Dialog'"
+        >
+          <div
+            class="rounded-t-3xl sm:rounded-3xl shadow-2xl border w-full p-5 sm:p-6 space-y-4 transition-colors max-h-[90vh] overflow-y-auto bg-white border-gray-200 text-gray-900 dark:bg-[#1E1E1E] dark:border-[#2A2A2A] dark:text-white"
+            :class="sizeClass"
+          >
+            <!-- Header -->
+            <div v-if="title || $slots.header || $slots['header-icon']" class="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-[#2A2A2A]">
+              <slot name="header">
+                <div class="flex items-center gap-2.5">
+                  <div v-if="$slots['header-icon']" class="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-500 font-bold shrink-0">
+                    <slot name="header-icon"></slot>
+                  </div>
+                  <div>
+                    <h3 v-if="title" class="font-extrabold text-sm sm:text-base">{{ title }}</h3>
+                    <p v-if="subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">{{ subtitle }}</p>
+                  </div>
+                </div>
+              </slot>
+              <button
+                v-if="dismissible"
+                type="button"
+                @click="close"
+                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold cursor-pointer touch-target flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close dialog"
+              >✕</button>
+            </div>
+
+            <!-- Body -->
+            <slot></slot>
+
+            <!-- Actions / Footer -->
+            <div v-if="$slots.actions || $slots.footer" class="pt-3 border-t border-gray-200 dark:border-[#2A2A2A]">
+              <slot name="actions">
+                <slot name="footer"></slot>
+              </slot>
+            </div>
+          </div>
+        </div>
+      </transition>
     `
   };
 
@@ -2669,7 +2901,13 @@
       FBadge,
       'f-badge': FBadge,
       FInput,
-      'f-input': FInput
+      'f-input': FInput,
+      FCard,
+      'f-card': FCard,
+      FDropdown,
+      'f-dropdown': FDropdown,
+      FDialog,
+      'f-dialog': FDialog
     },
     setup() {
       // 1. Navigation & Theme
@@ -3645,10 +3883,25 @@
       const modKey = isMacLike ? '\u2318' : 'Ctrl';
 
       const _slashFocus = (ev) => {
-        // Cmd/Ctrl+S saves the session instead of the browser page.
+        // Cmd/Ctrl+S stops the session instead of saving the browser page.
         if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 's') {
           ev.preventDefault();
           if (isTracking.value) toggleTrack();
+          else showToast('No session is running', 'info');
+          return;
+        }
+        // Cmd/Ctrl+D discards. Destructive, but discardSession already asks once and
+        // only throws the session away on the second press, so the key is safe.
+        if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 'd') {
+          ev.preventDefault();
+          if (isTracking.value) discardSession();
+          else showToast('No session is running', 'info');
+          return;
+        }
+        // Cmd/Ctrl+E opens Adjust, to fix the start/end of the running clock.
+        if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 'e') {
+          ev.preventDefault();
+          if (isTracking.value) openAdjustModal();
           else showToast('No session is running', 'info');
           return;
         }
@@ -3677,17 +3930,22 @@
         // Preserved for backwards-compatibility
       };
 
-      // Stopping is destructive-ish: an empty session saves a timesheet with no
-      // deliverable lines. Ask once, then let them through.
+      // A timesheet with no lines is an hour with nothing attached to it. The
+      // manager reading it cannot tell what was done, and when the hour reaches a
+      // client's invoice it reads as time billed for no work. So this is a hard
+      // rule, not a confirmation: no lines, no save.
+      const sessionHasLines = computed(() =>
+        (sessionNotesList.value || []).some(p => String(p || '').trim().length >= 3)
+      );
+      const refuseEmptySession = () => {
+        showToast('Write at least one line first — a timesheet with no description tells your manager (and the client being billed) nothing about the hour.', 'warning');
+        focusSessionPointInput();
+      };
+
       const stopConfirmName = ref('');
       const requestStopFocusBlock = (b) => {
         const running = isTracking.value && trackerBlockName.value === b.name;
-        if (running && !(sessionNotesList.value || []).length && stopConfirmName.value !== b.name) {
-          stopConfirmName.value = b.name;
-          showToast('Nothing is logged for this session yet — add a line, or press Stop anyway.', 'warning');
-          focusSessionPointInput();
-          return;
-        }
+        if (running && !sessionHasLines.value) { refuseEmptySession(); return; }
         stopConfirmName.value = '';
         startFocusBlock(b);
       };
@@ -3943,6 +4201,9 @@
           }, 1000);
           showToast(`Focus timer started for ${selectedNature.value}`, 'info');
         } else {
+          // Checked before the clock is torn down, so a refused stop leaves the
+          // session exactly as it was and nothing is lost.
+          if (!sessionHasLines.value) { refuseEmptySession(); return; }
           triggerHaptic([40, 50, 40]);
           isTracking.value = false;
           if (trackerTimer.value) clearInterval(trackerTimer.value);
@@ -4184,6 +4445,11 @@
         }
         if (adjustDurationMinutes.value <= 0) {
           showToast('Duration must be greater than 0 minutes', 'warning');
+          return;
+        }
+        // The modal has its own notes box, so either source satisfies the rule.
+        if (!sessionHasLines.value && String(adjustForm.value.notes || '').trim().length < 3) {
+          showToast('Describe what you did in the notes below before logging this time — an hour with no description cannot be justified to a manager or a client.', 'warning');
           return;
         }
 
@@ -4611,6 +4877,24 @@
         if (st === 'missed') return 'border-solid border-dashed';
         return 'border-solid';
       };
+      // Day at a glance borrows the planner grid's colour language: the hue says
+      // which project, the treatment says which lane. A hollow tinted bar is what
+      // was planned; the solid bar beneath it is what was actually logged against
+      // that same project, so a short or missing session is visible as bare outline.
+      const timelinePlannedStyle = (b) => {
+        const h = projectHue(b);
+        return isDarkMode.value
+          ? { background: `hsl(${h} 45% 18% / .75)`, borderColor: `hsl(${h} 45% 42%)`, color: `hsl(${h} 70% 82%)` }
+          : { background: `hsl(${h} 85% 96%)`, borderColor: `hsl(${h} 60% 68%)`, color: `hsl(${h} 55% 30%)` };
+      };
+      const timelineLoggedStyle = (r) => {
+        // Time logged where nothing was planned stays rose: that is the one thing
+        // the project hue must not be allowed to blend into the rest of the day.
+        if (!r.onPlan) return { background: isDarkMode.value ? '#9f1239' : '#e11d48' };
+        const h = projectHue(r.block);
+        return { background: isDarkMode.value ? `hsl(${h} 55% 40%)` : `hsl(${h} 62% 42%)` };
+      };
+
       const blockStyle = (b) => {
         const st = blockVisualState(b);
         const dark = isDarkMode.value;
@@ -5223,6 +5507,7 @@
           return;
         }
         if (!f.hours && !(f.from_time && f.to_time)) { showToast('Enter hours or a from/to time', 'danger'); return; }
+        if (String(f.notes || '').trim().length < 3) { showToast('Describe what you did in the notes — a session with no description cannot be read by a manager or a client.', 'danger'); return; }
         plannerBusy.value = true;
         try {
           await postJSON('log_work_session', {
@@ -5474,6 +5759,7 @@
         dashboardKPIs,
         updateDashboardKPIs,
         sessionNotesList,
+        sessionHasLines,
         sessionNotesRows,
         sessionCardRef,
         sessionCardFlash,
@@ -5555,6 +5841,8 @@
         pastShadeStyle,
         officeBandStyle,
         blockStyle,
+        timelinePlannedStyle,
+        timelineLoggedStyle,
         blockVisualState,
         isBlockLocked,
         focusBlocksHeading,
