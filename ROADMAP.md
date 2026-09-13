@@ -230,3 +230,13 @@ Open items from this pass:
 - `bench --site … clear-website-cache` is needed for `www/*.html` edits to reach the
   browser; document in AGENTS.md.
 - No regression test yet for the new stop/discard guards or the day-strip roving focus.
+
+### Day view: plan vs timesheet (2026-09-13, later)
+- Planner day / 4-day views showed an empty grid with no explanation when the anchor day had no blocks — added a "Nothing is planned for <range>" banner with a "Go to <nearest day with work>" jump (the fetch already returns the whole anchor week).
+- Dashboard bucketing was time-of-day only, so blocks on a **past** date were listed under "Upcoming Focus Blocks". A block on a past date now always falls in the past bucket; the headings are date-aware ("Focus blocks that were planned" / "What happened · plan vs timesheet").
+- Past-day cards now carry the calendar's reading in words: planned vs logged, a plan-vs-actual bar (emerald met / amber short / rose over), and the individual sessions with their times and notes — or "No timesheet was recorded against this block."
+- "Day at a glance": one horizontal timeline per day — planned blocks on the top lane, logged sessions on the lane below, off-plan sessions in rose, with planned/logged/unlogged totals. Segments use the planner's rich hover card (lifted out of the planner tab so every view can use it), are keyboard-focusable and open the block drawer.
+- Timeline has a 6h / 12h / 24h zoom toggle with horizontal scroll; default is device-based (6h mobile, 12h tablet, 24h desktop).
+- Day block lists sort by start time, latest first.
+- Past card meta row: project before status.
+- Session-log toolbar (clock + Discard + Stop & Save) overlapped itself at 375px — now wraps instead.
