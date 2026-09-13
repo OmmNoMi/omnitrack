@@ -241,14 +241,19 @@ def get_team_heatmap_data(days=14):
 @frappe.whitelist()
 def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None,
 					  deliverable_notes=None, work_nature=None,
-					  duration_hours=None, notes=None, task_nature=None):
+					  duration_hours=None, notes=None, task_nature=None,
+					  from_time=None, to_time=None, work_date=None):
 	"""
 	Quick Stopwatch Punch API from Desktop / Mobile HUD / Workstation.
 	Creates/Completes a Planned Work Block and triggers attendance synthesis.
+	Supports adjusted and backdated start/end datetimes.
 	"""
 	user = frappe.session.user
 	today = nowdate()
-	now_t = nowtime()
+	target_date = work_date or today
+
+	from omnitrack.permissions import check_timesheet_date_permission
+	check_timesheet_date_permission(target_date, user)
 
 	deliverable_notes = deliverable_notes or notes
 	work_nature = work_nature or task_nature
@@ -272,20 +277,26 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 	dur_secs = flt(duration_seconds)
 	if dur_secs <= 0 and duration_hours is not None:
 		dur_secs = flt(duration_hours) * 3600.0
+	elif dur_secs <= 0 and from_time and to_time:
+		dur_secs = _duration_hours(from_time, to_time) * 3600.0
 
 	dur_hours = flt(duration_hours) if duration_hours is not None and flt(duration_hours) > 0 else (max(round(dur_secs / 3600.0, 2), 0.01) if dur_secs > 0 else 0.5)
 
 	if action in ("stop", "punch_out", "save_block"):
 		# Calculate start time
 		from datetime import datetime, timedelta
-		now_dt = datetime.now()
-		start_dt = now_dt - timedelta(seconds=max(dur_secs, 60))
-		start_t = start_dt.strftime("%H:%M:%S")
-		end_t = now_dt.strftime("%H:%M:%S")
+		if from_time and to_time:
+			start_t = _time_str(from_time)
+			end_t = _time_str(to_time)
+		else:
+			now_dt = datetime.now()
+			start_dt = now_dt - timedelta(seconds=max(dur_secs, 60))
+			start_t = start_dt.strftime("%H:%M:%S")
+			end_t = now_dt.strftime("%H:%M:%S")
 
 		block = frappe.new_doc("Planned Work Block")
 		block.employee = user
-		block.work_date = today
+		block.work_date = target_date
 		block.start_time = start_t
 		block.end_time = end_t
 		block.duration_hours = dur_hours
@@ -314,6 +325,12 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 			chk.log_type = "OUT"
 			chk.flags.ignore_permissions = True
 			chk.insert()
+
+		# Auto-clear any in-flight active session across devices
+		try:
+			sync_active_session(None)
+		except Exception:
+			pass
 
 		return {
 			"status": "success",
@@ -463,6 +480,106 @@ def process_offline_sync(data=None):
 			doc.insert(ignore_permissions=True)
 			synced.append(doc.name)
 	return {"status": "success", "synced_records": synced}
+
+
+@frappe.whitelist()
+def sync_active_session(session_data=None):
+	"""
+	Synchronizes the in-flight stopwatch session across devices (Desktop, Mobile PWA, Tablet).
+	Persists to high-speed Redis cache and durable database storage (tabDefaultValue).
+	"""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		return {"status": "ignored", "reason": "Guest"}
+
+	if isinstance(session_data, str):
+		try:
+			session_data = json.loads(session_data)
+		except Exception:
+			session_data = None
+
+	# If session_data is empty or status is stopped/cleared, delete the active session
+	if not session_data or session_data.get("status") in ("stopped", "cleared", "discarded"):
+		frappe.cache.hdel("omnitrack:active_session", user)
+		frappe.db.sql(
+			"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
+			{"user": user}
+		)
+		frappe.db.commit()
+		try:
+			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": user}, user=user)
+		except Exception:
+			pass
+		return {"status": "cleared"}
+
+	# Normalize session fields
+	clean_data = {
+		"startTime": flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000)),
+		"selectedNature": session_data.get("selectedNature") or "🎯 Planned",
+		"selectedProject": session_data.get("selectedProject") or "",
+		"trackerNotes": (session_data.get("trackerNotes") or "").strip(),
+		"trackerBlockName": session_data.get("trackerBlockName") or None,
+		"sessionNotesList": session_data.get("sessionNotesList") if isinstance(session_data.get("sessionNotesList"), list) else [],
+		"lastUpdated": int(datetime.now().timestamp() * 1000),
+		"status": "active"
+	}
+
+	# 1. High-speed cache
+	frappe.cache.hset("omnitrack:active_session", user, clean_data)
+
+	# 2. Durable database persistence
+	json_str = json.dumps(clean_data)
+	frappe.db.set_default("omnitrack_active_session", json_str, parent=user)
+	frappe.db.commit()
+
+	try:
+		frappe.publish_realtime("omnitrack:active_session_updated", clean_data, user=user)
+	except Exception:
+		pass
+
+	return {"status": "success", "session": clean_data}
+
+
+@frappe.whitelist()
+def get_active_session(user=None):
+	"""
+	Returns the currently in-flight active session for the user across devices.
+	Automatically expires sessions older than 24 hours.
+	"""
+	target_user = user or frappe.session.user
+	if not target_user or target_user == "Guest":
+		return None
+
+	data = frappe.cache.hget("omnitrack:active_session", target_user)
+	if not data:
+		raw_db = frappe.db.get_default("omnitrack_active_session", target_user)
+		if raw_db:
+			try:
+				data = json.loads(raw_db) if isinstance(raw_db, str) else raw_db
+				if isinstance(data, dict):
+					frappe.cache.hset("omnitrack:active_session", target_user, data)
+			except Exception:
+				data = None
+
+	if not data or not isinstance(data, dict):
+		return None
+
+	# Check expiration (24h threshold)
+	start_time = flt(data.get("startTime", 0))
+	if start_time > 0:
+		now_ms = datetime.now().timestamp() * 1000
+		diff_seconds = (now_ms - start_time) / 1000.0
+		if diff_seconds > 86400 or diff_seconds < -300:
+			frappe.cache.hdel("omnitrack:active_session", target_user)
+			frappe.db.sql(
+				"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
+				{"user": target_user}
+			)
+			frappe.db.commit()
+			return None
+
+	return data
+
 
 @frappe.whitelist()
 def get_workstation_data(employee=None, work_date=None, project=None):
@@ -653,7 +770,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		"kpis": get_dashboard_kpis(employee=employee),
 		"heatmap": heatmap,
 		"synthesizer_logs": syn_logs,
-		"today_date": today
+		"today_date": today,
+		"active_session": get_active_session(user=current_user)
 	}
 
 @frappe.whitelist()
@@ -1332,6 +1450,13 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		})
 	doc.flags.ignore_permissions = True
 	doc.save()
+
+	# Auto-clear any in-flight active session across devices
+	try:
+		sync_active_session(None)
+	except Exception:
+		pass
+
 	return {
 		"status": "success",
 		"name": doc.name,

@@ -240,3 +240,63 @@ Open items from this pass:
 - Day block lists sort by start time, latest first.
 - Past card meta row: project before status.
 - Session-log toolbar (clock + Discard + Stop & Save) overlapped itself at 375px — now wraps instead.
+
+### Planner gestures + session toolbar (2026-09-13, later)
+
+- **Press-and-hold to grab.** Drag-to-move, edge-resize and drag-to-select on the
+  planner grid no longer fire on a plain pointerdown. The pointer must be held still
+  (touch 400ms, mouse 200ms, 8px slop) before anything is grabbed, so a swipe to scroll
+  the grid on mobile — or a stray mouse-down on desktop — scrolls instead of
+  rescheduling. The armed block gets a ring + slight scale and a haptic tick;
+  `touch-action` flips to `none` only once armed, and back on release.
+- **`pointercancel` aborts instead of committing.** Found while verifying the hold gate:
+  a browser-cancelled gesture (system gesture, palm, scroll takeover) was running the
+  same end handler as `pointerup`, so it saved the move / opened the booking modal.
+  Both `endBlockDrag` and `endSlotSelect` now discard on `pointercancel` and unregister
+  their sibling listener.
+- **Session toolbar is one tab stop.** Discard + Stop & Save are a WAI-ARIA toolbar with
+  roving tabindex: Tab reaches the group once (landing on Stop & Save), ArrowLeft moves to
+  Discard, ArrowRight back, Home/End jump. Tab can no longer land on Discard by accident.
+
+### Cross-Device Active Session Synchronization & Guard Invariants (2026-09-13)
+
+- **Seamless Computer ↔ Mobile Phone Stopwatch Handoff.** Previously, an active session
+  started on a computer was stored only in the browser's local `localStorage`. Walking
+  outside with a mobile phone resulted in a blank/standby HUD with no way to add lines
+  or close the session from the phone.
+  - Backend: Added `sync_active_session` and `get_active_session` endpoints using a
+    dual-tier persistence model (sub-millisecond Redis cache `frappe.cache` + durable
+    database persistence `tabDefaultValue` scoped to `frappe.session.user`).
+  - Auto-delivery: Server injects active session directly into `window.OMNITRACK_SESSION`
+    on initial SSR and delivers it in `get_workstation_data()["active_session"]`.
+  - Multi-device syncing: Starting or updating notes/lines from any device (desktop or mobile)
+    persists to server and broadcasts via Frappe realtime WebSockets (`omnitrack:active_session_updated`).
+  - Safe lifecycle: Stopping or discarding the session on mobile automatically logs the
+    full timesheet (including lines logged across both devices), clears the server session,
+    and broadcasts `omnitrack:active_session_cleared` so the computer HUD resets to standby.
+- **Defensive KPI Merging & Null Guarding.** Fixed template crash risk if partial KPI
+  payloads are returned. Deep per-section merge ensures `dashboardKPIs.today`, `week`,
+  and `month` are always fully-formed objects with fallback values.
+- **Automated Template Tag-Balance & Setup Export Guard Tests.** Added Python AST/HTML
+  parsing regression tests in `test_planned_work_block.py` (`test_omnitrack_html_tag_balance`
+  and `test_omnitrack_template_setup_exports`) preventing broken markup or unexported
+  setup helpers from reaching production.
+- **Frappe UI Component Primitives.** Introduced `FButton`, `FBadge`, and `FInput`
+  primitives matching Frappe UI's design token API (`variant`, `theme`, `size`), eliminating
+  boilerplate Tailwind strings in the HUD while retaining 100% native portal compatibility.
+
+### Timesheet line input is a real text field (2026-09-13, later)
+
+- The session-log "add a line" field is a `<textarea>`, not a single-line `<input>`:
+  **Enter** files the entry, **Shift+Enter** starts a new line, and the field grows with
+  the text (one row at rest, up to ~8 rows, then it scrolls). Placeholder and an
+  `sr-only` hint say so. ArrowUp only jumps to the log when the caret is at position 0,
+  so it stays normal cursor movement inside a paragraph.
+- Log rows render with `whitespace-pre-line` instead of `truncate`, so a multi-line entry
+  keeps the author's breaks instead of collapsing to one clipped line.
+- **Fixed: a live session could not be restored after a reload.** `restoreActiveSession`
+  required `status === 'active'`, but a payload written by an older build of the page has
+  only `startTime` — so a genuinely running clock was silently dropped on reload. Missing
+  status now counts as active (only an explicit non-active status refuses), and the
+  echoed-back record is re-stamped with `status: 'active'` so the next load sees a
+  current-shape payload.

@@ -55,12 +55,14 @@ def get_context(context):
 
 	ctx.today_blocks = blocks
 
-	# Fetch initial live data
+	# Fetch initial live data and active session
 	try:
-		from omnitrack.api import get_workstation_data
+		from omnitrack.api import get_workstation_data, get_active_session
 		ctx.initial_data = get_workstation_data()
+		ctx.active_session = get_active_session()
 	except Exception:
 		ctx.initial_data = {}
+		ctx.active_session = None
 
 	# Fetch Settings safely as dict
 	try:

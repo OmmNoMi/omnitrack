@@ -91,7 +91,8 @@
       user: "{{ user }}",
       user_fullname: "{{ user_fullname }}",
       is_manager: {{ 'true' if is_manager else 'false' }},
-      csrf_token: "{{ csrf_token }}"
+      csrf_token: "{{ csrf_token }}",
+      active_session: {{ (active_session | tojson) if active_session else 'null' }}
     };
   </script>
 </head>
@@ -321,9 +322,10 @@
               <!-- Header -->
               <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
                 <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Session Log</h4>
-                <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border"
-                  :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-600'"
-                  :aria-label="sessionNotesList.length + ' lines logged'">{{ sessionNotesList.length }}</span>
+                <f-badge
+                  theme="gray"
+                  size="xs"
+                  :aria-label="sessionNotesList.length + ' lines logged'">{{ sessionNotesList.length }}</f-badge>
               </div>
 
               <!-- Running Lines List -->
@@ -336,21 +338,24 @@
                   tabindex="0"
                   @keydown="onLogRowKey($event, row)"
                   :aria-label="'Line ' + row.n + ': ' + row.t + '. Press Enter to remove.'"
-                  class="flex items-center justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                  class="flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
                   :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700/80 text-gray-200' : 'bg-white border-gray-200/90 text-gray-800 shadow-2xs'">
-                  <div class="flex items-center gap-2 min-w-0">
+                  <div class="flex items-start gap-2 min-w-0">
                     <span class="font-mono text-[10px] font-bold w-5 h-5 shrink-0 rounded-md inline-flex items-center justify-center select-none"
                       :class="isDarkMode ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-600'">{{ row.n }}</span>
-                    <span class="truncate font-medium">{{ row.t }}</span>
+                    <!-- a line can be a paragraph now, so keep the author's breaks -->
+                    <span class="font-medium min-w-0 whitespace-pre-line break-words">{{ row.t }}</span>
                   </div>
-                  <button 
-                    type="button"
+                  <f-button 
+                    variant="ghost"
+                    theme="red"
+                    size="xs"
                     @click="removeSessionPoint(row.i)"
                     title="Remove this line"
                     aria-label="Remove line"
-                    class="text-gray-400 hover:text-red-500 p-0.5 rounded-md transition-colors cursor-pointer shrink-0">
+                    class="!p-0.5 !h-auto !w-auto text-gray-400 hover:text-red-500">
                     ✕
-                  </button>
+                  </f-button>
                 </div>
 
                 <!-- Empty State prompt -->
@@ -361,32 +366,36 @@
             </div>
 
             <!-- Single-Line Add Input Bar at the Bottom -->
-            <div class="flex items-center gap-2 pt-3 border-t mt-2.5" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
+            <div class="flex items-end gap-2 pt-3 border-t mt-2.5" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
               <div class="relative flex-1">
-                <input 
-                  type="text" 
+                <textarea
+                  rows="1"
                   ref="sessionPointInput"
-                  v-model="newSessionPoint" 
-                  @keyup.enter="addSessionPoint"
-                  @keydown.up.prevent="focusLogRow(sessionNotesList.length - 1)"
+                  v-model="newSessionPoint"
+                  @input="growSessionPoint"
+                  @keydown.enter="onSessionPointEnter"
+                  @keydown.up="onSessionPointUp"
                   aria-label="Add a timesheet line"
-                  placeholder="What did you just complete? Enter to add…" 
-                  class="w-full text-xs rounded-xl pl-3.5 pr-9 py-2 outline-none border transition-colors shadow-xs focus:ring-2"
-                  :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/25' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20'">
+                  aria-describedby="session-point-hint"
+                  placeholder="What did you just complete? Enter to add, Shift+Enter for a new line…"
+                  class="w-full text-xs rounded-xl pl-3.5 pr-9 py-2 outline-none border transition-colors shadow-xs focus:ring-2 resize-none overflow-y-auto leading-5 max-h-40 block"
+                  :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/25' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20'"></textarea>
                 <kbd v-if="!newSessionPoint" title="Press / or Shift+S anywhere to jump here"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
+                  class="absolute right-2 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
                   :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-400' : 'bg-gray-100 border-gray-200 text-gray-500'">/</kbd>
               </div>
-              <button 
-                type="button" 
+              <f-button 
+                variant="solid" 
+                theme="blue"
+                size="sm"
                 @click="addSessionPoint"
                 tabindex="-1"
                 :disabled="!newSessionPoint.trim()"
-                class="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-bold text-white transition-all cursor-pointer select-none disabled:opacity-40 shadow-xs active:scale-95 shrink-0"
-                :class="isDarkMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-[#1A73E8] hover:bg-blue-700'">
+                class="rounded-xl py-2 px-3.5 shadow-xs font-bold">
                 <span>Add</span>
-              </button>
+              </f-button>
             </div>
+            <p id="session-point-hint" class="sr-only">Press Enter to add the line. Press Shift and Enter together to start a new line within the same entry.</p>
 
           </div>
 
@@ -396,9 +405,9 @@
               <!-- Header / Status Context -->
               <div class="flex items-center justify-between gap-2 pb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Current Session</h3>
-                <span v-if="trackerBlockName" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold truncate max-w-[170px]" title="Bound to Calendar Block">
+                <f-badge v-if="trackerBlockName" theme="blue" size="xs" class="max-w-[170px] truncate" title="Bound to Calendar Block">
                   📅 Bound to Block
-                </span>
+                </f-badge>
               </div>
 
               <!-- Timer & Main Action Hero Bar -->
@@ -413,31 +422,66 @@
                   <span v-if="!isTracking" class="text-[10px] uppercase font-bold tracking-wider text-gray-400">standby</span>
                 </div>
 
-                <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+                <div class="flex items-center gap-1.5 shrink-0 ml-auto" role="toolbar" aria-orientation="horizontal"
+                  aria-label="Session controls" data-session-toolbar @keydown="onSessionToolbarKey">
                 <!-- A mis-started session has to be abandonable without writing a timesheet. -->
-                <button
-                  type="button"
+                <f-button
                   v-if="isTracking"
+                  data-session-tool
+                  tabindex="-1"
+                  :variant="discardConfirm ? 'solid' : 'outline'"
+                  :theme="discardConfirm ? 'amber' : 'gray'"
+                  size="sm"
                   @click="discardSession"
                   :aria-label="discardConfirm ? 'Confirm discard: throw this session away without saving' : 'Discard this session without saving'"
                   :title="discardConfirm ? 'Press again to discard' : 'Discard without saving'"
-                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-                  :class="discardConfirm ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' : (isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  class="font-bold py-2 px-3">
+                  <template #prefix>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </template>
                   <span>{{ discardConfirm ? 'Discard?' : 'Discard' }}</span>
-                </button>
-                <button 
-                  type="button"
+                </f-button>
+
+                <!-- Adjust timing button: allows ±5m or custom start/end datetime adjustment -->
+                <f-button
+                  v-if="isTracking"
+                  data-session-tool
+                  tabindex="-1"
+                  variant="outline"
+                  theme="gray"
+                  size="sm"
+                  @click="openAdjustModal"
+                  aria-label="Adjust start and end datetime of this timesheet"
+                  title="Adjust start/end time (±5 min or backdate)"
+                  class="font-bold py-2 px-3">
+                  <template #prefix>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </template>
+                  <span>Adjust</span>
+                </f-button>
+
+                <f-button
+                  data-session-tool
+                  tabindex="0"
                   @click="toggleTrack"
-                  :aria-label="isTracking ? 'Stop active session and save timesheet' : 'Start session and begin recording timesheet'"
-                  class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white transition-colors cursor-pointer select-none active:scale-95 focus:outline-none focus-visible:ring-2 shrink-0"
-                  :class="isTracking 
-                    ? 'bg-red-600 hover:bg-red-700 focus-visible:ring-red-500' 
-                    : 'bg-[#1A73E8] hover:bg-blue-700 focus-visible:ring-blue-500'">
-                  <svg v-if="!isTracking" class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-                  <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
-                  <span>{{ isTracking ? 'Stop & Save' : 'Start Session' }}</span>
-                </button>
+                  variant="solid"
+                  :theme="isTracking ? 'red' : 'blue'"
+                  size="sm"
+                  :aria-label="(isTracking ? 'Stop the active session and file its timesheet' : 'Start session and begin recording timesheet') + '. Keyboard shortcut ' + (isMacLike ? 'Command' : 'Control') + ' S'"
+                  :title="isTracking ? 'Stop the session (' + modKey + 'S) — your lines are already saved' : 'Start a session (' + modKey + 'S)'"
+                  class="font-bold py-2 px-3.5">
+                  <template #prefix>
+                    <svg v-if="!isTracking" class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                    <svg v-else class="w-3 h-3 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
+                  </template>
+                  <!-- Just "Stop": every line here is already saved as it is typed, so
+                       "Save" implied work was at risk. The shortcut rides in the label. -->
+                  <span>{{ isTracking ? 'Stop' : 'Start Session' }}</span>
+                  <template #suffix>
+                    <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-1 rounded border border-white/30 bg-white/15 text-white/90"
+                      aria-hidden="true">{{ modKey }}S</kbd>
+                  </template>
+                </f-button>
                 </div>
               </div>
             </div>
@@ -563,6 +607,29 @@
           </div>
 
         </div>
+
+        <!-- Shortcut legend: one quiet line under the whole card, ordered the way the
+             work flows — write a line, then break it, then stop. Keyboard-only, so it
+             is hidden on phones where none of it can be pressed. -->
+        <p class="hidden lg:flex flex-wrap items-center gap-x-2 gap-y-1 mt-4 pt-3 border-t text-[10px] leading-none"
+          :class="isDarkMode ? 'border-gray-800 text-gray-500' : 'border-gray-200/80 text-gray-400'">
+          <span class="font-bold uppercase tracking-wider">Shortcuts</span>
+          <span><kbd class="font-mono font-bold">/</kbd> jump to the line box</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">Enter</kbd> new line in the same entry</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Enter</kbd> add the line</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">{{ modKey }}S</kbd> stop the session</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">S</kbd> session</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">P</kbd> plan</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">T</kbd> task</span>
+          <span aria-hidden="true">·</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">D</kbd> day</span>
+        </p>
 
       </div>  <!-- /Desk Remote HUD card -->
 
@@ -932,6 +999,16 @@
                         class="inline-flex items-center justify-center px-3 py-2.5 rounded-full text-xs font-bold border cursor-pointer transition-all active:scale-95 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
                         :class="discardConfirm ? 'bg-amber-500 border-amber-500 text-white' : (isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100')">
                         {{ discardConfirm ? 'Discard?' : 'Discard' }}
+                      </button>
+                      <button
+                        type="button"
+                        @click.stop="openAdjustModal"
+                        aria-label="Adjust start and end datetime of this timesheet"
+                        title="Adjust start/end time (±5 min or backdate)"
+                        class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-bold border cursor-pointer transition-all active:scale-95 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        :class="isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100'">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span>Adjust</span>
                       </button>
                     </template>
                     <template v-else>
@@ -1837,7 +1914,7 @@
                       @blur="hideBlockHover"
                       :aria-label="(seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block') + ' ' + segTimeTitle(seg)"
                       class="absolute rounded-lg px-2 py-1 text-left overflow-hidden border touch-pan-y select-none hover:z-20 transition-[left,width] duration-75"
-                      :class="[blockClass(seg.block), isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab')]"
+                      :class="[blockClass(seg.block), isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab'), holdArmed === seg.block.name ? 'ring-2 ring-blue-500 ring-offset-1 z-30 scale-[1.02]' : '']"
                       :style="segStyle(seg)">
                       <!-- recorded (timesheet) time filling up from the bottom of the planned block -->
                       <div v-if="seg.block.actual_hours > 0 && seg.block.status !== 'Cancelled' && !seg.block.is_away"
@@ -2268,12 +2345,332 @@
     </div>
   </transition>
 
+  <!-- ========================================== -->
+  <!-- ADJUST TIMESHEET TIMING MODAL DIALOG       -->
+  <!-- ========================================== -->
+  <transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100" leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
+    <div v-if="showAdjustModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs" @click.self="showAdjustModal = false" role="dialog" aria-modal="true" aria-label="Adjust Timesheet Timing">
+      
+      <div class="rounded-t-3xl sm:rounded-3xl shadow-2xl border max-w-lg w-full p-5 sm:p-6 space-y-4 transition-colors max-h-[90vh] overflow-y-auto" :class="isDarkMode ? 'bg-[#1E1E1E] border-[#2A2A2A] text-white' : 'bg-white border-gray-200 text-gray-900'">
+        
+        <div class="flex items-center justify-between pb-3 border-b" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-500 font-bold">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm sm:text-base">Adjust Timesheet Timing</h3>
+              <p class="text-[10px] text-gray-500 dark:text-gray-400">Fine-tune start/end times or backdate running session</p>
+            </div>
+          </div>
+          <button @click="showAdjustModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg font-bold cursor-pointer touch-target flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Close dialog">✕</button>
+        </div>
+
+        <!-- Duration Hero Badge Card -->
+        <div class="p-3.5 rounded-2xl border flex items-center justify-between" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
+          <div>
+            <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Calculated Duration</div>
+            <div class="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight">{{ adjustDurationFormatted }}</div>
+          </div>
+          <f-badge :theme="adjustDurationMinutes > 0 ? 'green' : 'red'" variant="subtle" size="xs">
+            {{ adjustDurationMinutes > 0 ? '✓ Valid Duration' : 'Invalid Range' }}
+          </f-badge>
+        </div>
+
+        <div class="space-y-4 text-xs">
+          <!-- Session Date -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Session Date *</label>
+              <span v-if="!isManager" class="text-[10px] text-gray-400">Allowed: Today & Yesterday</span>
+            </div>
+            <input
+              type="date"
+              v-model="adjustForm.work_date"
+              :min="minTimesheetDate"
+              :max="todayDate"
+              class="w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+            />
+          </div>
+
+          <!-- Start Time (From) + Quick Nudge Chips -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Start Time (From) *</label>
+              <span class="text-[10px] text-gray-400">Quick adjust</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                type="time"
+                step="60"
+                v-model="adjustForm.from_time"
+                class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+              />
+              <div class="flex items-center gap-1">
+                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
+                <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
+                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- End Time (To) + Quick Nudge Chips -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">End Time (To) *</label>
+              <span class="text-[10px] text-gray-400">Quick adjust</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                type="time"
+                step="60"
+                v-model="adjustForm.to_time"
+                class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+              />
+              <div class="flex items-center gap-1">
+                <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('to', -5)" title="Finished 5m earlier">-5m</f-button>
+                <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('to', 5)" title="Finished 5m later">+5m</f-button>
+                <f-button size="xs" variant="outline" theme="green" @click="setAdjustEndNow" title="Set End Time to Right Now">Now</f-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notes / Activity Log -->
+          <div>
+            <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Notes / Activity Log</label>
+            <textarea
+              v-model="adjustForm.notes"
+              rows="3"
+              placeholder="What did you work on during this period?"
+              class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t" :class="isDarkMode ? 'border-[#2A2A2A]' : 'border-gray-200'">
+          <f-button variant="ghost" theme="gray" size="sm" @click="showAdjustModal = false">
+            Cancel
+          </f-button>
+          
+          <div class="flex items-center gap-2">
+            <!-- Two blue buttons side by side read as the same button. Say plainly which
+                 one stops the clock and which one leaves it running. -->
+            <f-button
+              v-if="isTracking"
+              variant="outline"
+              theme="gray"
+              size="sm"
+              @click="applyAdjustedStartTime"
+              title="Correct the start time and carry on timing — nothing is written to your timesheet">
+              Fix start, keep running
+            </f-button>
+
+            <f-button
+              variant="solid"
+              theme="blue"
+              size="sm"
+              @click="submitAdjustedTimesheet"
+              :disabled="adjustDurationMinutes <= 0"
+              :title="isTracking ? 'Stop the clock and write this to your timesheet' : 'Write this to your timesheet'">
+              <template #prefix>
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </template>
+              {{ isTracking ? 'Stop & log ' + adjustDurationShort : 'Log ' + adjustDurationShort }}
+            </f-button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </transition>
+
 </div>
 
 <script>
   const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
+  // ==========================================
+  // Frappe UI Component Abstractions (Experiment)
+  // Matching Frappe UI component API: variant, theme, size, disabled, loading
+  // ==========================================
+  const FButton = {
+    name: 'FButton',
+    props: {
+      theme: { type: String, default: 'gray' },
+      size: { type: String, default: 'sm' },
+      variant: { type: String, default: 'solid' },
+      loading: { type: Boolean, default: false },
+      disabled: { type: Boolean, default: false },
+      type: { type: String, default: 'button' },
+      ariaLabel: { type: String, default: null }
+    },
+    computed: {
+      classes() {
+        const base = 'inline-flex items-center justify-center font-medium transition-all select-none focus:outline-none focus-visible:ring-2 active:scale-95 shrink-0 cursor-pointer disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed';
+        const sizes = {
+          xs: 'h-6 text-[11px] px-2 rounded-md gap-1',
+          sm: 'h-7 text-xs px-2.5 rounded-lg gap-1.5',
+          md: 'h-8 text-xs font-semibold px-3 rounded-lg gap-1.5',
+          lg: 'h-10 text-sm font-semibold px-4 rounded-xl gap-2'
+        }[this.size] || 'h-7 text-xs px-2.5 rounded-lg gap-1.5';
+
+        const solid = {
+          gray: 'bg-gray-800 text-white hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 focus-visible:ring-gray-400',
+          blue: 'bg-[#1A73E8] text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 focus-visible:ring-blue-500',
+          green: 'bg-[#34A853] text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-500 focus-visible:ring-green-500',
+          red: 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500 focus-visible:ring-red-500',
+          amber: 'bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 focus-visible:ring-amber-500'
+        }[this.theme] || '';
+
+        const subtle = {
+          gray: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700/80 focus-visible:ring-gray-400',
+          blue: 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/70 dark:text-blue-300 dark:hover:bg-blue-900/60 focus-visible:ring-blue-400',
+          green: 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/70 dark:text-green-300 dark:hover:bg-green-900/60 focus-visible:ring-green-400',
+          red: 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/70 dark:text-red-300 dark:hover:bg-red-900/60 focus-visible:ring-red-400',
+          amber: 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/70 dark:text-amber-300 dark:hover:bg-amber-900/60 focus-visible:ring-amber-400'
+        }[this.theme] || '';
+
+        const outline = {
+          gray: 'bg-transparent border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 focus-visible:ring-gray-400',
+          blue: 'bg-transparent border border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/50 focus-visible:ring-blue-400',
+          green: 'bg-transparent border border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950/50 focus-visible:ring-green-400',
+          red: 'bg-transparent border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/50 focus-visible:ring-red-400',
+          amber: 'bg-transparent border border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/50 focus-visible:ring-amber-400'
+        }[this.theme] || '';
+
+        const ghost = {
+          gray: 'bg-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 focus-visible:ring-gray-400',
+          blue: 'bg-transparent text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40 focus-visible:ring-blue-400',
+          green: 'bg-transparent text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/40 focus-visible:ring-green-400',
+          red: 'bg-transparent text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 focus-visible:ring-red-400',
+          amber: 'bg-transparent text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 focus-visible:ring-amber-400'
+        }[this.theme] || '';
+
+        const variants = { solid, subtle, outline, ghost };
+        const variantClass = variants[this.variant] || solid;
+
+        return [base, sizes, variantClass].join(' ');
+      }
+    },
+    template: `
+      <button
+        :type="type"
+        :disabled="disabled || loading"
+        :aria-label="ariaLabel"
+        :class="classes"
+      >
+        <svg v-if="loading" class="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <slot name="prefix" v-if="!loading"></slot>
+        <slot></slot>
+        <slot name="suffix" v-if="!loading"></slot>
+      </button>
+    `
+  };
+
+  const FBadge = {
+    name: 'FBadge',
+    props: {
+      theme: { type: String, default: 'gray' },
+      size: { type: String, default: 'xs' },
+      variant: { type: String, default: 'subtle' }
+    },
+    computed: {
+      classes() {
+        const base = 'inline-flex select-none items-center justify-center font-mono font-bold rounded-full border whitespace-nowrap transition-colors';
+        const sizes = {
+          xs: 'text-[10px] px-1.5 py-0.5 leading-none',
+          sm: 'text-xs px-2 py-0.5 leading-none',
+          md: 'text-xs px-2.5 py-1'
+        }[this.size] || 'text-[10px] px-1.5 py-0.5 leading-none';
+
+        const subtle = {
+          gray: 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300',
+          blue: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300',
+          green: 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300',
+          red: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300',
+          amber: 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300'
+        }[this.theme] || '';
+
+        const solid = {
+          gray: 'bg-gray-700 border-gray-700 text-white dark:bg-gray-600',
+          blue: 'bg-blue-600 border-blue-600 text-white',
+          green: 'bg-green-600 border-green-600 text-white',
+          red: 'bg-red-600 border-red-600 text-white',
+          amber: 'bg-amber-500 border-amber-500 text-white'
+        }[this.theme] || '';
+
+        const outline = {
+          gray: 'bg-transparent border-gray-300 text-gray-600 dark:border-gray-700 dark:text-gray-400',
+          blue: 'bg-transparent border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400',
+          green: 'bg-transparent border-green-300 text-green-600 dark:border-green-700 dark:text-green-400',
+          red: 'bg-transparent border-red-300 text-red-600 dark:border-red-700 dark:text-red-400',
+          amber: 'bg-transparent border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400'
+        }[this.theme] || '';
+
+        const variants = { subtle, solid, outline };
+        return [base, sizes, variants[this.variant] || subtle].join(' ');
+      }
+    },
+    template: `
+      <span :class="classes">
+        <slot name="prefix"></slot>
+        <slot></slot>
+        <slot name="suffix"></slot>
+      </span>
+    `
+  };
+
+  const FInput = {
+    name: 'FInput',
+    props: {
+      modelValue: [String, Number],
+      type: { type: String, default: 'text' },
+      placeholder: { type: String, default: '' },
+      disabled: { type: Boolean, default: false },
+      size: { type: String, default: 'sm' }
+    },
+    emits: ['update:modelValue'],
+    computed: {
+      classes() {
+        const base = 'w-full text-xs rounded-xl outline-none border transition-colors shadow-xs focus:ring-2';
+        const sizes = {
+          sm: 'py-2 pl-3.5 pr-9',
+          md: 'py-2.5 pl-4 pr-10'
+        }[this.size] || 'py-2 pl-3.5 pr-9';
+        const theme = 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20 dark:bg-[#1E1F22] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/25';
+        return [base, sizes, theme].join(' ');
+      }
+    },
+    template: `
+      <input
+        :type="type"
+        :value="modelValue"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :class="classes"
+        @input="$emit('update:modelValue', $event.target.value)"
+      />
+    `
+  };
+
   const app = createApp({
+    components: {
+      FButton,
+      'f-button': FButton,
+      FBadge,
+      'f-badge': FBadge,
+      FInput,
+      'f-input': FInput
+    },
     setup() {
       // 1. Navigation & Theme
       const activeTab = ref('dashboard');
@@ -2509,12 +2906,28 @@
         return pill('Today', 'bg-gray-100 text-gray-600', 'bg-gray-800 text-gray-300');
       };
 
-      // Executive Dashboard KPIs
-      const dashboardKPIs = ref({
-        today: { target_hours: 8, planned_hours: 0, actual_hours: 0, variance_hours: 0, away_count: 0, block_count: 0, completed_count: 0, todo_completed_pct: 0 },
-        week: { target_hours: 40, planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, away_count: 0, block_count: 0 },
-        month: { target_hours: 160, planned_hours: 0, actual_hours: 0, capacity_hours: 160, capacity_pct: 0, away_count: 0, block_count: 0 }
-      });
+      // Executive Dashboard KPIs with defensive fallback defaults
+      const DEFAULT_KPIS = {
+        today: { target_hours: 8, planned_hours: 0, actual_hours: 0, variance_hours: 0, away_count: 0, block_count: 0, completed_count: 0, todo_completed_pct: 0, non_working_hours: 0 },
+        week: { target_hours: 40, planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, away_count: 0, block_count: 0, non_working_hours: 0 },
+        month: { target_hours: 160, planned_hours: 0, actual_hours: 0, capacity_hours: 160, capacity_pct: 0, away_count: 0, block_count: 0, non_working_hours: 0 }
+      };
+
+      const dashboardKPIs = ref(JSON.parse(JSON.stringify(DEFAULT_KPIS)));
+
+      const updateDashboardKPIs = (incoming) => {
+        if (!incoming || typeof incoming !== 'object') return;
+        const base = JSON.parse(JSON.stringify(DEFAULT_KPIS));
+        ['today', 'week', 'month'].forEach(section => {
+          base[section] = Object.assign(
+            {},
+            base[section],
+            dashboardKPIs.value && dashboardKPIs.value[section] ? dashboardKPIs.value[section] : {},
+            incoming[section] && typeof incoming[section] === 'object' ? incoming[section] : {}
+          );
+        });
+        dashboardKPIs.value = base;
+      };
 
       // Scratchpad & Haptics State
       const sessionNotesList = ref([]);
@@ -2633,6 +3046,34 @@
       const currentUser = ref(session.user || 'hardiksharma80912@gmail.com');
       const currentUserFullName = ref(session.user_fullname || 'Hardik Sharma');
       const isManager = ref(session.is_manager !== undefined ? session.is_manager : true);
+
+      const csrfToken = session.csrf_token || (window.OMNITRACK_SESSION && window.OMNITRACK_SESSION.csrf_token) || '';
+      // Frappe hides the real reason inside _server_messages, a JSON array of JSON.
+      const _errText = (err) => {
+        let raw = (err && err.message) || String(err || '');
+        try {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list) && list.length) {
+            const first = typeof list[0] === 'string' ? JSON.parse(list[0]) : list[0];
+            raw = (first && first.message) || raw;
+          }
+        } catch (e) {}
+        return String(raw).replace(/<[^>]*>/g, '').trim() || 'Request failed';
+      };
+
+      const postJSON = async (method, body) => {
+        const res = await fetch('/api/method/omnitrack.api.' + method, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Frappe-CSRF-Token': csrfToken
+          },
+          body: JSON.stringify(body || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data && (data._server_messages || data.message)) || 'Request failed');
+        return data.message;
+      };
 
       // Default directly to the logged-in user's profile
       const selectedEmployee = ref(session.user_fullname || 'Hardik Sharma');
@@ -2899,8 +3340,12 @@
         return Math.min(100, Math.round((actual / planned) * 100));
       };
 
-      // Scratchpad & Remote HUD Actions
-      const syncActiveSession = () => {
+      // Multi-Device Active Session Synchronization & Remote HUD Actions
+      let _syncDebounceTimer = null;
+      let _lastLocalUpdate = Date.now();
+
+      const syncActiveSession = (immediate = false) => {
+        _lastLocalUpdate = Date.now();
         if (isTracking.value) {
           const saved = localStorage.getItem('omnitrack_active_session');
           let startTime = Date.now() - (trackerSeconds.value * 1000);
@@ -2910,17 +3355,95 @@
               if (parsed && parsed.startTime) startTime = parsed.startTime;
             } catch (e) {}
           }
-          localStorage.setItem('omnitrack_active_session', JSON.stringify({
+          const payload = {
             startTime,
             selectedNature: selectedNature.value,
             selectedProject: selectedProject.value,
             trackerNotes: trackerNotes.value,
             trackerBlockName: trackerBlockName.value,
-            sessionNotesList: sessionNotesList.value
-          }));
+            sessionNotesList: sessionNotesList.value,
+            lastUpdated: _lastLocalUpdate,
+            status: 'active'
+          };
+          localStorage.setItem('omnitrack_active_session', JSON.stringify(payload));
+
+          const sendToServer = () => {
+            postJSON('sync_active_session', { session_data: payload }).catch(() => {});
+          };
+
+          if (immediate) {
+            if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+            sendToServer();
+          } else {
+            if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+            _syncDebounceTimer = setTimeout(sendToServer, 500);
+          }
         } else {
           localStorage.removeItem('omnitrack_active_session');
+          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+          postJSON('sync_active_session', { session_data: null }).catch(() => {});
         }
+      };
+
+      const restoreActiveSession = (sessionData) => {
+        // A payload written by an older build of this page carries no `status`. It is
+        // still a live session — only an explicit non-active status means "don't restore",
+        // otherwise a reload strands a clock that is genuinely still running.
+        if (!sessionData || !sessionData.startTime) return false;
+        if (sessionData.status && sessionData.status !== 'active') return false;
+        const startMs = Number(sessionData.startTime);
+        const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        if (elapsed >= 86400) return false; // expired past 24h
+
+        isTracking.value = true;
+        trackerSeconds.value = elapsed;
+        selectedNature.value = sessionData.selectedNature || '🎯 Planned';
+        selectedProject.value = sessionData.selectedProject || '';
+        let rawN = sessionData.trackerNotes || '';
+        if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
+          const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+          trackerNotes.value = parts[0] || '';
+          sessionNotesList.value = parts.slice(1);
+        } else {
+          trackerNotes.value = rawN;
+          sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
+        }
+        trackerBlockName.value = sessionData.trackerBlockName || null;
+
+        if (trackerTimer.value) clearInterval(trackerTimer.value);
+        trackerTimer.value = setInterval(() => {
+          trackerSeconds.value = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        }, 1000);
+
+        localStorage.setItem('omnitrack_active_session',
+          JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
+        return true;
+      };
+
+      // A timesheet line is often a paragraph, not a phrase: the field grows with the
+      // text, Shift+Enter breaks a line, and plain Enter still files the entry.
+      const growSessionPoint = () => {
+        const el = sessionPointInput.value;
+        if (!el || !el.style) return;
+        // An empty textarea reports a scrollHeight of two rows, so let CSS own the
+        // resting size and only measure once there is something to measure.
+        el.style.height = '';
+        if (!el.value) return;
+        void el.offsetHeight;                 // force the reflow before measuring
+        el.style.height = el.scrollHeight + 'px';
+      };
+      const onSessionPointEnter = (ev) => {
+        if (ev.shiftKey || ev.isComposing) return;   // Shift+Enter writes a new line
+        ev.preventDefault();
+        addSessionPoint();
+      };
+      // Only leave the field for the log when there is nothing above the caret to
+      // move through — otherwise Up is just normal cursor movement in the text.
+      const onSessionPointUp = (ev) => {
+        const el = ev.currentTarget;
+        if (el && el.selectionStart > 0) return;
+        ev.preventDefault();
+        focusLogRow(sessionNotesList.value.length - 1);
       };
 
       const addSessionPoint = () => {
@@ -2928,9 +3451,10 @@
         if (!pt) return;
         sessionNotesList.value.push(pt);
         newSessionPoint.value = '';
+        nextTick(() => { const el = sessionPointInput.value; if (el && el.style) el.style.height = ''; });
         // newest sits at the bottom of the list — keep it in view
         nextTick(() => { if (sessionNotesScroll.value) sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight; });
-        syncActiveSession();
+        syncActiveSession(true);
         triggerHaptic([25]);
       };
 
@@ -3114,6 +3638,12 @@
         const hour = Math.min(22, new Date().getHours());
         nextTick(() => { openBookModal(iso, hour); });
       };
+      // Shortcuts are worthless if nobody is told they exist — show the real modifier
+      // for the platform rather than a generic "Ctrl".
+      const isMacLike = (typeof navigator !== 'undefined') &&
+        /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+      const modKey = isMacLike ? '\u2318' : 'Ctrl';
+
       const _slashFocus = (ev) => {
         // Cmd/Ctrl+S saves the session instead of the browser page.
         if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 's') {
@@ -3139,7 +3669,7 @@
 
       const removeSessionPoint = (idx) => {
         sessionNotesList.value.splice(idx, 1);
-        syncActiveSession();
+        syncActiveSession(true);
         triggerHaptic([20]);
       };
 
@@ -3319,7 +3849,29 @@
               if (!selectedDashboardDate.value) selectedDashboardDate.value = m.today_date;
             }
             if (m.current_user) currentUser.value = m.current_user;
-            if (m.kpis) dashboardKPIs.value = m.kpis;
+            if (m.kpis) updateDashboardKPIs(m.kpis);
+
+            // Multi-device active session sync (computer <-> mobile phone)
+            if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime) {
+              const serverLines = Array.isArray(m.active_session.sessionNotesList) ? m.active_session.sessionNotesList : [];
+              const localLines = sessionNotesList.value || [];
+              const serverTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
+              if (!isTracking.value || serverLines.length >= localLines.length || serverTime > _lastLocalUpdate) {
+                restoreActiveSession(m.active_session);
+              }
+            } else if (m.active_session === null && isTracking.value) {
+              const localAge = Date.now() - _lastLocalUpdate;
+              if (localAge > 8000) {
+                isTracking.value = false;
+                if (trackerTimer.value) clearInterval(trackerTimer.value);
+                trackerSeconds.value = 0;
+                sessionNotesList.value = [];
+                trackerNotes.value = '';
+                trackerBlockName.value = null;
+                localStorage.removeItem('omnitrack_active_session');
+                showToast('Session was completed on another device', 'info');
+              }
+            }
           }
         } catch (e) {
           console.error("API error:", e);
@@ -3335,6 +3887,25 @@
       // must be throwable away. Two-step, because it drops the elapsed time.
       const discardConfirm = ref(false);
       let _discardTimer = null;
+      // Stop & Save and Discard are one control: a single tab stop, arrows between
+      // them (WAI-ARIA toolbar), so Tab never lands on Discard by accident.
+      const onSessionToolbarKey = (ev) => {
+        const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+        if (keys.indexOf(ev.key) === -1) return;
+        const bar = ev.currentTarget;
+        const items = [...bar.querySelectorAll('[data-session-tool]')];
+        if (items.length < 2) return;
+        ev.preventDefault();
+        const cur = Math.max(0, items.indexOf(document.activeElement));
+        let next = cur;
+        if (ev.key === 'ArrowLeft') next = (cur - 1 + items.length) % items.length;
+        else if (ev.key === 'ArrowRight') next = (cur + 1) % items.length;
+        else if (ev.key === 'Home') next = 0;
+        else next = items.length - 1;
+        items.forEach((el, i) => el.setAttribute('tabindex', i === next ? '0' : '-1'));
+        items[next].focus();
+      };
+
       const discardSession = () => {
         if (!isTracking.value) return;
         if (!discardConfirm.value) {
@@ -3463,6 +4034,220 @@
         openSessionCard();
       };
 
+      // 2b. Adjust Timesheet Timing & Backdating
+      const showAdjustModal = ref(false);
+      const adjustForm = ref({
+        work_date: new Date().toISOString().split('T')[0],
+        from_time: '09:00',
+        to_time: '10:00',
+        notes: ''
+      });
+
+      const minTimesheetDate = computed(() => {
+        if (isManager.value) return '';
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      });
+
+      const adjustDurationMinutes = computed(() => {
+        if (!adjustForm.value.from_time || !adjustForm.value.to_time) return 0;
+        try {
+          const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
+          const [th, tm] = adjustForm.value.to_time.split(':').map(Number);
+          let startMins = fh * 60 + fm;
+          let endMins = th * 60 + tm;
+          let diff = endMins - startMins;
+          if (diff < 0) diff += 1440;
+          return diff;
+        } catch (e) {
+          return 0;
+        }
+      });
+
+      // Short form for the save button, so the button itself says how much it will log.
+      const adjustDurationShort = computed(() => {
+        const mins = adjustDurationMinutes.value;
+        if (mins <= 0) return '0m';
+        const h = Math.floor(mins / 60), m = mins % 60;
+        return h ? (m ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
+      });
+
+      const adjustDurationFormatted = computed(() => {
+        const mins = adjustDurationMinutes.value;
+        if (mins <= 0) return '0h 00m (0.00 hrs)';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const dec = (mins / 60).toFixed(2);
+        return `${h}h ${String(m).padStart(2, '0')}m (${dec} hrs)`;
+      });
+
+      const openAdjustModal = () => {
+        const pad = (n) => String(n).padStart(2, '0');
+        const nowObj = new Date();
+        let startObj = new Date();
+        if (isTracking.value && trackerSeconds.value > 0) {
+          startObj = new Date(Date.now() - (trackerSeconds.value * 1000));
+        } else {
+          startObj = new Date(Date.now() - 3600 * 1000);
+        }
+
+        const work_date = `${startObj.getFullYear()}-${pad(startObj.getMonth() + 1)}-${pad(startObj.getDate())}`;
+        const from_time = `${pad(startObj.getHours())}:${pad(startObj.getMinutes())}`;
+        const to_time = `${pad(nowObj.getHours())}:${pad(nowObj.getMinutes())}`;
+
+        const rawTitle = (trackerNotes.value || '').trim();
+        const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
+        const notes = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
+
+        adjustForm.value = {
+          work_date,
+          from_time,
+          to_time,
+          notes
+        };
+        showAdjustModal.value = true;
+      };
+
+      const nudgeAdjustTime = (field, deltaMinutes) => {
+        const key = field === 'from' ? 'from_time' : 'to_time';
+        const curVal = adjustForm.value[key] || '00:00';
+        try {
+          const [h, m] = curVal.split(':').map(Number);
+          let totalMins = h * 60 + m + deltaMinutes;
+          if (totalMins < 0) totalMins = (totalMins % 1440) + 1440;
+          else if (totalMins >= 1440) totalMins = totalMins % 1440;
+          const newH = Math.floor(totalMins / 60);
+          const newM = totalMins % 60;
+          const pad = (n) => String(n).padStart(2, '0');
+          adjustForm.value[key] = `${pad(newH)}:${pad(newM)}`;
+        } catch (e) {}
+      };
+
+      const setAdjustEndNow = () => {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        adjustForm.value.to_time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      };
+
+      const applyAdjustedStartTime = () => {
+        if (!adjustForm.value.from_time) {
+          showToast('Start time is required', 'warning');
+          return;
+        }
+        try {
+          const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
+          const parts = (adjustForm.value.work_date || todayDate.value).split('-').map(Number);
+          const newStartObj = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0);
+          const newStartMs = newStartObj.getTime();
+          const nowMs = Date.now();
+          if (newStartMs > nowMs) {
+            showToast('Start time cannot be in the future for an ongoing session', 'warning');
+            return;
+          }
+          const newElapsedSecs = Math.max(0, Math.floor((nowMs - newStartMs) / 1000));
+          trackerSeconds.value = newElapsedSecs;
+          if (trackerTimer.value) clearInterval(trackerTimer.value);
+          trackerTimer.value = setInterval(() => {
+            trackerSeconds.value = Math.max(0, Math.floor((Date.now() - newStartMs) / 1000));
+          }, 1000);
+
+          if (adjustForm.value.notes) {
+            trackerNotes.value = adjustForm.value.notes;
+          }
+          const saved = localStorage.getItem('omnitrack_active_session');
+          let activePayload = {};
+          try { if (saved) activePayload = JSON.parse(saved); } catch (e) {}
+          activePayload.startTime = newStartMs;
+          activePayload.lastUpdated = Date.now();
+          if (adjustForm.value.notes) activePayload.trackerNotes = adjustForm.value.notes;
+          localStorage.setItem('omnitrack_active_session', JSON.stringify(activePayload));
+          syncActiveSession(true);
+
+          showAdjustModal.value = false;
+          showToast(`Running clock updated: started at ${adjustForm.value.from_time} (${Math.round(newElapsedSecs / 60)}m elapsed)`, 'success');
+        } catch (err) {
+          showToast('Failed to adjust start time: ' + (err && err.message || err), 'danger');
+        }
+      };
+
+      const submitAdjustedTimesheet = async () => {
+        const targetDate = adjustForm.value.work_date || todayDate.value;
+        if (!targetDate) {
+          showToast('Session date is required', 'warning');
+          return;
+        }
+        if (!isManager.value && minTimesheetDate.value && targetDate < minTimesheetDate.value) {
+          showToast(`Regular users can only log for today and yesterday (${minTimesheetDate.value}). Older dates require Manager role.`, 'danger');
+          return;
+        }
+        if (adjustDurationMinutes.value <= 0) {
+          showToast('Duration must be greater than 0 minutes', 'warning');
+          return;
+        }
+
+        const hrs = Math.max(Math.round((adjustDurationMinutes.value / 60.0) * 100) / 100, 0.01);
+        const fromTimeStr = adjustForm.value.from_time.length === 5 ? adjustForm.value.from_time + ':00' : adjustForm.value.from_time;
+        const toTimeStr = adjustForm.value.to_time.length === 5 ? adjustForm.value.to_time + ':00' : adjustForm.value.to_time;
+        const boundBlock = trackerBlockName.value;
+        const finalNotes = (adjustForm.value.notes || '').trim() || `Adjusted focus session (${selectedNature.value})`;
+
+        try {
+          if (boundBlock) {
+            await postJSON('log_work_session', {
+              block_name: boundBlock,
+              session_date: targetDate,
+              from_time: fromTimeStr,
+              to_time: toTimeStr,
+              hours: hrs,
+              notes: finalNotes,
+              logged_via: 'Adjusted Stopwatch'
+            });
+            showToast(`Logged ${hrs.toFixed(2)}h against focus block`, 'success');
+          } else {
+            // postJSON throws on a non-OK response. A bare fetch() resolves even for a
+            // 417/500, which used to leave the user with a success toast and a wiped
+            // session for a timesheet that was never written.
+            await postJSON('quick_timer_punch', {
+              action: 'stop',
+              work_date: targetDate,
+              from_time: fromTimeStr,
+              to_time: toTimeStr,
+              duration_seconds: adjustDurationMinutes.value * 60,
+              duration_hours: hrs,
+              work_nature: selectedNature.value,
+              task_nature: selectedNature.value,
+              deliverable_notes: finalNotes,
+              notes: finalNotes,
+              project: selectedProject.value
+            });
+            showToast(`Logged ${hrs.toFixed(2)} hrs successfully!`, 'success');
+          }
+
+          // Reset tracker state
+          isTracking.value = false;
+          if (trackerTimer.value) clearInterval(trackerTimer.value);
+          trackerTimer.value = null;
+          trackerSeconds.value = 0;
+          trackerBlockName.value = null;
+          trackerNotes.value = '';
+          sessionNotesList.value = [];
+          newSessionPoint.value = '';
+          stopConfirmName.value = '';
+          localStorage.removeItem('omnitrack_active_session');
+          postJSON('sync_active_session', { session_data: null }).catch(() => {});
+
+          showAdjustModal.value = false;
+          fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') fetchPlannerData();
+        } catch (err) {
+          // The clock is deliberately still running here — nothing was saved, so the
+          // user has not lost the session and can retry or fix the times.
+          showToast('Not saved — the clock is still running. ' + _errText(err), 'danger');
+        }
+      };
+
       const trackBlock = (block) => {
         if (isTracking.value) {
           showToast('Stop the current timer first', 'danger');
@@ -3569,18 +4354,6 @@
       const showBlockDrawer = ref(false);
       const activeBlock = ref(null);
       const sessionForm = ref({ session_date: '', from_time: '', to_time: '', hours: '', notes: '' });
-
-      const csrfToken = session.csrf_token || '';
-      const postJSON = async (method, body) => {
-        const res = await fetch('/api/method/omnitrack.api.' + method, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Frappe-CSRF-Token': csrfToken },
-          body: JSON.stringify(body || {})
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error((data && (data._server_messages || data.message)) || 'Request failed');
-        return data.message;
-      };
 
       const fmtHrs = (n) => {
         const v = Math.round((parseFloat(n) || 0) * 100) / 100;
@@ -3984,10 +4757,18 @@
           d.curEnd = Math.max(d.origStart + SNAP_MIN, Math.min(1440, d.origEnd + dMin));
         }
       };
-      const endBlockDrag = async () => {
+      // `ev` is the event that ended the gesture. A pointercancel means the browser
+      // took the pointer away (a system gesture, a palm, the page scrolling) — that is
+      // an abort, never a reschedule, so the block must snap back unsaved.
+      const endBlockDrag = async (ev) => {
         window.removeEventListener('pointermove', onBlockDragMove);
+        window.removeEventListener('pointerup', endBlockDrag);
+        window.removeEventListener('pointercancel', endBlockDrag);
         const d = plannerDrag.value;
         plannerDrag.value = null;
+        holdArmed.value = '';
+        if (d && d.el && d.el.style) d.el.style.touchAction = '';
+        if (ev && ev.type === 'pointercancel') return;
         if (!d || !d.moved) return;
         _blockDragEndedAt.value = Date.now();
         const changed = d.curStart !== d.origStart || d.curEnd !== d.origEnd || d.curDayIdx !== d.origDayIdx;
@@ -4005,25 +4786,78 @@
           alert('Could not reschedule block: ' + (e && e.message || e));
         }
       };
+      // ---- Press and hold to grab -------------------------------------------
+      // A finger on a block is far more often a scroll than a reschedule, and the
+      // same is true of a stray mouse-down. Nothing moves until the pointer has been
+      // held still for a moment; any movement before that is left to the scroller.
+      const HOLD_TOUCH_MS = 400;
+      const HOLD_MOUSE_MS = 200;
+      const HOLD_SLOP_PX = 8;
+      const holdArmed = ref('');            // name of the block currently grabbed
+      let _pendingHold = null;
+      const _pendingMove = (ev) => {
+        if (!_pendingHold) return;
+        if (Math.abs(ev.clientX - _pendingHold.x) > HOLD_SLOP_PX ||
+            Math.abs(ev.clientY - _pendingHold.y) > HOLD_SLOP_PX) _cancelHold();
+      };
+      const _cancelHold = () => {
+        if (!_pendingHold) return;
+        clearTimeout(_pendingHold.timer);
+        _pendingHold = null;
+        window.removeEventListener('pointermove', _pendingMove);
+        window.removeEventListener('pointerup', _cancelHold);
+        window.removeEventListener('pointercancel', _cancelHold);
+      };
+      // Arms `run` once the pointer has been held still long enough.
+      const _armOnHold = (ev, run) => {
+        _cancelHold();
+        const hold = ev.pointerType === 'touch' ? HOLD_TOUCH_MS : HOLD_MOUSE_MS;
+        const x = ev.clientX, y = ev.clientY;
+        _pendingHold = { x, y, timer: null };
+        _pendingHold.timer = setTimeout(() => {
+          _pendingHold = null;
+          window.removeEventListener('pointermove', _pendingMove);
+          window.removeEventListener('pointerup', _cancelHold);
+          window.removeEventListener('pointercancel', _cancelHold);
+          run(x, y);
+        }, hold);
+        window.addEventListener('pointermove', _pendingMove);
+        window.addEventListener('pointerup', _cancelHold);
+        window.addEventListener('pointercancel', _cancelHold);
+      };
+
       const startBlockDrag = (ev, b, mode) => {
         if (b.status === 'Cancelled') return;
         if (isBlockLocked(b)) return;   // the past is read-only
         if (ev.button !== undefined && ev.button !== 0) return;
-        ev.preventDefault();
-        const col = ev.currentTarget.closest('[data-day-col]');
+        const el = ev.currentTarget;
+        const col = el.closest && el.closest('[data-day-col]');
+        const pid = ev.pointerId;
+        _armOnHold(ev, (x, y) => _beginBlockDrag(b, mode, x, y, el, col, pid));
+      };
+
+      const _beginBlockDrag = (b, mode, x, y, el, col, pid) => {
         const s = _mins(b.start_time);
         let e = _mins(b.end_time);
         if (e <= s) e = s + (parseFloat(b.duration_hours) || 1) * 60;
         const idx = plannerDays.value.indexOf(b.work_date);
+        hideBlockHover();
+        triggerHaptic([25]);
+        holdArmed.value = b.name;
+        // Only now does the element stop belonging to the scroller.
+        const holder = (el && el.closest && el.closest('button')) || el;
+        if (holder && holder.style) holder.style.touchAction = 'none';
+        try { if (holder && pid !== undefined && holder.setPointerCapture) holder.setPointerCapture(pid); } catch (err) {}
         plannerDrag.value = {
-          name: b.name, mode,
-          startX: ev.clientX, startY: ev.clientY,
+          name: b.name, mode, el: holder,
+          startX: x, startY: y,
           colW: col ? col.getBoundingClientRect().width : 0,
           origStart: s, origEnd: e, origDayIdx: idx,
           curStart: s, curEnd: e, curDayIdx: idx, moved: false,
         };
         window.addEventListener('pointermove', onBlockDragMove);
         window.addEventListener('pointerup', endBlockDrag, { once: true });
+        window.addEventListener('pointercancel', endBlockDrag, { once: true });
       };
       const onBlockClick = (b) => {
         if (Date.now() - _blockDragEndedAt.value < 300) return; // just finished a drag
@@ -4123,23 +4957,37 @@
         if (Math.abs(ev.clientY - s.y0) > 4) s.moved = true;
         slotSel.value = { ...s, curMin: _snapMin(_minFromPointer(s.colEl, ev.clientY)) };
       };
-      const endSlotSelect = () => {
+      // Same rule as endBlockDrag: a cancelled pointer discards the range, it does
+      // not open the booking modal behind the user's back.
+      const endSlotSelect = (ev) => {
         window.removeEventListener('pointermove', onSlotSelectMove);
+        window.removeEventListener('pointerup', endSlotSelect);
+        window.removeEventListener('pointercancel', endSlotSelect);
         const s = slotSel.value;
+        if (s && s.rowEl && s.rowEl.style) s.rowEl.style.touchAction = '';
         const range = slotSelRange.value;
         slotSel.value = null;
+        if (ev && ev.type === 'pointercancel') return;
         if (!s || !s.moved || !range) return;   // no drag → let @click book the single hour
         _slotSelEndedAt = Date.now();
         openBookModalRange(s.iso, range.start, range.end);
       };
       const startSlotSelect = (ev, iso) => {
         if (ev.button !== undefined && ev.button !== 0) return;
-        const colEl = ev.currentTarget.closest('[data-day-col]');
+        const row = ev.currentTarget;
+        const colEl = row.closest && row.closest('[data-day-col]');
         if (!colEl) return;
-        const m = _snapMin(_minFromPointer(colEl, ev.clientY));
-        slotSel.value = { iso, colEl, startMin: m, curMin: m, moved: false, y0: ev.clientY };
-        window.addEventListener('pointermove', onSlotSelectMove);
-        window.addEventListener('pointerup', endSlotSelect, { once: true });
+        // Same rule as blocks: a swipe across the grid scrolls, a held pointer draws
+        // a time range. A plain tap still books the single hour via @click.
+        _armOnHold(ev, (x, y) => {
+          const m = _snapMin(_minFromPointer(colEl, y));
+          triggerHaptic([25]);
+          if (row && row.style) row.style.touchAction = 'none';
+          slotSel.value = { iso, colEl, rowEl: row, startMin: m, curMin: m, moved: false, y0: y };
+          window.addEventListener('pointermove', onSlotSelectMove);
+          window.addEventListener('pointerup', endSlotSelect, { once: true });
+          window.addEventListener('pointercancel', endSlotSelect, { once: true });
+        });
       };
 
       // --- Google-Calendar style "now" line ------------------------------------
@@ -4452,12 +5300,14 @@
       const onPlannerKeydown = (e) => {
         if (e.key !== 'Escape') return;
         if (showBookModal.value) showBookModal.value = false;
+        else if (showAdjustModal.value) showAdjustModal.value = false;
+        else if (showNewTaskModal.value) showNewTaskModal.value = false;
         else if (showBlockDrawer.value) showBlockDrawer.value = false;
         else if (showAppMenu.value) showAppMenu.value = false;
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showBookModal, showBlockDrawer, showTrackerPopup, showNatureFilter], (vals) => {
+      watch([showBookModal, showAdjustModal, showNewTaskModal, showBlockDrawer, showTrackerPopup, showNatureFilter], (vals) => {
         if (vals.some(Boolean)) document.addEventListener('keydown', onPlannerKeydown);
         else document.removeEventListener('keydown', onPlannerKeydown);
       });
@@ -4478,50 +5328,54 @@
           setDark: (d) => { isDarkMode.value = d; applyTheme(d); }
         };
 
-        // Auto-recover active session from localStorage (phone sleep / tab refresh resilient)
+        // Auto-recover active session (SSR window.OMNITRACK_SESSION.active_session or localStorage)
         try {
-          const saved = localStorage.getItem('omnitrack_active_session');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed && parsed.startTime) {
-              const elapsed = Math.floor((Date.now() - parsed.startTime) / 1000);
-              if (elapsed < 86400) { // within 24h
-                isTracking.value = true;
-                trackerSeconds.value = elapsed;
-                selectedNature.value = parsed.selectedNature || 'Planned Work';
-                selectedProject.value = parsed.selectedProject || '';
-                let rawN = parsed.trackerNotes || '';
-                if (rawN.includes('•')) {
-                  const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
-                  trackerNotes.value = parts[0] || '';
-                  sessionNotesList.value = (!parsed.sessionNotesList || parsed.sessionNotesList.length === 0) ? parts.slice(1) : parsed.sessionNotesList;
-                } else {
-                  trackerNotes.value = rawN;
-                  sessionNotesList.value = parsed.sessionNotesList || [];
-                }
-                trackerBlockName.value = parsed.trackerBlockName || null;
-                trackerTimer.value = setInterval(() => {
-                  trackerSeconds.value = Math.floor((Date.now() - parsed.startTime) / 1000);
-                }, 1000);
-              }
+          const ssrSession = session && session.active_session;
+          if (ssrSession && ssrSession.status === 'active' && ssrSession.startTime) {
+            restoreActiveSession(ssrSession);
+          } else {
+            const saved = localStorage.getItem('omnitrack_active_session');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              restoreActiveSession(parsed);
             }
           }
         } catch (e) {}
 
-        // Listen for visibility change to immediately sync timer on phone wake
+        // Listen for visibility change to immediately sync timer & fetch fresh active session on phone wake
         document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible' && isTracking.value) {
+          if (document.visibilityState === 'visible') {
             const saved = localStorage.getItem('omnitrack_active_session');
             if (saved) {
               try {
                 const parsed = JSON.parse(saved);
-                if (parsed && parsed.startTime) {
-                  trackerSeconds.value = Math.floor((Date.now() - parsed.startTime) / 1000);
+                if (parsed && parsed.startTime && isTracking.value) {
+                  trackerSeconds.value = Math.max(0, Math.floor((Date.now() - parsed.startTime) / 1000));
                 }
               } catch (e) {}
             }
+            fetchWorkstationData(selectedEmployee.value);
           }
         });
+
+        // Realtime sync across devices via WebSockets if available
+        if (window.frappe && frappe.realtime) {
+          frappe.realtime.on('omnitrack:active_session_updated', (data) => {
+            if (data && data.status === 'active') restoreActiveSession(data);
+          });
+          frappe.realtime.on('omnitrack:active_session_cleared', () => {
+            if (isTracking.value) {
+              isTracking.value = false;
+              if (trackerTimer.value) clearInterval(trackerTimer.value);
+              trackerSeconds.value = 0;
+              sessionNotesList.value = [];
+              trackerNotes.value = '';
+              trackerBlockName.value = null;
+              localStorage.removeItem('omnitrack_active_session');
+              showToast('Session was completed on another device', 'info');
+            }
+          });
+        }
       });
 
       onUnmounted(() => {
@@ -4581,6 +5435,18 @@
         openDayView,
         discardSession,
         discardConfirm,
+        onSessionToolbarKey,
+        showAdjustModal,
+        adjustForm,
+        minTimesheetDate,
+        adjustDurationMinutes,
+        adjustDurationFormatted,
+        openAdjustModal,
+        nudgeAdjustTime,
+        setAdjustEndNow,
+        adjustDurationShort,
+        applyAdjustedStartTime,
+        submitAdjustedTimesheet,
         trackBlock,
         saveNewPlannedTask,
         // Google Meet Dashboard & Agenda
@@ -4595,6 +5461,7 @@
         selectDashboardDate,
         onDashboardDayKey,
         resetDashboardToToday,
+        fetchWorkstationData,
         formatAmPm,
         formatBlockRange,
         getBlockTimingInfo,
@@ -4605,6 +5472,7 @@
         upcomingFocusBlocks,
         pastFocusBlocks,
         dashboardKPIs,
+        updateDashboardKPIs,
         sessionNotesList,
         sessionNotesRows,
         sessionCardRef,
@@ -4620,7 +5488,12 @@
         pickDropdown,
         onDropdownKey,
         closeDropdown,
+        modKey,
+        isMacLike,
         sessionPointInput,
+        growSessionPoint,
+        onSessionPointEnter,
+        onSessionPointUp,
         sessionNotesScroll,
         focusSessionPointInput,
         focusLogRow,
@@ -4628,6 +5501,7 @@
         newSessionPoint,
         triggerHaptic,
         syncActiveSession,
+        restoreActiveSession,
         addSessionPoint,
         removeSessionPoint,
         startFocusBlock,
@@ -4713,6 +5587,7 @@
         segStyle,
         segTimeTitle,
         plannerDrag,
+        holdArmed,
         dragStyle,
         dragTimeLabel,
         startBlockDrag,

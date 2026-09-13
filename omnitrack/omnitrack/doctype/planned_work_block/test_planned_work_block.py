@@ -451,6 +451,268 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		finally:
 			frappe.set_user("Administrator")
 
+	def test_omnitrack_html_tag_balance(self):
+		import html.parser
+		import os
+		import re
+
+		html_path = frappe.get_app_path("omnitrack", "www", "omnitrack.html")
+		self.assertTrue(os.path.exists(html_path), f"omnitrack.html not found at {html_path}")
+
+		with open(html_path, "r", encoding="utf-8") as f:
+			content = f.read()
+
+		# Strip scripts, styles, and jinja template tags before checking HTML tag balance
+		cleaned = re.sub(r"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>", "", content, flags=re.IGNORECASE)
+		cleaned = re.sub(r"<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>", "", cleaned, flags=re.IGNORECASE)
+		cleaned = re.sub(r"{%.*?%}", "", cleaned)
+		cleaned = re.sub(r"{{.*?}}", "", cleaned)
+
+		void_elements = {
+			"area", "base", "br", "col", "embed", "hr", "img", "input",
+			"link", "meta", "param", "source", "track", "wbr"
+		}
+
+		class TagBalanceParser(html.parser.HTMLParser):
+			def __init__(self):
+				super().__init__()
+				self.stack = []
+				self.errors = []
+
+			def handle_starttag(self, tag, attrs):
+				tag_lower = tag.lower()
+				if tag_lower not in void_elements:
+					self.stack.append((tag_lower, self.getpos()))
+
+			def handle_endtag(self, tag):
+				tag_lower = tag.lower()
+				if tag_lower in void_elements:
+					return
+				if not self.stack:
+					self.errors.append(f"Unexpected closing tag </{tag}> at line {self.getpos()[0]}")
+					return
+				last_tag, pos = self.stack.pop()
+				if last_tag != tag_lower:
+					self.errors.append(
+						f"Mismatched tag: expected </{last_tag}> (opened line {pos[0]}), got </{tag}> at line {self.getpos()[0]}"
+					)
+
+		parser = TagBalanceParser()
+		parser.feed(cleaned)
+
+		self.assertEqual(len(parser.errors), 0, f"HTML parser encountered errors: {parser.errors[:5]}")
+		self.assertEqual(len(parser.stack), 0, f"Unclosed HTML tags remaining: {parser.stack[-5:]}")
+
+	def test_omnitrack_template_setup_exports(self):
+		import os
+		import re
+
+		html_path = frappe.get_app_path("omnitrack", "www", "omnitrack.html")
+		self.assertTrue(os.path.exists(html_path), f"omnitrack.html not found at {html_path}")
+
+		with open(html_path, "r", encoding="utf-8") as f:
+			content = f.read()
+
+		match = re.search(r"return\s*\{([^}]+)\};\s*\}\s*\n\s*\}\);", content)
+		self.assertIsNotNone(match, "setup() return block not found in omnitrack.html")
+
+		exports = set(
+			x.strip().split(":")[0].strip()
+			for x in match.group(1).split(",")
+			if x.strip() and not x.strip().startswith("//")
+		)
+
+		required_exports = [
+			"dashboardKPIs",
+			"updateDashboardKPIs",
+			"sessionNotesList",
+			"sessionNotesRows",
+			"newSessionPoint",
+			"addSessionPoint",
+			"removeSessionPoint",
+			"onLogRowKey",
+			"onSessionToolbarKey",
+			"toggleTrack",
+			"discardSession",
+			"discardConfirm",
+			"isTracking",
+			"formattedTime",
+			"trackerBlockName",
+			"trackerBoundBlock",
+			"getBlockTimingInfo",
+			"isBlockLocked",
+			"canLogTimesheet",
+			"formatAmPm",
+			"fetchWorkstationData",
+			"syncActiveSession",
+			"restoreActiveSession",
+			"showAdjustModal",
+			"adjustForm",
+			"openAdjustModal",
+			"applyAdjustedStartTime",
+			"submitAdjustedTimesheet",
+		]
+
+		missing = [exp for exp in required_exports if exp not in exports]
+		self.assertEqual(len(missing), 0, f"Missing required setup() exports in omnitrack.html: {missing}")
+
+	def test_multi_device_active_session_sync(self):
+		from omnitrack.api import sync_active_session, get_active_session, get_workstation_data
+		import time
+
+		user = frappe.session.user
+		start_ms = int(time.time() * 1000)
+
+		# 1. Start / sync session from device A (computer)
+		session_payload = {
+			"startTime": start_ms,
+			"selectedNature": "🎯 Planned",
+			"selectedProject": "PROJ-TEST",
+			"trackerNotes": "Cross-device planning session",
+			"trackerBlockName": "TEST-BLOCK-1",
+			"sessionNotesList": ["Initial task item from computer"],
+			"status": "active"
+		}
+		res = sync_active_session(session_payload)
+		self.assertEqual(res["status"], "success")
+
+		# 2. Query active session as device B (mobile phone)
+		active = get_active_session()
+		self.assertIsNotNone(active)
+		self.assertEqual(active["trackerNotes"], "Cross-device planning session")
+		self.assertEqual(active["sessionNotesList"], ["Initial task item from computer"])
+
+		# Verify workstation data includes the active session
+		ws_data = get_workstation_data()
+		self.assertIn("active_session", ws_data)
+		self.assertEqual(ws_data["active_session"]["trackerBlockName"], "TEST-BLOCK-1")
+
+		# 3. Add more lines from device B (mobile phone)
+		session_payload["sessionNotesList"].append("Second task item from mobile outside")
+		res_update = sync_active_session(session_payload)
+		self.assertEqual(res_update["status"], "success")
+
+		active_updated = get_active_session()
+		self.assertEqual(len(active_updated["sessionNotesList"]), 2)
+		self.assertIn("Second task item from mobile outside", active_updated["sessionNotesList"])
+
+		# 4. Clear / stop session
+		res_clear = sync_active_session(None)
+		self.assertEqual(res_clear["status"], "cleared")
+		self.assertIsNone(get_active_session())
+
+	def test_active_session_cleared_on_work_session_log(self):
+		from omnitrack.api import sync_active_session, get_active_session, log_work_session
+		import time
+
+		today = frappe.utils.nowdate()
+		b = _block(work_date=today, start_time="11:00:00", end_time="13:00:00").insert()
+
+		start_ms = int(time.time() * 1000)
+		sync_active_session({
+			"startTime": start_ms,
+			"trackerBlockName": b.name,
+			"trackerNotes": "Live focus",
+			"sessionNotesList": ["Item 1", "Item 2"],
+			"status": "active"
+		})
+		self.assertIsNotNone(get_active_session())
+
+		# Logging the work session against the block auto-clears the active session
+		log_work_session(
+			block_name=b.name,
+			session_date=today,
+			from_time="11:00:00",
+			to_time="12:30:00",
+			hours=1.5,
+			notes="Item 1\nItem 2"
+		)
+		self.assertIsNone(get_active_session())
+
+	def test_active_session_24h_expiration(self):
+		from omnitrack.api import sync_active_session, get_active_session
+		import time
+
+		# 25 hours in the past
+		past_ms = int((time.time() - 25 * 3600) * 1000)
+		sync_active_session({
+			"startTime": past_ms,
+			"trackerNotes": "Ancient session",
+			"status": "active"
+		})
+
+		# Should auto-expire and return None
+		self.assertIsNone(get_active_session())
+
+	def test_adjust_timesheet_timing_and_temporal_permissions(self):
+		from unittest.mock import patch
+		from omnitrack.api import quick_timer_punch, log_work_session
+		today = frappe.utils.nowdate()
+		yesterday = frappe.utils.add_days(today, -1)
+		two_days_ago = frappe.utils.add_days(today, -2)
+
+		frappe.set_user("test1@example.com")
+		try:
+			with patch("frappe.get_roles", return_value=["OmniTrack User"]):
+				# 1. Adjusting timesheet on today succeeds (e.g. 5m earlier / later)
+				res_today = quick_timer_punch(
+					action="stop",
+					work_date=today,
+					from_time="09:55:00",
+					to_time="10:30:00",
+					duration_hours=0.58,
+					deliverable_notes="Adjusted focus session today"
+				)
+				self.assertEqual(res_today["status"], "success")
+				b_today = frappe.get_doc("Planned Work Block", res_today["block"])
+				self.assertEqual(str(b_today.work_date), today)
+				from omnitrack.api import _time_str
+				self.assertEqual(_time_str(b_today.start_time), "09:55:00")
+				self.assertEqual(_time_str(b_today.end_time), "10:30:00")
+				self.assertEqual(frappe.utils.flt(b_today.duration_hours), 0.58)
+
+				# 2. Adjusting timesheet on yesterday succeeds
+				res_yesterday = quick_timer_punch(
+					action="stop",
+					work_date=yesterday,
+					from_time="16:00:00",
+					to_time="17:00:00",
+					duration_hours=1.0,
+					deliverable_notes="Adjusted focus session yesterday"
+				)
+				self.assertEqual(res_yesterday["status"], "success")
+				b_yesterday = frappe.get_doc("Planned Work Block", res_yesterday["block"])
+				self.assertEqual(str(b_yesterday.work_date), yesterday)
+				self.assertEqual(_time_str(b_yesterday.start_time), "16:00:00")
+				self.assertEqual(_time_str(b_yesterday.end_time), "17:00:00")
+
+				# 3. Regular user attempting to adjust before yesterday is blocked
+				with self.assertRaises(frappe.PermissionError):
+					quick_timer_punch(
+						action="stop",
+						work_date=two_days_ago,
+						from_time="14:00:00",
+						to_time="15:00:00",
+						duration_hours=1.0,
+						deliverable_notes="Attempted backdated adjustment beyond horizon"
+					)
+		finally:
+			frappe.set_user("Administrator")
+
+		# 4. Manager can adjust before yesterday
+		with patch("frappe.get_roles", return_value=["OmniTrack Manager", "System Manager"]):
+			res_mgr = quick_timer_punch(
+				action="stop",
+				work_date=two_days_ago,
+				from_time="14:00:00",
+				to_time="15:00:00",
+				duration_hours=1.0,
+				deliverable_notes="Manager historical timesheet adjustment"
+			)
+			self.assertEqual(res_mgr["status"], "success")
+			b_mgr = frappe.get_doc("Planned Work Block", res_mgr["block"])
+			self.assertEqual(str(b_mgr.work_date), two_days_ago)
+
 	def tearDown(self):
 		frappe.db.rollback()
 
