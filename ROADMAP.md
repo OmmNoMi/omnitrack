@@ -472,3 +472,68 @@ behaviour and fail.
 
 Worth noting for the app itself: that mid-request commit means a failure anywhere
 after the block insert in `quick_timer_punch` cannot be rolled back either.
+
+### Stop looked like it did nothing (fixed)
+
+Root cause was not the button. The click reached `toggleTrack` every time
+(verified by instrumenting the handler live). `toggleTrack` tears the session
+down locally, fires `sync_active_session(null)` **without awaiting it**, and then
+calls `fetchWorkstationData()`. That refresh hit `get_active_session` while the
+clear was still in flight, found `status: 'active'`, and called
+`restoreActiveSession()` — which had no stop guard of its own. The session came
+back inside a few hundred ms, so the HUD never visibly changed.
+
+Fixed by moving the guard into `restoreActiveSession` (the single choke point),
+adding the same bar to the `fetchWorkstationData` restore branch, mirroring the
+ended-session set into `localStorage` so other tabs honour it, and cancelling a
+pending `_syncDebounceTimer` on stop/discard so a 500ms-old payload cannot
+re-activate the session after the clear.
+
+### Modals were dialogs in looks only (fixed)
+
+`FDialog` had Esc but no scroll lock, no initial focus, no focus trap and no
+focus restore — WCAG 2.4.3 and 2.1.2. Added all four to `FDialog` itself so every
+dialog built on it inherits them, with a depth counter so a nested dialog closing
+does not unlock the page. The lock sets `overflow:hidden` on `documentElement`
+too, because `<html>` is this page's scrolling element.
+
+Still open: the work-block drawer (`showBlockDrawer`) is its own `role="dialog"`
+and does not go through `FDialog` — it still has no trap or scroll lock.
+
+## Domain model written down (`docs/DOMAIN_MODEL.md`)
+
+Project / Task / Planned Work Block / Work Session were being used
+interchangeably, and "timesheet" meant three different objects depending on who
+said it. Every metric on top of that — PAI, variance, "unlogged hours" — inherited
+the ambiguity. The canonical definition now lives in `docs/DOMAIN_MODEL.md`; the
+four-layer "for whom / what / when / did" framing is codified there.
+
+### Still open, in priority order
+
+- **Stop must not create a Planned Work Block.** `quick_timer_punch(action="stop")`
+  calls `frappe.new_doc("Planned Work Block")` on the unbound path, setting
+  `duration_hours = actual_hours` and `variance_hours = 0.0`. That fabricates a
+  retroactive plan that perfectly fulfils itself, so PAI measures a tautology.
+  Verified: 157 blocks against 158 session rows; one day holds 18 byte-identical
+  `In Progress` 14:00–16:00 blocks plus 6 identical 12:58:15 blocks. An unbound
+  stop should produce a session on a block explicitly marked `⚠️ Unplanned`.
+- **"Xh unlogged" is meaningless.** `dayTimeline.gapH = Σ(block spans) − Σ(session
+  spans)` with no overlap merging and no dedup — eighteen overlapping two-hour
+  blocks sum to 36 planned hours inside a 24-hour day. Must be derived from the
+  associate's commitment hours instead.
+- **No commitment-hours source exists.** `commitment` appears only as prose in
+  README / CHANGELOG / SRS / AGENTS.md — no field, no API, no calculation.
+  `OmniTrack Shift Template` → `OmniTrack Shift Session` (`min_duration_hours`),
+  assigned via `OmniTrack Shift Split Assignment`, is the nearest structure and is
+  **never read by any Python or JavaScript in the app**. Wire it up or replace it
+  with a per-user contracted-hours value; the day legend cannot be correct until
+  one exists.
+- **`employee` means two different things.** `Planned Work Block.employee` is a
+  Link to `User`; `OmniTrack Shift Split Assignment.employee` is a Link to
+  `Employee`. Same name, same module, different targets.
+- **Duplicate blocks need cleanup.** PWB-2026-00160/00161/00162 (same 16:24
+  session, created 10:10:32 / 10:23:06 / 10:23:59) and the 00163/00164 pair
+  (19 s apart) were written by repeated Stop presses while the HUD appeared dead.
+  Deletion is irreversible — needs an explicit go-ahead.
+- **Regression tests** for the invariants in `docs/DOMAIN_MODEL.md` §10, mutation-
+  verified and wired into CI alongside `scripts/check_www_html.py`.

@@ -15,7 +15,7 @@
 
 <p align="center">
   <b>The Enterprise Workforce Operating System for Frappe Framework & ERPNext</b><br>
-  <i>Discontinuous Split-Shifts · Real-Time Workstation HUD · Plan Adherence Engine · Cross-Site Cryptographic Sync</i>
+  <i>Discontinuous Split-Shifts · Real-Time Workstation HUD · Mathematical Plan Adherence · Cross-Site Cryptographic Sync</i>
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@
 
 ## ⚡ Executive Summary: Stop Guessing. Start Knowing.
 
-Traditional ERP timesheets are broken. Associates fill out fictitious hours on Friday afternoon from memory, biometric clocks treat split shifts like unexcused absences, and managers have zero visibility into whether daily commitments were actually delivered.
+Traditional enterprise timesheets are broken. Associates scramble to fill out fictitious hours on Friday afternoon from memory, biometric clocks treat modern split shifts like unexcused absences, and managers have zero visibility into whether daily commitments were actually delivered.
 
 **OmniTrack transforms this entire paradigm.**
 
@@ -46,6 +46,38 @@ Engineered by **OmmNoMi Automation**, OmniTrack is a production-grade workforce 
 |  • Immutable Past Blocks    |              |  • Zero-Refresh Multi-Device    |              |  • Cross-Site Sync    |
 +-----------------------------+              +---------------------------------+              +-----------------------+
 ```
+
+---
+
+## 🏛️ The Four Core Concepts (Truth in Architecture)
+
+OmniTrack establishes a clean, mathematically rigorous domain hierarchy grounded in database truth (incorporating the forensic characterization and schema ground truth):
+
+```
+  📁 PROJECT (Top-Level Ownership & Billing Container)
+      │  ERPNext `Project` or OmniTrack Native Workspace
+      │
+      └── 🎯 TASK / WORK ITEM (The Multi-Day Actionable Deliverable)
+            │  ERPNext `Task`, Frappe Core `ToDo`, or OmniTrack `work_item`
+            │
+            ├── 📅 PLANNED WORK BLOCK (The Calendar Commitment: "When I plan to work")
+            │     │  DocType `Planned Work Block` (PWB-YYYY-#####) · Immutable once past
+            │     │
+            │     ├── ⏱️ WORK SESSION 1 (Execution Reality: "What actually happened")
+            │     │     Child row in `OmniTrack Work Session` · Live stopwatch punch + micro-lines
+            │     │
+            │     └── ⏱️ WORK SESSION 2 (Subsequent sitting against same commitment)
+            │           Incremental progress log appended directly to parent block
+            │
+            └── 📅 NEXT PLANNED WORK BLOCK (Discontinuous Split Shift / Future Sitting)
+                  └── ⏱️ WORK SESSION 3 (Evening execution sitting)
+```
+
+### Clarifying What Each Entity Truly Is:
+1. **📁 Project**: The macro-level billing and client contract umbrella. You don't work directly on a Project for 30 minutes; it is the financial and organizational container.
+2. **🎯 Task / Work Item**: The deliverable assigned to an associate (e.g., *"Build Searchable ToDo Dropdown"*). A Task typically spans multiple days and requires multiple sittings.
+3. **📅 Planned Work Block**: A reservation on an associate's daily calendar for a specific date and time window (e.g., *Sunday 14:00–16:00*). It represents **commitment**. Once yesterday has elapsed, historical blocks are **permanently locked**.
+4. **⏱️ Work Session**: The physical reality of sitting at your desk running the stopwatch. It is a **child table row** inside the Planned Work Block holding start/end timestamps, elapsed hours, and progressive micro-logs.
 
 ---
 
@@ -64,18 +96,19 @@ Say goodbye to the fiction that knowledge and modern service work fits into a si
 * **Discontinuous Split-Shifts**: Intelligently models discontinuous morning, afternoon, and night blocks with sub-minute precision.
 * **Midnight-Crossing Boundary Engine**: Automatically detects sessions and shifts that cross midnight, mathematically splitting them into Day N (start→24:00) and Day N+1 (00:00→end) continuation records.
 * **Smart Overlap Lane Packing**: Concurrent blocks are dynamically arranged using greedy interval graph coloring into clean, collision-free side-by-side sub-lanes.
+* **Interval Union Calculation**: Daily planned commitment is computed using mathematical interval union ($\mu \circ \bigcup$), ensuring that overlapping concurrent blocks can never sum to impossible numbers beyond 24 hours.
 * **Interactive Drag & Snap Rescheduling**: Drag blocks across days, resize bottom edges with 15-minute magnetic snapping, and view rich hover cards with real-time actuals vs planned progress bars.
 * **All-Day Leave & Away Banners**: Dedicated top-level banner row isolating sick leave, vacations, and out-of-office blocks from working capacity calculations.
 
 ### 3. 🎯 Plan Adherence Index (PAI / PACI Engine)
-How truthful is your company\'s execution velocity?
-OmniTrack computes the **Plan Adherence Index (PAI)** in real time:
+How truthful is your company's execution velocity? OmniTrack computes the **Plan Adherence Index (PAI)** in real time:
 
-$$\\text{PAI} = \\left( \\frac{\\sum \\text{Planned Hours Worked Within Commitment}}{\\sum \\text{Total Logged Hours}} \\right) \\times 100\\%$$
+$$\text{PAI} = \left( \frac{\sum \text{Planned Hours Worked Within Commitment}}{\sum \text{Total Logged Hours}} \right) \times 100\%$$
 
+* **Strict Plan vs. Actual Separation**: Unplanned stopwatch sessions are authentically classified under `task_nature = 'Unplanned Work'`, preventing retroactive plan fabrication from falsely inflating adherence to 100%.
 * **Instant Header Gauge**: High-contrast pulse badge displaying live PAI percentage (e.g. `75%`, `100%`).
 * **Underplanned & Overdue Radar**: Automatic scanning surfaces past-due or under-allocated tasks with instant one-click actions (`Plan in Calendar` or `Start Now`).
-* **Velocity Variance Metrics**: Live calculation of Expected vs Actual vs $\\Delta\\text{ Variance}$ hours on every planned work block and ERPNext Timesheet.
+* **Velocity Variance Metrics**: Live calculation of Expected vs Actual vs $\Delta\text{ Variance}$ hours on every planned work block and ERPNext Timesheet.
 
 ### 4. ⚖️ Temporal Governance & Anti-Fraud Architecture
 Enterprise timesheets require strict auditability. OmniTrack enforces strict business rules at the database engine level:
@@ -88,66 +121,11 @@ Manage a parent headquarters with distributed regional branches, franchised stud
 * **Monotonic Checksum Verification**: Every payload is verified against a monotonic SHA-256 hash to guarantee zero in-transit tampering.
 * **Granular White-Labeling**: Customer-facing workspace isolation ensuring clients only view their authorized deliverables.
 
-### 6. 🤖 Autonomous Attendance Synthesis
-Eliminate manual biometric punch reconciliation and attendance disputes.
-* **Synthesis from Ground Truth**: Synthesizes standard Frappe/ERPNext `Attendance` records directly from validated timesheet sessions and check-in logs.
-* **Configurable Cutoffs & Grace Windows**: Configurable midnight cutoff thresholds (default `04:00:00`) prevent graveyard and overnight shifts from falsely tripping "Absent" or "Late Entry" penalties.
-
----
-
-## 🏛️ System Architecture
-
-```mermaid
-flowchart TB
-    subgraph ClientLayer ["Client & Associate Layer"]
-        Workstation["💻 OmniTrack Workstation SPA (/omnitrack)"]
-        MobilePWA["📱 Mobile Responsive PWA"]
-        ElevationModal["🔍 Full-Focus Elevation Modal (Shift+S)"]
-    end
-
-    subgraph ControllerLayer ["Real-Time Controller & Event Bus"]
-        SocketIO["⚡ Frappe Socket.IO Real-Time Engine"]
-        RedisCache["🚀 Redis Cache & Session State"]
-        API["⚙️ OmniTrack REST / Whitelisted API (api.py)"]
-    end
-
-    subgraph GovernanceLayer ["Temporal Governance & Validation"]
-        HorizonGuard["⏳ 2-Day Horizon Guard (Today & Yesterday)"]
-        ImmutabilityGuard["🔒 Historical Plan Immutability (work_date < today)"]
-        HTML5ParserGuard["🛡️ Spec-Compliant HTML5 Tree Guard (check_www_html.py)"]
-    end
-
-    subgraph CoreDocTypes ["OmniTrack Core Domain"]
-        PWB["📅 Planned Work Block (Split-Shifts)"]
-        OWS["⏱️ OmniTrack Work Session (Incremental Lines)"]
-        Settings["⚙️ OmniTrack Settings (Cutoffs & Tolerances)"]
-    end
-
-    subgraph ERPNextIntegration ["ERPNext & Frappe Integration"]
-        Timesheet["📝 Standard ERPNext Timesheet"]
-        Attendance["👤 Standard ERPNext Attendance"]
-        SyncGateway["🔐 HMAC-SHA256 Cross-Site Sync Gateway"]
-    end
-
-    Workstation --> API
-    MobilePWA --> API
-    ElevationModal --> API
-    API <--> RedisCache
-    API --> SocketIO
-    SocketIO -. Live Refresh .-> Workstation
-
-    API --> HorizonGuard
-    API --> ImmutabilityGuard
-    HorizonGuard --> PWB
-    ImmutabilityGuard --> PWB
-    API --> OWS
-
-    OWS --> Timesheet
-    PWB --> Timesheet
-    OWS --> Attendance
-    PWB --> Attendance
-    API --> SyncGateway
-```
+### 6. 🤖 Dual-Mode Runtime & Autonomous Attendance Synthesis
+OmniTrack adapts instantly to your technical infrastructure:
+* **Mode A: Pure Frappe Standalone Engine**: Runs cleanly on standalone Frappe Framework installations without requiring ERPNext.
+* **Mode B: ERPNext Enterprise Integrated Engine**: Seamlessly links to ERPNext `Project`, `Task`, `Timesheet`, and `Employee` when ERPNext is installed.
+* **Autonomous Attendance Synthesis**: Synthesizes standard Frappe/ERPNext `Attendance` records directly from validated timesheet sessions and check-in logs. Configurable midnight cutoff thresholds (default `04:00:00`) prevent overnight shifts from falsely tripping "Absent" penalties.
 
 ---
 
@@ -192,7 +170,7 @@ cd /path/to/frappe-bench
 # Get the OmniTrack app
 bench get-app https://github.com/OmmNoMi/omnitrack.git
 
-# Install onto your target site
+# Install onto your target site (Standalone Frappe or ERPNext)
 bench --site [your-site-name] install-app omnitrack
 
 # Run database schema migrations
@@ -238,6 +216,16 @@ Run the automated Python unit tests covering split-shift synthesis, midnight spl
 ```bash
 bench --site [your-site-name] run-tests --app omnitrack
 ```
+
+---
+
+## 📄 Documentation Reference
+
+For deep technical specifications, mathematical proofs, and architectural audits:
+* [🏛️ Architecture & Domain Model](docs/ARCHITECTURE.md) — Universal 4-tier domain hierarchy, dual-mode topologies, and forensic schema audit resolution.
+* [⏱️ Split-Shift & Midnight Spanning Attendance Engine](docs/SPLIT_SHIFT_ENGINE.md) — Mathematical formulas and midnight cutoff logic.
+* [🌐 Cross-Site Synchronization](docs/CROSS_SITE_SYNC.md) — HMAC-SHA256 signature verification and replication protocols.
+* [🛠️ Developer Guide](docs/DEVELOPMENT_GUIDE.md) — Local development, test harnesses, and code conventions.
 
 ---
 

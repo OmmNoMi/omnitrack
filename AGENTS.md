@@ -16,6 +16,11 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 - Commits and pushes are strictly made on user instruction with author identity `OmmNoMi Automation <ommnomi.automation@gmail.com>`.
 - Core branch flow: `develop` (active development), `feat/core-split-shift-engine` (feature work), `main` (production release).
 
+## Domain Model (read this first)
+- **`docs/DOMAIN_MODEL.md` is canonical** for what Project, Task, Planned Work Block and Work Session mean. Where code disagrees with it, the code is the bug.
+- The four layers answer four different questions — **Project = for whom, Task = what, Planned Work Block = when, Work Session = did**. Never collapse Block and Session: a Block is a *commitment made before* the work, a Session is a *child row recording* the work. `quick_timer_punch` creating a Planned Work Block on Stop is the defect that motivated the document.
+- Never write the word "timesheet" unqualified. Say **Work Session** (child row), **Planned Work Block** (commitment), or **ERPNext Timesheet** (billing doc, absent on `ommnomi.local`).
+
 ## Frappe Engineering Rules
 - **100% Configuration Driven**: Keep all features toggleable via `OmniTrack Settings`.
 - **Zero Monkey Patching**: Standard hooks, DocEvents, and Permission Queries only.
@@ -111,3 +116,40 @@ never as a label — resolve identity positionally.
 
 After editing `www/*.html`: `bench --site <site> clear-website-cache`, then reload
 with a cache-busting query. After editing anything under `src/`: `yarn build` first.
+
+## Gotcha: in-DOM templates are parsed by the browser, not by Vue
+
+Everything under `omnitrack/www/*.html` is an in-DOM template. The browser's HTML
+parser sees it first, so two things an SFC tolerates silently destroy the page:
+
+* self-closing a non-void element (`<f-dropdown … />`) — the browser keeps it
+  open and it swallows the rest of the document;
+* nesting a control in a control (`<button>` inside `<button>`) — the parser
+  closes the outer one early, every following `</div>` lands on the wrong
+  element, and the close walks up through `<main>` and `#app`.
+
+The symptom is not an error: `#app` ends up holding only HEADER/NAV/MAIN, the
+rest of the markup spills into `<body>`, and raw `{{ mustaches }}` render.
+
+Run `env/bin/python scripts/check_www_html.py` before shipping any `www/*.html`
+edit. It parses with html5lib and fails on exactly those structural errors;
+regex balancers and Python's `html.parser` both report these files as balanced.
+
+## Gotcha: `restoreActiveSession` must carry the stop guard itself
+
+`fetchWorkstationData` restored the server's `active_session` with no stop guard,
+and the stop path calls it right after `sync_active_session(null)` — which is
+fire-and-forget. The refresh raced the clear, found the row still active and put
+the session straight back, so **Stop looked like it did nothing at all**. Guards
+belong in `restoreActiveSession`, the one choke point every caller passes
+through, not in each caller. The ended-session set is mirrored into
+`localStorage` (`omnitrack_ended_sessions`) so a second tab cannot push a
+stopped session back either.
+
+## Gotcha: `document.body.style.overflow = 'hidden'` does not lock this page
+
+`document.scrollingElement` here is `<html>`. A modal must set `overflow:hidden`
+on `documentElement` as well as `body`. Note that scripted `window.scrollBy`
+still moves an `overflow:hidden` page — verify the lock with
+`getComputedStyle(document.scrollingElement).overflowY`, not by scripting a
+scroll.

@@ -316,11 +316,22 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		block.start_time = start_t
 		block.end_time = end_t
 		block.duration_hours = dur_hours
+		block.actual_hours = dur_hours
+		block.variance_hours = 0.0
 		block.project = project
 		block.task = task
 		block.deliverable_notes = _require_session_notes(deliverable_notes)
 		block.status = "Completed"
 		block.task_nature = work_nature or "🎯 Planned"
+		block.append("sessions", {
+			"session_date": target_date,
+			"from_time": start_t,
+			"to_time": end_t,
+			"hours": dur_hours,
+			"notes": block.deliverable_notes,
+			"logged_via": "Stopwatch",
+			"task_nature": block.task_nature,
+		})
 		block.flags.ignore_permissions = True
 		block.insert()
 
@@ -527,10 +538,13 @@ def sync_active_session(session_data=None):
 	# If session_data is empty or status is stopped/cleared, delete the active session
 	if not session_data or session_data.get("status") in ("stopped", "cleared", "discarded"):
 		frappe.cache.hdel("omnitrack:active_session", user)
+		frappe.defaults.clear_default("omnitrack_active_session", parent=user)
+		frappe.db.set_default("omnitrack_active_session", None, parent=user)
 		frappe.db.sql(
 			"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
 			{"user": user}
 		)
+		frappe.clear_cache(user=user)
 		frappe.db.commit()
 		try:
 			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": user}, user=user)
@@ -597,10 +611,13 @@ def get_active_session(user=None):
 		diff_seconds = (now_ms - start_time) / 1000.0
 		if diff_seconds > 86400 or diff_seconds < -300:
 			frappe.cache.hdel("omnitrack:active_session", target_user)
+			frappe.defaults.clear_default("omnitrack_active_session", parent=target_user)
+			frappe.db.set_default("omnitrack_active_session", None, parent=target_user)
 			frappe.db.sql(
 				"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
 				{"user": target_user}
 			)
+			frappe.clear_cache(user=target_user)
 			frappe.db.commit()
 			return None
 
@@ -681,8 +698,48 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			limit=150
 		) if frappe.db.exists("DocType", "Planned Work Block") else []
 
-	# Enrich blocks with Project Name and Task Subject
+	# 1b. Bulk query child sessions for all loaded blocks
+	block_names = [b.name for b in work_blocks]
+	sessions_by_block = {}
+	if block_names and frappe.db.exists("DocType", "OmniTrack Work Session"):
+		all_sessions = frappe.db.sql("""
+			SELECT parent, session_date, from_time, to_time, hours, notes, logged_via
+			FROM `tabOmniTrack Work Session`
+			WHERE parent IN %(block_names)s AND parenttype = 'Planned Work Block'
+			ORDER BY session_date ASC, from_time ASC
+		""", {"block_names": block_names}, as_dict=True)
+		for s in all_sessions:
+			s["session_date"] = str(s.session_date or "")
+			s["from_time"] = _time_str(s.from_time)
+			s["to_time"] = _time_str(s.to_time)
+			s["hours"] = flt(s.hours)
+			sessions_by_block.setdefault(s.parent, []).append(s)
+
+	# Enrich blocks with Project Name, Task Subject, and Sessions
 	for b in work_blocks:
+		b["start_time"] = _time_str(b.get("start_time"))
+		b["end_time"] = _time_str(b.get("end_time"))
+		b["work_date"] = str(b.get("work_date") or "")
+
+		# Attach real child sessions
+		b["sessions"] = sessions_by_block.get(b.name, [])
+
+		# Fallback: if a Completed block has actual_hours or duration_hours but no child session rows,
+		# synthesize a session so the timeline displays it!
+		if not b["sessions"] and b.get("status") == "Completed" and flt(b.get("actual_hours") or b.get("duration_hours")) > 0:
+			if b.get("start_time") and b.get("end_time"):
+				b["sessions"] = [{
+					"session_date": b["work_date"],
+					"from_time": b["start_time"],
+					"to_time": b["end_time"],
+					"hours": flt(b.get("actual_hours") or b.get("duration_hours")),
+					"notes": b.get("deliverable_notes") or "Completed Session",
+					"logged_via": "Stopwatch"
+				}]
+
+		if flt(b.get("actual_hours")) <= 0 and b["sessions"]:
+			b["actual_hours"] = round(sum(flt(s.get("hours") or 0) for s in b["sessions"]), 2)
+
 		if b.project and frappe.db.exists("Project", b.project):
 			b["project_name"] = frappe.db.get_value("Project", b.project, "project_name") or b.project
 		else:

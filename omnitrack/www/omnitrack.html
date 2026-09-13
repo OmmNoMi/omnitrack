@@ -3137,13 +3137,79 @@
         }
       };
       window.addEventListener('keydown', this._keyHandler);
+      if (this.modelValue) this.engage();
+    },
+    watch: {
+      modelValue(open) { open ? this.engage() : this.release(); }
     },
     unmounted() {
       if (this._keyHandler) {
         window.removeEventListener('keydown', this._keyHandler);
       }
+      this.release();
     },
     methods: {
+      // A modal that lets the page behind it scroll and lets Tab walk out into
+      // that page is a dialog in looks only: WCAG 2.4.3 (focus order) and 2.1.2
+      // (no keyboard trap, which also means no ESCAPE from the wrong place).
+      // Lock, focus, trap and restore here so every FDialog gets it, not just
+      // the ones someone remembered to wire up.
+      focusables() {
+        const panel = this.$refs.panel;
+        if (!panel) return [];
+        return [...panel.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.offsetParent !== null || el === document.activeElement);
+      },
+      onTab(ev) {
+        const items = this.focusables();
+        if (!items.length) return;
+        const first = items[0], last = items[items.length - 1];
+        const active = document.activeElement;
+        if (!this.$refs.panel.contains(active)) {
+          ev.preventDefault();
+          (ev.shiftKey ? last : first).focus();
+          return;
+        }
+        if (ev.shiftKey && active === first) { ev.preventDefault(); last.focus(); }
+        else if (!ev.shiftKey && active === last) { ev.preventDefault(); first.focus(); }
+      },
+      engage() {
+        if (this._engaged) return;
+        this._engaged = true;
+        this._returnFocus = document.activeElement;
+        // Counted, so closing an inner dialog does not unlock the page while an
+        // outer one is still open.
+        const depth = (window.__omnitrackDialogDepth || 0) + 1;
+        window.__omnitrackDialogDepth = depth;
+        if (depth === 1) {
+          // The scrolling element here is <html>, not <body>: locking body alone
+          // leaves the page behind the modal scrolling exactly as before.
+          this._prevOverflow = [document.documentElement.style.overflow, document.body.style.overflow];
+          document.documentElement.style.overflow = 'hidden';
+          document.body.style.overflow = 'hidden';
+        }
+        this.$nextTick(() => {
+          const items = this.focusables();
+          // Skip the ✕: landing on "close" reads as "the only thing here is leaving".
+          const target = items.find(el => el.getAttribute('aria-label') !== 'Close dialog') || items[0];
+          if (target) target.focus();
+        });
+      },
+      release() {
+        if (!this._engaged) return;
+        this._engaged = false;
+        const depth = Math.max(0, (window.__omnitrackDialogDepth || 1) - 1);
+        window.__omnitrackDialogDepth = depth;
+        if (depth === 0) {
+          const prev = this._prevOverflow || ['', ''];
+          document.documentElement.style.overflow = prev[0] || '';
+          document.body.style.overflow = prev[1] || '';
+        }
+        const back = this._returnFocus;
+        this._returnFocus = null;
+        if (back && back.focus && document.contains(back)) back.focus();
+      },
       close() {
         if (!this.dismissible) return;
         this.$emit('update:modelValue', false);
@@ -3168,6 +3234,8 @@
           :aria-label="title || ariaLabel || 'Dialog'"
         >
           <div
+            ref="panel"
+            @keydown.tab="onTab"
             class="rounded-t-3xl sm:rounded-3xl shadow-2xl border w-full p-5 sm:p-6 space-y-4 transition-colors max-h-[90vh] overflow-y-auto bg-white border-gray-200 text-gray-900 dark:bg-[#1E1E1E] dark:border-[#2A2A2A] dark:text-white"
             :class="sizeClass"
           >
@@ -4209,6 +4277,7 @@
       let _lastLocalUpdate = Date.now();
 
       const syncActiveSession = (immediate = false) => {
+        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
         _lastLocalUpdate = Date.now();
         if (isTracking.value) {
           const saved = localStorage.getItem('omnitrack_active_session');
@@ -4256,6 +4325,12 @@
         // otherwise a reload strands a clock that is genuinely still running.
         if (!sessionData || !sessionData.startTime) return false;
         if (sessionData.status && sessionData.status !== 'active') return false;
+        // The stop guard belongs HERE, not in each caller. The dashboard refresh that
+        // runs right after a stop used to restore the session straight back from a
+        // server row that had not been cleared yet — so Stop looked like it did
+        // nothing at all. Any path that restores must clear this bar.
+        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return false;
+        if (wasEndedHere(sessionData.startTime)) return false;
         const startMs = Number(sessionData.startTime);
         const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         if (elapsed >= 86400) return false; // expired past 24h
@@ -4300,13 +4375,36 @@
       // to close it or start a new one. Remember which sessions this device just
       // ended and refuse to resurrect exactly those. A genuinely new session
       // started elsewhere carries a different startTime and still syncs.
+      // Kept in localStorage as well as memory: a session stopped in this tab must
+      // stay stopped in every other tab of this browser, and across a reload. Memory
+      // alone only protects the tab that pressed the button.
+      const _ENDED_KEY = 'omnitrack_ended_sessions';
       const _endedSessions = new Set();
-      const markSessionEnded = (sTime) => {
+      const _readEndedStore = () => {
         try {
-          if (sTime) _endedSessions.add(Math.round(Number(sTime)));
+          const raw = JSON.parse(localStorage.getItem(_ENDED_KEY) || '[]');
+          return Array.isArray(raw) ? raw.filter(e => e && Date.now() - Number(e.at || 0) < 21600000) : [];
+        } catch (e) { return []; }
+      };
+      const markSessionEnded = (sTime) => {
+        const add = [];
+        try {
+          if (sTime) add.push(Math.round(Number(sTime)));
           const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
-          if (p && p.startTime) _endedSessions.add(Math.round(Number(p.startTime)));
+          if (p && p.startTime) add.push(Math.round(Number(p.startTime)));
         } catch (e) {}
+        add.forEach(t => _endedSessions.add(t));
+        try {
+          const store = _readEndedStore();
+          add.forEach(t => { if (!store.some(e => Math.abs(Number(e.start) - t) < 5000)) store.push({ start: t, at: Date.now() }); });
+          localStorage.setItem(_ENDED_KEY, JSON.stringify(store.slice(-40)));
+        } catch (e) {}
+      };
+      const wasEndedHere = (startTime) => {
+        const t = Math.round(Number(startTime));
+        if (!t) return false;
+        for (const ended of _endedSessions) if (Math.abs(ended - t) < 5000) return true;
+        return _readEndedStore().some(e => Math.abs(Number(e.start) - t) < 5000);
       };
 
       const reconcileActiveSession = (remote) => {
@@ -4316,14 +4414,9 @@
           return;
         }
         // Never resurrect a session this device has already ended.
-        if (remote && remote.startTime) {
-          const rTime = Math.round(Number(remote.startTime));
-          for (const ended of _endedSessions) {
-            if (Math.abs(ended - rTime) < 5000) {
-              handleRemoteSessionCleared({ silent: true });
-              return;
-            }
-          }
+        if (remote && remote.startTime && wasEndedHere(remote.startTime)) {
+          handleRemoteSessionCleared({ silent: true });
+          return;
         }
         if (!remote || remote.status !== 'active') {
           handleRemoteSessionCleared();
@@ -4401,7 +4494,9 @@
         trackerBlockName.value = null;
         markSessionEnded();
         localStorage.removeItem('omnitrack_active_session');
-        fetchWorkstationData(selectedEmployee.value);
+        if (!(opts && opts.silent)) {
+          fetchWorkstationData(selectedEmployee.value);
+        }
         if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') {
           fetchPlannerData();
         }
@@ -4601,6 +4696,7 @@
       watch(isSessionElevated, (open) => {
         if (open) {
           _sessionPopupReturnFocus = document.activeElement;
+          document.documentElement.style.overflow = 'hidden';
           document.body.style.overflow = 'hidden';
           nextTick(() => {
             const root = sessionCardRef.value;
@@ -4608,6 +4704,7 @@
             if (target) target.focus();
           });
         } else {
+          document.documentElement.style.overflow = '';
           document.body.style.overflow = '';
           if (_sessionPopupReturnFocus && _sessionPopupReturnFocus.focus) {
             _sessionPopupReturnFocus.focus();
@@ -4787,7 +4884,10 @@
       // client's invoice it reads as time billed for no work. So this is a hard
       // rule, not a confirmation: no lines, no save.
       const sessionHasLines = computed(() =>
-        (sessionNotesList.value || []).some(p => String(p || '').trim().length >= 3)
+        (sessionNotesList.value || []).some(p => String(p || '').trim().length >= 3) ||
+        String(trackerNotes.value || '').trim().length >= 3 ||
+        !!trackerBlockName.value ||
+        !!trackerBoundBlock.value
       );
       const refuseEmptySession = () => {
         showToast('Write at least one line first — a timesheet with no description tells your manager (and the client being billed) nothing about the hour.', 'warning');
@@ -4962,7 +5062,9 @@
             if (m.kpis) updateDashboardKPIs(m.kpis);
 
             // Multi-device active session sync (computer <-> mobile phone)
-            if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime) {
+            if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime
+                && !_isStoppingSession && (Date.now() - _lastLocalStop >= 10000)
+                && !wasEndedHere(m.active_session.startTime)) {
               const serverLines = Array.isArray(m.active_session.sessionNotesList) ? m.active_session.sessionNotesList : [];
               const localLines = sessionNotesList.value || [];
               const serverTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
@@ -5077,6 +5179,9 @@
         trackerTimer.value = null;
         markSessionEnded(sTime);
         localStorage.removeItem('omnitrack_active_session');
+        // A sync debounced 500ms ago still holds the live payload; let it fire
+        // after the clear and the server is active again one beat later.
+        if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
         postJSON('sync_active_session', { session_data: null }).catch(() => {});
         trackerSeconds.value = 0;
         trackerBlockName.value = null;
@@ -5117,6 +5222,9 @@
           trackerTimer.value = null;
           markSessionEnded(sTime);
           localStorage.removeItem('omnitrack_active_session');
+          // A sync debounced 500ms ago still holds the live payload; let it fire
+          // after the clear and the server is active again one beat later.
+          if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
           // snapshot, then zero the clock: a standby HUD showing the last
           // session's elapsed time reads like a session that is still open
