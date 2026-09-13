@@ -57,8 +57,22 @@ OmniTrack is structured as a modular Frappe application designed to seamlessly e
 - **2-Pane Left-and-Right Architecture**:
   - **Left Pane (Context & Controls)**: Live high-contrast digital stopwatch (`00:43:34`), Start/Stop action, Deliverable / Task Title, Project picker, and Activity Nature dropdown defaulted to `Planned Work`.
   - **Right Pane (Progressive Work Log)**: Incremental subtask lines logger (`+ Add Line` / <kbd>Enter</kbd>) for logging accomplishments throughout a work session every 5–10 minutes.
-- **Timesheet Aggregation**: Upon stopping the timer, subtask lines and task title compile automatically into bulleted notes stored in the `OmniTrack Work Session` child table (or ERPNext Timesheet).
+- **Searchable ToDo / Task Dropdown**: Embedded search popover indexing Frappe `ToDo` and ERPNext `Task` doctypes. Selecting an open item auto-fills project, nature, and establishes bi-directional binding with calendar work blocks.
+- **Full-Focus Elevation Mode (<kbd>Shift + S</kbd>)**: Elevates the active session box into a distraction-free dialog modal to protect deep-work focus.
+- **Timesheet Aggregation & Safety Guards**:
+  - Stopping the timer compiles subtask lines and task title into bulleted notes in `OmniTrack Work Session` child table (or ERPNext Timesheet).
+  - 2-step Discard action allows abandoning false starts without polluting ERPNext timesheets.
+  - Confirmation prompt protects against submitting blank line logs.
 - **Midnight Boundary Splitting**: Work sessions crossing midnight are automatically split into discrete Day N and Day N+1 child records.
+
+### 5. Multi-Device Real-Time Event Bus & Cache Eviction (`api.py`)
+- **Instant Reflection Across Devices**: Sessions started or updated on a mobile device broadcast real-time events via Frappe Socket.IO (`publish_realtime('omnitrack_session_synced')`).
+- **Redis Cache Invalidation**: Explicit `frappe.cache().delete_value(...)` and `frappe.db.commit()` in `sync_active_session()`, `log_work_session()`, and `quick_timer_punch()` guarantee that open desktop tabs immediately observe new sessions and line items without a full-page browser refresh.
+
+### 6. In-DOM Web Template Validation & HTML5 Parser Guard (`scripts/check_www_html.py`)
+- **Tree-Construction Verification**: Unlike Vite Single File Components (`.vue`), in-DOM templates (`www/*.html`) are parsed by the browser's native HTML5 parser before Vue evaluates them.
+- **Strict Prohibition of Nested Interactive Controls**: Controls like `<button>` inside `<button>` cause WHATWG HTML5 parsers to force-close outer containers, desynchronizing `</div>` endings and prematurely ejecting components outside `<div id="app">`.
+- **Automated Structural Linting**: `scripts/check_www_html.py` uses `html5lib` to assert zero `unexpected-end-tag` or `unexpected-start-tag-implies-end-tag` errors across all templates.
 
 ---
 
@@ -101,4 +115,13 @@ OmniTrack implements multi-tier declarative access control across 6 dedicated ro
 5. **Past Planned Work Blocks Lock (Historical Plan Immutability)**:
    - In the past (`work_date < nowdate()`), NO ONE (neither User nor Manager nor Admin) can create, move, reschedule, or delete planned work blocks.
    - Historical planning commitments are permanently locked once their calendar day has elapsed.
+
+---
+
+<p align="center">
+  <span style="font-family:'Roboto',sans-serif;font-weight:900;">
+    <span style="color:#4285f4;">Omm</span><span style="color:#34a853;">No</span><span style="color:#ea4335;">M</span><span style="color:#fbbc05;">i</span>
+  </span> Automation LLP<br>
+  <i>Architecting Next-Generation Operational Ecosystems</i>
+</p>
 

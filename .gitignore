@@ -10,6 +10,8 @@ __pycache__/
 dist/
 build/
 node_modules/
+omnitrack/public/node_modules
+*.d.ts
 *.log
 
 # Strict Data & Confidentiality Guardrails (NEVER PUSH TO GIT)

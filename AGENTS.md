@@ -69,3 +69,45 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
    - Whenever editing Frappe portal/web views (`www/*.html`), always clear the site cache (`bench --site [sitename] clear-cache`) and re-verify before claiming fixes.
 
 
+
+## Gotcha: the session HUD is NOT in `www/omnitrack.html`
+
+The live "Current Session" card is `src/timesheet_session/SessionBox.vue`, built by
+`yarn build` into `omnitrack/public/dist/timesheet_session_box.bundle.{js,css}`.
+Editing the matching-looking markup in `www/omnitrack.html` changes nothing.
+`www/omnitrack.html` owns only the chrome around it (the elevated popup shell,
+the FAB, the page app).
+
+## Gotcha: Jinja inside `{% raw %}` is not substituted
+
+`www/omnitrack.html` wraps its whole body in `{% raw %}` (line ~106 to ~6663).
+Any `{{ ... }}` inside reaches the browser literally. Two live bugs came from this:
+
+* `<script src=".../timesheet_session_box.bundle.js?v={{ ... }}">` — the src was a
+  fixed literal string, so the browser cached the bundle forever and rebuilt HUD
+  code never shipped. Now the tag steps out with `{% endraw %}...{% raw %}` and
+  uses `asset_bust` (the bundle's mtime, set in `www/omnitrack.py`).
+* `const socketPort = {{ frappe.conf.socketio_port or 9003 }};` — the literal
+  braces were a `SyntaxError` that killed the entire inline script and blanked
+  the page.
+
+## Gotcha: Vue inline handlers must be expressions
+
+`@click="if (x) y = false"` is compiled as `$event => (if ...)` — a template
+compile error that renders an empty `#app` with no useful console message. Use
+`@click="x && (y = false)"`.
+
+## Gotcha: `watch()` evaluates its source once at creation
+
+Even a getter source (`() => dayTimeline.value`) throws if the ref is declared
+later in `setup()`. Register such watches inside `onMounted()`.
+
+## Gotcha: Frappe UI's Button drops `data-*` values
+
+`data-session-tool="stop"` renders as `data-session-tool=""`. Usable as a marker,
+never as a label — resolve identity positionally.
+
+## Workflow
+
+After editing `www/*.html`: `bench --site <site> clear-website-cache`, then reload
+with a cache-busting query. After editing anything under `src/`: `yarn build` first.

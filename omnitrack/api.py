@@ -335,18 +335,22 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		# Also log Employee Checkin if Employee exists
 		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
 		if emp and frappe.db.exists("DocType", "Employee Checkin"):
-			chk = frappe.new_doc("Employee Checkin")
-			chk.employee = emp
-			chk.time = now_datetime()
-			chk.log_type = "OUT"
-			chk.flags.ignore_permissions = True
-			chk.insert()
+			try:
+				chk = frappe.new_doc("Employee Checkin")
+				chk.employee = emp
+				chk.time = now_datetime()
+				chk.log_type = "OUT"
+				chk.flags.ignore_permissions = True
+				chk.insert()
+			except Exception as e:
+				frappe.log_error(f"Employee Checkin punch OUT failed: {e}", "OmniTrack")
 
 		# Auto-clear any in-flight active session across devices
 		try:
 			sync_active_session(None)
 		except Exception:
 			pass
+		frappe.db.commit()
 
 		return {
 			"status": "success",
@@ -389,9 +393,6 @@ def create_timesheet_from_work_block(block_name):
 	if not frappe.db.exists("DocType", "Timesheet"):
 		return None
 
-	if block.timesheet and frappe.db.exists("Timesheet", block.timesheet):
-		return block.timesheet
-
 	# Resolve project and task from block
 	project = block.project
 	task = block.task
@@ -408,16 +409,22 @@ def create_timesheet_from_work_block(block_name):
 			block.project = project
 			block.db_set("project", project)
 
-	ts = frappe.new_doc("Timesheet")
-	user_emp = frappe.db.get_value("Employee", {"user_id": block.employee}, "name") if frappe.db.exists("DocType", "Employee") else None
-	ts.employee = user_emp or block.employee
-	
-	company = frappe.db.get_single_value("Global Defaults", "default_company") if frappe.db.exists("DocType", "Global Defaults") else None
-	if not company and frappe.db.exists("DocType", "Company"):
-		comps = frappe.get_all("Company", limit=1)
-		if comps:
-			company = comps[0].name
-	ts.company = company
+	is_existing = False
+	if block.timesheet and frappe.db.exists("Timesheet", block.timesheet):
+		ts = frappe.get_doc("Timesheet", block.timesheet)
+		ts.time_logs = []
+		is_existing = True
+	else:
+		ts = frappe.new_doc("Timesheet")
+		user_emp = frappe.db.get_value("Employee", {"user_id": block.employee}, "name") if frappe.db.exists("DocType", "Employee") else None
+		ts.employee = user_emp or block.employee
+		
+		company = frappe.db.get_single_value("Global Defaults", "default_company") if frappe.db.exists("DocType", "Global Defaults") else None
+		if not company and frappe.db.exists("DocType", "Company"):
+			comps = frappe.get_all("Company", limit=1)
+			if comps:
+				company = comps[0].name
+		ts.company = company
 
 	# Every Timesheet is connected to one Project (parent_project)
 	if project:
@@ -461,7 +468,10 @@ def create_timesheet_from_work_block(block_name):
 		ts.append("time_logs", row)
 
 	ts.flags.ignore_permissions = True
-	ts.insert()
+	if is_existing:
+		ts.save()
+	else:
+		ts.insert()
 
 	block.timesheet = ts.name
 	block.db_set("timesheet", ts.name)
@@ -498,7 +508,7 @@ def process_offline_sync(data=None):
 	return {"status": "success", "synced_records": synced}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def sync_active_session(session_data=None):
 	"""
 	Synchronizes the in-flight stopwatch session across devices (Desktop, Mobile PWA, Tablet).
@@ -530,7 +540,7 @@ def sync_active_session(session_data=None):
 
 	# Normalize session fields
 	clean_data = {
-		"startTime": flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000)),
+		"startTime": int(flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000))),
 		"selectedNature": session_data.get("selectedNature") or "🎯 Planned",
 		"selectedProject": session_data.get("selectedProject") or "",
 		"trackerNotes": (session_data.get("trackerNotes") or "").strip(),
@@ -556,7 +566,7 @@ def sync_active_session(session_data=None):
 	return {"status": "success", "session": clean_data}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def get_active_session(user=None):
 	"""
 	Returns the currently in-flight active session for the user across devices.
@@ -678,10 +688,10 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		else:
 			b["project_name"] = b.project or "General Work"
 
-		if b.task and frappe.db.exists("Task", b.task):
-			b["task_subject"] = frappe.db.get_value("Task", b.task, "subject") or b.task
-		else:
-			b["task_subject"] = b.deliverable_notes or f"Block {b.name}"
+		subject = b.get("work_item_label")
+		if not subject and b.get("task") and frappe.db.exists("DocType", "Task") and frappe.db.exists("Task", b.task):
+			subject = frappe.db.get_value("Task", b.task, "subject") or b.task
+		b["task_subject"] = subject or b.get("deliverable_notes") or f"Block {b.name}"
 
 		nature = (b.get("task_nature") or "").lower()
 		b["is_away"] = any(m in nature for m in ("leave", "absent", "out-of-office", "out of office", "break"))
@@ -1469,11 +1479,19 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 	doc.flags.ignore_permissions = True
 	doc.save()
 
+	# Auto-create / update Timesheet connected to Project and Task
+	if frappe.db.exists("DocType", "Timesheet"):
+		try:
+			create_timesheet_from_work_block(doc.name)
+		except Exception:
+			pass
+
 	# Auto-clear any in-flight active session across devices
 	try:
 		sync_active_session(None)
 	except Exception:
 		pass
+	frappe.db.commit()
 
 	return {
 		"status": "success",

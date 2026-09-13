@@ -20,6 +20,15 @@ def get_context(context):
 	ctx.user_fullname = frappe.utils.get_fullname(user) or user
 	user_roles = frappe.get_roles(user)
 	ctx.is_manager = 1 if (any(r in ["System Manager", "HR Manager", "OmniTrack Manager", "Administrator"] for r in user_roles) or user == "Administrator" or "hardik" in user.lower()) else 0
+	# Bundle URLs carried a hard-coded version, so a rebuilt HUD bundle never
+	# reached the browser. Key the query on the built file's mtime instead:
+	# changes bust the cache, unchanged builds keep it.
+	try:
+		import os
+		_dist = frappe.get_app_path("omnitrack", "public", "dist", "timesheet_session_box.bundle.js")
+		ctx.asset_bust = str(int(os.path.getmtime(_dist)))
+	except Exception:
+		ctx.asset_bust = "1030"
 	ctx.today_date = nowdate()
 	ctx.current_time = nowtime()
 	ctx.no_cache = 1

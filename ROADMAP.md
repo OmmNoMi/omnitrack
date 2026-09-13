@@ -402,3 +402,73 @@ were flat blue/emerald while the planner grid next to them colours by project.
   session shows as bare outline.
 - Off-plan time stays rose in the logged lane — the one thing the project hue
   must not disguise — and the legend gained an "Off plan" swatch.
+
+### The 6h / 12h / 24h zoom actually zooms (done)
+
+The control claimed to set "hours visible across the timeline" but did nothing:
+the window was fitted to the data (`lo`/`hi` from the first and last block, floor
+180 min), so a day whose blocks span 3h gave `3/zoom*100` — under 100 at every
+setting — and `Math.max(100, …)` clamped all three buttons to the same 100%.
+
+- The window is now midnight to midnight, always. A day at a glance is the day.
+- `timelineTrackWidth` is purely the zoom ratio: 24h → 100%, 12h → 200%,
+  6h → 400%, so the track genuinely overflows and scrolls horizontally.
+- Hour labels follow the zoom (every 2h at 24-across, hourly below it) instead
+  of following the old span.
+- Zoomed in, the left edge is empty small hours, so the scroller auto-scrolls to
+  just before the first block of the day on mount and on every zoom change.
+
+Gotcha worth remembering: the `watch` source must be `() => dayTimeline.value`,
+not `dayTimeline`. This block sits above the `const dayTimeline` declaration, and
+naming the ref directly evaluates it during setup — a TDZ throw that takes the
+whole page down with "Cannot access 'dayTimeline' before initialization".
+
+Verified live at 1134px: 100/200/400%, track 1130/2260/4520px, all scrollable,
+auto-scroll landing on the 11:00 block at each zoom.
+
+### Frappe UI Marketplace Architecture & Timesheet Session Box (2026-09-13, shipped)
+
+To ensure OmniTrack satisfies Frappe Cloud Marketplace requirements and adheres to official Frappe frontend architecture:
+- **Standard Vite + Frappe UI Build Pipeline:**
+  - Standard `package.json` installed with `@frappe/ui` (`^0.1.278`), `vue` (`^3.5.13`), `lucide-vue-next`, `vite`, and `tailwindcss` using `frappe-ui/tailwind` preset.
+  - Standard `vite.config.js` configured with `frappeui-build-config-plugin`.
+  - Registered automatically with Frappe's asset pipeline: `bench build --app omnitrack` invokes `vite build` seamlessly during standard bench builds and asset linking.
+- **Genuine Frappe UI Component Implementation:**
+  - Created `src/timesheet_session/SessionBox.vue` using genuine Frappe UI components (`Button`, `Badge`, `TextInput` from `frappe-ui`).
+  - Styled with high visual fidelity matching the established OmniTrack high-density layout, keyboard shortcuts (`/`, `Enter`, `Shift+Enter`, `⌘S`, `⌘E`, `⌘D`), and dark mode styling.
+- **Dynamic Mount & Graceful Fallback:**
+  - Bundled as an IIFE library exposing `window.OmniTrackSessionBox = { mount, update, unmount }`.
+  - Portal template (`www/omnitrack.html`) renders via a dynamic Vue wrapper component `FrappeUITimesheetBox` when the bundle is loaded, with an automatic fallback to the native HUD if running without precompiled assets.
+- **Comprehensive Verification:**
+  - All 30 tests in `test_planned_work_block.py` pass (including template tag balance and exported setup invariants).
+  - Assets verified via HTTP 200 checks on `ommnomi.local`.
+
+
+### Day at a glance on mobile (done)
+
+Checked at 375×812 and found two real faults, both fixed:
+
+- The legend row (`Planned / Logged / Off plan / unlogged` + the zoom pills) had
+  no `flex-wrap`. At 371px inside a 375px viewport it pushed the **whole page**
+  into a horizontal scroll. Now wraps onto two rows.
+- The auto-scroll-to-first-block never fired on first load: the card is created
+  by `v-if` on the same tick the data arrives, so a single rAF attempt measured a
+  track that had not taken its zoomed width and landed on 0. Now retries up to 8
+  times at 120ms, instant on load and smooth on a zoom change.
+
+Verified: `pageOverflow:false`, track 257/514/1028px at 24/12/6h, all scrollable,
+initial `scrollLeft` 447 = exactly the 11:00 block.
+
+### Tests must not commit (fixed — they were writing to real site data)
+
+`quick_timer_punch(action="stop")` ends in `sync_active_session()`, which calls
+`frappe.db.commit()`. That commit flushed everything the test had just inserted,
+so `tearDown`'s `frappe.db.rollback()` could not undo it and every run left real
+Planned Work Blocks in the site — inflating the dashboard's planned hours.
+
+Fixed with a class-level `patch("frappe.db.commit")` in `setUp`. Patching
+`sync_active_session` instead does NOT work: two tests assert on its real
+behaviour and fail.
+
+Worth noting for the app itself: that mid-request commit means a failure anywhere
+after the block insert in `quick_timer_punch` cannot be rolled back either.

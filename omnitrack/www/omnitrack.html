@@ -17,6 +17,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+  <!-- Frappe UI Timesheet Session Box CSS Bundle -->
+  <link rel="stylesheet" href="/assets/omnitrack/dist/timesheet_session_box.bundle.css?v={{ asset_bust }}">
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -38,6 +41,9 @@
 
   <!-- Vue.js 3 Global Production CDN -->
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <!-- Socket.io Client for Instant Live Cross-Device Sync -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <style>
     [v-cloak] { display: none !important; }
@@ -142,15 +148,21 @@
     <!-- Header Controls: Employee Switcher & Theme Mode -->
     <div class="flex items-center gap-2 flex-shrink-0">
       
-      <!-- Header stopwatch: click (or Shift+T) jumps to the session timesheet -->
+      <!-- Header stopwatch: click (or Shift+S) elevates to the session timesheet in full focus -->
       <button
-        @click="openSessionCard"
-        :aria-label="isTracking ? 'Open the current session timesheet' : 'Start an unplanned session'"
-        :title="isTracking ? 'Open the current session timesheet (Shift+T)' : 'Start an unplanned session (Shift+T)'"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-mono font-bold transition-colors cursor-pointer"
-        :class="isTracking ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300' : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')">
-        <span class="w-2 h-2 rounded-full" :class="isTracking ? 'bg-red-500 pulse-record' : 'bg-gray-400'"></span>
+        @click="toggleSessionFocus"
+        :aria-label="isTracking ? (isSessionElevated ? 'Minimize session popup (Shift+S / Esc)' : 'Elevate session into full focus popup (Shift+S)') : 'Start an unplanned session (Shift+S)'"
+        :title="isTracking ? (isSessionElevated ? 'Minimize session popup (Shift+S / Esc)' : 'Elevate session into full focus popup (Shift+S)') : 'Start an unplanned session (Shift+S)'"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-mono font-bold transition-all cursor-pointer"
+        :class="isTracking ? (isSessionElevated ? 'bg-blue-600 border-blue-600 text-white shadow-sm ring-2 ring-blue-500/30' : 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100 dark:bg-red-950/60 dark:border-red-800 dark:text-red-300') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200 hover:bg-gray-700' : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200')">
+        <span class="w-2 h-2 rounded-full" :class="isTracking ? (isSessionElevated ? 'bg-white animate-pulse' : 'bg-red-500 pulse-record') : 'bg-gray-400'"></span>
         <span>{{ formattedTime }}</span>
+        <svg v-if="isTracking && !isSessionElevated" class="w-3 h-3 text-red-500 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 3 21 3 21 9"/>
+          <polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
       </button>
 
       <!-- Desktop Quick New Task Button -->
@@ -302,18 +314,99 @@
   <!-- ========================================== -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6 pb-20 md:pb-8" :class="isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]'">
 
-    <!-- ======================================== -->
-    <!-- ======================================== -->
-    <!-- TAB 1: EXECUTIVE DASHBOARD & GOOGLE MEET AGENDA -->
-    <!-- ======================================== -->
-    <div v-if="activeTab === 'dashboard'" class="space-y-6">
+    <!-- 1. Active Timesheet Card ("Desk Remote HUD") — Elevated Focus Popup or Inline -->
+    <teleport to="body" :disabled="!isSessionElevated">
+      <div
+        v-if="isTracking && (activeTab === 'dashboard' || isSessionElevated)"
+        :class="[
+          isSessionElevated
+            ? 'fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200'
+            : 'relative mb-6'
+        ]"
+        @click.self="isSessionElevated && (isSessionElevated = false)"
+      >
+        <div
+          ref="sessionCardRef"
+          :class="[
+            isSessionElevated
+              ? 'relative w-full max-w-4xl bg-white dark:bg-[#1E1F22] rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-700/80 p-4 sm:p-6 space-y-3.5 my-auto overflow-hidden animate-in zoom-in-95 duration-200'
+              : 'relative w-full'
+          ]"
+          @click.stop
+          :role="isSessionElevated ? 'dialog' : null"
+          :aria-modal="isSessionElevated ? 'true' : null"
+          :aria-labelledby="isSessionElevated ? 'session-popup-title' : null"
+          @keydown.tab="trapSessionPopupTab"
+        >
+          <!-- Elevated Header Bar (Visible only when in full focus popup) -->
+          <div v-if="isSessionElevated" class="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+            <div class="flex items-center gap-2.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+              <span id="session-popup-title" class="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white">
+                Current Session Timesheet
+              </span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                Full Focus
+              </span>
+            </div>
+            <!-- One control, not a sentence plus a bare glyph: the same
+                 label + shortcut-chip shape every other action in this app uses,
+                 so Esc reads as this button's shortcut instead of loose advice. -->
+            <button
+              type="button"
+              @click="isSessionElevated = false"
+              class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xl font-bold text-[11px] border shadow-2xs cursor-pointer transition-colors border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400 dark:border-gray-700 dark:bg-[#2B2D30] dark:text-gray-200 dark:hover:bg-gray-800"
+              title="Minimize to page (Esc)"
+              aria-label="Minimize popup"
+              aria-keyshortcuts="Escape"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              <span class="hidden sm:inline">Minimize</span>
+              <kbd class="hidden sm:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-0.5 rounded border border-gray-300 bg-gray-100 text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                aria-hidden="true">Esc</kbd>
+            </button>
+          </div>
 
-      <!-- 1. Active Timesheet Card ("Desk Remote HUD") — only while a session runs -->
-      <f-card v-if="isTracking" :highlight="sessionCardFlash" class="transition-all duration-200">
-        
-        <!-- One timesheet, two panes: its lines on the left, the session meta on the right. -->
-        <div ref="sessionCardRef" class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x transition-all scroll-mt-28 px-0.5"
-          :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-200'">
+          <!-- Genuine Frappe UI Timesheet Session Box (Compiled via Vite + @frappe/ui) -->
+          <frappe-ui-timesheet-box
+            v-if="hasFrappeUI && isTracking"
+            :is-tracking="isTracking"
+            :tracker-seconds="trackerSeconds"
+            :tracker-notes="trackerNotes"
+            :tracker-project="trackerProject"
+            :tracker-nature="trackerNature"
+            :tracker-bound-block="trackerBoundBlock"
+            :session-notes-list="sessionNotesList"
+            :projects="projects"
+            :nature-options="natureOptions"
+            :assigned-tasks="assignedTasks"
+            :work-blocks="workBlocks"
+            :mod-key="modKey"
+            :is-dark-mode="isDarkMode"
+            :session-card-flash="sessionCardFlash"
+            :discard-confirm="discardConfirm"
+            :is-elevated="isSessionElevated"
+            @stop="toggleTrack"
+            @adjust="openAdjustModal"
+            @discard="discardSession"
+            @add-line="appendSessionLine($event)"
+            @remove-line="removeSessionPoint($event)"
+            @bind-block="bindSessionToBlock($event)"
+            @unbind-block="bindSessionToBlock(null)"
+            @toggle-elevate="isSessionElevated = !isSessionElevated"
+            @update:notes="trackerNotes = $event; syncActiveSession();"
+            @update:project="trackerProject = $event; syncActiveSession();"
+            @update:nature="trackerNature = $event; syncActiveSession();"
+          ></frappe-ui-timesheet-box>
+
+          <f-card v-else-if="isTracking" :highlight="sessionCardFlash" class="transition-all duration-200">
+            
+            <!-- One timesheet, two panes: its lines on the left, the session meta on the right. -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x transition-all scroll-mt-28 px-0.5"
+              :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-200'">
           
           <!-- LEFT PANE: the lines of this session — Shift+S lands here, Tab reaches Stop & Save -->
           <div class="lg:col-span-6 flex flex-col pb-5 lg:pb-0 lg:pr-6">
@@ -321,7 +414,7 @@
             <div class="flex-1 min-h-0 flex flex-col">
               <!-- Header -->
               <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-gray-200/80 dark:border-gray-800">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Session Log</h4>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Current Session Log</h4>
                 <f-badge
                   theme="gray"
                   size="xs"
@@ -387,6 +480,10 @@
                   class="hidden lg:block absolute right-2 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border"
                   :class="isDarkMode ? 'bg-gray-800 border-gray-700 text-gray-400' : 'bg-gray-100 border-gray-200 text-gray-500'">/</kbd>
               </div>
+              <!-- f-button's size prop pins its own height, so it sat 9px shorter than
+                   the textarea next to it. Pin it back to the input's height instead of
+                   nudging padding, which only held at one font size. Enter is the real
+                   way this gets used; the button is the discoverable copy of it. -->
               <f-button 
                 variant="solid" 
                 theme="blue"
@@ -394,8 +491,14 @@
                 @click="addSessionPoint"
                 tabindex="-1"
                 :disabled="!newSessionPoint.trim()"
-                class="rounded-xl py-2 px-3.5 shadow-xs font-bold">
+                title="Add this line (Enter)"
+                aria-keyshortcuts="Enter"
+                class="!h-[37px] rounded-xl px-3.5 shadow-xs font-bold shrink-0">
                 <span>Add</span>
+                <template #suffix>
+                  <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-0.5 rounded border border-white/30 bg-white/15 text-white/90"
+                    aria-hidden="true">&crarr;</kbd>
+                </template>
               </f-button>
             </div>
             <p id="session-point-hint" class="sr-only">Press Enter to add the line. Press Shift and Enter together to start a new line within the same entry.</p>
@@ -406,32 +509,42 @@
           <div class="lg:col-span-6 flex flex-col gap-3.5 pt-5 lg:pt-0 lg:pl-6">
             <div>
               <!-- Header / Status Context -->
-              <div class="flex items-center justify-between gap-2 pb-2.5 border-b" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Current Session</h3>
-                <f-badge v-if="trackerBlockName" theme="blue" size="xs" class="max-w-[170px] truncate" title="Bound to Calendar Block">
+              <div v-if="trackerBlockName" class="flex items-center justify-end gap-2 pb-2.5">
+                <f-badge theme="blue" size="xs" class="max-w-[170px] truncate" title="Bound to Calendar Block">
                   📅 Bound to Block
                 </f-badge>
               </div>
 
               <!-- Timer & Main Action Hero Bar -->
-              <div class="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-3 py-2.5 rounded-xl border mt-3 transition-colors"
-                :class="isDarkMode ? 'bg-[#25262A] border-gray-800' : 'bg-gray-50 border-gray-200'">
+              <div class="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap px-3 py-2.5 rounded-xl border transition-colors"
+                :class="[isDarkMode ? 'bg-[#25262A] border-gray-800' : 'bg-gray-50 border-gray-200', trackerBlockName ? 'mt-3' : '']">
                 <div class="flex items-center gap-2.5 min-w-0 shrink-0">
                   <span class="w-2 h-2 rounded-full shrink-0" :class="isTracking ? 'bg-red-500 animate-pulse' : 'bg-gray-400'"></span>
-                  <div class="font-mono text-xl font-bold tracking-tight tabular-nums"
-                    :class="isDarkMode ? 'text-white' : 'text-gray-900'">
-                    {{ formattedTime }}
+                  <div class="min-w-0">
+                    <div class="font-mono text-xl font-bold tracking-tight tabular-nums leading-none"
+                      :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                      {{ formattedTime }}
+                    </div>
+                    <!-- An elapsed count says how long, never since when. On a timesheet
+                         the start is the fact that has to be defensible, so show it. -->
+                    <div v-if="isTracking && sessionStart" class="text-[10px] font-semibold mt-1 whitespace-nowrap"
+                      :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+                      Started {{ sessionStart.date }} &middot; {{ sessionStart.time }}
+                    </div>
                   </div>
-                  <span v-if="!isTracking" class="text-[10px] uppercase font-bold tracking-wider text-gray-400">standby</span>
+                  <span v-if="trackerBoundBlock" class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">
+                    📦 {{ trackerBoundBlock.name }}
+                  </span>
+                  <span v-else-if="!isTracking" class="text-[10px] uppercase font-bold tracking-wider text-gray-400">standby</span>
                 </div>
 
                 <div class="flex items-center gap-1.5 shrink-0 ml-auto" role="toolbar" aria-orientation="horizontal"
-                  aria-label="Session controls" data-session-toolbar @keydown="onSessionToolbarKey">
+                  aria-label="Session controls" data-session-toolbar @keydown="onSessionToolbarKey" @focusout="onSessionToolbarFocusOut">
                 <!-- A mis-started session has to be abandonable without writing a timesheet. -->
                 <f-button
                   v-if="isTracking"
-                  data-session-tool
-                  tabindex="-1"
+                  data-session-tool="discard"
+                  :tabindex="sessionToolTabindex('discard')"
                   :variant="discardConfirm ? 'solid' : 'outline'"
                   :theme="discardConfirm ? 'amber' : 'gray'"
                   size="sm"
@@ -453,8 +566,8 @@
                 <!-- Adjust timing button: allows ±5m or custom start/end datetime adjustment -->
                 <f-button
                   v-if="isTracking"
-                  data-session-tool
-                  tabindex="-1"
+                  data-session-tool="adjust"
+                  :tabindex="sessionToolTabindex('adjust')"
                   variant="outline"
                   theme="gray"
                   size="sm"
@@ -474,8 +587,8 @@
                 </f-button>
 
                 <f-button
-                  data-session-tool
-                  tabindex="0"
+                  data-session-tool="stop"
+                  :tabindex="sessionToolTabindex('stop')"
                   @click="toggleTrack"
                   variant="solid"
                   :theme="isTracking ? 'red' : 'blue'"
@@ -500,51 +613,226 @@
             </div>
 
             <!-- What this session is bound to: the block's own title, timing and notes -->
-            <div v-if="trackerBoundBlock" class="rounded-xl border px-3 py-2.5 space-y-1"
-              :class="isDarkMode ? 'bg-blue-950/20 border-blue-900/50' : 'bg-blue-50/60 border-blue-200/70'">
-              <div class="flex items-start justify-between gap-2">
-                <div class="text-xs font-bold leading-snug" :class="isDarkMode ? 'text-blue-200' : 'text-blue-900'">
-                  {{ trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || 'Work block' }}
+            <div v-if="trackerBoundBlock" class="rounded-2xl border px-3.5 py-3 space-y-2 bg-blue-50/70 border-blue-200/90 dark:bg-blue-950/30 dark:border-blue-800/60 shadow-2xs">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-blue-600 text-white shrink-0 shadow-2xs">
+                    📦 {{ trackerBoundBlock.name }}
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 shrink-0">
+                    {{ trackerBoundBlock.status || 'Planned' }}
+                  </span>
+                  <span class="text-xs font-bold text-blue-950 dark:text-blue-100 truncate" :title="trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label">
+                    {{ trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || 'Work block' }}
+                  </span>
                 </div>
-                <span class="text-[10px] font-mono font-bold shrink-0" :class="isDarkMode ? 'text-blue-300' : 'text-blue-700'">
-                  {{ hhmm(trackerBoundBlock.start_time) }}–{{ hhmm(trackerBoundBlock.end_time) }}
-                </span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[11px] font-mono font-bold text-blue-800 dark:text-blue-300">
+                    {{ hhmm(trackerBoundBlock.start_time) }}–{{ hhmm(trackerBoundBlock.end_time) }}
+                  </span>
+                  <button
+                    type="button"
+                    @click="bindSessionToBlock(null)"
+                    class="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-white dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    title="Unbind from this Planned Work Block"
+                    aria-label="Unbind block"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-medium" :class="isDarkMode ? 'text-blue-300/80' : 'text-blue-700/80'">
-                <span>📅 {{ trackerBoundBlock.work_date }}</span>
-                <span v-if="trackerBoundBlock.project_name || trackerBoundBlock.project">🗂 {{ trackerBoundBlock.project_name || trackerBoundBlock.project }}</span>
-                <span v-if="trackerBoundBlock.task_nature">🏷 {{ trackerBoundBlock.task_nature }}</span>
-                <span>⏱ planned {{ fmtHrs(trackerBoundBlock.duration_hours) }} · logged {{ fmtHrs(trackerBoundBlock.actual_hours) }}</span>
+
+              <!-- Detailed Connected Task Row -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[11px] border-t border-blue-200/60 dark:border-blue-900/50 pt-2 text-blue-900 dark:text-blue-200">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="font-bold text-gray-500 dark:text-gray-400 shrink-0">🎯 Task:</span>
+                  <span class="font-semibold truncate text-blue-950 dark:text-blue-100">
+                    {{ trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || trackerBoundBlock.task || 'General Task' }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 min-w-0 sm:justify-end">
+                  <span class="font-bold text-gray-500 dark:text-gray-400 shrink-0">🗂 Project:</span>
+                  <span class="font-medium truncate text-blue-900 dark:text-blue-200">
+                    {{ trackerBoundBlock.project_name || trackerBoundBlock.project || 'General Work (Internal)' }}
+                  </span>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-blue-700/90 dark:text-blue-300/90 pt-0.5">
+                  <span>📅 {{ trackerBoundBlock.work_date }}</span>
+                  <span>🏷 {{ trackerBoundBlock.task_nature }}</span>
+                  <span v-if="trackerBoundBlock.duration_hours">⏱ planned {{ fmtHrs(trackerBoundBlock.duration_hours) }}</span>
+                  <span v-if="trackerBoundBlock.actual_hours">· logged {{ fmtHrs(trackerBoundBlock.actual_hours) }}</span>
+                </div>
+                <div class="sm:text-right text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                  Timesheet will log against <strong class="font-mono">{{ trackerBoundBlock.name }}</strong>
+                </div>
               </div>
-              <p v-if="trackerBoundBlock.deliverable_notes" class="text-[11px] leading-snug whitespace-pre-line max-h-16 overflow-y-auto"
-                :class="isDarkMode ? 'text-gray-300' : 'text-gray-600'">{{ trackerBoundBlock.deliverable_notes }}</p>
             </div>
 
             <!-- Form: Deliverable Title & Dropdowns -->
             <div class="space-y-3">
-              <!-- Deliverable / Task Title -->
-              <div>
-                <label class="block text-[11px] font-bold uppercase tracking-wider mb-1 text-gray-500 dark:text-gray-400">Deliverable / Task Title</label>
-                <f-input 
-                  v-model="trackerNotes" 
-                  @input="syncActiveSession"
-                  placeholder="e.g. Higher Ed Onboarding & Client Training Session..." 
-                  size="md"
-                  aria-label="Deliverable or task title">
-                  <template #suffix v-if="trackerNotes">
-                    <f-button 
-                      type="button" 
-                      variant="ghost"
-                      theme="gray"
-                      size="xs"
-                      @click="trackerNotes = ''; syncActiveSession();" 
-                      class="!p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                      title="Clear title"
-                      aria-label="Clear title">
-                      ✕
-                    </f-button>
-                  </template>
-                </f-input>
+              <!-- Deliverable / Task Select Dropdown (Search-to-Select Open ToDo or Planned Block) -->
+              <div class="relative" data-todo-picker-container>
+                <div class="flex items-center justify-between mb-1">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">
+                      Task / Open ToDo
+                    </label>
+                    <span v-if="trackerBlockName" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900/60 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                      <span>🔗 Block: {{ trackerBlockName }}</span>
+                      <button type="button" @click="bindSessionToBlock(null)" class="hover:text-red-500 font-bold ml-0.5" title="Unbind from block">✕</button>
+                    </span>
+                    <span v-else-if="trackerBoundBlock" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900/60 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                      <span>🔗 Block: {{ trackerBoundBlock.name }}</span>
+                      <button type="button" @click="bindSessionToBlock(null)" class="hover:text-red-500 font-bold ml-0.5" title="Unbind from block">✕</button>
+                    </span>
+                  </div>
+                  <div v-if="openTodos.length > 0" class="text-[10px] text-gray-400 font-medium">
+                    {{ openTodos.length }} open ToDo{{ openTodos.length > 1 ? 's' : '' }}
+                  </div>
+                </div>
+
+                <!-- Dropdown Trigger Button (Styled like Frappe UI Select) -->
+                <div class="relative">
+                  <button
+                    type="button"
+                    @click="toggleTodoPicker"
+                    class="w-full flex items-center justify-between text-xs font-medium rounded-xl px-3.5 py-2.5 outline-none border transition-colors shadow-2xs !bg-white !border-gray-300 !text-gray-900 hover:!border-gray-400 focus:!border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:!bg-[#2B2D30] dark:!border-gray-700 dark:!text-white cursor-pointer"
+                    aria-label="Select open ToDo or Task"
+                  >
+                    <div class="flex items-center gap-2 truncate min-w-0 flex-1">
+                      <span v-if="trackerBlockName || trackerBoundBlock" class="text-blue-500 shrink-0">📅</span>
+                      <span v-else-if="trackerNotes" class="text-blue-500 shrink-0">📋</span>
+                      <span v-else class="text-gray-400 shrink-0">🔍</span>
+                      <span class="truncate" :class="trackerNotes ? 'font-medium text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'">
+                        {{ trackerNotes || 'Select an open ToDo or search tasks...' }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                      <svg class="w-3.5 h-3.5 text-gray-400 transition-transform" :class="{ 'rotate-180': todoDropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </div>
+                  </button>
+
+                  <!-- A control inside a control is invalid HTML: the parser closes the
+                       outer <button> at the inner one and every following </div> then
+                       lands on the wrong element, collapsing the page. Keep Clear a
+                       sibling of the trigger, placed over it. -->
+                  <button
+                    v-if="trackerNotes"
+                    type="button"
+                    @click.stop="clearSelectedTodo"
+                    class="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                    title="Clear selection"
+                    aria-label="Clear selected ToDo"
+                  >
+                    ✕
+                  </button>
+
+                  <!-- Popover Menu with Embedded Search -->
+                  <div
+                    v-if="todoDropdownOpen"
+                    class="absolute left-0 right-0 top-full mt-1.5 w-full max-h-72 overflow-hidden rounded-2xl bg-white dark:bg-[#1E1F22] border border-gray-200 dark:border-gray-700 shadow-2xl z-50 flex flex-col"
+                  >
+                    <!-- Search Input at top of Popover -->
+                    <div class="p-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-[#25272B]">
+                      <div class="relative flex items-center">
+                        <svg class="w-3.5 h-3.5 absolute left-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <input
+                          ref="todoSearchInput"
+                          v-model="todoSearchQuery"
+                          type="text"
+                          placeholder="Type to search open ToDos..."
+                          class="w-full pl-9 pr-7 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#16171A] text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                          @keydown.esc="todoDropdownOpen = false"
+                          @keydown.enter.prevent="onTodoSearchEnter"
+                        />
+                        <button v-if="todoSearchQuery" type="button" @click="todoSearchQuery = ''" class="absolute right-2.5 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                      </div>
+                    </div>
+
+                    <!-- Scrollable Options List -->
+                    <div class="overflow-y-auto flex-1 p-1.5 space-y-1">
+                      <!-- Group: Open ToDos -->
+                      <div v-if="filteredOpenTodos.length > 0">
+                        <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center justify-between">
+                          <span>📋 Open ToDos</span>
+                          <span class="font-mono text-[9px]">{{ filteredOpenTodos.length }}</span>
+                        </div>
+                        <button
+                          v-for="(t, idx) in filteredOpenTodos"
+                          :key="'todo-' + idx"
+                          type="button"
+                          @click="selectTodoToAutofill(t)"
+                          class="w-full text-left px-2.5 py-2 rounded-xl text-xs hover:bg-blue-50/80 dark:hover:bg-blue-950/40 transition-colors flex flex-col gap-1 cursor-pointer group"
+                          :class="trackerNotes === (t.subject || t.title || t.name) ? 'bg-blue-50 dark:bg-blue-950/60 font-semibold' : ''"
+                        >
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                              {{ t.subject || t.title || t.name }}
+                            </span>
+                            <span v-if="t.priority" class="text-[9px] font-bold px-1.5 py-0.2 rounded" :class="t.priority === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'">
+                              {{ t.priority }}
+                            </span>
+                          </div>
+                          <div class="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+                            <span v-if="t.project_name || t.project" class="truncate font-medium text-blue-600 dark:text-blue-400">
+                              🗂 {{ t.project_name || t.project }}
+                            </span>
+                            <span v-if="t.due_date">📅 Due {{ t.due_date }}</span>
+                          </div>
+                        </button>
+                      </div>
+
+                      <!-- Group: Today's Planned Blocks -->
+                      <div v-if="filteredPlannedBlocks.length > 0" class="pt-1 border-t border-gray-100 dark:border-gray-800">
+                        <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center justify-between">
+                          <span>📅 Today's Planned Blocks</span>
+                          <span class="font-mono text-[9px]">{{ filteredPlannedBlocks.length }}</span>
+                        </div>
+                        <button
+                          v-for="(b, idx) in filteredPlannedBlocks"
+                          :key="'block-' + idx"
+                          type="button"
+                          @click="selectPlannedBlock(b)"
+                          class="w-full text-left px-2.5 py-2 rounded-xl text-xs hover:bg-blue-50/80 dark:hover:bg-blue-950/40 transition-colors flex flex-col gap-1 cursor-pointer group"
+                          :class="trackerBlockName === b.name ? 'bg-blue-50 dark:bg-blue-950/60 font-semibold' : ''"
+                        >
+                          <div class="flex items-center justify-between gap-1">
+                            <span class="font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                              {{ b.task_subject || b.work_item_label || 'Work Block' }}
+                            </span>
+                            <span class="font-mono text-[10px] font-bold text-blue-600 dark:text-blue-400">{{ b.name }}</span>
+                          </div>
+                          <div class="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+                            <span class="font-mono">{{ b.start_time }}–{{ b.end_time }}</span>
+                            <span v-if="b.project_name || b.project">🗂 {{ b.project_name || b.project }}</span>
+                            <span v-if="b.task_nature">🏷 {{ b.task_nature }}</span>
+                          </div>
+                        </button>
+                      </div>
+
+                      <!-- Custom Title Option -->
+                      <div v-if="showCustomOption" class="pt-1 border-t border-gray-100 dark:border-gray-800">
+                        <button
+                          type="button"
+                          @click="selectCustomTitle"
+                          class="w-full text-left px-2.5 py-2 rounded-xl text-xs hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-200"
+                        >
+                          <span class="text-sm">✏️</span>
+                          <span class="truncate">Use custom title: <strong class="text-blue-600 dark:text-blue-400">"{{ todoSearchQuery.trim() }}"</strong></span>
+                        </button>
+                      </div>
+
+                      <!-- Empty State -->
+                      <div v-if="filteredOpenTodos.length === 0 && filteredPlannedBlocks.length === 0 && !showCustomOption" class="py-6 text-center text-xs text-gray-400">
+                        No open ToDos or planned blocks found
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- Two Dropdowns: Project & Activity Nature (Frappe UI FDropdown) -->
@@ -558,7 +846,7 @@
                     placeholder="General Work (Internal)"
                     aria-label="Project"
                     @change="syncActiveSession"
-                  />
+                  ></f-dropdown>
                 </div>
 
                 <!-- Activity Nature -->
@@ -575,7 +863,7 @@
                     placeholder="Select activity nature"
                     aria-label="Activity nature"
                     @change="syncActiveSession"
-                  />
+                  ></f-dropdown>
                 </div>
               </div>
             </div>
@@ -611,6 +899,14 @@
         </p>
 
       </f-card>  <!-- /Desk Remote HUD card -->
+        </div>
+      </div>
+    </teleport>
+
+    <!-- ======================================== -->
+    <!-- TAB 1: EXECUTIVE DASHBOARD & GOOGLE MEET AGENDA -->
+    <!-- ======================================== -->
+    <div v-if="activeTab === 'dashboard'" class="space-y-6">
 
       <!-- 2. Attention Needed: Overdue & Underplanned Tasks (WCAG 2.1 AA Compliant) -->
       <section v-if="attentionTasks && attentionTasks.length > 0" 
@@ -840,7 +1136,7 @@
             :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
             <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
               <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Day at a glance</h4>
-              <div class="flex items-center gap-3 text-[11px] font-semibold">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0 text-[11px] font-semibold">
                 <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm border border-gray-400 bg-gray-400/20" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Planned {{ dayTimeline.plannedH.toFixed(1) }}h</span></span>
                 <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-gray-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Logged {{ dayTimeline.loggedH.toFixed(1) }}h</span></span>
                 <span class="inline-flex items-center gap-1.5" title="Time logged when nothing was planned for it"><span class="w-3 h-2 rounded-sm bg-rose-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Off plan</span></span>
@@ -866,7 +1162,23 @@
               <div class="h-5 leading-5 mt-1.5">Logged</div>
               <div class="h-4 mt-0.5"></div>
             </div>
-            <div class="overflow-x-auto no-scrollbar flex-1 min-w-0 -mr-1 pr-1">
+            <!-- The day is wider than the card, and a hidden scrollbar gives no hint
+                 of that. Show a real button on each side that can still be scrolled,
+                 so the affordance is visible and operable by keyboard (WCAG 2.1.1). -->
+            <div class="relative flex-1 min-w-0">
+            <button v-if="timelineCanScrollLeft" type="button" @click="nudgeTimeline(-1)"
+              aria-label="Scroll timeline to earlier hours"
+              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full border shadow-sm flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              :class="isDarkMode ? 'bg-[#1E1F22]/90 border-gray-700 text-gray-300 hover:bg-gray-800' : 'bg-white/90 border-gray-200 text-gray-600 hover:bg-gray-50'">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button v-if="timelineCanScrollRight" type="button" @click="nudgeTimeline(1)"
+              aria-label="Scroll timeline to later hours"
+              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full border shadow-sm flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              :class="isDarkMode ? 'bg-[#1E1F22]/90 border-gray-700 text-gray-300 hover:bg-gray-800' : 'bg-white/90 border-gray-200 text-gray-600 hover:bg-gray-50'">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1">
             <div class="relative" role="img" :style="{ width: timelineTrackWidth }"
               :aria-label="dayTimeline.plannedH.toFixed(1) + ' hours planned and ' + dayTimeline.loggedH.toFixed(1) + ' hours logged on ' + selectedDashboardDateLabel">
               <!-- hour grid -->
@@ -903,6 +1215,7 @@
                 <span v-for="t in dayTimeline.ticks" :key="'lb' + t.m"
                   class="absolute -translate-x-1/2 text-[9px] font-mono text-gray-400" :style="{ left: t.left }">{{ t.label }}</span>
               </div>
+            </div>
             </div>
             </div>
             </div>
@@ -2251,7 +2564,7 @@
           size="md"
           v-model="newTaskForm.notes"
           placeholder="e.g. Implement Cold-Chain Telemetry Logging API"
-        />
+        ></f-input>
       </div>
 
       <!-- Assignee & Project Grid -->
@@ -2465,6 +2778,7 @@
 
 </div>
 
+{% endraw %}<script src="/assets/omnitrack/dist/timesheet_session_box.bundle.js?v={{ asset_bust }}"></script>{% raw %}
 <script>
   const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -2894,8 +3208,126 @@
     `
   };
 
+  const FrappeUITimesheetBox = {
+    name: 'FrappeUITimesheetBox',
+    props: {
+      isTracking: Boolean,
+      trackerSeconds: Number,
+      trackerNotes: String,
+      trackerProject: String,
+      trackerNature: String,
+      trackerBoundBlock: Object,
+      sessionNotesList: Array,
+      projects: Array,
+      natureOptions: Array,
+      assignedTasks: Array,
+      workBlocks: Array,
+      modKey: String,
+      isDarkMode: Boolean,
+      sessionCardFlash: Boolean,
+      discardConfirm: Boolean,
+      isElevated: Boolean
+    },
+    emits: [
+      'stop',
+      'adjust',
+      'discard',
+      'add-line',
+      'remove-line',
+      'bind-block',
+      'unbind-block',
+      'toggle-elevate',
+      'update:notes',
+      'update:project',
+      'update:nature'
+    ],
+    mounted() {
+      this.mountBundle();
+    },
+    watch: {
+      isTracking() { this.syncProps(); },
+      trackerSeconds() { this.syncProps(); },
+      trackerNotes() { this.syncProps(); },
+      trackerProject() { this.syncProps(); },
+      trackerNature() { this.syncProps(); },
+      trackerBoundBlock() { this.syncProps(); },
+      sessionNotesList: { deep: true, handler() { this.syncProps(); } },
+      projects: { deep: true, handler() { this.syncProps(); } },
+      assignedTasks: { deep: true, handler() { this.syncProps(); } },
+      workBlocks: { deep: true, handler() { this.syncProps(); } },
+      isDarkMode() { this.syncProps(); },
+      sessionCardFlash() { this.syncProps(); },
+      discardConfirm() { this.syncProps(); },
+      isElevated() { this.syncProps(); }
+    },
+    beforeUnmount() {
+      if (window.OmniTrackSessionBox && window.OmniTrackSessionBox.unmount) {
+        window.OmniTrackSessionBox.unmount();
+      }
+    },
+    methods: {
+      mountBundle() {
+        if (!window.OmniTrackSessionBox || !window.OmniTrackSessionBox.mount) return;
+        this._box = window.OmniTrackSessionBox.mount(this.$el, {
+          isTracking: this.isTracking,
+          trackerSeconds: this.trackerSeconds,
+          trackerNotes: this.trackerNotes,
+          trackerProject: this.trackerProject,
+          trackerNature: this.trackerNature,
+          trackerBoundBlock: this.trackerBoundBlock,
+          sessionNotesList: this.sessionNotesList,
+          projects: this.projects,
+          natureOptions: this.natureOptions,
+          assignedTasks: this.assignedTasks,
+          workBlocks: this.workBlocks,
+          modKey: this.modKey,
+          isDarkMode: this.isDarkMode,
+          sessionCardFlash: this.sessionCardFlash,
+          discardConfirm: this.discardConfirm,
+          isElevated: this.isElevated,
+          onStop: () => this.$emit('stop'),
+          onAdjust: () => this.$emit('adjust'),
+          onDiscard: () => this.$emit('discard'),
+          onAddLine: (text) => this.$emit('add-line', text),
+          onRemoveLine: (idx) => this.$emit('remove-line', idx),
+          onBindBlock: (b) => this.$emit('bind-block', b),
+          onUnbindBlock: () => this.$emit('unbind-block'),
+          onToggleElevate: () => this.$emit('toggle-elevate'),
+          'onUpdate:notes': (val) => this.$emit('update:notes', val),
+          'onUpdate:project': (val) => this.$emit('update:project', val),
+          'onUpdate:nature': (val) => this.$emit('update:nature', val)
+        });
+      },
+      syncProps() {
+        if (window.OmniTrackSessionBox && window.OmniTrackSessionBox.update) {
+          window.OmniTrackSessionBox.update({
+            isTracking: this.isTracking,
+            trackerSeconds: this.trackerSeconds,
+            trackerNotes: this.trackerNotes,
+            trackerProject: this.trackerProject,
+            trackerNature: this.trackerNature,
+            trackerBoundBlock: this.trackerBoundBlock,
+            sessionNotesList: this.sessionNotesList,
+            projects: this.projects,
+            natureOptions: this.natureOptions,
+            assignedTasks: this.assignedTasks,
+            workBlocks: this.workBlocks,
+            modKey: this.modKey,
+            isDarkMode: this.isDarkMode,
+            sessionCardFlash: this.sessionCardFlash,
+            discardConfirm: this.discardConfirm,
+            isElevated: this.isElevated
+          });
+        }
+      }
+    },
+    template: `<div class="w-full"></div>`
+  };
+
   const app = createApp({
     components: {
+      FrappeUITimesheetBox,
+      'frappe-ui-timesheet-box': FrappeUITimesheetBox,
       FButton,
       'f-button': FButton,
       FBadge,
@@ -2914,6 +3346,19 @@
       const activeTab = ref('dashboard');
       const initialDark = localStorage.getItem('omnitrack_theme') === 'dark' || (!localStorage.getItem('omnitrack_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       const isDarkMode = ref(initialDark);
+      const hasFrappeUI = ref(typeof window !== 'undefined' && Boolean(window.OmniTrackSessionBox && window.OmniTrackSessionBox.mount));
+      onMounted(() => {
+        if (typeof window !== 'undefined' && window.OmniTrackSessionBox && window.OmniTrackSessionBox.mount) {
+          hasFrappeUI.value = true;
+        }
+      });
+      const appendSessionLine = (text) => {
+        const pt = (text || '').trim();
+        if (!pt) return;
+        sessionNotesList.value.push(pt);
+        syncActiveSession(true);
+        triggerHaptic([25]);
+      };
 
       const applyTheme = (dark) => {
         if (dark) {
@@ -3275,6 +3720,8 @@
       const trackerNotes = ref('');
       const selectedNature = ref('Planned Work');
       const selectedProject = ref('');
+      const trackerProject = selectedProject;
+      const trackerNature = selectedNature;
       // When the tracker was started from a Planner block, its logged time is
       // recorded as a real Work Session against that block (feeds actual_hours).
       const trackerBlockName = ref(null);
@@ -3326,6 +3773,144 @@
       const tasks = ref([]);
       const assignedTasks = ref([]);
       const attentionTasks = ref([]);
+      const openTodos = computed(() => {
+        return (assignedTasks.value || []).filter(t => {
+          const st = (t.status || '').toLowerCase();
+          return st !== 'closed' && st !== 'cancelled' && st !== 'completed';
+        });
+      });
+
+      const todayPlannedBlocks = computed(() => {
+        return (workBlocks.value || []).filter(b => {
+          const st = (b.status || '').toLowerCase();
+          return st !== 'completed' && st !== 'cancelled';
+        });
+      });
+
+      const todoDropdownOpen = ref(false);
+      const todoSearchQuery = ref('');
+      const todoSearchInput = ref(null);
+
+      const toggleTodoPicker = () => {
+        todoDropdownOpen.value = !todoDropdownOpen.value;
+        if (todoDropdownOpen.value) {
+          todoSearchQuery.value = '';
+          nextTick(() => {
+            if (todoSearchInput.value && todoSearchInput.value.focus) {
+              todoSearchInput.value.focus();
+            }
+          });
+        }
+      };
+
+      const filteredOpenTodos = computed(() => {
+        const q = (todoSearchQuery.value || '').trim().toLowerCase();
+        if (!q) return openTodos.value;
+        return openTodos.value.filter(t => {
+          const subj = (t.subject || t.title || t.name || '').toLowerCase();
+          const proj = (t.project_name || t.project || '').toLowerCase();
+          const prio = (t.priority || '').toLowerCase();
+          return subj.includes(q) || proj.includes(q) || prio.includes(q);
+        });
+      });
+
+      const filteredPlannedBlocks = computed(() => {
+        const q = (todoSearchQuery.value || '').trim().toLowerCase();
+        if (!q) return todayPlannedBlocks.value;
+        return todayPlannedBlocks.value.filter(b => {
+          const title = (b.task_subject || b.work_item_label || b.task || b.deliverable_notes || b.name || '').toLowerCase();
+          const proj = (b.project_name || b.project || '').toLowerCase();
+          return title.includes(q) || proj.includes(q);
+        });
+      });
+
+      const showCustomOption = computed(() => {
+        const q = (todoSearchQuery.value || '').trim();
+        if (!q) return false;
+        const qLower = q.toLowerCase();
+        const matchesTodo = openTodos.value.some(t => (t.subject || t.title || t.name || '').toLowerCase() === qLower);
+        const matchesBlock = todayPlannedBlocks.value.some(b => (b.task_subject || b.work_item_label || b.task || '').toLowerCase() === qLower);
+        return !matchesTodo && !matchesBlock;
+      });
+
+      const selectTodoToAutofill = (t) => {
+        if (!t) return;
+        trackerBlockName.value = null;
+        trackerNotes.value = t.subject || t.title || t.name || '';
+        if (t.project) {
+          selectedProject.value = t.project;
+          trackerProject.value = t.project;
+        }
+        selectedNature.value = 'Planned Work';
+        trackerNature.value = 'Planned Work';
+        syncActiveSession();
+        todoDropdownOpen.value = false;
+        todoSearchQuery.value = '';
+        triggerHaptic([20]);
+        showToast('Selected ToDo & auto-filled details', 'info');
+      };
+
+      const selectPlannedBlock = (b) => {
+        bindSessionToBlock(b);
+        todoDropdownOpen.value = false;
+        todoSearchQuery.value = '';
+      };
+
+      const selectCustomTitle = () => {
+        const q = (todoSearchQuery.value || '').trim();
+        if (!q) return;
+        trackerBlockName.value = null;
+        trackerNotes.value = q;
+        syncActiveSession();
+        todoDropdownOpen.value = false;
+        todoSearchQuery.value = '';
+        triggerHaptic([20]);
+      };
+
+      const onTodoSearchEnter = () => {
+        if (filteredOpenTodos.value.length > 0) {
+          selectTodoToAutofill(filteredOpenTodos.value[0]);
+        } else if (filteredPlannedBlocks.value.length > 0) {
+          selectPlannedBlock(filteredPlannedBlocks.value[0]);
+        } else if (showCustomOption.value) {
+          selectCustomTitle();
+        }
+      };
+
+      const clearSelectedTodo = () => {
+        _explicitBoundBlock.value = null;
+        trackerBlockName.value = null;
+        trackerNotes.value = '';
+        syncActiveSession();
+        triggerHaptic([20]);
+      };
+
+      const bindSessionToBlock = (b) => {
+        if (!b) {
+          _explicitBoundBlock.value = null;
+          trackerBlockName.value = null;
+          syncActiveSession();
+          triggerHaptic([20]);
+          showToast('Unbound session from work block', 'info');
+          return;
+        }
+        _explicitBoundBlock.value = b;
+        trackerBlockName.value = b.name;
+        const taskTitle = b.task_subject || b.work_item_label || (b.task ? (b.task_subject || b.task) : '') || b.deliverable_notes || '';
+        if (taskTitle) trackerNotes.value = taskTitle;
+        if (b.project) {
+          selectedProject.value = b.project;
+          trackerProject.value = b.project;
+        }
+        if (b.task_nature) {
+          const nat = getNatureBadge(b.task_nature).label;
+          selectedNature.value = nat;
+          trackerNature.value = nat;
+        }
+        syncActiveSession();
+        triggerHaptic([25]);
+        showToast(`Bound session to Work Block ${b.name}`, 'info');
+      };
             const teamMembers = ref([
         { name: 'hardiksharma80912@gmail.com', full_name: 'Hardik Sharma', role: 'Lead Architect / Founder' },
         { name: 'Devoted NoMi', full_name: 'Nomeshwer Sharma', role: 'Operations Manager' },
@@ -3521,12 +4106,25 @@
         const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
         return w < 640 ? 6 : (w < 1024 ? 12 : 24);
       })());
-      const timelineTrackWidth = computed(() => {
-        const tl = dayTimeline.value;
-        if (!tl) return '100%';
-        return Math.max(100, (tl.spanH / timelineZoom.value) * 100) + '%';
-      });
+      const timelineTrackWidth = computed(() => (24 / timelineZoom.value * 100) + '%');
 
+      // Zoomed in, the left edge of the track is 3am and empty. Put the first block
+      // of the day just inside the viewport instead of making the user hunt for it.
+      const timelineScroller = ref(null);
+      const timelineCanScrollLeft = ref(false);
+      const timelineCanScrollRight = ref(false);
+      const syncTimelineEdges = () => {
+        const box = timelineScroller.value;
+        if (!box) { timelineCanScrollLeft.value = timelineCanScrollRight.value = false; return; }
+        timelineCanScrollLeft.value = box.scrollLeft > 2;
+        timelineCanScrollRight.value = box.scrollLeft + box.clientWidth < box.scrollWidth - 2;
+      };
+      const nudgeTimeline = (dir) => {
+        const box = timelineScroller.value;
+        if (!box) return;
+        box.scrollBy({ left: dir * Math.max(120, box.clientWidth * 0.8), behavior: 'smooth' });
+        setTimeout(syncTimelineEdges, 400);
+      };
       const dayTimeline = computed(() => {
         const blocks = workFocusBlocks.value || [];
         const planned = [], logged = [];
@@ -3540,14 +4138,13 @@
         });
         if (!planned.length && !logged.length) return null;
         const all = planned.concat(logged);
-        let lo = Math.floor(Math.min(...all.map(r => r.s)) / 60) * 60;
-        let hi = Math.ceil(Math.max(...all.map(r => r.e)) / 60) * 60;
-        if (hi - lo < 180) hi = Math.min(1440, lo + 180);
-        const span = hi - lo || 60;
+        const lo = 0, hi = 1440;
+        const span = hi - lo;
+        const firstMin = Math.min(...all.map(r => r.s));
         const place = (r) => ({ left: ((r.s - lo) / span * 100) + '%', width: (Math.max(4, r.e - r.s) / span * 100) + '%' });
         const covered = (r) => planned.some(pb => r.s < pb.e && r.e > pb.s);
         const ticks = [];
-        const step = span > 600 ? 120 : 60;
+        const step = timelineZoom.value >= 24 ? 120 : 60;
         for (let m = lo; m <= hi; m += step) ticks.push({ m, left: ((m - lo) / span * 100) + '%', label: hourLabel(Math.floor(m / 60) % 24) });
         const plannedH = planned.reduce((t, r) => t + (r.e - r.s) / 60, 0);
         const loggedH = logged.reduce((t, r) => t + (r.e - r.s) / 60, 0);
@@ -3557,8 +4154,37 @@
           logged: logged.map(r => Object.assign({}, r, place(r), { onPlan: covered(r) })),
           plannedH, loggedH,
           spanH: span / 60,
+          firstMin,
           gapH: Math.max(0, plannedH - loggedH),
         };
+      });
+
+      // On first paint the card has only just been created by v-if and the track may
+      // not have its zoomed width yet, so a single attempt lands on 0 and parks the
+      // user in the empty small hours. Retry briefly until the scroll actually takes.
+      const scrollTimelineToWork = (smooth) => {
+        let tries = 0;
+        const attempt = () => {
+          const box = timelineScroller.value;
+          syncTimelineEdges();
+          const tl = dayTimeline.value;
+          const track = box && box.firstElementChild;
+          if (box && tl && track && tl.firstMin >= 0) {
+            const target = Math.max(0, (tl.firstMin / 1440) * track.offsetWidth - 24);
+            const reachable = Math.min(target, box.scrollWidth - box.clientWidth);
+            box.scrollTo({ left: reachable, behavior: smooth ? 'smooth' : 'auto' });
+            syncTimelineEdges();
+            if (reachable <= 1 || Math.abs(box.scrollLeft - reachable) < 2) return;
+          }
+          if (++tries < 8) setTimeout(attempt, 120);
+        };
+        attempt();
+      };
+
+      onMounted(() => {
+        watch(timelineZoom, () => nextTick(() => scrollTimelineToWork(true)));
+        watch(() => dayTimeline.value && dayTimeline.value.firstMin, () => nextTick(() => scrollTimelineToWork(false)));
+        nextTick(() => scrollTimelineToWork(false));
       });
 
       // Same reading the planner grid gives a block, in words: planned vs logged and
@@ -3617,6 +4243,7 @@
             _syncDebounceTimer = setTimeout(sendToServer, 500);
           }
         } else {
+          markSessionEnded();
           localStorage.removeItem('omnitrack_active_session');
           if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
@@ -3636,7 +4263,9 @@
         isTracking.value = true;
         trackerSeconds.value = elapsed;
         selectedNature.value = sessionData.selectedNature || '🎯 Planned';
+        trackerNature.value = sessionData.selectedNature || '🎯 Planned';
         selectedProject.value = sessionData.selectedProject || '';
+        trackerProject.value = sessionData.selectedProject || '';
         let rawN = sessionData.trackerNotes || '';
         if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
           const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
@@ -3656,6 +4285,154 @@
         localStorage.setItem('omnitrack_active_session',
           JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
         return true;
+      };
+
+      // Cross-device live session synchronization
+      let _livePollTimer = null;
+      let _isCheckingActiveSession = false;
+      let _lastLocalStop = 0;
+      let _isStoppingSession = false;
+
+      // A stop is not instantaneous: the local HUD tears down immediately, but the
+      // server write that clears the active session lands a moment later. Any poll
+      // or socket push in that window still reports the old session as active, and
+      // the sync faithfully puts it back on screen — again and again, with no way
+      // to close it or start a new one. Remember which sessions this device just
+      // ended and refuse to resurrect exactly those. A genuinely new session
+      // started elsewhere carries a different startTime and still syncs.
+      const _endedSessions = new Set();
+      const markSessionEnded = (sTime) => {
+        try {
+          if (sTime) _endedSessions.add(Math.round(Number(sTime)));
+          const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
+          if (p && p.startTime) _endedSessions.add(Math.round(Number(p.startTime)));
+        } catch (e) {}
+      };
+
+      const reconcileActiveSession = (remote) => {
+        // Never resurrect a session if this device just stopped or discarded within the last 10s
+        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) {
+          handleRemoteSessionCleared({ silent: true });
+          return;
+        }
+        // Never resurrect a session this device has already ended.
+        if (remote && remote.startTime) {
+          const rTime = Math.round(Number(remote.startTime));
+          for (const ended of _endedSessions) {
+            if (Math.abs(ended - rTime) < 5000) {
+              handleRemoteSessionCleared({ silent: true });
+              return;
+            }
+          }
+        }
+        if (!remote || remote.status !== 'active') {
+          handleRemoteSessionCleared();
+          return;
+        }
+
+        // If this device wasn't tracking, start tracking and restore
+        if (!isTracking.value) {
+          restoreActiveSession(remote);
+          showToast('Live session synced from mobile', 'info');
+          return;
+        }
+
+        // If local had an edit within the last 1200ms, let local write settle
+        if (Date.now() - _lastLocalUpdate < 1200) return;
+
+        // 1. Reconcile session lines logged from phone
+        const remoteLines = Array.isArray(remote.sessionNotesList) ? remote.sessionNotesList : [];
+        const localLines = sessionNotesList.value || [];
+        if (JSON.stringify(remoteLines) !== JSON.stringify(localLines)) {
+          sessionNotesList.value = [...remoteLines];
+          nextTick(() => {
+            if (sessionNotesScroll.value) {
+              sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight;
+            }
+          });
+        }
+
+        // 2. Reconcile deliverable title (avoid clobbering if actively typing)
+        if (remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
+          const activeEl = document.activeElement;
+          const isNotesFocused = activeEl && (
+            activeEl.getAttribute('aria-label') === 'Deliverable or task title' ||
+            (activeEl.tagName === 'INPUT' && activeEl.placeholder && activeEl.placeholder.includes('Deliverable'))
+          );
+          if (!isNotesFocused) {
+            trackerNotes.value = remote.trackerNotes || '';
+          }
+        }
+
+        // 3. Reconcile project and nature
+        if (remote.selectedProject !== undefined && remote.selectedProject !== selectedProject.value) {
+          selectedProject.value = remote.selectedProject || '';
+          trackerProject.value = remote.selectedProject || '';
+        }
+        if (remote.selectedNature !== undefined && remote.selectedNature !== selectedNature.value) {
+          selectedNature.value = remote.selectedNature || '🎯 Planned';
+          trackerNature.value = remote.selectedNature || '🎯 Planned';
+        }
+
+        // 4. Reconcile bound work block
+        if (remote.trackerBlockName !== undefined && remote.trackerBlockName !== trackerBlockName.value) {
+          trackerBlockName.value = remote.trackerBlockName || null;
+        }
+
+        localStorage.setItem('omnitrack_active_session', JSON.stringify(Object.assign({}, remote, { status: 'active' })));
+      };
+
+      // The "ended elsewhere" toast is news the first time and noise on every
+      // poll after it. A guard-triggered teardown (this device just stopped, or
+      // already ended this session) is not news at all, so it passes silent.
+      let _lastClearedToast = 0;
+      const handleRemoteSessionCleared = (opts) => {
+        if (!isTracking.value) return;
+        if (Date.now() - _lastLocalUpdate < 3000) return;
+
+        isTracking.value = false;
+        if (trackerTimer.value) {
+          clearInterval(trackerTimer.value);
+          trackerTimer.value = null;
+        }
+        trackerSeconds.value = 0;
+        sessionNotesList.value = [];
+        trackerNotes.value = '';
+        trackerBlockName.value = null;
+        markSessionEnded();
+        localStorage.removeItem('omnitrack_active_session');
+        fetchWorkstationData(selectedEmployee.value);
+        if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') {
+          fetchPlannerData();
+        }
+        if (!(opts && opts.silent) && Date.now() - _lastClearedToast > 30000) {
+          _lastClearedToast = Date.now();
+          showToast('Timesheet session saved on other device', 'info');
+        }
+      };
+
+      const checkRemoteActiveSession = async () => {
+        if (document.visibilityState === 'hidden') return;
+        if (_isCheckingActiveSession) return;
+        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
+        _isCheckingActiveSession = true;
+        try {
+          const res = await fetch('/api/method/omnitrack.api.get_active_session', {
+            headers: { 'Accept': 'application/json' }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const active = data.message;
+            if (active && active.status === 'active') {
+              reconcileActiveSession(active);
+            } else if (!active && isTracking.value) {
+              handleRemoteSessionCleared();
+            }
+          }
+        } catch (e) {
+        } finally {
+          _isCheckingActiveSession = false;
+        }
       };
 
       // A timesheet line is often a paragraph, not a phrase: the field grows with the
@@ -3702,7 +4479,11 @@
         (sessionNotesList.value || []).map((t, i) => ({ i: i, t: t, n: i + 1 }))
       );
       // --- custom dropdowns (native <select> popups can't be styled) ---
+      const _explicitBoundBlock = ref(null);
       const trackerBoundBlock = computed(() => {
+        if (_explicitBoundBlock.value && (!trackerBlockName.value || _explicitBoundBlock.value.name === trackerBlockName.value)) {
+          return _explicitBoundBlock.value;
+        }
         const nm = trackerBlockName.value;
         if (!nm) return null;
         return (workBlocks.value || []).find((b) => b.name === nm) || null;
@@ -3785,15 +4566,70 @@
         if (!ev.target.closest || !ev.target.closest('[data-appmenu]')) showAppMenu.value = false;
       };
       const _dropdownOutside = (ev) => {
-        if (!openDropdown.value) return;
-        if (!ev.target.closest || !ev.target.closest('[data-dropdown]')) closeDropdown();
+        if (openDropdown.value) {
+          if (!ev.target.closest || !ev.target.closest('[data-dropdown]')) closeDropdown();
+        }
+        if (todoDropdownOpen.value) {
+          if (!ev.target.closest || !ev.target.closest('[data-todo-picker-container]')) {
+            todoDropdownOpen.value = false;
+          }
+        }
       };
+
+      const isSessionElevated = ref(false);
+      // A modal that leaves the page scrolling behind it is not modal. Lock the
+      // body, remember where focus came from, keep Tab inside the dialog, and
+      // hand focus back on close — WCAG 2.1 2.4.3 / 2.1.2, not decoration.
+      let _sessionPopupReturnFocus = null;
+      const trapSessionPopupTab = (ev) => {
+        if (!isSessionElevated.value) return;
+        const root = sessionCardRef.value;
+        if (!root) return;
+        const items = [...root.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.offsetParent !== null);
+        if (!items.length) return;
+        const first = items[0], last = items[items.length - 1];
+        if (ev.shiftKey && document.activeElement === first) {
+          ev.preventDefault();
+          last.focus();
+        } else if (!ev.shiftKey && document.activeElement === last) {
+          ev.preventDefault();
+          first.focus();
+        }
+      };
+      watch(isSessionElevated, (open) => {
+        if (open) {
+          _sessionPopupReturnFocus = document.activeElement;
+          document.body.style.overflow = 'hidden';
+          nextTick(() => {
+            const root = sessionCardRef.value;
+            const target = root && root.querySelector('textarea, button');
+            if (target) target.focus();
+          });
+        } else {
+          document.body.style.overflow = '';
+          if (_sessionPopupReturnFocus && _sessionPopupReturnFocus.focus) {
+            _sessionPopupReturnFocus.focus();
+          }
+          _sessionPopupReturnFocus = null;
+        }
+      });
 
       const sessionPointInput = ref(null);
       const sessionNotesScroll = ref(null);
       const focusSessionPointInput = () => {
-        const el = sessionPointInput.value;
-        if (el && el.focus) { el.focus(); el.select && el.select(); }
+        nextTick(() => {
+          const vueBoxInput = document.querySelector('#omnitrack-session-box-root textarea') ||
+                             document.querySelector('#omnitrack-session-box-root [data-session-input]');
+          if (vueBoxInput && vueBoxInput.focus) {
+            vueBoxInput.focus();
+            if (vueBoxInput.select) vueBoxInput.select();
+            return;
+          }
+          const el = sessionPointInput.value;
+          if (el && el.focus) { el.focus(); el.select && el.select(); }
+        });
       };
       const _logRows = () => {
         const box = sessionNotesScroll.value;
@@ -3829,20 +4665,30 @@
 
       const sessionCardRef = ref(null);
       const sessionCardFlash = ref(false);
-      // The header timer is a shortcut back to the session timesheet (Shift+T).
+
+      // The header timer and Shift+S elevates to the session timesheet in full focus
       const openSessionCard = () => {
         showTrackerPopup.value = false;
-        activeTab.value = 'dashboard';
         // Idle: there is no HUD to jump to, so this gesture opens an unplanned
         // session. Planned work should be started from its block instead.
         if (!isTracking.value) toggleTrack();
+        isSessionElevated.value = true;
         nextTick(() => {
-          const el = sessionCardRef.value;
-          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           sessionCardFlash.value = true;
           setTimeout(() => { sessionCardFlash.value = false; }, 1600);
           focusSessionPointInput();
         });
+      };
+
+      const toggleSessionFocus = () => {
+        if (!isTracking.value) {
+          toggleTrack();
+          isSessionElevated.value = true;
+          focusSessionPointInput();
+          return;
+        }
+        isSessionElevated.value = !isSessionElevated.value;
+        if (isSessionElevated.value) focusSessionPointInput();
       };
       // Shift+D: jump to the day view and land on the selected day, so the arrow keys
       // pick a day and Tab reaches that day's Start Session button straight away.
@@ -3883,6 +4729,12 @@
       const modKey = isMacLike ? '\u2318' : 'Ctrl';
 
       const _slashFocus = (ev) => {
+        // Esc minimizes elevated session popup
+        if (ev.key === 'Escape' && isSessionElevated.value) {
+          ev.preventDefault();
+          isSessionElevated.value = false;
+          return;
+        }
         // Cmd/Ctrl+S stops the session instead of saving the browser page.
         if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 's') {
           ev.preventDefault();
@@ -4126,7 +4978,8 @@
                 sessionNotesList.value = [];
                 trackerNotes.value = '';
                 trackerBlockName.value = null;
-                localStorage.removeItem('omnitrack_active_session');
+                markSessionEnded();
+          localStorage.removeItem('omnitrack_active_session');
                 showToast('Session was completed on another device', 'info');
               }
             }
@@ -4147,11 +5000,37 @@
       let _discardTimer = null;
       // Stop & Save and Discard are one control: a single tab stop, arrows between
       // them (WAI-ARIA toolbar), so Tab never lands on Discard by accident.
+      // The roving index is Vue state, not a tabindex the handler pokes into the
+      // DOM. Written straight to the DOM it survived until the next re-render and
+      // then drifted, so Tab out of the notes box could land on Discard — one
+      // keystroke from throwing the session away. Stop owns the tab stop.
+      // Read the start off the same payload the tracker persists, so a session
+      // restored after a reload — or re-anchored by Adjust — shows its real start
+      // rather than one inferred from the tick count. trackerSeconds is touched
+      // deliberately: it is the dependency that makes this recompute as time runs.
+      const sessionStart = computed(() => {
+        trackerSeconds.value;
+        if (!isTracking.value) return null;
+        let ms = 0;
+        try {
+          const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
+          if (p && p.startTime) ms = Number(p.startTime);
+        } catch (e) {}
+        if (!ms) ms = Date.now() - trackerSeconds.value * 1000;
+        const d = new Date(ms);
+        if (isNaN(d.getTime())) return null;
+        return {
+          date: d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+          time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        };
+      });
+
+      const sessionToolFocus = ref('stop');
+      const sessionToolTabindex = (id) => (sessionToolFocus.value === id ? 0 : -1);
       const onSessionToolbarKey = (ev) => {
         const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
         if (keys.indexOf(ev.key) === -1) return;
-        const bar = ev.currentTarget;
-        const items = [...bar.querySelectorAll('[data-session-tool]')];
+        const items = [...ev.currentTarget.querySelectorAll('[data-session-tool]')];
         if (items.length < 2) return;
         ev.preventDefault();
         const cur = Math.max(0, items.indexOf(document.activeElement));
@@ -4160,8 +5039,17 @@
         else if (ev.key === 'ArrowRight') next = (cur + 1) % items.length;
         else if (ev.key === 'Home') next = 0;
         else next = items.length - 1;
-        items.forEach((el, i) => el.setAttribute('tabindex', i === next ? '0' : '-1'));
+        // Identify by position, not by the attribute's value: Frappe UI's button
+        // renders through to a real <button> but drops data-* values on the way,
+        // so the attribute is only good as a marker, never as a label.
+        const ids = isTracking.value ? ['discard', 'adjust', 'stop'] : ['stop'];
+        sessionToolFocus.value = ids[next] || 'stop';
         items[next].focus();
+      };
+      // Leaving the group resets it. The group is one tab stop and that stop is
+      // always Stop, never whichever button was last arrowed to.
+      const onSessionToolbarFocusOut = (ev) => {
+        if (!ev.currentTarget.contains(ev.relatedTarget)) sessionToolFocus.value = 'stop';
       };
 
       const discardSession = () => {
@@ -4176,10 +5064,20 @@
         if (_discardTimer) clearTimeout(_discardTimer);
         discardConfirm.value = false;
         triggerHaptic([40, 30, 40]);
+        let sTime = null;
+        try {
+          const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
+          if (p && p.startTime) sTime = Number(p.startTime);
+        } catch (e) {}
+        _lastLocalStop = Date.now();
+        _isStoppingSession = true;
         isTracking.value = false;
+        isSessionElevated.value = false;
         if (trackerTimer.value) clearInterval(trackerTimer.value);
         trackerTimer.value = null;
+        markSessionEnded(sTime);
         localStorage.removeItem('omnitrack_active_session');
+        postJSON('sync_active_session', { session_data: null }).catch(() => {});
         trackerSeconds.value = 0;
         trackerBlockName.value = null;
         trackerNotes.value = '';
@@ -4187,6 +5085,7 @@
         newSessionPoint.value = '';
         stopConfirmName.value = '';
         showToast('Session discarded — no timesheet was created', 'info');
+        setTimeout(() => { _isStoppingSession = false; }, 8000);
       };
 
       const toggleTrack = async () => {
@@ -4205,9 +5104,20 @@
           // session exactly as it was and nothing is lost.
           if (!sessionHasLines.value) { refuseEmptySession(); return; }
           triggerHaptic([40, 50, 40]);
+          let sTime = null;
+          try {
+            const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
+            if (p && p.startTime) sTime = Number(p.startTime);
+          } catch (e) {}
+          _lastLocalStop = Date.now();
+          _isStoppingSession = true;
           isTracking.value = false;
+          isSessionElevated.value = false;
           if (trackerTimer.value) clearInterval(trackerTimer.value);
+          trackerTimer.value = null;
+          markSessionEnded(sTime);
           localStorage.removeItem('omnitrack_active_session');
+          postJSON('sync_active_session', { session_data: null }).catch(() => {});
           // snapshot, then zero the clock: a standby HUD showing the last
           // session's elapsed time reads like a session that is still open
           const elapsedSecs = trackerSeconds.value;
@@ -4243,27 +5153,22 @@
               if (refreshed && showBlockDrawer.value) activeBlock.value = refreshed;
             } catch (err) {
               showToast('Could not log session: ' + (err && err.message || err), 'danger');
+            } finally {
+              setTimeout(() => { _isStoppingSession = false; }, 8000);
             }
             return;
           }
 
           try {
-            await fetch('/api/method/omnitrack.api.quick_timer_punch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Frappe-CSRF-Token': window.OMNITRACK_SESSION && window.OMNITRACK_SESSION.csrf_token || ''
-              },
-              body: JSON.stringify({
-                action: 'stop',
-                duration_seconds: elapsedSecs,
-                duration_hours: hrs,
-                work_nature: selectedNature.value,
-                task_nature: selectedNature.value,
-                deliverable_notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
-                notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
-                project: selectedProject.value
-              })
+            await postJSON('quick_timer_punch', {
+              action: 'stop',
+              duration_seconds: elapsedSecs,
+              duration_hours: hrs,
+              work_nature: selectedNature.value,
+              task_nature: selectedNature.value,
+              deliverable_notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
+              notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
+              project: selectedProject.value
             });
             showToast(`Logged ${hrs.toFixed(2)} hrs successfully!`, 'success');
             trackerNotes.value = '';
@@ -4271,6 +5176,8 @@
             if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') fetchPlannerData();
           } catch (err) {
             showToast('Timer punch recorded locally.', 'success');
+          } finally {
+            setTimeout(() => { _isStoppingSession = false; }, 8000);
           }
         }
       };
@@ -4278,8 +5185,9 @@
       // Start the header stopwatch bound to a specific Planner block.
       const trackPlannerBlock = (b) => {
         if (isTracking.value) { showToast('Stop the current timer first', 'danger'); return; }
+        _explicitBoundBlock.value = b;
         trackerBlockName.value = b.name;
-        let rawN = b.task_subject || b.work_item_label || b.deliverable_notes || '';
+        let rawN = b.task_subject || b.work_item_label || (b.task ? (b.task_subject || b.task) : '') || b.deliverable_notes || '';
         if (rawN.includes('•')) {
           const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
           trackerNotes.value = parts[0] || '';
@@ -4288,8 +5196,12 @@
           trackerNotes.value = rawN;
           sessionNotesList.value = [];
         }
-        selectedProject.value = b.project || '';
-        selectedNature.value = getNatureBadge(b.task_nature).label;
+        const proj = b.project || '';
+        selectedProject.value = proj;
+        trackerProject.value = proj;
+        const nat = getNatureBadge(b.task_nature).label;
+        selectedNature.value = nat;
+        trackerNature.value = nat;
         showBlockDrawer.value = false;
         toggleTrack();
         openSessionCard();
@@ -4501,6 +5413,7 @@
           sessionNotesList.value = [];
           newSessionPoint.value = '';
           stopConfirmName.value = '';
+          markSessionEnded();
           localStorage.removeItem('omnitrack_active_session');
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
 
@@ -4519,8 +5432,9 @@
           showToast('Stop the current timer first', 'danger');
           return;
         }
+        _explicitBoundBlock.value = block;
         trackerBlockName.value = block.name;
-        let rawN = block.task_subject || block.deliverable_notes || '';
+        let rawN = block.task_subject || block.work_item_label || (block.task ? (block.task_subject || block.task) : '') || block.deliverable_notes || '';
         if (rawN.includes('•')) {
           const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
           trackerNotes.value = parts[0] || '';
@@ -4529,8 +5443,12 @@
           trackerNotes.value = rawN;
           sessionNotesList.value = [];
         }
-        selectedProject.value = block.project || '';
-        selectedNature.value = getNatureBadge(block.task_nature).label;
+        const proj = block.project || '';
+        selectedProject.value = proj;
+        trackerProject.value = proj;
+        const nat = getNatureBadge(block.task_nature).label;
+        selectedNature.value = nat;
+        trackerNature.value = nat;
         toggleTrack();
       };
 
@@ -5630,40 +6548,50 @@
         // Listen for visibility change to immediately sync timer & fetch fresh active session on phone wake
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
-            const saved = localStorage.getItem('omnitrack_active_session');
-            if (saved) {
-              try {
-                const parsed = JSON.parse(saved);
-                if (parsed && parsed.startTime && isTracking.value) {
-                  trackerSeconds.value = Math.max(0, Math.floor((Date.now() - parsed.startTime) / 1000));
-                }
-              } catch (e) {}
-            }
+            checkRemoteActiveSession();
             fetchWorkstationData(selectedEmployee.value);
           }
         });
 
-        // Realtime sync across devices via WebSockets if available
-        if (window.frappe && frappe.realtime) {
+        // 1. Rock-solid background poller (every 2s for instant multi-device reflection)
+        _livePollTimer = setInterval(checkRemoteActiveSession, 2000);
+
+        // 2. Realtime sync across devices via WebSockets / Socket.IO if available
+        if (typeof io !== 'undefined') {
+          try {
+            const host = window.location.hostname;
+            const siteName = "{{ frappe.local.site }}";
+            const socketPort = (window.frappe && frappe.boot && frappe.boot.socketio_port) || 9003;
+            const socketHost = `${window.location.protocol}//${host}:${socketPort}/${siteName}`;
+            const socket = io(socketHost, {
+              withCredentials: true,
+              reconnectionAttempts: 10,
+              timeout: 4000,
+              transports: ['websocket', 'polling']
+            });
+            socket.on('omnitrack:active_session_updated', (data) => {
+              if (data && data.status === 'active') {
+                reconcileActiveSession(data);
+              }
+            });
+            socket.on('omnitrack:active_session_cleared', () => {
+              handleRemoteSessionCleared();
+            });
+          } catch (e) {
+            console.debug('Socket.io connection bypassed, live poller active', e);
+          }
+        } else if (window.frappe && frappe.realtime) {
           frappe.realtime.on('omnitrack:active_session_updated', (data) => {
-            if (data && data.status === 'active') restoreActiveSession(data);
+            if (data && data.status === 'active') reconcileActiveSession(data);
           });
           frappe.realtime.on('omnitrack:active_session_cleared', () => {
-            if (isTracking.value) {
-              isTracking.value = false;
-              if (trackerTimer.value) clearInterval(trackerTimer.value);
-              trackerSeconds.value = 0;
-              sessionNotesList.value = [];
-              trackerNotes.value = '';
-              trackerBlockName.value = null;
-              localStorage.removeItem('omnitrack_active_session');
-              showToast('Session was completed on another device', 'info');
-            }
+            handleRemoteSessionCleared();
           });
         }
       });
 
       onUnmounted(() => {
+        if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
         document.removeEventListener('keydown', _slashFocus);
         document.removeEventListener('pointerdown', _dropdownOutside);
         document.removeEventListener('pointerdown', _appMenuOutside);
@@ -5686,6 +6614,8 @@
         getNatureBadge,
         selectedNature,
         selectedProject,
+        trackerProject,
+        trackerNature,
         currentUser,
         currentUserFullName,
         isManager,
@@ -5721,6 +6651,9 @@
         discardSession,
         discardConfirm,
         onSessionToolbarKey,
+        onSessionToolbarFocusOut,
+        sessionToolTabindex,
+        sessionStart,
         showAdjustModal,
         adjustForm,
         minTimesheetDate,
@@ -5764,6 +6697,9 @@
         sessionCardRef,
         sessionCardFlash,
         openSessionCard,
+        isSessionElevated,
+        trapSessionPopupTab,
+        toggleSessionFocus,
         trackerBoundBlock,
         showAppMenu,
         openDropdown,
@@ -5851,6 +6787,11 @@
         timelineZoom,
         timelineZoomOptions,
         timelineTrackWidth,
+        timelineScroller,
+        timelineCanScrollLeft,
+        timelineCanScrollRight,
+        syncTimelineEdges,
+        nudgeTimeline,
         blockLogState,
         blockLogPct,
         isPastBlock,
@@ -5900,12 +6841,40 @@
         startTaskImmediately,
         setUserPlannerView,
         isNonWorkingNature,
-        paciNonWorkingHours
+        paciNonWorkingHours,
+        hasFrappeUI,
+        appendSessionLine,
+        openTodos,
+        todayPlannedBlocks,
+        todoDropdownOpen,
+        todoSearchQuery,
+        todoSearchInput,
+        toggleTodoPicker,
+        filteredOpenTodos,
+        filteredPlannedBlocks,
+        showCustomOption,
+        selectTodoToAutofill,
+        selectPlannedBlock,
+        selectCustomTitle,
+        onTodoSearchEnter,
+        clearSelectedTodo,
+        bindSessionToBlock,
+        reconcileActiveSession,
+        handleRemoteSessionCleared,
+        checkRemoteActiveSession
       };
     }
   });
 
-  app.mount('#app');
+  app.config.errorHandler = (err, vm, info) => {
+    console.error('[OmniTrack Vue Error]:', err, info);
+  };
+
+  try {
+    app.mount('#app');
+  } catch (err) {
+    console.error('[OmniTrack Fatal Mount Error]:', err);
+  }
 </script>
 
 </body>

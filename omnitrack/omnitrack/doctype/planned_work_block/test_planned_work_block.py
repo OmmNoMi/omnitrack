@@ -1,4 +1,5 @@
 import frappe
+from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
 # ommnomi.local has no ERPNext: the Link targets Project / Task / Timesheet do not exist,
@@ -21,6 +22,16 @@ def _block(**kw):
 
 
 class TestPlannedWorkBlock(FrappeTestCase):
+	def setUp(self):
+		# quick_timer_punch ends its stop branch in sync_active_session(), which calls
+		# frappe.db.commit(). That commit flushes every row the test just inserted, so
+		# tearDown's rollback cannot undo it and the blocks land in real site data.
+		# Neutralise the commit itself rather than the sync: the sync still runs (two
+		# tests below depend on its real behaviour), but nothing escapes the rollback.
+		patcher = patch("frappe.db.commit")
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 	"""Invariants for the plan-vs-actual roll-up. These cover future changes to
 	`calculate_duration` / `roll_up_sessions` — do not weaken them.
 	"""
@@ -551,10 +562,104 @@ class TestPlannedWorkBlock(FrappeTestCase):
 			"openAdjustModal",
 			"applyAdjustedStartTime",
 			"submitAdjustedTimesheet",
+			"trackerProject",
+			"trackerNature",
+			"openTodos",
+			"todayPlannedBlocks",
+			"todoDropdownOpen",
+			"todoSearchQuery",
+			"todoSearchInput",
+			"toggleTodoPicker",
+			"filteredOpenTodos",
+			"filteredPlannedBlocks",
+			"showCustomOption",
+			"selectTodoToAutofill",
+			"selectPlannedBlock",
+			"selectCustomTitle",
+			"onTodoSearchEnter",
+			"clearSelectedTodo",
+			"bindSessionToBlock",
+			"reconcileActiveSession",
+			"handleRemoteSessionCleared",
+			"checkRemoteActiveSession",
+			"isSessionElevated",
+			"toggleSessionFocus",
+			"dayTimeline",
 		]
 
 		missing = [exp for exp in required_exports if exp not in exports]
 		self.assertEqual(len(missing), 0, f"Missing required setup() exports in omnitrack.html: {missing}")
+
+	def test_omnitrack_vue_template_render(self):
+		"""Compiles and renders the actual omnitrack.html template with the component setup
+		state in Node.js, ensuring zero runtime ReferenceErrors or TypeErrors occur during mount/render."""
+		import subprocess
+		import os
+
+		node_script = """
+const fs = require('fs');
+const { compile, ref, computed, reactive } = require('vue');
+const html = fs.readFileSync('./omnitrack/www/omnitrack.html', 'utf8');
+
+const appStart = html.indexOf('<div id="app"');
+const appOpenTagEnd = html.indexOf('>', appStart) + 1;
+const scriptStart = html.indexOf('<script', appOpenTagEnd);
+const appEnd = html.lastIndexOf('</div>', scriptStart);
+const template = html.substring(appOpenTagEnd, appEnd);
+
+let idx = html.lastIndexOf('<script>');
+let scriptOpenEnd = idx + '<script>'.length;
+let scriptClose = html.indexOf('</script>', scriptOpenEnd);
+let scriptContent = html.substring(scriptOpenEnd, scriptClose);
+
+const vm = require('vm');
+let compDef = null;
+const customVue = {
+  createApp: (def) => {
+    compDef = def;
+    return { config: { errorHandler: null }, component: () => {}, directive: () => {}, mount: () => {} };
+  },
+  ref: ref, computed: computed, watch: () => {}, onMounted: () => {}, onUnmounted: () => {}, nextTick: (fn) => fn && fn()
+};
+
+const context = {
+  Vue: customVue, console: console,
+  window: {
+    OMNITRACK_SESSION: { user: 'admin@example.com', user_fullname: 'Admin', is_manager: true, csrf_token: 'csrf', active_session: null },
+    addEventListener: () => {}, removeEventListener: () => {}, matchMedia: () => ({ matches: false }),
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    location: { reload: () => {}, href: '', search: '' },
+    setTimeout: setTimeout, clearTimeout: clearTimeout, setInterval: setInterval, clearInterval: clearInterval,
+    io: () => ({ on: () => {}, emit: () => {} }),
+    OmniTrackSessionBox: { mount: () => ({}), unmount: () => {} }
+  },
+  document: {
+    documentElement: { classList: { add: () => {}, remove: () => {} }, style: {} },
+    body: { classList: { add: () => {}, remove: () => {} }, style: {} },
+    addEventListener: () => {}, removeEventListener: () => {},
+    getElementById: () => null, querySelector: () => null, querySelectorAll: () => []
+  },
+  fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }),
+  navigator: { userAgent: 'node' }
+};
+context.localStorage = context.window.localStorage;
+context.globalThis = context;
+context.window.window = context.window;
+context.window.document = context.document;
+
+vm.runInNewContext(scriptContent, context);
+const state = reactive(compDef.setup());
+const renderFn = compile(template);
+const vnode = renderFn(state, []);
+if (!vnode) throw new Error('VNode rendered as null/undefined');
+console.log('SUCCESS');
+"""
+		app_dir = frappe.get_app_path("omnitrack", "..")
+		node_path = os.path.join(app_dir, "node_modules")
+		env = dict(os.environ, NODE_PATH=node_path)
+		proc = subprocess.run(["node", "-e", node_script], cwd=app_dir, env=env, capture_output=True, text=True)
+		self.assertEqual(proc.returncode, 0, f"Vue template render test failed in Node.js:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}")
+		self.assertIn("SUCCESS", proc.stdout)
 
 	def test_multi_device_active_session_sync(self):
 		from omnitrack.api import sync_active_session, get_active_session, get_workstation_data
