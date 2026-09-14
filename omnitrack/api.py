@@ -610,15 +610,15 @@ def sync_active_session(session_data=None, user=None):
 	}
 
 	# 1. High-speed cache
-	frappe.cache.hset("omnitrack:active_session", user, clean_data)
+	frappe.cache.hset("omnitrack:active_session", target_user, clean_data)
 
 	# 2. Durable database persistence
 	json_str = json.dumps(clean_data)
-	frappe.db.set_default("omnitrack_active_session", json_str, parent=user)
+	frappe.db.set_default("omnitrack_active_session", json_str, parent=target_user)
 	frappe.db.commit()
 
 	try:
-		frappe.publish_realtime("omnitrack:active_session_updated", clean_data, user=user)
+		frappe.publish_realtime("omnitrack:active_session_updated", clean_data, user=target_user)
 	except Exception:
 		pass
 
@@ -676,6 +676,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	Enforces standard Frappe role-based permissions and user scoping.
 	"""
 	# Generic User & Permission Resolution
+	session_user = frappe.session.user
+	current_user = session_user
 	target_user = _resolve_planner_user(employee)
 	today = nowdate()
 	target_date = work_date or today
@@ -837,7 +839,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	paci_ratio = round((planned_hours / total_hours * 100), 1) if total_hours > 0 else 85.0
 
 	# 6. User Heatmap
-	heatmap = get_user_heatmap_data(user=current_user, days=14)
+	heatmap = get_user_heatmap_data(user=target_user or current_user, days=14)
 
 	# 7. Synthesizer Logs
 	syn_filters = {}
@@ -955,6 +957,11 @@ def _resolve_planner_user(employee=None):
 						target_user = owner
 		return target_user
 
+	# If employee matches session user's full name, resolve directly to session_user
+	session_fullname = (frappe.utils.get_fullname(session_user) or "").strip().lower()
+	if session_fullname and str(employee).strip().lower() == session_fullname:
+		return session_user
+
 	# Resolve employee argument
 	target_user = None
 	if frappe.db.exists("User", employee):
@@ -1005,16 +1012,35 @@ def get_dashboard_kpis(employee=None):
 	workdays = sum(1 for d in range(1, days_in_month + 1) if today.replace(day=d).weekday() < 5)
 	monthly_capacity_hours = round(workdays * 8.0, 1)
 
-	blocks_month = frappe.get_all(
-		"Planned Work Block",
-		filters={
-			"employee": target,
-			"work_date": ["between", [str(first_of_month), str(end_of_month)]]
-		},
-		fields=["name", "work_date", "start_time", "end_time", "duration_hours", "actual_hours", "task_nature", "status", "project", "task", "deliverable_notes"],
-		order_by="work_date desc, start_time desc",
-		limit=1000
-	) if frappe.db.exists("DocType", "Planned Work Block") else []
+	has_employee = frappe.db.exists("DocType", "Employee")
+	user_emp = (frappe.db.get_value("Employee", {"user_id": target}, "name") if has_employee else None) or target
+	emp_fullname = frappe.db.get_value("User", target, "full_name") or (frappe.db.get_value("Employee", user_emp, "employee_name") if has_employee else None) or target
+
+	if target and target != "All":
+		blocks_month = frappe.db.sql("""
+			SELECT name, work_date, start_time, end_time, duration_hours, actual_hours, task_nature, status, project, task, deliverable_notes
+			FROM `tabPlanned Work Block`
+			WHERE (employee = %(target)s OR employee = %(user_emp)s OR associate_name = %(emp_fullname)s)
+			  AND work_date BETWEEN %(first_of_month)s AND %(end_of_month)s
+			ORDER BY work_date DESC, start_time DESC
+			LIMIT 1000
+		""", {
+			"target": target,
+			"user_emp": user_emp,
+			"emp_fullname": emp_fullname,
+			"first_of_month": str(first_of_month),
+			"end_of_month": str(end_of_month)
+		}, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []
+	else:
+		blocks_month = frappe.get_all(
+			"Planned Work Block",
+			filters={
+				"work_date": ["between", [str(first_of_month), str(end_of_month)]]
+			},
+			fields=["name", "work_date", "start_time", "end_time", "duration_hours", "actual_hours", "task_nature", "status", "project", "task", "deliverable_notes"],
+			order_by="work_date desc, start_time desc",
+			limit=1000
+		) if frappe.db.exists("DocType", "Planned Work Block") else []
 
 	away_markers = ("leave", "absent", "out-of-office", "out of office", "break")
 	for b in blocks_month:
