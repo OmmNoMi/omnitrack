@@ -108,6 +108,16 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		self.assertEqual(blk.task_nature, "⚠️ Unplanned")
 		self.assertEqual(blk.status, "Completed")
 
+	def test_quick_timer_punch_in(self):
+		from omnitrack.api import quick_timer_punch
+		res = quick_timer_punch(action="punch_in")
+		self.assertEqual(res["status"], "success")
+		self.assertTrue(res["message"].startswith("Punched IN at "))
+
+		res_start = quick_timer_punch(action="start")
+		self.assertEqual(res_start["status"], "success")
+		self.assertTrue(res_start["message"].startswith("Punched IN at "))
+
 	def test_planner_data_away_count(self):
 		from omnitrack.api import get_planner_data
 		# 2026-09-07 is Monday, 2026-09-13 is Sunday
@@ -859,6 +869,75 @@ console.log('SUCCESS');
 		blk.reload()
 		self.assertEqual(len(blk.sessions), 1)
 
+	def test_get_task_workflow_actions_and_execute(self):
+		"""Users can fetch available workflow transitions for a task/todo and execute them."""
+		from omnitrack.api import get_task_workflow_actions, execute_task_workflow_action
+
+		todo = frappe.new_doc("ToDo")
+		todo.description = "Test task for workflow action execution"
+		todo.status = "Open"
+		todo.insert(ignore_permissions=True)
+
+		actions = get_task_workflow_actions(doctype="ToDo", docname=todo.name)
+		self.assertIsInstance(actions, list)
+		self.assertTrue(len(actions) > 0)
+
+		target_act = next((a["action"] for a in actions if "Close" in a["action"] or a["action"] == "Closed"), actions[0]["action"])
+		res = execute_task_workflow_action(
+			doctype="ToDo",
+			docname=todo.name,
+			action=target_act,
+			comment="Closing task via OmniTrack workflow action test"
+		)
+		self.assertEqual(res.get("status"), "success")
+		self.assertTrue(res.get("new_state"))
+		todo.reload()
+
+
+	def test_execute_task_action_fallback_without_workflow(self):
+		"""When no workflow is configured, execute_task_workflow_action cleanly transitions doc.status."""
+		from omnitrack.api import execute_task_workflow_action
+
+		todo = frappe.new_doc("ToDo")
+		todo.description = "Test fallback without workflow"
+		todo.status = "Open"
+		todo.insert(ignore_permissions=True)
+
+		with patch("frappe.model.workflow.get_workflow_name", return_value=None), \
+		     patch.object(todo.meta, "get_workflow", return_value=None):
+			res = execute_task_workflow_action(
+				doctype="ToDo",
+				docname=todo.name,
+				action="Close Task",
+				comment="Closing fallback test"
+			)
+			self.assertEqual(res.get("status"), "success")
+			self.assertEqual(res.get("new_state"), "Closed")
+			todo.reload()
+			self.assertEqual(todo.status, "Closed")
+
+			res_cancel = execute_task_workflow_action(
+				doctype="ToDo",
+				docname=todo.name,
+				action="Cancel Task"
+			)
+			self.assertEqual(res_cancel.get("status"), "success")
+			self.assertEqual(res_cancel.get("new_state"), "Cancelled")
+			todo.reload()
+			self.assertEqual(todo.status, "Cancelled")
+
 	def tearDown(self):
 		frappe.db.rollback()
+
+
+def run_test_workflow_actions():
+	"""Standalone runner for workflow action tests."""
+	test_case = TestPlannedWorkBlock()
+	test_case.setUp()
+	try:
+		test_case.test_get_task_workflow_actions_and_execute()
+		test_case.test_execute_task_action_fallback_without_workflow()
+		print("SUCCESS: all workflow action tests passed!")
+	finally:
+		test_case.tearDown()
 

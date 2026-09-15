@@ -924,23 +924,24 @@
                 <h3 id="attention-tasks-heading" class="text-sm sm:text-base font-extrabold tracking-tight">
                   Action Required: Overdue & Underplanned Tasks
                 </h3>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white">
+                <f-badge theme="red" variant="solid" size="xs">
                   {{ attentionTasks.length }} {{ attentionTasks.length === 1 ? 'task' : 'tasks' }}
-                </span>
+                </f-badge>
               </div>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
                 Tasks that are past due or have fewer hours booked in your calendar than needed to complete them.
               </p>
             </div>
           </div>
-          <button 
-            type="button"
+          <f-button 
+            variant="ghost"
+            theme="blue"
+            size="sm"
             @click="activeTab = 'planner'"
-            aria-label="Open Planner Calendar to allocate time"
-            class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg px-2 py-1">
+            aria-label="Open Planner Calendar to allocate time">
             <span>Open Planner Calendar</span>
-            <span aria-hidden="true">→</span>
-          </button>
+            <template #suffix><span aria-hidden="true">→</span></template>
+          </f-button>
         </div>
 
         <!-- Attention Task Cards Grid -->
@@ -955,25 +956,31 @@
               <div class="space-y-1.5 flex-1 min-w-0">
                 <!-- Badges -->
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide"
-                    :class="t.attention_level === 'critical' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'">
+                  <f-badge :theme="t.attention_level === 'critical' ? 'red' : 'amber'" variant="solid" size="xs">
                     {{ t.attention_badge || (t.is_overdue ? 'Overdue' : 'Needs Planning') }}
-                  </span>
-                  <span v-if="t.priority && t.priority !== 'Medium'" class="px-2 py-0.5 rounded-full text-[10px] font-bold border"
-                    :class="t.priority === 'Urgent' || t.priority === 'High' ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300' : 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300'">
+                  </f-badge>
+                  <f-badge v-if="t.priority && t.priority !== 'Medium'" :theme="t.priority === 'Urgent' || t.priority === 'High' ? 'red' : 'amber'" variant="subtle" size="xs">
                     {{ t.priority }} Priority
-                  </span>
-                  <span v-if="t.due_date" class="text-xs font-mono font-bold" :class="t.is_overdue ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">
+                  </f-badge>
+                  <f-badge v-if="t.due_date" :theme="t.is_overdue ? 'red' : 'gray'" variant="outline" size="xs">
                     📅 Due: {{ t.due_date }} <span v-if="t.days_overdue > 0">({{ t.days_overdue }}d ago)</span>
-                  </span>
-                  <span v-if="t.project_name || t.project" class="text-xs text-gray-500 dark:text-gray-400">
+                  </f-badge>
+                  <f-badge v-if="t.project_name || t.project" theme="gray" variant="subtle" size="xs">
                     📁 {{ t.project_name || t.project }}
-                  </span>
+                  </f-badge>
                 </div>
 
                 <!-- Subject -->
                 <h4 class="text-sm sm:text-base font-bold text-gray-900 dark:text-white leading-snug">
-                  {{ t.subject }}
+                  <a 
+                    :href="getTaskDeskUrl(t)" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    :title="'Open ' + (t.doctype || 'Task') + ' ' + (t.docname || t.id) + ' in Desk'"
+                    class="hover:underline hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-1.5 group">
+                    <span>{{ t.subject }}</span>
+                    <svg class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
                 </h4>
 
                 <!-- Reason & Planning Progress -->
@@ -993,27 +1000,75 @@
               </div>
 
               <!-- Action Buttons -->
-              <div class="flex items-center gap-2 self-stretch sm:self-center">
+              <div class="flex items-center gap-2 self-stretch sm:self-center flex-wrap sm:flex-nowrap">
                 <!-- Schedule in Planner -->
-                <button 
-                  type="button"
+                <f-button 
+                  variant="subtle" 
+                  theme="blue" 
+                  size="sm" 
                   @click="planAttentionTask(t)"
-                  :aria-label="'Schedule ' + t.subject + ' into planner calendar'"
-                  class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 active:scale-95"
-                  :class="isDarkMode ? 'bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700' : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300'">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  :aria-label="'Schedule ' + t.subject + ' into planner calendar'">
+                  <template #prefix>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </template>
                   <span>Plan in Calendar</span>
-                </button>
+                </f-button>
 
                 <!-- Immediate Focus Session -->
-                <button 
-                  type="button"
+                <f-button 
+                  variant="solid" 
+                  theme="blue" 
+                  size="sm" 
                   @click="startTaskImmediately(t)"
-                  :aria-label="'Start focus session now for ' + t.subject"
-                  class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95">
-                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                  :aria-label="'Start focus session now for ' + t.subject">
+                  <template #prefix>
+                    <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                  </template>
                   <span>Start Now</span>
-                </button>
+                </f-button>
+
+                <!-- Workflow Actions Dropdown -->
+                <div v-if="t.workflow_actions && t.workflow_actions.length > 0" class="relative" data-taskmenu>
+                  <f-button
+                    variant="outline"
+                    theme="gray"
+                    size="sm"
+                    @click.stop="toggleTaskWorkflowMenu(t)"
+                    :aria-expanded="activeWorkflowMenuTask === t.id ? 'true' : 'false'"
+                    :aria-label="'Workflow actions for ' + t.subject">
+                    <template #prefix>
+                      <svg class="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    </template>
+                    <span>Workflow</span>
+                    <template #suffix>
+                      <svg class="w-3 h-3 transition-transform duration-150" :class="activeWorkflowMenuTask === t.id ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                    </template>
+                  </f-button>
+
+                  <!-- Menu Dropdown -->
+                  <div v-if="activeWorkflowMenuTask === t.id"
+                    class="absolute right-0 top-full mt-1.5 w-52 rounded-xl shadow-xl border py-1.5 z-30 transition-all"
+                    :class="isDarkMode ? 'bg-gray-800 border-gray-700 shadow-black/60' : 'bg-white border-gray-200 shadow-lg'">
+                    <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-1">
+                      Workflow Actions
+                    </div>
+                    <button
+                      v-for="act in t.workflow_actions"
+                      :key="act.action"
+                      type="button"
+                      @click="promptWorkflowAction(t, act)"
+                      class="w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
+                      :class="getWorkflowActionClass(act.action)">
+                      <span class="flex items-center gap-2">
+                        <span class="w-4 text-center font-bold" aria-hidden="true">{{ getWorkflowActionIcon(act.action) }}</span>
+                        <span>{{ act.action }}</span>
+                      </span>
+                      <f-badge v-if="act.next_state" theme="gray" variant="subtle" size="xs">
+                        {{ act.next_state }}
+                      </f-badge>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2343,6 +2398,61 @@
       <div class="flex justify-end gap-2 w-full">
         <f-button variant="ghost" theme="gray" size="sm" @click="showBookModal = false">Cancel</f-button>
         <f-button variant="solid" theme="blue" size="sm" @click="submitBooking" :disabled="plannerBusy">{{ bookForm.mode === 'work' ? 'Book block' : 'Mark away' }}</f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- TASK WORKFLOW ACTION CONFIRMATION MODAL    -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showWorkflowModal"
+    :title="(workflowTargetAction ? workflowTargetAction.action : 'Workflow Action')"
+    :subtitle="workflowTargetTask ? workflowTargetTask.subject : ''"
+    size="md"
+    z-index="z-[60]"
+  >
+    <div class="space-y-3.5 text-xs py-1">
+      <div class="p-3 rounded-xl border flex items-start gap-3"
+        :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0"
+          :class="isDarkMode ? 'bg-indigo-950 text-indigo-300 border border-indigo-800' : 'bg-indigo-100 text-indigo-700 border border-indigo-200'">
+          {{ workflowTargetAction ? getWorkflowActionIcon(workflowTargetAction.action) : '→' }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <span>{{ workflowTargetAction ? workflowTargetAction.action : '' }}</span>
+            <f-badge v-if="workflowTargetAction && workflowTargetAction.next_state" theme="blue" variant="subtle" size="xs">
+              Target: {{ workflowTargetAction.next_state }}
+            </f-badge>
+          </div>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            Apply workflow transition to <strong class="text-gray-800 dark:text-gray-200">{{ workflowTargetTask ? (workflowTargetTask.doctype || 'Task') : 'Task' }}</strong>:
+            <code class="font-mono text-[11px] px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">{{ workflowTargetTask ? (workflowTargetTask.docname || workflowTargetTask.id) : '' }}</code>
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+          Handoff / Transition Comment (optional)
+        </label>
+        <f-input
+          v-model="workflowComment"
+          placeholder="Add any context, completion notes, or reason for this status change..."
+          size="md"
+        ></f-input>
+      </div>
+    </div>
+
+    <template #actions>
+      <div class="flex justify-end gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showWorkflowModal = false" :disabled="workflowBusy">
+          Cancel
+        </f-button>
+        <f-button variant="solid" theme="blue" size="sm" @click="submitWorkflowAction" :disabled="workflowBusy">
+          Confirm {{ workflowTargetAction ? workflowTargetAction.action : 'Action' }}
+        </f-button>
       </div>
     </template>
   </f-dialog>
@@ -3841,6 +3951,12 @@
       const tasks = ref([]);
       const assignedTasks = ref([]);
       const attentionTasks = ref([]);
+      const activeWorkflowMenuTask = ref(null);
+      const showWorkflowModal = ref(false);
+      const workflowTargetTask = ref(null);
+      const workflowTargetAction = ref(null);
+      const workflowComment = ref('');
+      const workflowBusy = ref(false);
       const openTodos = computed(() => {
         return (assignedTasks.value || []).filter(t => {
           const st = (t.status || '').toLowerCase();
@@ -4667,6 +4783,11 @@
         if (todoDropdownOpen.value) {
           if (!ev.target.closest || !ev.target.closest('[data-todo-picker-container]')) {
             todoDropdownOpen.value = false;
+          }
+        }
+        if (activeWorkflowMenuTask.value) {
+          if (!ev.target.closest || !ev.target.closest('[data-taskmenu]')) {
+            activeWorkflowMenuTask.value = null;
           }
         }
       };
@@ -6617,17 +6738,98 @@
         showToast(`Started tracking: ${t.subject}`, 'success');
       };
 
+      const toggleTaskWorkflowMenu = (t) => {
+        if (activeWorkflowMenuTask.value === t.id) {
+          activeWorkflowMenuTask.value = null;
+        } else {
+          activeWorkflowMenuTask.value = t.id;
+        }
+      };
+
+      const promptWorkflowAction = (t, act) => {
+        activeWorkflowMenuTask.value = null;
+        workflowTargetTask.value = t;
+        workflowTargetAction.value = act;
+        workflowComment.value = '';
+        showWorkflowModal.value = true;
+      };
+
+      const getWorkflowActionIcon = (action) => {
+        const act = (action || '').toLowerCase();
+        if (act.includes('close') || act.includes('complete') || act.includes('approve')) return '✓';
+        if (act.includes('cancel') || act.includes('reject')) return '✕';
+        if (act.includes('review')) return '🔍';
+        if (act.includes('hold') || act.includes('pause')) return '⏸';
+        if (act.includes('start') || act.includes('resume')) return '▶';
+        return '→';
+      };
+
+      const getWorkflowActionClass = (action) => {
+        const act = (action || '').toLowerCase();
+        if (act.includes('close') || act.includes('complete') || act.includes('approve')) {
+          return 'text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40';
+        }
+        if (act.includes('cancel') || act.includes('reject')) {
+          return 'text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40';
+        }
+        if (act.includes('review')) {
+          return 'text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40';
+        }
+        if (act.includes('hold') || act.includes('pause')) {
+          return 'text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40';
+        }
+        return 'text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40';
+      };
+
+      const getTaskDeskUrl = (t) => {
+        if (!t) return '#';
+        const dt = t.doctype ? t.doctype.toLowerCase() : (t.type === 'todo' ? 'todo' : 'task');
+        const dn = t.docname || t.id || t.name;
+        return `/app/${encodeURIComponent(dt)}/${encodeURIComponent(dn)}`;
+      };
+
+      const submitWorkflowAction = async () => {
+        if (!workflowTargetTask.value || !workflowTargetAction.value) return;
+        workflowBusy.value = true;
+        const task = workflowTargetTask.value;
+        const act = workflowTargetAction.value;
+        try {
+          const res = await postJSON('execute_task_workflow_action', {
+            doctype: task.doctype || (task.type === 'todo' ? 'ToDo' : 'Task'),
+            docname: task.docname || task.id,
+            action: act.action,
+            comment: workflowComment.value || ''
+          });
+          showToast((res && res.message) || `Action applied: ${act.action}`, 'success');
+          showWorkflowModal.value = false;
+          // Optimistically remove from attention tasks if closed or cancelled
+          const actionLower = (act.action || '').toLowerCase();
+          if (actionLower.includes('close') || actionLower.includes('cancel') || actionLower.includes('complete')) {
+            attentionTasks.value = attentionTasks.value.filter(item => item.id !== task.id);
+          }
+          await Promise.all([
+            fetchWorkstationData(selectedEmployee.value),
+            fetchPlannerData()
+          ]);
+        } catch (err) {
+          showToast('Failed to execute workflow action: ' + (err && err.message ? err.message : err), 'danger');
+        } finally {
+          workflowBusy.value = false;
+        }
+      };
+
       const onPlannerKeydown = (e) => {
         if (e.key !== 'Escape') return;
         if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
         else if (showNewTaskModal.value) showNewTaskModal.value = false;
+        else if (showWorkflowModal.value) showWorkflowModal.value = false;
         else if (showBlockDrawer.value) showBlockDrawer.value = false;
         else if (showAppMenu.value) showAppMenu.value = false;
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showBookModal, showAdjustModal, showNewTaskModal, showBlockDrawer, showTrackerPopup, showNatureFilter], (vals) => {
+      watch([showBookModal, showAdjustModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter], (vals) => {
         if (vals.some(Boolean)) document.addEventListener('keydown', onPlannerKeydown);
         else document.removeEventListener('keydown', onPlannerKeydown);
       });
@@ -6961,6 +7163,18 @@
         // Attention & Non-Working Tasks
         assignedTasks,
         attentionTasks,
+        activeWorkflowMenuTask,
+        showWorkflowModal,
+        workflowTargetTask,
+        workflowTargetAction,
+        workflowComment,
+        workflowBusy,
+        toggleTaskWorkflowMenu,
+        promptWorkflowAction,
+        getWorkflowActionIcon,
+        getWorkflowActionClass,
+        getTaskDeskUrl,
+        submitWorkflowAction,
         planAttentionTask,
         startTaskImmediately,
         setUserPlannerView,

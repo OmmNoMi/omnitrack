@@ -372,14 +372,20 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		}
 
 	elif action in ("punch_in", "start"):
+		now_dt = now_datetime()
+		now_t = now_dt.strftime("%H:%M:%S")
 		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
 		if emp and frappe.db.exists("DocType", "Employee Checkin"):
-			chk = frappe.new_doc("Employee Checkin")
-			chk.employee = emp
-			chk.time = now_datetime()
-			chk.log_type = "IN"
-			chk.flags.ignore_permissions = True
-			chk.insert()
+			try:
+				chk = frappe.new_doc("Employee Checkin")
+				chk.employee = emp
+				chk.time = now_dt
+				chk.log_type = "IN"
+				chk.flags.ignore_permissions = True
+				chk.insert()
+			except Exception as e:
+				frappe.log_error(f"Employee Checkin punch IN failed: {e}", "OmniTrack")
+		frappe.db.commit()
 		return {"status": "success", "message": "Punched IN at " + now_t}
 
 	return {"status": "ignored"}
@@ -1167,6 +1173,8 @@ def get_assigned_tasks(employee=None):
 				items[r.name] = {
 					"ref": r.name,
 					"kind": "Task",
+					"doctype": "Task",
+					"docname": r.name,
 					"subject": r.subject,
 					"project": r.project,
 					"project_name": frappe.db.get_value("Project", r.project, "project_name") if r.project else None,
@@ -1177,22 +1185,33 @@ def get_assigned_tasks(employee=None):
 				}
 
 	# Standalone ToDos (the Frappe-native "Assign To" primitive; no ERPNext needed)
+	todo_fields = ["name", "description", "date", "priority", "reference_type", "reference_name", "status"]
+	if frappe.db.has_column("ToDo", "workflow_state_todo"):
+		todo_fields.append("workflow_state_todo")
+	elif frappe.db.has_column("ToDo", "workflow_state"):
+		todo_fields.append("workflow_state")
+
 	for td in frappe.get_all(
 		"ToDo",
 		filters={"allocated_to": target, "status": ["not in", ["Cancelled", "Closed"]]},
-		fields=["name", "description", "date", "priority", "reference_type", "reference_name"],
+		fields=todo_fields,
 		limit=200,
 	):
 		if has_task and td.reference_type == "Task" and td.reference_name in items:
+			continue
+		wf_st = td.get("workflow_state_todo") or td.get("workflow_state")
+		if wf_st in ("Cancelled", "Closed"):
 			continue
 		label = frappe.utils.strip_html(td.description or "").strip().split("\n")[0][:140] or "Untitled to-do"
 		items[f"todo:{td.name}"] = {
 			"ref": f"todo:{td.name}",
 			"kind": "ToDo",
+			"doctype": "ToDo",
+			"docname": td.name,
 			"subject": label,
 			"project": None,
 			"project_name": None,
-			"status": "Open",
+			"status": wf_st or td.status or "Open",
 			"priority": td.priority,
 			"due_date": str(td.date or ""),
 			"estimate_hours": 0.0,
@@ -1300,7 +1319,136 @@ def get_assigned_tasks(employee=None):
 		x.get("due_date") or "9999-12-31"
 	))
 	rows.sort(key=lambda x: (x.get("due_date") or "9999-12-31", x.get("subject") or ""))
+
+	# Enrich attention rows with available workflow actions
+	for it in attention_rows:
+		it["workflow_actions"] = get_task_workflow_actions(
+			it.get("doctype"), it.get("docname"), it.get("status")
+		)
+
 	return {"user": target, "tasks": rows, "attention_tasks": attention_rows}
+
+
+@frappe.whitelist()
+def get_task_workflow_actions(doctype, docname, current_status=None):
+	"""Returns available workflow action dictionaries for a Task or ToDo."""
+	if not doctype or not docname:
+		return []
+
+	try:
+		from frappe.model.workflow import get_workflow_name, get_transitions
+		wf_name = get_workflow_name(doctype)
+		if wf_name:
+			doc = frappe.get_doc(doctype, docname)
+			transitions = get_transitions(doc)
+			actions = []
+			for t in transitions:
+				act = t.action
+				act_l = act.lower()
+				style = "danger" if any(w in act_l for w in ("cancel", "reject", "drop")) \
+					else "success" if any(w in act_l for w in ("close", "complete", "approve", "done")) \
+					else "warning" if any(w in act_l for w in ("hold", "pause", "rework", "changes")) \
+					else "primary"
+				actions.append({
+					"action": act,
+					"next_state": t.next_state,
+					"style": style
+				})
+			if actions:
+				return actions
+	except Exception:
+		pass
+
+	# Standard actions fallback if no workflow or transitions empty
+	status = (current_status or "Open").lower()
+	fallback = []
+	if status not in ("completed", "closed"):
+		fallback.append({
+			"action": "Complete" if doctype == "Task" else "Close Task",
+			"next_state": "Completed" if doctype == "Task" else "Closed",
+			"style": "success"
+		})
+	if status != "cancelled":
+		fallback.append({
+			"action": "Cancel Task",
+			"next_state": "Cancelled",
+			"style": "danger"
+		})
+	if status not in ("on hold", "hold"):
+		fallback.append({
+			"action": "Put on Hold",
+			"next_state": "On Hold",
+			"style": "warning"
+		})
+	return fallback
+
+
+@frappe.whitelist()
+def execute_task_workflow_action(doctype, docname, action, comment=None):
+	"""
+	Executes a workflow action or status transition on a Task or ToDo document.
+	Handles both workflow transitions and direct status changes.
+	"""
+	if not doctype or not docname or not action:
+		frappe.throw(_("DocType, Document Name, and Action are required."))
+
+	if doctype not in ("Task", "ToDo"):
+		frappe.throw(_("Workflow actions are only supported on Task and ToDo documents."))
+
+	doc = frappe.get_doc(doctype, docname)
+	doc.check_permission("write")
+
+	from frappe.model.workflow import get_workflow_name, apply_workflow
+
+	wf_name = get_workflow_name(doctype)
+	if wf_name:
+		apply_workflow(doc, action)
+		if comment:
+			try:
+				doc.add_comment("Workflow", f"Action: {action}\n{comment}")
+			except Exception:
+				pass
+		frappe.db.commit()
+		state_field = frappe.get_doc("Workflow", wf_name).workflow_state_field
+		new_state = doc.get(state_field) or doc.get("status")
+		return {
+			"status": "success",
+			"message": _("Workflow action '{0}' applied to {1} {2} (New State: {3})").format(
+				action, doctype, docname, new_state
+			),
+			"doctype": doctype,
+			"docname": docname,
+			"new_state": new_state
+		}
+	else:
+		act_lower = str(action).lower()
+		if "complete" in act_lower or "close" in act_lower:
+			doc.status = "Completed" if doctype == "Task" else "Closed"
+		elif "cancel" in act_lower:
+			doc.status = "Cancelled"
+		elif "hold" in act_lower:
+			doc.status = "On Hold" if doctype == "Task" else "Open"
+		elif "progress" in act_lower or "start" in act_lower or "work" in act_lower:
+			doc.status = "Working" if doctype == "Task" else "Open"
+		else:
+			doc.status = action
+
+		doc.save()
+		if comment:
+			try:
+				doc.add_comment("Comment", f"Status updated to {doc.status}: {comment}")
+			except Exception:
+				pass
+		frappe.db.commit()
+		return {
+			"status": "success",
+			"message": _("Status updated to '{0}' for {1} {2}").format(
+				doc.status, doctype, docname
+			),
+			"doctype": doctype,
+			"docname": docname,
+			"new_state": doc.status
+		}
 
 
 def _time_str(val):
