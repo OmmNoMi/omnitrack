@@ -5,6 +5,14 @@ All notable changes to **OmniTrack** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-17
+
+### Fixed
+- **Workstation Dropdown Keyboard Trap & Shielding**: Added WAI-ARIA 1.2 deterministic focus management to `FDropdownMenu` with circular arrow-key navigation (<kbd>ArrowDown</kbd>, <kbd>ArrowUp</kbd>, <kbd>Home</kbd>, <kbd>End</kbd>), `e.stopPropagation()` isolation, and focus restoration to the trigger button upon close or <kbd>Escape</kbd>.
+- **Truncated Option Visibility**: Added native HTML `title` attributes on truncated dropdown menuitem labels, ensuring long task and workflow labels remain readable via browser tooltips without expanding menu bounds.
+- **2D Roving Grid Keyboard Isolation**: Shielded the attention tasks table keyboard handler (`onAttentionGridKey`) so keystrokes inside open dropdowns or workflow triggers do not trigger unwanted row jumps.
+- **Automated Interaction Regression Suite**: Added `scripts/test_workstation_interactions.cjs` validating spatial bounding, WAI-ARIA focus contracts, and event isolation across the Workstation interface.
+
 ## [1.2.0] - 2026-09-13
 
 ### Added
