@@ -153,3 +153,22 @@ on `documentElement` as well as `body`. Note that scripted `window.scrollBy`
 still moves an `overflow:hidden` page — verify the lock with
 `getComputedStyle(document.scrollingElement).overflowY`, not by scripting a
 scroll.
+
+## Gotcha: Dropdown keyboard navigation leaks into grid shortcuts
+
+When an attention grid or list view listens to keyboard events (`ArrowUp`, `ArrowDown`, `Home`, `End`), opening a dropdown menu inside a cell can cause keystrokes to bleed into the grid handler, moving rows in the background.
+
+Two defensive layers are mandatory:
+1. **Grid Shielding**: Global/grid keydown listeners MUST immediately return if the event originated inside an active menu:
+   ```javascript
+   if (ev.target && (ev.target.closest('[role="menu"]') || ev.target.closest('[data-f-dropdown-menu] [role="menu"]'))) {
+     return;
+   }
+   ```
+2. **Menu Event Containment**: The dropdown component must call `e.stopPropagation()` on all internal menu navigation keys (`ArrowDown`, `ArrowUp`, `Home`, `End`, `Escape`, `Enter`).
+3. **Deterministic Focus Restoration**: When closing via `Escape` or item selection, focus must restore back to the invoking trigger button (`_triggerEl.focus()`).
+
+## Gotcha: Truncated option labels must carry native title tooltips
+
+Long workflow action labels (e.g., *"Convert to Sales Invoice with Linked Delivery Note"*) and state transitions truncate with `.truncate`. Without `:title="item.label"`, users cannot inspect the full string on hover and must click blindly. Always bind `:title="item.label"` on truncated text elements and enforce responsive max-width bounds (`max-w-[min(30rem,calc(100vw-2rem))]`).
+
