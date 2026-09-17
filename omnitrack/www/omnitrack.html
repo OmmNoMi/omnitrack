@@ -944,69 +944,94 @@
           </f-button>
         </div>
 
-        <!-- Attention Task Cards Grid -->
-        <ul role="list" class="space-y-2.5" aria-label="Overdue and underplanned task list">
+        <!-- Attention Task Cards Grid with 2D Roving Tabindex -->
+        <ul role="grid" class="space-y-2.5" :aria-rowcount="visibleAttentionTasks.length" aria-colcount="4" aria-label="Action required overdue and underplanned task table. Use arrow keys to navigate rows and actions.">
           <li 
-            v-for="t in attentionTasks" 
-            :key="t.ref"
+            v-for="(t, rIdx) in visibleAttentionTasks" 
+            :key="t.ref || t.id || t.docname"
+            role="row"
+            :aria-rowindex="rIdx + 1"
             class="rounded-2xl p-3.5 sm:p-4 border transition-all"
             :class="isDarkMode ? 'bg-[#2B2D30]/90 border-gray-700/80 hover:border-gray-600' : 'bg-white border-amber-200 hover:border-amber-300 shadow-xs'">
             
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div class="space-y-1.5 flex-1 min-w-0">
-                <!-- Badges -->
-                <div class="flex items-center gap-2 flex-wrap">
-                  <f-badge :theme="t.attention_level === 'critical' ? 'red' : 'amber'" variant="solid" size="xs">
-                    {{ t.attention_badge || (t.is_overdue ? 'Overdue' : 'Needs Planning') }}
+                <!-- Badges: Clean, Non-Redundant -->
+                <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <f-badge v-if="t.days_overdue > 0" theme="red" variant="solid" size="xs">
+                    Overdue {{ t.days_overdue }}d
                   </f-badge>
-                  <f-badge v-if="t.priority && t.priority !== 'Medium'" :theme="t.priority === 'Urgent' || t.priority === 'High' ? 'red' : 'amber'" variant="subtle" size="xs">
+                  <f-badge v-else-if="t.is_due_today" theme="amber" variant="solid" size="xs">
+                    Due Today
+                  </f-badge>
+
+                  <f-badge v-if="t.deficit_hours > 0" theme="amber" variant="subtle" size="xs">
+                    {{ Number(t.deficit_hours).toFixed(1) }}h Deficit
+                  </f-badge>
+                  <f-badge v-else-if="t.is_unplanned" theme="amber" variant="subtle" size="xs">
+                    Unplanned
+                  </f-badge>
+
+                  <f-badge v-if="t.priority === 'Urgent' || t.priority === 'High'" theme="red" variant="subtle" size="xs">
                     {{ t.priority }} Priority
                   </f-badge>
-                  <f-badge v-if="t.due_date" :theme="t.is_overdue ? 'red' : 'gray'" variant="outline" size="xs">
-                    📅 Due: {{ t.due_date }} <span v-if="t.days_overdue > 0">({{ t.days_overdue }}d ago)</span>
+
+                  <f-badge v-if="t.due_date" theme="gray" variant="outline" size="xs">
+                    📅 {{ t.due_date }}
                   </f-badge>
+
                   <f-badge v-if="t.project_name || t.project" theme="gray" variant="subtle" size="xs">
                     📁 {{ t.project_name || t.project }}
                   </f-badge>
                 </div>
 
-                <!-- Subject -->
+                <!-- Subject (Column 0 in Roving Tabindex) -->
                 <h4 class="text-sm sm:text-base font-bold text-gray-900 dark:text-white leading-snug">
                   <a 
                     :href="getTaskDeskUrl(t)" 
                     target="_blank" 
                     rel="noopener noreferrer" 
                     :title="'Open ' + (t.doctype || 'Task') + ' ' + (t.docname || t.id) + ' in Desk'"
-                    class="hover:underline hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-1.5 group">
+                    :tabindex="attentionTabindex(rIdx, 0)"
+                    :data-attention-row="rIdx"
+                    :data-attention-col="0"
+                    @focus="setAttentionRoving(rIdx, 0)"
+                    @keydown="onAttentionGridKey($event, rIdx, 0)"
+                    class="hover:underline hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-1.5 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded">
                     <span>{{ t.subject }}</span>
                     <svg class="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   </a>
                 </h4>
 
-                <!-- Reason & Planning Progress -->
-                <div class="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300 flex-wrap">
-                  <span class="font-medium text-amber-800 dark:text-amber-300">
-                    ⚠️ {{ t.attention_reason }}
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span class="font-mono">
-                    Booked: <strong class="text-blue-600 dark:text-blue-400">{{ Number(t.booked_hours || 0).toFixed(1) }}h</strong>
+                <!-- Planning Metrics Pill (Zero Redundant Sentences) -->
+                <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 flex-wrap">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-mono text-[11px]"
+                    :class="t.is_unplanned ? 'bg-amber-100/70 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'">
+                    <span>Booked:</span>
+                    <strong :class="t.booked_hours > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'">{{ Number(t.booked_hours || 0).toFixed(1) }}h</strong>
                     <template v-if="t.estimate_hours > 0">
-                      / {{ Number(t.estimate_hours).toFixed(1) }}h estimated
-                      (<span class="text-red-600 dark:text-red-400 font-bold">{{ Number(t.deficit_hours).toFixed(1) }}h unbooked deficit</span>)
+                      <span>/ {{ Number(t.estimate_hours).toFixed(1) }}h est.</span>
                     </template>
+                  </span>
+                  <span v-if="t.logged_hours > 0" class="text-[11px] font-mono text-gray-500 dark:text-gray-400">
+                    · Logged: {{ Number(t.logged_hours).toFixed(1) }}h
                   </span>
                 </div>
               </div>
 
-              <!-- Action Buttons -->
-              <div class="flex items-center gap-2 self-stretch sm:self-center flex-wrap sm:flex-nowrap">
-                <!-- Schedule in Planner -->
+              <!-- Action Buttons (Columns 1, 2, 3 in Roving Tabindex) -->
+              <div class="flex items-center gap-2 self-stretch sm:self-center flex-wrap sm:flex-nowrap pt-1 sm:pt-0">
+                <!-- Schedule in Planner (Col 1) -->
                 <f-button 
                   variant="subtle" 
                   theme="blue" 
                   size="sm" 
                   @click="planAttentionTask(t)"
+                  :tabindex="attentionTabindex(rIdx, 1)"
+                  :data-attention-row="rIdx"
+                  :data-attention-col="1"
+                  @focus="setAttentionRoving(rIdx, 1)"
+                  @keydown="onAttentionGridKey($event, rIdx, 1)"
                   :aria-label="'Schedule ' + t.subject + ' into planner calendar'">
                   <template #prefix>
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1014,12 +1039,17 @@
                   <span>Plan in Calendar</span>
                 </f-button>
 
-                <!-- Immediate Focus Session -->
+                <!-- Immediate Focus Session (Col 2) -->
                 <f-button 
                   variant="solid" 
                   theme="blue" 
                   size="sm" 
                   @click="startTaskImmediately(t)"
+                  :tabindex="attentionTabindex(rIdx, 2)"
+                  :data-attention-row="rIdx"
+                  :data-attention-col="2"
+                  @focus="setAttentionRoving(rIdx, 2)"
+                  @keydown="onAttentionGridKey($event, rIdx, 2)"
                   :aria-label="'Start focus session now for ' + t.subject">
                   <template #prefix>
                     <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
@@ -1027,53 +1057,60 @@
                   <span>Start Now</span>
                 </f-button>
 
-                <!-- Workflow Actions Dropdown -->
-                <div v-if="t.workflow_actions && t.workflow_actions.length > 0" class="relative" data-taskmenu>
-                  <f-button
-                    variant="outline"
-                    theme="gray"
-                    size="sm"
-                    @click.stop="toggleTaskWorkflowMenu(t)"
-                    :aria-expanded="activeWorkflowMenuTask === t.id ? 'true' : 'false'"
-                    :aria-label="'Workflow actions for ' + t.subject">
-                    <template #prefix>
-                      <svg class="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    </template>
-                    <span>Workflow</span>
-                    <template #suffix>
-                      <svg class="w-3 h-3 transition-transform duration-150" :class="activeWorkflowMenuTask === t.id ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-                    </template>
-                  </f-button>
-
-                  <!-- Menu Dropdown -->
-                  <div v-if="activeWorkflowMenuTask === t.id"
-                    class="absolute right-0 top-full mt-1.5 w-52 rounded-xl shadow-xl border py-1.5 z-30 transition-all"
-                    :class="isDarkMode ? 'bg-gray-800 border-gray-700 shadow-black/60' : 'bg-white border-gray-200 shadow-lg'">
-                    <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-1">
-                      Workflow Actions
-                    </div>
-                    <button
-                      v-for="act in t.workflow_actions"
-                      :key="act.action"
-                      type="button"
-                      @click="promptWorkflowAction(t, act)"
-                      class="w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
-                      :class="getWorkflowActionClass(act.action)">
-                      <span class="flex items-center gap-2">
-                        <span class="w-4 text-center font-bold" aria-hidden="true">{{ getWorkflowActionIcon(act.action) }}</span>
-                        <span>{{ act.action }}</span>
-                      </span>
-                      <f-badge v-if="act.next_state" theme="gray" variant="subtle" size="xs">
-                        {{ act.next_state }}
-                      </f-badge>
-                    </button>
-                  </div>
-                </div>
+                <!-- Encapsulated Workflow Actions Dropdown Menu (Col 3) -->
+                <f-dropdown-menu
+                  v-if="t.workflow_actions && t.workflow_actions.length > 0"
+                  :items="getTaskWorkflowMenuItems(t)"
+                  title="Workflow Actions"
+                  :aria-label="'Workflow actions for ' + t.subject"
+                  align="right">
+                  <template #trigger="{ isOpen }">
+                    <f-button
+                      variant="outline"
+                      theme="gray"
+                      size="sm"
+                      :tabindex="attentionTabindex(rIdx, 3)"
+                      :data-attention-row="rIdx"
+                      :data-attention-col="3"
+                      @focus="setAttentionRoving(rIdx, 3)"
+                      @keydown="onAttentionGridKey($event, rIdx, 3)"
+                      :aria-expanded="isOpen ? 'true' : 'false'"
+                      :aria-label="'Workflow actions for ' + t.subject">
+                      <template #prefix>
+                        <svg class="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                      </template>
+                      <span>Workflow</span>
+                      <template #suffix>
+                        <svg class="w-3 h-3 transition-transform duration-150" :class="isOpen ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                      </template>
+                    </f-button>
+                  </template>
+                </f-dropdown-menu>
               </div>
             </div>
 
           </li>
         </ul>
+
+        <!-- Google Meet-Style Show More / Show Less Toggle -->
+        <div v-if="attentionTasks.length > 3" class="pt-2.5 flex justify-center">
+          <button
+            type="button"
+            data-attention-show-more
+            @click="toggleShowAllAttentionTasks"
+            class="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full border transition-all shadow-xs cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 bg-white/95 border-amber-300 text-amber-900 hover:bg-amber-100 hover:border-amber-400 dark:bg-gray-800/95 dark:border-amber-500/40 dark:text-amber-200 dark:hover:bg-gray-700"
+            :aria-expanded="showAllAttentionTasks ? 'true' : 'false'"
+            :aria-label="showAllAttentionTasks ? 'Show fewer overdue tasks' : ('Show ' + remainingAttentionTasksCount + ' more overdue tasks')">
+            <span v-if="!showAllAttentionTasks" class="inline-flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              <span>Show {{ remainingAttentionTasksCount }} more</span>
+            </span>
+            <span v-else class="inline-flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+              <span>Show less</span>
+            </span>
+          </button>
+        </div>
 
       </section>
 
@@ -3218,6 +3255,146 @@
     `
   };
 
+  const FDropdownMenu = {
+    name: 'FDropdownMenu',
+    props: {
+      items: { type: Array, default: () => [] },
+      title: { type: String, default: null },
+      disabled: { type: Boolean, default: false },
+      ariaLabel: { type: String, default: 'Menu' },
+      align: { type: String, default: 'right' }
+    },
+    emits: ['select'],
+    data() {
+      return {
+        isOpen: false,
+        focusedIdx: -1
+      };
+    },
+    mounted() {
+      this._outsideHandler = (e) => {
+        if (this.isOpen && this.$el && !this.$el.contains(e.target)) {
+          this.isOpen = false;
+        }
+      };
+      this._closeListener = (e) => {
+        if (this.isOpen && e.detail !== this) {
+          this.isOpen = false;
+        }
+      };
+      document.addEventListener('pointerdown', this._outsideHandler);
+      window.addEventListener('omnitrack-close-menus', this._closeListener);
+    },
+    unmounted() {
+      document.removeEventListener('pointerdown', this._outsideHandler);
+      window.removeEventListener('omnitrack-close-menus', this._closeListener);
+    },
+    methods: {
+      toggle() {
+        if (this.disabled) return;
+        this.isOpen = !this.isOpen;
+        if (this.isOpen) {
+          this.focusedIdx = 0;
+          window.dispatchEvent(new CustomEvent('omnitrack-close-menus', { detail: this }));
+        }
+      },
+      close() {
+        this.isOpen = false;
+        this.focusedIdx = -1;
+      },
+      selectItem(item) {
+        if (item.disabled) return;
+        this.close();
+        if (typeof item.onClick === 'function') {
+          item.onClick();
+        }
+        this.$emit('select', item);
+        const btn = this.$el.querySelector('button');
+        if (btn) btn.focus();
+      },
+      onKeydown(e) {
+        if (!this.isOpen) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this.toggle();
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.close();
+          const btn = this.$el.querySelector('button');
+          if (btn) btn.focus();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          this.focusedIdx = (this.focusedIdx + 1) % this.items.length;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          this.focusedIdx = (this.focusedIdx - 1 + this.items.length) % this.items.length;
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          if (this.focusedIdx >= 0 && this.items[this.focusedIdx]) {
+            e.preventDefault();
+            this.selectItem(this.items[this.focusedIdx]);
+          }
+        }
+      }
+    },
+    template: `
+      <div class="relative inline-block text-left" data-f-dropdown-menu>
+        <div @click="toggle" @keydown="onKeydown">
+          <slot name="trigger" :is-open="isOpen" :toggle="toggle">
+            <button
+              type="button"
+              :disabled="disabled"
+              :aria-expanded="isOpen ? 'true' : 'false'"
+              :aria-label="ariaLabel"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-colors shadow-xs outline-none bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <span>Menu</span>
+              <svg class="w-3 h-3 transition-transform" :class="isOpen ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          </slot>
+        </div>
+
+        <div
+          v-if="isOpen"
+          role="menu"
+          :aria-label="ariaLabel"
+          class="absolute z-50 mt-1.5 w-64 sm:w-72 max-w-[calc(100vw-2.5rem)] rounded-2xl shadow-xl border py-1.5 transition-all outline-none bg-white border-gray-200 text-gray-900 shadow-gray-400/20 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:shadow-black/60"
+          :class="align === 'left' ? 'left-0' : 'right-0'"
+        >
+          <div v-if="title" class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-1">
+            {{ title }}
+          </div>
+          <div class="space-y-0.5 px-1">
+            <button
+              v-for="(item, idx) in items"
+              :key="item.action || item.label || idx"
+              type="button"
+              role="menuitem"
+              :disabled="item.disabled"
+              @click.stop="selectItem(item)"
+              @pointerenter="focusedIdx = idx"
+              class="w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer group"
+              :class="[
+                idx === focusedIdx ? (item.focusClass || 'bg-gray-100 dark:bg-gray-700/70') : '',
+                item.itemClass || 'hover:bg-gray-100 dark:hover:bg-gray-700/70 text-gray-800 dark:text-gray-200'
+              ]"
+            >
+              <span class="flex items-center gap-2.5 min-w-0">
+                <span v-if="item.icon" class="w-4 text-center font-bold shrink-0 text-xs" aria-hidden="true">{{ item.icon }}</span>
+                <span class="font-semibold whitespace-nowrap">{{ item.label }}</span>
+              </span>
+              <span v-if="item.next_state || item.badge" class="shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded-full border bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">
+                {{ item.next_state || item.badge }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `
+  };
+
   const FDialog = {
     name: 'FDialog',
     props: {
@@ -3516,6 +3693,9 @@
       'f-card': FCard,
       FDropdown,
       'f-dropdown': FDropdown,
+      FDropdownMenu,
+      'f-dropdown-menu': FDropdownMenu,
+      'f-menu': FDropdownMenu,
       FDialog,
       'f-dialog': FDialog
     },
@@ -3951,6 +4131,100 @@
       const tasks = ref([]);
       const assignedTasks = ref([]);
       const attentionTasks = ref([]);
+      const showAllAttentionTasks = ref(false);
+      const ATTENTION_TASKS_COLLAPSED_LIMIT = 3;
+
+      const visibleAttentionTasks = computed(() => {
+        const list = attentionTasks.value || [];
+        if (showAllAttentionTasks.value || list.length <= ATTENTION_TASKS_COLLAPSED_LIMIT) {
+          return list;
+        }
+        return list.slice(0, ATTENTION_TASKS_COLLAPSED_LIMIT);
+      });
+
+      const remainingAttentionTasksCount = computed(() => {
+        const total = (attentionTasks.value || []).length;
+        return Math.max(0, total - ATTENTION_TASKS_COLLAPSED_LIMIT);
+      });
+
+      // Roving Tabindex Grid Navigation for Attention Tasks (WCAG 2.2 AA)
+      const attentionRovingRow = ref(0);
+      const attentionRovingCol = ref(0);
+
+      const setAttentionRoving = (r, c) => {
+        attentionRovingRow.value = r;
+        attentionRovingCol.value = c;
+      };
+
+      const attentionTabindex = (r, c) => {
+        return (attentionRovingRow.value === r && attentionRovingCol.value === c) ? 0 : -1;
+      };
+
+      const focusAttentionCell = (targetRow, targetCol) => {
+        const rows = visibleAttentionTasks.value || [];
+        if (!rows.length) return;
+        const r = Math.max(0, Math.min(targetRow, rows.length - 1));
+        const task = rows[r];
+        const maxCol = (task && task.workflow_actions && task.workflow_actions.length > 0) ? 3 : 2;
+        const c = Math.max(0, Math.min(targetCol, maxCol));
+
+        setAttentionRoving(r, c);
+        nextTick(() => {
+          const el = document.querySelector(`[data-attention-row="${r}"][data-attention-col="${c}"]`);
+          if (el) el.focus();
+        });
+      };
+
+      const toggleShowAllAttentionTasks = () => {
+        const wasCollapsed = !showAllAttentionTasks.value;
+        showAllAttentionTasks.value = !showAllAttentionTasks.value;
+        if (wasCollapsed) {
+          // Move focus to the last previously visible task (index ATTENTION_TASKS_COLLAPSED_LIMIT - 1)
+          // so pressing ArrowDown immediately explores the newly revealed tasks!
+          const lastPrevIndex = Math.max(0, ATTENTION_TASKS_COLLAPSED_LIMIT - 1);
+          focusAttentionCell(lastPrevIndex, 0);
+        } else {
+          nextTick(() => {
+            const btn = document.querySelector('[data-attention-show-more]');
+            if (btn) btn.focus();
+            else focusAttentionCell(0, 0);
+          });
+        }
+      };
+
+      const onAttentionGridKey = (ev, r, c) => {
+        const k = ev.key;
+        if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') {
+          return;
+        }
+        ev.preventDefault();
+
+        const rows = visibleAttentionTasks.value || [];
+        if (!rows.length) return;
+
+        if (k === 'ArrowDown') {
+          focusAttentionCell(r + 1, c);
+        } else if (k === 'ArrowUp') {
+          focusAttentionCell(r - 1, c);
+        } else if (k === 'ArrowRight') {
+          focusAttentionCell(r, c + 1);
+        } else if (k === 'ArrowLeft') {
+          focusAttentionCell(r, c - 1);
+        } else if (k === 'Home') {
+          if (ev.ctrlKey || ev.metaKey) {
+            focusAttentionCell(0, 0);
+          } else {
+            focusAttentionCell(r, 0);
+          }
+        } else if (k === 'End') {
+          if (ev.ctrlKey || ev.metaKey) {
+            focusAttentionCell(rows.length - 1, 3);
+          } else {
+            focusAttentionCell(r, 3);
+          }
+        }
+      };
+
       const activeWorkflowMenuTask = ref(null);
       const showWorkflowModal = ref(false);
       const workflowTargetTask = ref(null);
@@ -6738,11 +7012,26 @@
         showToast(`Started tracking: ${t.subject}`, 'success');
       };
 
+      const getTaskWorkflowMenuItems = (t) => {
+        if (!t || !t.workflow_actions) return [];
+        return t.workflow_actions.map(act => {
+          return {
+            action: act.action,
+            label: act.action,
+            next_state: act.next_state,
+            icon: getWorkflowActionIcon(act.action),
+            itemClass: getWorkflowActionClass(act.action),
+            onClick: () => promptWorkflowAction(t, act)
+          };
+        });
+      };
+
       const toggleTaskWorkflowMenu = (t) => {
-        if (activeWorkflowMenuTask.value === t.id) {
+        const taskId = t.ref || t.id || t.docname;
+        if (activeWorkflowMenuTask.value === taskId) {
           activeWorkflowMenuTask.value = null;
         } else {
-          activeWorkflowMenuTask.value = t.id;
+          activeWorkflowMenuTask.value = taskId;
         }
       };
 
@@ -6805,7 +7094,8 @@
           // Optimistically remove from attention tasks if closed or cancelled
           const actionLower = (act.action || '').toLowerCase();
           if (actionLower.includes('close') || actionLower.includes('cancel') || actionLower.includes('complete')) {
-            attentionTasks.value = attentionTasks.value.filter(item => item.id !== task.id);
+            const targetId = task.ref || task.id || task.docname;
+            attentionTasks.value = attentionTasks.value.filter(item => (item.ref || item.id || item.docname) !== targetId);
           }
           await Promise.all([
             fetchWorkstationData(selectedEmployee.value),
@@ -7163,6 +7453,17 @@
         // Attention & Non-Working Tasks
         assignedTasks,
         attentionTasks,
+        showAllAttentionTasks,
+        visibleAttentionTasks,
+        remainingAttentionTasksCount,
+        toggleShowAllAttentionTasks,
+        attentionRovingRow,
+        attentionRovingCol,
+        setAttentionRoving,
+        attentionTabindex,
+        focusAttentionCell,
+        onAttentionGridKey,
+        getTaskWorkflowMenuItems,
         activeWorkflowMenuTask,
         showWorkflowModal,
         workflowTargetTask,

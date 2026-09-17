@@ -1172,6 +1172,7 @@ def get_assigned_tasks(employee=None):
 			):
 				items[r.name] = {
 					"ref": r.name,
+					"id": r.name,
 					"kind": "Task",
 					"doctype": "Task",
 					"docname": r.name,
@@ -1205,6 +1206,7 @@ def get_assigned_tasks(employee=None):
 		label = frappe.utils.strip_html(td.description or "").strip().split("\n")[0][:140] or "Untitled to-do"
 		items[f"todo:{td.name}"] = {
 			"ref": f"todo:{td.name}",
+			"id": td.name,
 			"kind": "ToDo",
 			"doctype": "ToDo",
 			"docname": td.name,
