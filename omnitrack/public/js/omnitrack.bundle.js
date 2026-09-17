@@ -6,19 +6,14 @@ omnitrack.MODE_KEY = 'omnitrack_hud_mode_v1';
 omnitrack.POS_KEY = 'omnitrack_hud_pos_v1';
 
 // Available HUD Positions:
-// 'topbar'  : Mount in .page-head / .page-actions (default)
-// 'sidebar' : Dock on sidebar border alongside collapse button & assistant help
+// 'sidebar' : Dock on sidebar border alongside collapse button & assistant help (strictly isolated from topbar action buttons)
 omnitrack.get_hud_position = function() {
-	try {
-		return localStorage.getItem(omnitrack.POS_KEY) || 'topbar';
-	} catch (e) {
-		return 'topbar';
-	}
+	return 'sidebar';
 };
 
 omnitrack.set_hud_position = function(pos) {
 	try {
-		localStorage.setItem(omnitrack.POS_KEY, pos);
+		localStorage.setItem(omnitrack.POS_KEY, 'sidebar');
 	} catch (e) {}
 	omnitrack.mount_navbar_timer();
 };
@@ -167,10 +162,17 @@ omnitrack.sync_timer_ui = function() {
 };
 
 omnitrack.mount_navbar_timer = function() {
-	const currentPos = omnitrack.get_hud_position();
+	// Defensively purge any topbar or floating timer so it NEVER obscures native action buttons
+	$('.omni-pos-topbar, .omnitrack-floating, .page-actions #omnitrack-nav-timer').remove();
+
+	const $sidebar = $('.body-sidebar').first();
+	if (!$sidebar.length) {
+		// If there is no sidebar on this view, do NOT inject anywhere else
+		return;
+	}
 
 	const timerHtml = `
-		<div id="omnitrack-nav-timer" class="omni-pos-${currentPos}" title="${__('OmniTrack Live Stopwatch (Alt+Shift+T)')}">
+		<div id="omnitrack-nav-timer" class="omni-pos-sidebar" title="${__('OmniTrack Live Stopwatch (Alt+Shift+T)')}">
 			<div class="omni-timer-pill-inner">
 				<span class="omnitrack-timer-dot" id="omni-timer-dot" title="${__('Status Indicator')}"></span>
 				<span id="omni-timer-text">00:00:00</span>
@@ -178,16 +180,7 @@ omnitrack.mount_navbar_timer = function() {
 				<button type="button" class="omnitrack-timer-opts" id="omni-timer-opts-btn" title="${__('Stopwatch Settings')}" aria-haspopup="true">▾</button>
 			</div>
 			<div class="omnitrack-opts-dropdown" id="omni-timer-dropdown" role="menu" aria-label="${__('Stopwatch Settings')}">
-				<div class="omni-opt-header" role="presentation">${__('Timer Location')}</div>
-				<div class="omni-opt-item" data-pos="topbar" role="menuitemradio" tabindex="0" aria-label="${__('Top Bar')}">
-					<span>${frappe.utils.icon ? frappe.utils.icon('layout', 'xs') : ''} ${__('Top Bar (Header)')}</span>
-					<span class="check">✓</span>
-				</div>
-				<div class="omni-opt-item" data-pos="sidebar" role="menuitemradio" tabindex="-1" aria-label="${__('Sidebar Border')}">
-					<span>${frappe.utils.icon ? frappe.utils.icon('sidebar', 'xs') : ''} ${__('Sidebar Border (Hover)')}</span>
-					<span class="check">✓</span>
-				</div>
-				<div class="omni-opt-header" role="presentation" style="margin-top:6px;">${__('Timer Style')}</div>
+				<div class="omni-opt-header" role="presentation">${__('Timer Style')}</div>
 				<div class="omni-opt-item" data-mode="pill" role="menuitemradio" tabindex="-1" aria-label="${__('Always Visible')}">
 					<span>${frappe.utils.icon ? frappe.utils.icon('eye', 'xs') : ''} ${__('Always Visible')}</span>
 					<span class="check">✓</span>
@@ -204,47 +197,14 @@ omnitrack.mount_navbar_timer = function() {
 		</div>
 	`;
 
-	const $existing = $('#omnitrack-nav-timer');
-
-	if (currentPos === 'sidebar') {
-		// Dock on sidebar boundary
-		const $sidebar = $('.body-sidebar').first();
-		if ($sidebar.length) {
-			if ($existing.length) {
-				$existing.removeClass('omnitrack-floating omni-pos-topbar').addClass('omni-pos-sidebar');
-				if (!$sidebar.has($existing).length) {
-					$existing.appendTo($sidebar);
-				}
-			} else {
-				$(timerHtml).appendTo($sidebar);
-			}
-		} else {
-			// Fallback if sidebar not loaded yet
-			if ($existing.length) {
-				$existing.addClass('omnitrack-floating').appendTo('body');
-			} else {
-				$(timerHtml).addClass('omnitrack-floating').appendTo('body');
-			}
+	let $existing = $('#omnitrack-nav-timer');
+	if ($existing.length) {
+		$existing.removeClass('omnitrack-floating omni-pos-topbar').addClass('omni-pos-sidebar');
+		if (!$sidebar.has($existing).length) {
+			$existing.appendTo($sidebar);
 		}
 	} else {
-		// Topbar placement inside .page-actions
-		const $pageActions = $('.page-head:visible .page-actions, .page-container:visible:not(.hide) .page-head .page-actions, .page-actions:visible').first();
-		if ($pageActions.length) {
-			if ($existing.length) {
-				$existing.removeClass('omnitrack-floating omni-pos-sidebar').addClass('omni-pos-topbar');
-				if (!$pageActions.has($existing).length) {
-					$existing.prependTo($pageActions);
-				}
-			} else {
-				$(timerHtml).prependTo($pageActions);
-			}
-		} else {
-			if ($existing.length) {
-				$existing.removeClass('omni-pos-sidebar').addClass('omnitrack-floating omni-pos-topbar').appendTo('body');
-			} else {
-				$(timerHtml).addClass('omnitrack-floating omni-pos-topbar').appendTo('body');
-			}
-		}
+		$existing = $(timerHtml).appendTo($sidebar);
 	}
 
 	omnitrack.sync_timer_ui();
@@ -301,22 +261,6 @@ omnitrack.mount_navbar_timer = function() {
 			$('#omnitrack-nav-timer').removeClass('omni-dock-open');
 			$('#omni-timer-opts-btn').focus();
 		}
-	});
-
-	// Position item selection
-	$('.omnitrack-opts-dropdown .omni-opt-item[data-pos]').off('click').on('click', function(e) {
-		e.stopPropagation();
-		e.preventDefault();
-		const targetPos = $(this).attr('data-pos');
-		$('#omni-timer-dropdown').removeClass('show');
-		$('#omnitrack-nav-timer').removeClass('omni-dock-open');
-		omnitrack.set_hud_position(targetPos);
-
-		let posLabel = targetPos === 'sidebar' ? __('Sidebar Border') : __('Top Bar');
-		frappe.show_alert({
-			message: __('Timer location set to: ') + '<strong>' + posLabel + '</strong>',
-			indicator: 'blue'
-		}, 3);
 	});
 
 	// Mode item selection

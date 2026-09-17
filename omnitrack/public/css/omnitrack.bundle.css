@@ -45,17 +45,11 @@
 	height: 100%;
 }
 
-/* Top-bar layout */
-#omnitrack-nav-timer.omni-pos-topbar {
-	margin-right: 8px;
-}
-
-#omnitrack-nav-timer.omnitrack-floating {
-	position: fixed;
-	top: 10px;
-	right: 80px;
-	z-index: 1005;
-	box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+/* Top-bar & floating layouts are strictly suppressed to guarantee zero button overlap */
+#omnitrack-nav-timer.omni-pos-topbar,
+#omnitrack-nav-timer.omnitrack-floating,
+.page-actions #omnitrack-nav-timer {
+	display: none !important;
 }
 
 #omnitrack-nav-timer:hover {
