@@ -645,13 +645,15 @@ def sync_active_session(session_data=None, user=None):
 		return {"status": "cleared"}
 
 	# Normalize session fields
+	start_time = int(flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000)))
 	clean_data = {
-		"startTime": int(flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000))),
+		"startTime": start_time,
 		"selectedNature": session_data.get("selectedNature") or "🎯 Planned",
 		"selectedProject": session_data.get("selectedProject") or "",
 		"trackerNotes": (session_data.get("trackerNotes") or "").strip(),
 		"trackerBlockName": session_data.get("trackerBlockName") or None,
 		"sessionNotesList": session_data.get("sessionNotesList") if isinstance(session_data.get("sessionNotesList"), list) else [],
+		"lastActivityTime": int(flt(session_data.get("lastActivityTime") or session_data.get("lastUpdated") or start_time)),
 		"lastUpdated": int(datetime.now().timestamp() * 1000),
 		"status": "active"
 	}

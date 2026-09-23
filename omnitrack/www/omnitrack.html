@@ -3314,6 +3314,82 @@
   </f-dialog>
 
   <!-- ========================================== -->
+  <!-- 30-MINUTE INACTIVITY GOVERNOR MODAL        -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showInactivityModal"
+    title="Are you still working?"
+    subtitle="30 minutes without activity or notes"
+    size="sm"
+    z-index="z-[60]"
+  >
+    <div class="space-y-3 py-1 text-xs">
+      <div class="p-3 rounded-xl border flex items-start gap-2.5"
+        :class="isDarkMode ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-900'">
+        <span class="text-base select-none" aria-hidden="true">⏱️</span>
+        <div class="space-y-1">
+          <div class="font-extrabold text-[12px] leading-snug">
+            No notes logged for {{ inactivityMinutes }} minutes
+          </div>
+          <p class="text-[11px] leading-relaxed opacity-90">
+            You normally log bullet updates every 10–15 minutes on active work.
+          </p>
+        </div>
+      </div>
+
+      <div class="rounded-xl border p-2.5 space-y-1"
+        :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700'">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-gray-400 font-medium">Active Task:</span>
+          <span class="font-bold truncate max-w-[190px]">{{ trackerNotes || (trackerBoundBlock ? trackerBoundBlock.work_item_label : 'Active Work') }}</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-gray-400 font-medium">Last edit recorded:</span>
+          <span class="font-mono font-bold">{{ lastActivityTimeHHMM }}</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-gray-400 font-medium">Current clock:</span>
+          <span class="font-mono font-bold">{{ formattedTime }}</span>
+        </div>
+      </div>
+
+      <p class="text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+        Would you like to continue tracking, stop the timesheet 15 minutes after your last edit, or stop now?
+      </p>
+    </div>
+
+    <template #actions>
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 w-full">
+        <f-button
+          variant="ghost"
+          theme="gray"
+          size="sm"
+          @click="stopInactivitySessionNow"
+        >
+          Stop Now
+        </f-button>
+        <f-button
+          variant="outline"
+          theme="amber"
+          size="sm"
+          @click="stopInactivitySessionAtLastEditPlus15"
+          :title="'Log timesheet up to ' + suggestedStopHHMM"
+        >
+          Stop at 15m after last edit ({{ suggestedStopHHMM }})
+        </f-button>
+        <f-button
+          variant="solid"
+          theme="blue"
+          size="sm"
+          @click="confirmStillWorking"
+        >
+          Yes, Still Working
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
   <!-- TASK WORKFLOW ACTION CONFIRMATION MODAL    -->
   <!-- ========================================== -->
   <f-dialog
@@ -7303,6 +7379,109 @@
       // Multi-Device Active Session Synchronization & Remote HUD Actions
       let _syncDebounceTimer = null;
       let _lastLocalUpdate = Date.now();
+      const lastActivityTime = ref(Date.now());
+      const lastInactivityAlertTime = ref(0);
+      const showInactivityModal = ref(false);
+
+      const recordUserActivity = () => {
+        lastActivityTime.value = Date.now();
+        if (showInactivityModal.value) {
+          showInactivityModal.value = false;
+        }
+      };
+
+      const playInactivityChime = () => {
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.5);
+        } catch (e) {}
+      };
+
+      const dispatchInactivityNotification = (msg) => {
+        try {
+          if (typeof window !== 'undefined' && 'Notification' in window) {
+            if (Notification.permission === 'granted') {
+              new Notification('OmniTrack: Are you still working?', {
+                body: msg || 'No activity logged for 30 minutes on active timesheet.',
+                icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+                tag: 'omnitrack-inactivity'
+              });
+            } else if (Notification.permission === 'default') {
+              Notification.requestPermission();
+            }
+          }
+        } catch (e) {}
+      };
+
+      const inactivityMinutes = computed(() => {
+        const ms = Date.now() - (lastActivityTime.value || Date.now());
+        return Math.max(1, Math.floor(ms / 60000));
+      });
+
+      const lastActivityTimeHHMM = computed(() => {
+        const t = lastActivityTime.value ? new Date(lastActivityTime.value) : new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return pad(t.getHours()) + ':' + pad(t.getMinutes());
+      });
+
+      const suggestedStopHHMM = computed(() => {
+        const base = lastActivityTime.value || Date.now();
+        const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
+        const t = new Date(targetMs);
+        const pad = (n) => String(n).padStart(2, '0');
+        return pad(t.getHours()) + ':' + pad(t.getMinutes());
+      });
+
+      const checkInactivity = () => {
+        if (!isTracking.value) return;
+        const now = Date.now();
+        const act = lastActivityTime.value || now;
+        const idleMs = now - act;
+        const INACTIVITY_MS = 30 * 60 * 1000;
+        const REPEAT_MS = 30 * 60 * 1000;
+
+        if (idleMs >= INACTIVITY_MS) {
+          const timeSinceAlert = now - (lastInactivityAlertTime.value || 0);
+          if (!lastInactivityAlertTime.value || timeSinceAlert >= REPEAT_MS) {
+            lastInactivityAlertTime.value = now;
+            showInactivityModal.value = true;
+            playInactivityChime();
+            dispatchInactivityNotification(`No notes logged for ${Math.floor(idleMs / 60000)}m on "${trackerNotes.value || 'Active Work'}". Are you still working?`);
+          }
+        }
+      };
+
+      const confirmStillWorking = () => {
+        recordUserActivity();
+        lastInactivityAlertTime.value = 0;
+        showInactivityModal.value = false;
+        syncActiveSession(true);
+        showToast('Timesheet confirmed active — timer continues!', 'success');
+      };
+
+      const stopInactivitySessionNow = () => {
+        showInactivityModal.value = false;
+        toggleTrack();
+      };
+
+      const stopInactivitySessionAtLastEditPlus15 = async () => {
+        showInactivityModal.value = false;
+        const base = lastActivityTime.value || Date.now();
+        const cappedEndMs = Math.min(Date.now(), base + 15 * 60 * 1000);
+        await toggleTrack(cappedEndMs);
+      };
 
       const syncActiveSession = (immediate = false) => {
         if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
@@ -7323,6 +7502,7 @@
             trackerNotes: trackerNotes.value,
             trackerBlockName: trackerBlockName.value,
             sessionNotesList: sessionNotesList.value,
+            lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
             lastUpdated: _lastLocalUpdate,
             status: 'active'
           };
@@ -7347,6 +7527,7 @@
         }
       };
 
+      let _isRestoring = false;
       const restoreActiveSession = (sessionData) => {
         // A payload written by an older build of this page carries no `status`. It is
         // still a live session — only an explicit non-active status means "don't restore",
@@ -7374,32 +7555,45 @@
           }
         }
 
-        isTracking.value = true;
-        trackerSeconds.value = elapsed;
-        selectedNature.value = sessionData.selectedNature || '🎯 Planned';
-        trackerNature.value = sessionData.selectedNature || '🎯 Planned';
-        selectedProject.value = sessionData.selectedProject || '';
-        trackerProject.value = sessionData.selectedProject || '';
-        let rawN = sessionData.trackerNotes || '';
-        if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
-          const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
-          trackerNotes.value = parts[0] || '';
-          sessionNotesList.value = parts.slice(1);
-        } else {
-          trackerNotes.value = rawN;
-          sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
+        _isRestoring = true;
+        try {
+          isTracking.value = true;
+          trackerSeconds.value = elapsed;
+          selectedNature.value = sessionData.selectedNature || '🎯 Planned';
+          trackerNature.value = sessionData.selectedNature || '🎯 Planned';
+          selectedProject.value = sessionData.selectedProject || '';
+          trackerProject.value = sessionData.selectedProject || '';
+          let rawN = sessionData.trackerNotes || '';
+          if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
+            const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+            trackerNotes.value = parts[0] || '';
+            sessionNotesList.value = parts.slice(1);
+          } else {
+            trackerNotes.value = rawN;
+            sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
+          }
+          trackerBlockName.value = sessionData.trackerBlockName || null;
+          lastActivityTime.value = Number(sessionData.lastActivityTime) || Number(sessionData.lastUpdated) || Number(sessionData.startTime) || Date.now();
+
+          if (trackerTimer.value) clearInterval(trackerTimer.value);
+          trackerTimer.value = setInterval(() => {
+            trackerSeconds.value = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            checkInactivity();
+          }, 1000);
+
+          localStorage.setItem('omnitrack_active_session',
+            JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
+          return true;
+        } finally {
+          nextTick(() => { _isRestoring = false; });
         }
-        trackerBlockName.value = sessionData.trackerBlockName || null;
-
-        if (trackerTimer.value) clearInterval(trackerTimer.value);
-        trackerTimer.value = setInterval(() => {
-          trackerSeconds.value = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-        }, 1000);
-
-        localStorage.setItem('omnitrack_active_session',
-          JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
-        return true;
       };
+
+      watch([trackerNotes, sessionNotesList], () => {
+        if (isTracking.value && !_isRestoring) {
+          recordUserActivity();
+        }
+      }, { deep: true });
 
       // Cross-device live session synchronization
       let _livePollTimer = null;
@@ -7601,6 +7795,7 @@
         if (!pt) return;
         sessionNotesList.value.push(pt);
         newSessionPoint.value = '';
+        recordUserActivity();
         nextTick(() => { const el = sessionPointInput.value; if (el && el.style) el.style.height = ''; });
         // newest sits at the bottom of the list — keep it in view
         nextTick(() => { if (sessionNotesScroll.value) sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight; });
@@ -7971,6 +8166,7 @@
 
       const removeSessionPoint = (idx) => {
         sessionNotesList.value.splice(idx, 1);
+        recordUserActivity();
         syncActiveSession(true);
         triggerHaptic([20]);
       };
@@ -8322,15 +8518,18 @@
         setTimeout(() => { _isStoppingSession = false; }, 8000);
       };
 
-      const toggleTrack = async () => {
+      const toggleTrack = async (customEndMs = null) => {
         triggerHaptic([40]);
         if (!isTracking.value) {
           isTracking.value = true;
           trackerSeconds.value = 0;
           const startTime = Date.now();
+          lastActivityTime.value = startTime;
+          lastInactivityAlertTime.value = 0;
           syncActiveSession();
           trackerTimer.value = setInterval(() => {
             trackerSeconds.value = Math.floor((Date.now() - startTime) / 1000);
+            checkInactivity();
           }, 1000);
           showToast(`Focus timer started for ${selectedNature.value}`, 'info');
         } else {
@@ -8357,7 +8556,16 @@
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
           // snapshot, then zero the clock: a standby HUD showing the last
           // session's elapsed time reads like a session that is still open
-          const elapsedSecs = trackerSeconds.value;
+          let elapsedSecs = trackerSeconds.value;
+          let effectiveStopMs = Date.now();
+          if (customEndMs && customEndMs < effectiveStopMs) {
+            effectiveStopMs = customEndMs;
+            if (sTime) {
+              elapsedSecs = Math.max(60, Math.floor((effectiveStopMs - sTime) / 1000));
+            } else {
+              elapsedSecs = Math.min(elapsedSecs, Math.max(60, Math.floor((effectiveStopMs - (Date.now() - elapsedSecs * 1000)) / 1000)));
+            }
+          }
           trackerSeconds.value = 0;
           const hrs = Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100;
           const boundBlock = trackerBlockName.value;
@@ -8370,7 +8578,7 @@
           if (boundBlock) {
             // Recorded against a Planner block -> a real Work Session (the timesheet).
             try {
-              const now = new Date();
+              const now = new Date(effectiveStopMs);
               const from = new Date(now.getTime() - elapsedSecs * 1000);
               const pad = (n) => String(n).padStart(2, '0');
               await postJSON('log_work_session', {
@@ -8588,16 +8796,19 @@
           if (trackerTimer.value) clearInterval(trackerTimer.value);
           trackerTimer.value = setInterval(() => {
             trackerSeconds.value = Math.max(0, Math.floor((Date.now() - newStartMs) / 1000));
+            checkInactivity();
           }, 1000);
 
           if (adjustForm.value.notes) {
             trackerNotes.value = adjustForm.value.notes;
           }
+          recordUserActivity();
           const saved = localStorage.getItem('omnitrack_active_session');
           let activePayload = {};
           try { if (saved) activePayload = JSON.parse(saved); } catch (e) {}
           activePayload.startTime = newStartMs;
           activePayload.lastUpdated = Date.now();
+          activePayload.lastActivityTime = Date.now();
           if (adjustForm.value.notes) activePayload.trackerNotes = adjustForm.value.notes;
           localStorage.setItem('omnitrack_active_session', JSON.stringify(activePayload));
           syncActiveSession(true);
@@ -10434,7 +10645,8 @@
 
       const onPlannerKeydown = (e) => {
         if (e.key !== 'Escape') return;
-        if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
+        if (showInactivityModal.value) showInactivityModal.value = false;
+        else if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
         else if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
         else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
@@ -10446,7 +10658,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -10633,6 +10845,13 @@
         sessionToolTabindex,
         sessionStart,
         showAdjustModal,
+        showInactivityModal,
+        inactivityMinutes,
+        lastActivityTimeHHMM,
+        suggestedStopHHMM,
+        confirmStillWorking,
+        stopInactivitySessionNow,
+        stopInactivitySessionAtLastEditPlus15,
         showEmptyStopModal,
         emptyStopQuickNote,
         emptyStopElapsedHrs,

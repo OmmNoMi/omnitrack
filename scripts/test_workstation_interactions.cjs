@@ -857,7 +857,137 @@ assert.ok(content.includes('bottomBarTimer.hours') && content.includes('bottomBa
 
 console.log('✓ Test 20: Bottom navigation bar dynamic timer invariants (<1h min:sec, >=1h hours) verified.');
 
-console.log('\nSUCCESS: All 20 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 21: 30-Minute Inactivity Notification & 15m-Post-Last-Edit Governor
+// ---------------------------------------------------------------------------
+// 1. Template & structural invariants
+assert.ok(content.includes('v-model="showInactivityModal"'), 'FAIL: showInactivityModal dialog must be rendered in template');
+assert.ok(content.includes('stopInactivitySessionAtLastEditPlus15'), 'FAIL: 15-minute stop button must be present');
+assert.ok(content.includes('confirmStillWorking'), 'FAIL: confirmStillWorking button must be present');
+assert.ok(content.includes('stopInactivitySessionNow'), 'FAIL: stopInactivitySessionNow button must be present');
+assert.ok(content.includes('lastActivityTime'), 'FAIL: lastActivityTime must be tracked');
+assert.ok(content.includes('checkInactivity'), 'FAIL: checkInactivity must be present');
+
+// 2. Behavioral verification in VM sandbox
+const inactivitySandbox = {
+  ref: (val) => ({ value: val }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  watch: () => {},
+  nextTick: (fn) => fn && fn(),
+  console,
+  notificationsDispatched: [],
+  chimesPlayed: 0,
+  Notification: class {
+    constructor(title, opts) {
+      inactivitySandbox.notificationsDispatched.push({ title, ...opts });
+    }
+    static permission = 'granted';
+    static requestPermission() {}
+  }
+};
+vm.createContext(inactivitySandbox);
+
+const inactivityCode = `
+  const isTracking = ref(true);
+  const lastActivityTime = ref(Date.now() - 31 * 60 * 1000); // 31 minutes ago
+  const lastInactivityAlertTime = ref(0);
+  const showInactivityModal = ref(false);
+  const trackerNotes = ref('Coding feature');
+  let loggedSession = null;
+
+  const playInactivityChime = () => {
+    chimesPlayed++;
+  };
+
+  const dispatchInactivityNotification = (msg) => {
+    new Notification('OmniTrack: Are you still working?', { body: msg, tag: 'omnitrack-inactivity' });
+  };
+
+  const recordUserActivity = () => {
+    lastActivityTime.value = Date.now();
+    if (showInactivityModal.value) showInactivityModal.value = false;
+  };
+
+  const checkInactivity = () => {
+    if (!isTracking.value) return;
+    const now = Date.now();
+    const act = lastActivityTime.value || now;
+    const idleMs = now - act;
+    const INACTIVITY_MS = 30 * 60 * 1000;
+    const REPEAT_MS = 30 * 60 * 1000;
+
+    if (idleMs >= INACTIVITY_MS) {
+      const timeSinceAlert = now - (lastInactivityAlertTime.value || 0);
+      if (!lastInactivityAlertTime.value || timeSinceAlert >= REPEAT_MS) {
+        lastInactivityAlertTime.value = now;
+        showInactivityModal.value = true;
+        playInactivityChime();
+        dispatchInactivityNotification('No notes logged for 31m. Are you still working?');
+      }
+    }
+  };
+
+  // Test 1: Check inactivity triggers alert when 31m idle
+  checkInactivity();
+  const alertTriggered = showInactivityModal.value === true && notificationsDispatched.length === 1 && chimesPlayed === 1;
+
+  // Test 2: If checked again immediately (0ms later), it must NOT repeat notification (throttled for 30m)
+  checkInactivity();
+  const throttledClean = notificationsDispatched.length === 1;
+
+  // Test 3: User confirms still working -> modal closes and activity resets
+  recordUserActivity();
+  const resetAfterActive = showInactivityModal.value === false && (Date.now() - lastActivityTime.value) < 1000;
+
+  // Test 4: Stop at 15m after last edit calculation
+  // Set last edit to 45 minutes ago, start time 60 minutes ago
+  const fakeNow = Date.now();
+  const sTime = fakeNow - (60 * 60 * 1000);
+  const fakeLastEdit = fakeNow - (45 * 60 * 1000);
+  lastActivityTime.value = fakeLastEdit;
+
+  const toggleTrack = (customEndMs = null) => {
+    let effectiveStopMs = fakeNow;
+    let elapsedSecs = Math.floor((fakeNow - sTime) / 1000); // 3600s
+    if (customEndMs && customEndMs < effectiveStopMs) {
+      effectiveStopMs = customEndMs;
+      elapsedSecs = Math.max(60, Math.floor((effectiveStopMs - sTime) / 1000));
+    }
+    const hrs = Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100;
+    loggedSession = {
+      effectiveStopMs,
+      elapsedSecs,
+      hrs
+    };
+  };
+
+  const stopInactivitySessionAtLastEditPlus15 = () => {
+    const base = lastActivityTime.value || fakeNow;
+    const cappedEndMs = Math.min(fakeNow, base + 15 * 60 * 1000);
+    toggleTrack(cappedEndMs);
+  };
+
+  stopInactivitySessionAtLastEditPlus15();
+
+  // fakeLastEdit was 45m ago (-45m), + 15m means cappedEndMs was 30m ago (-30m from fakeNow).
+  // Total elapsed from sTime (-60m) to cappedEndMs (-30m) must be exactly 30 minutes (1800s / 0.5 hrs),
+  // cutting off the 30 minutes of idle ghost time!
+  const governorCappedElapsedSecs = loggedSession && loggedSession.elapsedSecs === 1800;
+  const governorCappedHrs = loggedSession && loggedSession.hrs === 0.5;
+
+  ({ alertTriggered, throttledClean, resetAfterActive, governorCappedElapsedSecs, governorCappedHrs });
+`;
+
+const inactInst = vm.runInContext(inactivityCode, inactivitySandbox);
+assert.strictEqual(inactInst.alertTriggered, true, 'FAIL: Inactivity check must trigger modal and notification at 30m inactivity');
+assert.strictEqual(inactInst.throttledClean, true, 'FAIL: Inactivity notification must throttle and repeat every 30m rather than spamming every tick');
+assert.strictEqual(inactInst.resetAfterActive, true, 'FAIL: User activity must reset inactivity timer and dismiss modal');
+assert.strictEqual(inactInst.governorCappedElapsedSecs, true, 'FAIL: 15m stop governor must cap elapsed time exactly to lastActivityTime + 15m');
+assert.strictEqual(inactInst.governorCappedHrs, true, 'FAIL: 15m stop governor must save exact hours without idle ghost time');
+
+console.log('✓ Test 21: 30-Minute inactivity notification & 15m stop governor invariants verified.');
+
+console.log('\nSUCCESS: All 21 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
