@@ -165,5 +165,108 @@ assert.ok(content.includes('isBlockNotesExpanded(b.name)'), 'FAIL: isBlockNotesE
 assert.ok(content.includes('-webkit-line-clamp: 2'), 'FAIL: Multi-line notes must be clamped when collapsed');
 console.log('✓ Test 9: Concluded deliverables show-more and note-expansion invariants verified.');
 
-console.log('\nSUCCESS: All 9 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 10: Standard Searchable Combobox (FCombobox) & Anti-Native-Select Invariants
+// 10.1: Assert complete elimination of raw <select> elements in the HTML template
+const rawSelectMatches = content.match(/<select[\s>]/gi);
+assert.strictEqual(rawSelectMatches, null, 'FAIL: Zero raw <select> elements must remain in omnitrack.html template');
+
+// 10.2: Extract FCombobox definition and instantiate in vm sandbox
+const fComboboxMatch = content.match(/const\s+FCombobox\s*=\s*\{([\s\S]*?)\n\s*\};\n\s*const\s+FrappeUITimesheetBox/);
+assert.ok(fComboboxMatch, 'FAIL: Could not extract FCombobox definition from omnitrack.html');
+
+let emittedValue = null;
+let emittedEvent = null;
+let emittedChangeArg = null;
+let comboboxTriggerFocused = false;
+
+const mockTriggerEl = {
+  focus() { comboboxTriggerFocused = true; },
+  getAttribute(attr) { return attr === 'aria-expanded' ? 'false' : null; }
+};
+
+const mockSearchInput = {
+  focus() { /* focus search input */ }
+};
+
+const comboboxSandbox = {
+  console,
+  document: {
+    activeElement: mockTriggerEl,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  },
+  window: {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => {}
+  },
+  CustomEvent: function(name, opts) { this.name = name; this.detail = opts && opts.detail; }
+};
+
+vm.createContext(comboboxSandbox);
+const comboboxCode = `
+  const def = { ${fComboboxMatch[1]} };
+  def;
+`;
+const comboboxDef = vm.runInContext(comboboxCode, comboboxSandbox);
+assert.strictEqual(typeof comboboxDef.methods.open, 'function');
+assert.strictEqual(typeof comboboxDef.methods.selectOption, 'function');
+assert.strictEqual(typeof comboboxDef.methods.clear, 'function');
+
+// Create instance
+const cInst = Object.assign({}, comboboxDef.data(), comboboxDef.methods, {
+  modelValue: '',
+  options: [
+    { value: 'TASK-001', label: 'Fix articulation agreements', kind: 'Task', project: 'OTC' },
+    { value: 'TODO-002', label: 'ClassLink enrollment validation', kind: 'ToDo', project: 'CC Tech' },
+    'General ad-hoc item'
+  ],
+  $emit(evt, val, extra) {
+    emittedEvent = evt;
+    emittedValue = val;
+    emittedChangeArg = extra;
+  },
+  $nextTick(cb) { cb(); },
+  $refs: {
+    searchInput: mockSearchInput,
+    optionsList: { children: [{ scrollIntoView: () => {} }] }
+  },
+  _triggerEl: mockTriggerEl
+});
+
+// Normalization check
+const normalized = comboboxDef.computed.normalizedOptions.call(cInst);
+assert.strictEqual(normalized.length, 3, 'FAIL: normalizedOptions must normalize all 3 items');
+assert.strictEqual(normalized[0].value, 'TASK-001');
+assert.strictEqual(normalized[0].kind, 'Task');
+assert.strictEqual(normalized[2].value, 'General ad-hoc item');
+assert.strictEqual(normalized[2].label, 'General ad-hoc item');
+
+// Filtering check
+cInst.normalizedOptions = normalized;
+cInst.searchQuery = 'classlink';
+const filtered = comboboxDef.computed.filteredOptions.call(cInst);
+assert.strictEqual(filtered.length, 1, 'FAIL: filteredOptions must filter by query');
+assert.strictEqual(filtered[0].value, 'TODO-002');
+
+// Trigger keydown open
+comboboxTriggerFocused = false;
+cInst.onTriggerKeydown({ key: 'ArrowDown', preventDefault: () => {}, stopPropagation: () => {} });
+assert.strictEqual(cInst.isOpen, true, 'FAIL: onTriggerKeydown ArrowDown must open combobox');
+
+// Selection check
+cInst.selectOption(filtered[0]);
+assert.strictEqual(emittedValue, 'TODO-002', 'FAIL: selectOption must emit selected option value');
+assert.strictEqual(cInst.isOpen, false, 'FAIL: selectOption must close popover');
+assert.strictEqual(comboboxTriggerFocused, true, 'FAIL: selectOption must restore focus to trigger');
+
+// Clear check
+cInst.clear({ stopPropagation: () => {}, preventDefault: () => {} });
+assert.strictEqual(emittedValue, '', 'FAIL: clear must emit empty string');
+assert.strictEqual(emittedEvent, 'change', 'FAIL: clear must emit change');
+
+console.log('✓ Test 10: FCombobox rendering, search filtering, keyboard nav, and anti-native-select invariants verified.');
+
+console.log('\nSUCCESS: All 10 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
+
