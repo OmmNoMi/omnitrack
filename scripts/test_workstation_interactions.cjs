@@ -267,6 +267,14 @@ assert.strictEqual(emittedEvent, 'change', 'FAIL: clear must emit change');
 
 console.log('✓ Test 10: FCombobox rendering, search filtering, keyboard nav, and anti-native-select invariants verified.');
 
-console.log('\nSUCCESS: All 10 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 11: Day at a glance current-time indicator line invariants
+assert.ok(content.includes('v-if="selectedDashboardDate === todayDate"'), 'FAIL: Timeline must conditionally render current time line only when viewing today');
+assert.ok(content.includes(':style="{ left: ((nowMinute / 1440) * 100) + \'%\' }"'), 'FAIL: Timeline indicator line must position dynamically based on nowMinute / 1440');
+assert.ok(content.includes('{{ nowLineLabel }}'), 'FAIL: Timeline indicator line must render nowLineLabel badge');
+assert.ok(content.includes('w-[2px] flex-1 bg-red-500'), 'FAIL: Timeline indicator must draw vertical red line');
+console.log('✓ Test 11: Day at a glance red current-time vertical indicator line invariants verified.');
+
+console.log('\nSUCCESS: All 11 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
+
 

@@ -1687,7 +1687,7 @@
                  actually logged. The gutter sits outside the scroller so the labels
                  stay put while the day scrolls. -->
             <div class="flex gap-2">
-            <div class="shrink-0 w-[52px] select-none text-[9px] font-bold uppercase tracking-wider"
+            <div class="shrink-0 w-[52px] select-none text-[9px] font-bold uppercase tracking-wider pt-3.5"
               :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" aria-hidden="true">
               <div class="h-7 leading-7">Planned</div>
               <div class="h-6 leading-6 mt-1.5">Logged</div>
@@ -1709,13 +1709,30 @@
               :class="isDarkMode ? 'bg-[#1E1F22]/90 border-gray-700 text-gray-300 hover:bg-gray-800' : 'bg-white/90 border-gray-200 text-gray-600 hover:bg-gray-50'">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
-            <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1">
+            <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1 pt-3.5">
             <div class="relative" role="img" :style="{ width: timelineTrackWidth }"
               :aria-label="dayTimeline.plannedH.toFixed(1) + ' hours planned and ' + dayTimeline.loggedH.toFixed(1) + ' hours logged on ' + selectedDashboardDateLabel">
               <!-- hour grid -->
               <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
                 <div v-for="t in dayTimeline.ticks" :key="'t' + t.m" class="absolute top-0 bottom-4 w-px"
                   :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'" :style="{ left: t.left }"></div>
+              </div>
+
+              <!-- Current Time Red Line (When viewing today) -->
+              <div v-if="selectedDashboardDate === todayDate"
+                class="absolute top-0 bottom-4 pointer-events-none z-20"
+                :style="{ left: ((nowMinute / 1440) * 100) + '%' }"
+                aria-hidden="true">
+                <div class="relative h-full flex flex-col items-center">
+                  <!-- Time badge on top -->
+                  <span class="absolute -top-3.5 -translate-x-1/2 text-[9px] font-bold font-mono px-1 py-0.5 rounded bg-red-500 text-white shadow-xs whitespace-nowrap">
+                    {{ nowLineLabel }}
+                  </span>
+                  <!-- Red dot at top of vertical line -->
+                  <span class="w-2 h-2 -mt-0.5 rounded-full bg-red-500 shadow-xs shrink-0"></span>
+                  <!-- Crisp red vertical line through planned and logged lanes -->
+                  <div class="w-[2px] flex-1 bg-red-500 shadow-xs"></div>
+                </div>
               </div>
               <!-- planned lane -->
               <div class="relative h-7">
@@ -6742,7 +6759,11 @@
           const tl = dayTimeline.value;
           const track = box && box.firstElementChild;
           if (box && tl && track && tl.firstMin >= 0) {
-            const target = Math.max(0, (tl.firstMin / 1440) * track.offsetWidth - 24);
+            const isToday = selectedDashboardDate.value === todayDate.value;
+            const focusMin = (isToday && nowMinute.value !== undefined)
+              ? Math.min(tl.firstMin, Math.max(0, nowMinute.value - 60))
+              : tl.firstMin;
+            const target = Math.max(0, (focusMin / 1440) * track.offsetWidth - 24);
             const reachable = Math.min(target, box.scrollWidth - box.clientWidth);
             box.scrollTo({ left: reachable, behavior: smooth ? 'smooth' : 'auto' });
             syncTimelineEdges();
