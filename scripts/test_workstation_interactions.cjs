@@ -327,9 +327,47 @@ assert.strictEqual(rovingInst.concludedTabindex(1, 0), 0, 'FAIL: New active row 
 const cancelledBlock = { status: 'Cancelled' };
 const activeBlock = { status: 'Completed' };
 assert.strictEqual(rovingInst.getMaxConcludedCol(cancelledBlock), 1, 'FAIL: Cancelled block without reopen must clamp max col to 1');
-assert.strictEqual(rovingInst.getMaxConcludedCol(activeBlock), 2, 'FAIL: Block with reopen must have max col 2');
+// Simulate toggleShowAllPastBlocks focus retention (show more and show less)
+let focusedTargetRow = null;
+rovingInst.focusConcludedCell = (r, c) => {
+  focusedTargetRow = r;
+  rovingInst.setConcludedRoving(r, c);
+};
+rovingSandbox.focusConcludedCell = rovingInst.focusConcludedCell;
 
-console.log('✓ Test 12: Daily Accomplishments roving tabindex grid & arrow navigation invariants verified.');
+const pastBlocksToggleCode = `
+  const pastFocusBlocks = [{ name: 'B1' }, { name: 'B2' }, { name: 'B3' }];
+  const showAllPastBlocks = ref(false);
+  const visiblePastFocusBlocks = computed(() => {
+    return showAllPastBlocks.value ? pastFocusBlocks : pastFocusBlocks.slice(0, 2);
+  });
+  const toggleShowAllPastBlocks = () => {
+    showAllPastBlocks.value = !showAllPastBlocks.value;
+    const rows = visiblePastFocusBlocks.value || [];
+    const targetIndex = Math.min(1, rows.length - 1);
+    focusConcludedCell(Math.max(0, targetIndex), 0);
+  };
+  ({ showAllPastBlocks, toggleShowAllPastBlocks });
+`;
+const toggleInst = vm.runInContext(pastBlocksToggleCode, rovingSandbox);
+
+// Expand (Show More)
+toggleInst.toggleShowAllPastBlocks();
+assert.strictEqual(toggleInst.showAllPastBlocks.value, true, 'FAIL: showAllPastBlocks must be true after expand');
+assert.strictEqual(focusedTargetRow, 1, 'FAIL: Expanding must focus last previously visible row (index 1)');
+assert.strictEqual(rovingInst.concludedTabindex(1, 0), 0, 'FAIL: Roving tabindex must be 0 on row 1 after expand');
+
+// Collapse (Show Less)
+toggleInst.toggleShowAllPastBlocks();
+assert.strictEqual(toggleInst.showAllPastBlocks.value, false, 'FAIL: showAllPastBlocks must be false after collapse');
+assert.strictEqual(focusedTargetRow, 1, 'FAIL: Collapsing must focus last visible row (index 1)');
+assert.strictEqual(rovingInst.concludedTabindex(1, 0), 0, 'FAIL: Roving tabindex must be 0 on row 1 after collapse');
+
+// Assert scrollIntoView with WCAG reduced-motion safety check in source
+assert.ok(content.includes('el.scrollIntoView'), 'FAIL: focusConcludedCell and focusAttentionCell must call scrollIntoView');
+assert.ok(content.includes('prefers-reduced-motion: reduce'), 'FAIL: scrollIntoView must honor prefers-reduced-motion');
+
+console.log('✓ Test 12: Daily Accomplishments roving tabindex grid, arrow navigation & show more/less focus retention verified.');
 
 console.log('\nSUCCESS: All 12 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);

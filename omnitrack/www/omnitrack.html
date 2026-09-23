@@ -6212,25 +6212,27 @@
         setAttentionRoving(r, c);
         nextTick(() => {
           const el = document.querySelector(`[data-attention-row="${r}"][data-attention-col="${c}"]`);
-          if (el) el.focus();
+          if (el) {
+            el.focus();
+            if (el.scrollIntoView) {
+              const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              el.scrollIntoView({ block: 'nearest', behavior: prefersReduced ? 'auto' : 'smooth' });
+            }
+          }
         });
       };
 
       const toggleShowAllAttentionTasks = () => {
         const wasCollapsed = !showAllAttentionTasks.value;
         showAllAttentionTasks.value = !showAllAttentionTasks.value;
-        if (wasCollapsed) {
-          // Move focus to the last previously visible task (index ATTENTION_TASKS_COLLAPSED_LIMIT - 1)
-          // so pressing ArrowDown immediately explores the newly revealed tasks!
-          const lastPrevIndex = Math.max(0, ATTENTION_TASKS_COLLAPSED_LIMIT - 1);
-          focusAttentionCell(lastPrevIndex, 0);
-        } else {
-          nextTick(() => {
-            const btn = document.querySelector('[data-attention-show-more]');
-            if (btn) btn.focus();
-            else focusAttentionCell(0, 0);
-          });
-        }
+        nextTick(() => {
+          const rows = visibleAttentionTasks.value || [];
+          if (!rows.length) return;
+          // When clicking show more or show less, focus the last element that was visible in the collapsed view
+          // so the user can immediately keep scrolling down with ArrowDown!
+          const targetIndex = Math.min(ATTENTION_TASKS_COLLAPSED_LIMIT - 1, rows.length - 1);
+          focusAttentionCell(Math.max(0, targetIndex), 0);
+        });
       };
 
       const onAttentionGridKey = (ev, r, c) => {
@@ -6738,7 +6740,13 @@
             el = document.querySelector(`[data-concluded-row="${r}"][data-concluded-col="0"]`);
             if (el) setConcludedRoving(r, 0);
           }
-          if (el) el.focus();
+          if (el) {
+            el.focus();
+            if (el.scrollIntoView) {
+              const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+              el.scrollIntoView({ block: 'nearest', behavior: prefersReduced ? 'auto' : 'smooth' });
+            }
+          }
         });
       };
 
@@ -6786,14 +6794,14 @@
       const toggleShowAllPastBlocks = () => {
         const wasCollapsed = !showAllPastBlocks.value;
         showAllPastBlocks.value = !showAllPastBlocks.value;
-        if (wasCollapsed) {
-          const lastPrevIndex = Math.min(1, Math.max(0, pastFocusBlocks.value.length - 1));
-          focusConcludedCell(lastPrevIndex, 0);
-        } else {
-          if (concludedRovingRow.value > 1) {
-            focusConcludedCell(1, 0);
-          }
-        }
+        nextTick(() => {
+          // On both show more and show less, focus the last element that was visible in the collapsed view (index 1)
+          // so the user can immediately keep scrolling down with ArrowDown!
+          const rows = visiblePastFocusBlocks.value || [];
+          if (!rows.length) return;
+          const targetIndex = Math.min(1, rows.length - 1);
+          focusConcludedCell(Math.max(0, targetIndex), 0);
+        });
       };
 
       const expandedBlockNotes = ref(new Set());
