@@ -707,9 +707,142 @@ assert.strictEqual(syncInst.guardedDuringRecentEdit, true, 'FAIL: Non-authoritat
 assert.strictEqual(syncInst.authoritativeCleared, true, 'FAIL: Authoritative remote clear must stop tracking, reset timer, and clear localStorage');
 assert.strictEqual(syncInst.reloadResurrectionPrevented, true, 'FAIL: When server active_session is null, page reload must purge localStorage instead of resurrecting');
 
-console.log('✓ Test 17: Cross-device active session sync and authoritative clear invariants verified.');
+// ---------------------------------------------------------------------------
+// TEST 18: Empty Session Stop Modal & Completed Block Ghost Prevention
+// ---------------------------------------------------------------------------
+const emptyStopSandbox = {
+  ref: (val) => ({ value: val }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  localStorage: {
+    _data: {},
+    getItem(k) { return this._data[k] || null; },
+    setItem(k, v) { this._data[k] = String(v); },
+    removeItem(k) { delete this._data[k]; }
+  }
+};
+vm.createContext(emptyStopSandbox);
+const emptyStopCode = `
+  const isTracking = ref(true);
+  const trackerSeconds = ref(3600); // 1 hr
+  const trackerNotes = ref('');
+  const sessionNotesList = ref([]);
+  const trackerBlockName = ref(null);
+  const trackerBoundBlock = ref(null);
+  const discardConfirm = ref(false);
+  const showEmptyStopModal = ref(false);
+  const emptyStopQuickNote = ref('');
+  const emptyStopElapsedHrs = ref(0);
 
-console.log('\nSUCCESS: All 17 Tier 3 Workstation Interaction tests passed cleanly.\n');
+  const sessionHasLines = computed(() =>
+    (sessionNotesList.value || []).some(p => String(p || '').trim().length >= 3) ||
+    String(trackerNotes.value || '').trim().length >= 3 ||
+    !!trackerBlockName.value ||
+    !!trackerBoundBlock.value
+  );
+
+  const openEmptyStopModal = () => {
+    const elapsedSecs = trackerSeconds.value;
+    emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
+    const defaultNote = String(trackerNotes.value || '').trim() ||
+      (trackerBoundBlock.value ? (trackerBoundBlock.value.work_item_label || trackerBoundBlock.value.task_subject || trackerBoundBlock.value.name) : '') ||
+      'Focus work session';
+    emptyStopQuickNote.value = defaultNote;
+    showEmptyStopModal.value = true;
+  };
+
+  let sessionDiscarded = false;
+  const discardSession = () => {
+    sessionDiscarded = true;
+    isTracking.value = false;
+    trackerSeconds.value = 0;
+    localStorage.removeItem('omnitrack_active_session');
+  };
+
+  const confirmEmptyStopDiscard = () => {
+    showEmptyStopModal.value = false;
+    discardConfirm.value = true;
+    discardSession();
+  };
+
+  let timesheetSaved = false;
+  const toggleTrack = () => {
+    if (!sessionHasLines.value) {
+      openEmptyStopModal();
+      return;
+    }
+    timesheetSaved = true;
+    isTracking.value = false;
+    trackerSeconds.value = 0;
+  };
+
+  const confirmEmptyStopSave = () => {
+    const note = String(emptyStopQuickNote.value || '').trim() || 'Focus work session';
+    showEmptyStopModal.value = false;
+    sessionNotesList.value.push(note);
+    toggleTrack();
+  };
+
+  // 1. Attempt stop with empty notes -> must open modal with fallback title and calculated hours
+  toggleTrack();
+  const modalOpenedOnEmpty = showEmptyStopModal.value === true &&
+    emptyStopElapsedHrs.value === 1.0 &&
+    emptyStopQuickNote.value === 'Focus work session';
+
+  // 2. Discard branch -> wipes session cleanly
+  confirmEmptyStopDiscard();
+  const discardClean = !isTracking.value && sessionDiscarded && !showEmptyStopModal.value;
+
+  // 3. Save branch -> fills note and completes timesheet save
+  isTracking.value = true;
+  trackerSeconds.value = 1800; // 0.5h
+  openEmptyStopModal();
+  emptyStopQuickNote.value = 'Custom wrap-up';
+  confirmEmptyStopSave();
+  const saveClean = !isTracking.value && timesheetSaved && sessionNotesList.value.includes('Custom wrap-up');
+
+  // 4. Completed block ghost prevention in restoreActiveSession
+  const workFocusBlocks = ref([
+    { name: 'PWB-COMPLETED', status: 'Logged (Full)' },
+    { name: 'PWB-ACTIVE', status: 'Planned' }
+  ]);
+  let sessionEndedMarked = false;
+  const markSessionEnded = () => { sessionEndedMarked = true; };
+
+  const restoreActiveSession = (sessionData) => {
+    if (!sessionData || !sessionData.startTime) return false;
+    if (sessionData.trackerBlockName) {
+      const matched = workFocusBlocks.value.find(b => b.name === sessionData.trackerBlockName);
+      if (matched && (matched.status === 'Logged (Full)' || matched.status === 'Cancelled')) {
+        markSessionEnded();
+        localStorage.removeItem('omnitrack_active_session');
+        return false;
+      }
+    }
+    isTracking.value = true;
+    return true;
+  };
+
+  localStorage.setItem('omnitrack_active_session', 'stale');
+  const completedRefused = restoreActiveSession({
+    startTime: Date.now() - 1000,
+    trackerBlockName: 'PWB-COMPLETED'
+  });
+  const completedGhostPurged = !completedRefused &&
+    sessionEndedMarked &&
+    localStorage.getItem('omnitrack_active_session') === null;
+
+  ({ modalOpenedOnEmpty, discardClean, saveClean, completedGhostPurged });
+`;
+const emptyStopInst = vm.runInContext(emptyStopCode, emptyStopSandbox);
+assert.strictEqual(emptyStopInst.modalOpenedOnEmpty, true, 'FAIL: Empty session stop must trigger interactive modal with fallback title');
+assert.strictEqual(emptyStopInst.discardClean, true, 'FAIL: Discard branch must wipe in-flight session and reset tracking state');
+assert.strictEqual(emptyStopInst.saveClean, true, 'FAIL: Save branch must file timesheet with quick note and stop tracking cleanly');
+assert.strictEqual(emptyStopInst.completedGhostPurged, true, 'FAIL: Completed block in Logged (Full) status must refuse session restoration and purge localStorage');
+
+console.log('✓ Test 18: Empty session stop modal & completed block ghost prevention verified.');
+
+console.log('\nSUCCESS: All 18 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
+
 
 

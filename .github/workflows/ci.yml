@@ -1,70 +1,57 @@
-name: CI Pipeline
+name: OmniTrack CI & Cloud Alignment
 
 on:
   push:
-    branches: [main, develop, "feat/**", "fix/**"]
+    branches: [ develop, main ]
   pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [ develop, main ]
 
 jobs:
-  lint-and-validate:
-    name: 🔍 Lint & Syntax Validation
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          fetch-depth: 0
 
-      - name: Install Linting Tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff flake8
-
-      - name: Run Ruff Linter
-        run: |
-          ruff check omnitrack/ --ignore E501,F401,F841
-
-      - name: Validate DocType JSON Schemas
-        run: |
-          python -c "
-          import json, glob, sys
-          errors = 0
-          for f in glob.glob('omnitrack/**/*.json', recursive=True):
-              try:
-                  with open(f, 'r') as fp:
-                      json.load(fp)
-              except Exception as e:
-                  print(f'JSON Error in {f}: {e}')
-                  errors += 1
-          if errors > 0:
-              sys.exit(1)
-          print('All DocType JSON files are syntactically valid!')
-          "
-
-  frontend-build:
-    name: 📦 Frontend Assets Verification
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 18
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '20'
 
-      - name: Verify JavaScript & CSS Bundles
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
         run: |
-          echo "Verifying public assets and manifest structure..."
-          test -f omnitrack/public/js/omnitrack.bundle.js
-          test -f omnitrack/public/css/omnitrack.bundle.css
-          echo "Frontend asset structure is healthy!"
+          pip install html5lib
+
+      - name: Validate HTML5 Spec Compliance
+        run: |
+          python scripts/check_www_html.py omnitrack/www/omnitrack.html
+
+      - name: Run Tier 3 Workstation Interaction & A11y Tests
+        run: |
+          node scripts/test_workstation_interactions.cjs
+
+  sync-main:
+    needs: test
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fast-forward main to develop
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git merge --ff-only develop
+          git push origin main

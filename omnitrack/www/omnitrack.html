@@ -1230,6 +1230,16 @@
 
             <!-- Up Next Actions -->
             <div class="flex items-center gap-2 self-stretch sm:self-center justify-end">
+              <a
+                v-if="getMeetUrl(upNextBlock)"
+                :href="getMeetUrl(upNextBlock)"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold border border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all select-none cursor-pointer"
+                aria-label="Open Meeting Link"
+              >
+                <span>Join Meet ↗</span>
+              </a>
               <button
                 type="button"
                 v-if="!isBlockLocked(upNextBlock)"
@@ -3233,6 +3243,55 @@
       <div class="flex justify-end gap-2 w-full">
         <f-button variant="ghost" theme="gray" size="sm" @click="showBookModal = false">Cancel</f-button>
         <f-button variant="solid" theme="blue" size="sm" @click="submitBooking" :disabled="plannerBusy">{{ bookForm.mode === 'work' ? 'Book block' : 'Mark away' }}</f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- WORKSTATION: EMPTY STOP CONFIRMATION MODAL -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showEmptyStopModal"
+    title="End Focus Session"
+    subtitle="No bullet notes recorded yet"
+    size="sm"
+    z-index="z-[60]"
+  >
+    <div class="space-y-3 py-1">
+      <p class="text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-600'">
+        You haven't added any bullet notes to this session. What would you like to do with this elapsed time?
+      </p>
+      <div class="block space-y-1">
+        <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">Quick Note (used for Timesheet description):</label>
+        <input
+          v-model="emptyStopQuickNote"
+          type="text"
+          placeholder="e.g. Focus work session"
+          class="w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-900'"
+          @keydown.enter.prevent="confirmEmptyStopSave"
+        />
+      </div>
+    </div>
+
+    <template #actions>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <f-button
+          variant="outline"
+          theme="gray"
+          size="sm"
+          @click="confirmEmptyStopDiscard"
+        >
+          Discard (No Timesheet)
+        </f-button>
+        <f-button
+          variant="solid"
+          theme="blue"
+          size="sm"
+          @click="confirmEmptyStopSave"
+        >
+          Save &amp; Log ({{ fmtHrs(emptyStopElapsedHrs) }}h)
+        </f-button>
       </div>
     </template>
   </f-dialog>
@@ -5930,6 +5989,14 @@
         return `${formatAmPm(b.start_time)} – ${formatAmPm(b.end_time)}`;
       };
 
+      const getMeetUrl = (b) => {
+        if (!b) return null;
+        if (b.meet_url) return b.meet_url;
+        const notes = b.deliverable_notes || '';
+        const match = notes.match(/https:\/\/(meet\.google\.com|zoom\.us|teams\.microsoft\.com)\/[^\s"'>]+/i);
+        return match ? match[0] : null;
+      };
+
       // Status pill for a work block: reality first (cancelled / done / running),
       // then the block's position relative to now. Referenced by the day-list and
       // timeline rows — it was called in the template but never defined, which threw
@@ -7015,14 +7082,17 @@
         const blocks = workFocusBlocks.value || [];
         const planned = [], logged = [];
         blocks.forEach((bk) => {
-          const s = _minsOf(bk.start_time), e = _minsOf(bk.end_time);
-          const dt = selectedDashboardDate.value;
-          if (bk.work_date !== dt && e < s) {
-            planned.push({ s: 0, e: e, block: bk });
-          } else if (s >= 0 && e > s) {
-            planned.push({ s, e, block: bk });
-          } else if (s >= 0 && e < s) {
-            planned.push({ s, e: 1440, block: bk });
+          const isUnplanned = bk.task_nature && bk.task_nature.includes('Unplanned');
+          if (!isUnplanned) {
+            const s = _minsOf(bk.start_time), e = _minsOf(bk.end_time);
+            const dt = selectedDashboardDate.value;
+            if (bk.work_date !== dt && e < s) {
+              planned.push({ s: 0, e: e, block: bk });
+            } else if (s >= 0 && e > s) {
+              planned.push({ s, e, block: bk });
+            } else if (s >= 0 && e < s) {
+              planned.push({ s, e: 1440, block: bk });
+            }
           }
           (bk.sessions || []).forEach((x) => {
             const ss = _minsOf(x.from_time), ee = _minsOf(x.to_time);
@@ -7192,6 +7262,17 @@
         const startMs = Number(sessionData.startTime);
         const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         if (elapsed >= 86400) return false; // expired past 24h
+
+        // Do not resurrect a session bound to a block that is already Logged (Full) or Cancelled
+        if (sessionData.trackerBlockName) {
+          const matched = (workFocusBlocks.value || []).find(b => b.name === sessionData.trackerBlockName);
+          if (matched && (matched.status === 'Logged (Full)' || matched.status === 'Cancelled')) {
+            markSessionEnded();
+            localStorage.removeItem('omnitrack_active_session');
+            postJSON('sync_active_session', { session_data: null }).catch(() => {});
+            return false;
+          }
+        }
 
         isTracking.value = true;
         trackerSeconds.value = elapsed;
@@ -7808,15 +7889,41 @@
         !!trackerBlockName.value ||
         !!trackerBoundBlock.value
       );
+      const showEmptyStopModal = ref(false);
+      const emptyStopQuickNote = ref('');
+      const emptyStopElapsedHrs = ref(0);
+
+      const openEmptyStopModal = () => {
+        const elapsedSecs = trackerSeconds.value;
+        emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
+        const defaultNote = String(trackerNotes.value || '').trim() ||
+          (trackerBoundBlock.value ? (trackerBoundBlock.value.work_item_label || trackerBoundBlock.value.task_subject || trackerBoundBlock.value.name) : '') ||
+          'Focus work session';
+        emptyStopQuickNote.value = defaultNote;
+        showEmptyStopModal.value = true;
+      };
+
+      const confirmEmptyStopDiscard = () => {
+        showEmptyStopModal.value = false;
+        discardConfirm.value = true;
+        discardSession();
+      };
+
+      const confirmEmptyStopSave = () => {
+        const note = String(emptyStopQuickNote.value || '').trim() || 'Focus work session';
+        showEmptyStopModal.value = false;
+        appendSessionLine(note);
+        toggleTrack();
+      };
+
       const refuseEmptySession = () => {
-        showToast('Write at least one line first — a timesheet with no description tells your manager (and the client being billed) nothing about the hour.', 'warning');
-        focusSessionPointInput();
+        openEmptyStopModal();
       };
 
       const stopConfirmName = ref('');
       const requestStopFocusBlock = (b) => {
         const running = isTracking.value && trackerBlockName.value === b.name;
-        if (running && !sessionHasLines.value) { refuseEmptySession(); return; }
+        if (running && !sessionHasLines.value) { openEmptyStopModal(); return; }
         stopConfirmName.value = '';
         startFocusBlock(b);
       };
@@ -10185,6 +10292,7 @@
         if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
         else if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
+        else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
         else if (showCancelModal.value) showCancelModal.value = false;
         else if (showNewTaskModal.value) showNewTaskModal.value = false;
         else if (showWorkflowModal.value) showWorkflowModal.value = false;
@@ -10193,7 +10301,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showBookModal, showAdjustModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter, showTaskRavenDrawer], (vals) => {
+      watch([showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -10379,6 +10487,12 @@
         sessionToolTabindex,
         sessionStart,
         showAdjustModal,
+        showEmptyStopModal,
+        emptyStopQuickNote,
+        emptyStopElapsedHrs,
+        openEmptyStopModal,
+        confirmEmptyStopDiscard,
+        confirmEmptyStopSave,
         adjustForm,
         minTimesheetDate,
         adjustDurationMinutes,
@@ -10409,6 +10523,7 @@
         fetchWorkstationData,
         formatAmPm,
         formatBlockRange,
+        getMeetUrl,
         getBlockTimingInfo,
         dayFocusBlocks,
         awayFocusBlocks,
