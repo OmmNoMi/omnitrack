@@ -841,7 +841,15 @@ assert.strictEqual(emptyStopInst.completedGhostPurged, true, 'FAIL: Completed bl
 
 console.log('✓ Test 18: Empty session stop modal & completed block ghost prevention verified.');
 
-console.log('\nSUCCESS: All 18 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// 19. Live Active Running Session Visualization Invariants
+assert.ok(content.includes('is_live_active: true'), 'FAIL: dayTimeline must inject is_live_active into logged items when tracking');
+assert.ok(content.includes('LIVE Recording: ') || content.includes('Live Recording: ') || content.includes('REC {{ trackerElapsedFormatted }}'), 'FAIL: Calendar grid must render live recording indicator on active block');
+assert.ok(content.includes('st === \'recording\''), 'FAIL: blockVisualState and blockStyle must recognize recording state');
+assert.ok(content.includes('live_active_session_seg'), 'FAIL: timedSegmentsForDay must inject live active session segment when tracking ad-hoc');
+
+console.log('✓ Test 19: Live active running session in Day Timeline & Calendar grid invariants verified.');
+
+console.log('\nSUCCESS: All 19 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

@@ -3074,15 +3074,29 @@
                         :class="seg.block.actual_hours > seg.block.duration_hours ? 'bg-rose-500/25 border-t-2 border-rose-500' : 'bg-emerald-500/30 border-t-2 border-emerald-500'"
                         :style="{ height: Math.min(100, (seg.block.actual_hours / (parseFloat(seg.block.duration_hours) || seg.block.actual_hours) * 100)) + '%' }"
                         :title="fmtHrs(seg.block.actual_hours) + 'h recorded of ' + fmtHrs(seg.block.duration_hours) + 'h planned'"></div>
-                      <div class="relative text-[10px] font-bold leading-tight truncate">
+                      <!-- Live recording fill bar when session is actively tracking on this block -->
+                      <div v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)"
+                        class="absolute left-0 right-0 bottom-0 pointer-events-none rounded-b-lg bg-red-500/25 border-t-2 border-red-500"
+                        :style="{ height: Math.min(100, Math.max(8, ((trackerElapsedSecs / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
+                        :title="'Live Recording: ' + trackerElapsedFormatted + ' elapsed'"></div>
+                      <div class="relative text-[10px] font-bold leading-tight truncate flex items-center gap-1">
+                        <span v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)" class="inline-flex items-center gap-1 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-red-600 text-white shrink-0 shadow-xs animate-pulse">
+                          <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                          <span>REC {{ trackerElapsedFormatted }}</span>
+                        </span>
                         <span v-if="seg.is_segment && seg.segment_type === 'head'" class="text-[9px] opacity-75 font-normal mr-1">↩ (cont.)</span>
-                        {{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}
+                        <span class="truncate">{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}</span>
                         <span v-if="seg.is_segment && seg.segment_type === 'tail'" class="text-[9px] opacity-75 font-normal ml-1">↪</span>
                       </div>
                       <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(seg) }}</div>
                       <div class="relative text-[9px] opacity-80" v-if="segHeight(seg) > 44">
-                        {{ fmtHrs(seg.block.actual_hours) }}/{{ fmtHrs(seg.block.duration_hours) }}h
-                        <span v-if="seg.block.variance_hours" :class="seg.block.variance_hours < 0 ? 'text-amber-200' : 'text-rose-200'">({{ seg.block.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(seg.block.variance_hours) }})</span>
+                        <template v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)">
+                          <span class="text-red-500 font-extrabold">{{ fmtHrs(trackerElapsedSecs / 3600) }}h running</span> / {{ fmtHrs(seg.block.duration_hours) }}h
+                        </template>
+                        <template v-else>
+                          {{ fmtHrs(seg.block.actual_hours) }}/{{ fmtHrs(seg.block.duration_hours) }}h
+                          <span v-if="seg.block.variance_hours" :class="seg.block.variance_hours < 0 ? 'text-amber-200' : 'text-rose-200'">({{ seg.block.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(seg.block.variance_hours) }})</span>
+                        </template>
                       </div>
                       <div v-if="!isBlockLocked(seg.block)" @pointerdown.stop="startBlockDrag($event, seg.block, 'resize-start')"
                         class="absolute left-0 right-0 top-0 h-2 cursor-ns-resize" aria-hidden="true"
@@ -3123,7 +3137,10 @@
     <!-- Status Badges -->
     <div class="flex items-center gap-1.5 flex-wrap">
       <template v-if="hoverCard.source === 'logged'">
-        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+        <span v-if="hoverCard.seg && hoverCard.seg.is_live_active" class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 animate-pulse">
+          🔴 Recording {{ trackerElapsedFormatted }}
+        </span>
+        <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           ✓ Logged {{ fmtHrs((hoverCard.seg && hoverCard.seg.hours) || hoverCard.block.actual_hours) }}h
         </span>
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
@@ -7078,6 +7095,10 @@
         box.scrollBy({ left: dir * Math.max(120, box.clientWidth * 0.8), behavior: 'smooth' });
         setTimeout(syncTimelineEdges, 400);
       };
+      const _minToHHMM = (m) => {
+        const mm = Math.max(0, Math.min(24 * 60, Math.round(m)));
+        return String(Math.floor(mm / 60) % 24).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0');
+      };
       const dayTimeline = computed(() => {
         const blocks = workFocusBlocks.value || [];
         const planned = [], logged = [];
@@ -7109,6 +7130,32 @@
             });
           });
         });
+        if (isTracking.value && startTime.value) {
+          const isViewingToday = !selectedDashboardDate.value || selectedDashboardDate.value === (todayDate.value || todayISO());
+          if (isViewingToday) {
+            const d = new Date(startTime.value);
+            const ss = d.getHours() * 60 + d.getMinutes();
+            const curNow = new Date();
+            const ee = Math.max(ss + 1, curNow.getHours() * 60 + curNow.getMinutes());
+            const runningBlock = blocks.find(b => b.name === trackerBlockName.value) || {
+              name: trackerBlockName.value || 'live_running_session',
+              work_item_label: trackerNotes.value || 'Active Work Session',
+              task_subject: trackerNotes.value || 'Active Work Session',
+              project: selectedProject.value || '',
+              task_nature: selectedNature.value || '🎯 Planned'
+            };
+            logged.push({
+              s: ss,
+              e: ee,
+              from_time: _minToHHMM(ss),
+              to_time: _minToHHMM(ee),
+              block: runningBlock,
+              hours: (ee - ss) / 60,
+              notes: (trackerNotes.value || 'Active Work') + ' (Recording...)',
+              is_live_active: true
+            });
+          }
+        }
         if (!planned.length && !logged.length) return null;
         const all = planned.concat(logged);
         const lo = 0, hi = 1440;
@@ -8847,6 +8894,40 @@
           }
         }
 
+        if (iso === (todayDate.value || todayISO()) && isTracking.value && startTime.value) {
+          const isBoundToExistingSeg = trackerBlockName.value && segments.some(s => s.block && s.block.name === trackerBlockName.value);
+          if (!isBoundToExistingSeg) {
+            const d = new Date(startTime.value);
+            const sMins = d.getHours() * 60 + d.getMinutes();
+            const curNow = new Date();
+            const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
+            const eMins = Math.max(sMins + 15, curNowMins);
+            const liveBlock = {
+              name: trackerBlockName.value || 'live_active_session',
+              is_live_active: true,
+              task_subject: trackerNotes.value || 'Active Work Session',
+              work_item_label: trackerNotes.value || 'Active Work Session',
+              deliverable_notes: trackerNotes.value || 'Active Running Session',
+              start_time: _minToHHMM(sMins),
+              end_time: _minToHHMM(eMins),
+              duration_hours: ((eMins - sMins) / 60).toFixed(2),
+              actual_hours: (trackerElapsedSecs.value / 3600).toFixed(2),
+              task_nature: selectedNature.value || '🎯 Planned',
+              project: selectedProject.value || '',
+              status: 'In Progress'
+            };
+            segments.push({
+              key: 'live_active_session_seg',
+              name: liveBlock.name,
+              is_segment: false,
+              segment_type: 'full',
+              start_mins: sMins,
+              end_mins: eMins,
+              block: liveBlock
+            });
+          }
+        }
+
         if (!segments.length) return [];
 
         segments.sort((a, b) => a.start_mins - b.start_mins || (b.end_mins - b.start_mins) - (a.end_mins - a.start_mins));
@@ -8974,6 +9055,7 @@
         if (b.status === 'Cancelled') return 'cancelled';
         if (b.status === 'Rescheduled') return 'rescheduled';
         if (b.is_away || isNonWorkingNature(b.task_nature)) return 'away';
+        if (b.is_live_active || (isTracking.value && trackerBlockName.value === b.name)) return 'recording';
         if (b.status === 'Logged (Partial)') return 'partial';
         if (b.status === 'Logged (Over)') return 'over';
         const logged = parseFloat(b.actual_hours) || 0;
@@ -8994,6 +9076,7 @@
         if (st === 'cancelled') return 'border-dotted line-through ' + (isDarkMode.value ? 'text-gray-500' : 'text-gray-400');
         if (st === 'rescheduled') return 'border-dashed ' + (isDarkMode.value ? 'text-gray-400 opacity-75' : 'text-gray-600 opacity-80');
         if (st === 'away') return 'border-dotted border-2';
+        if (st === 'recording') return 'border-solid text-white ring-2 ring-red-500 ring-offset-1 z-20 shadow-md';
         if (st === 'logged' || st === 'over' || st === 'partial') return 'border-solid text-white';
         if (st === 'missed') return 'border-solid border-dashed';
         return 'border-solid';
@@ -9009,6 +9092,14 @@
           : { background: `hsl(${h} 85% 96%)`, borderColor: `hsl(${h} 60% 68%)`, color: `hsl(${h} 55% 30%)` };
       };
       const timelineLoggedStyle = (r) => {
+        if (r && r.is_live_active) {
+          return {
+            background: isDarkMode.value ? '#dc2626' : '#e11d48',
+            borderColor: '#ef4444',
+            color: '#fff',
+            boxShadow: '0 0 10px rgba(225, 29, 72, 0.65)'
+          };
+        }
         // Time logged where nothing was planned stays rose: that is the one thing
         // the project hue must not be allowed to blend into the rest of the day.
         if (!r.onPlan) return { background: isDarkMode.value ? '#9f1239' : '#e11d48' };
@@ -9029,6 +9120,11 @@
           return dark
             ? { background: 'rgba(51, 65, 85, 0.35)', borderColor: '#64748b', color: '#94a3b8' }
             : { background: 'rgba(241, 245, 249, 0.85)', borderColor: '#94a3b8', color: '#475569' };
+        }
+        if (st === 'recording') {
+          return dark
+            ? { background: `hsl(${h} 50% 20% / .9)`, borderColor: '#ef4444', color: '#fff', boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)' }
+            : { background: `hsl(${h} 80% 95%)`, borderColor: '#dc2626', color: `hsl(${h} 65% 25%)`, boxShadow: '0 0 10px rgba(220, 38, 38, 0.25)' };
         }
         if (st === 'partial') {
           return dark
@@ -9346,10 +9442,6 @@
         const lo = plannerRange.value.lo * 60;
         const raw = lo + ((clientY - r.top) / (r.height || 1)) * span;
         return Math.max(lo, Math.min(lo + span, raw));
-      };
-      const _minToHHMM = (m) => {
-        const mm = Math.max(0, Math.min(24 * 60, Math.round(m)));
-        return String(Math.floor(mm / 60) % 24).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0');
       };
       const slotSelRange = computed(() => {
         const s = slotSel.value;
