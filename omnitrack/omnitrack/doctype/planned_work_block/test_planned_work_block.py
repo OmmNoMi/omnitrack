@@ -598,6 +598,14 @@ class TestPlannedWorkBlock(FrappeTestCase):
 			"isSessionElevated",
 			"toggleSessionFocus",
 			"dayTimeline",
+			"bottomBarTimer",
+			"showInactivityModal",
+			"inactivityMinutes",
+			"lastActivityTimeHHMM",
+			"suggestedStopHHMM",
+			"confirmStillWorking",
+			"stopInactivitySessionNow",
+			"stopInactivitySessionAtLastEditPlus15",
 		]
 
 		missing = [exp for exp in required_exports if exp not in exports]
