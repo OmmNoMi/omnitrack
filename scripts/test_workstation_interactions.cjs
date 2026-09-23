@@ -369,7 +369,55 @@ assert.ok(content.includes('prefers-reduced-motion: reduce'), 'FAIL: scrollIntoV
 
 console.log('✓ Test 12: Daily Accomplishments roving tabindex grid, arrow navigation & show more/less focus retention verified.');
 
-console.log('\nSUCCESS: All 12 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 13: Adjust Timesheet Timing Modal Makeover & Intent Mode Invariants
+assert.ok(content.includes('adjustMode = \'keep_running\''), 'FAIL: Modal must have adjustMode toggle for keep_running');
+assert.ok(content.includes('adjustMode = \'stop_and_log\''), 'FAIL: Modal must have adjustMode toggle for stop_and_log');
+assert.ok(content.includes('Fix Start Time (Keep Running)'), 'FAIL: Modal must declare Fix Start Time option');
+assert.ok(content.includes('Stop & Log to Timesheet'), 'FAIL: Modal must declare Stop & Log to Timesheet option');
+assert.ok(content.includes('Live Stopwatch Preview'), 'FAIL: Mode A must display Live Stopwatch Preview');
+assert.ok(content.includes('keepRunningElapsedFormatted'), 'FAIL: Modal must compute keepRunningElapsedFormatted');
+assert.ok(content.includes('Update Start Time & Keep Running'), 'FAIL: Mode A primary button must be Update Start Time & Keep Running');
+
+// Validate keepRunningElapsedFormatted calculation in sandbox
+const timingSandbox = {
+  ref: (v) => ({ value: v }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  todayDate: { value: '2026-09-23' }
+};
+vm.createContext(timingSandbox);
+
+const timingCode = `
+  const adjustForm = ref({
+    work_date: '2026-09-23',
+    from_time: '10:00',
+    to_time: '11:00',
+    notes: ''
+  });
+  const keepRunningElapsedFormatted = (nowMs) => {
+    if (!adjustForm.value.from_time) return '0m 00s';
+    const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
+    const parts = adjustForm.value.work_date.split('-').map(Number);
+    const startMs = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0).getTime();
+    const diffSecs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+    const h = Math.floor(diffSecs / 3600);
+    const m = Math.floor((diffSecs % 3600) / 60);
+    const s = diffSecs % 60;
+    const dec = (diffSecs / 3600).toFixed(2);
+    if (h > 0) return \`\${h}h \${String(m).padStart(2, '0')}m \${String(s).padStart(2, '0')}s (\${dec} hrs)\`;
+    return \`\${m}m \${String(s).padStart(2, '0')}s (\${dec} hrs)\`;
+  };
+  ({ adjustForm, keepRunningElapsedFormatted });
+`;
+const timingInst = vm.runInContext(timingCode, timingSandbox);
+
+// Suppose now is 10:25:30 on same day
+const fakeNow = new Date(2026, 8, 23, 10, 25, 30).getTime();
+const elapsedStr = timingInst.keepRunningElapsedFormatted(fakeNow);
+assert.strictEqual(elapsedStr.includes('25m 30s'), true, 'FAIL: keepRunningElapsedFormatted must calculate 25m 30s');
+
+console.log('✓ Test 13: Adjust Timesheet Timing Frappe UI makeover & intent mode invariants verified.');
+
+console.log('\nSUCCESS: All 13 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

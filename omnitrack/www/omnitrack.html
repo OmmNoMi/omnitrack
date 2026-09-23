@@ -4132,93 +4132,212 @@
   <f-dialog
     v-model="showAdjustModal"
     title="Adjust Timesheet Timing"
-    subtitle="Fine-tune start/end times or backdate running session"
+    :subtitle="isTracking ? 'Fine-tune ongoing session start time or conclude and log to timesheet' : 'Backdate or record a past focus session window'"
     size="md"
   >
     <template #header-icon>
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </template>
 
-    <!-- Duration Hero Badge Card -->
-    <div class="p-3.5 rounded-2xl border flex items-center justify-between" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
-      <div>
-        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Calculated Duration</div>
-        <div class="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight">{{ adjustDurationFormatted }}</div>
-      </div>
-      <f-badge :theme="adjustDurationMinutes > 0 ? 'green' : 'red'" variant="subtle" size="xs">
-        {{ adjustDurationMinutes > 0 ? '✓ Valid Duration' : 'Invalid Range' }}
-      </f-badge>
+    <!-- Mode Selector Tabs (only when actively tracking) -->
+    <div v-if="isTracking" class="p-1 rounded-2xl bg-gray-100 dark:bg-[#161618] border border-gray-200/80 dark:border-gray-800 flex items-center gap-1">
+      <button 
+        type="button" 
+        @click="adjustMode = 'keep_running'"
+        class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        :class="adjustMode === 'keep_running' ? 'bg-white dark:bg-[#25272B] text-blue-600 dark:text-blue-400 shadow-xs font-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Fix Start Time (Keep Running)</span>
+      </button>
+      <button 
+        type="button" 
+        @click="adjustMode = 'stop_and_log'"
+        class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        :class="adjustMode === 'stop_and_log' ? 'bg-white dark:bg-[#25272B] text-emerald-600 dark:text-emerald-400 shadow-xs font-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+        <span>Stop & Log to Timesheet</span>
+      </button>
     </div>
 
-    <div class="space-y-4 text-xs">
-      <!-- Session Date -->
+    <!-- MODE A: FIX START TIME (KEEP RUNNING) -->
+    <div v-if="isTracking && adjustMode === 'keep_running'" class="space-y-4 text-xs">
+      <!-- Live Preview Stat Card -->
+      <div class="p-4 rounded-2xl border flex items-center justify-between transition-colors"
+        :class="isDarkMode ? 'bg-blue-950/20 border-blue-900/50' : 'bg-blue-50/60 border-blue-100'">
+        <div class="space-y-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            <span class="text-[10px] uppercase font-bold tracking-wider text-blue-600 dark:text-blue-400">Live Stopwatch Preview</span>
+          </div>
+          <div class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white font-mono tracking-tight">
+            {{ keepRunningElapsedFormatted }}
+          </div>
+          <p class="text-[11px] text-gray-500 dark:text-gray-400">
+            Stopwatch will seamlessly continue ticking up with this adjusted duration.
+          </p>
+        </div>
+        <f-badge theme="blue" variant="subtle" size="sm">
+          ▶ Active
+        </f-badge>
+      </div>
+
+      <!-- Start Date (Only if needed) -->
       <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Session Date *</label>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="font-bold text-gray-700 dark:text-gray-300">Session Start Date *</label>
           <span v-if="!isManager" class="text-[10px] text-gray-400">Allowed: Today & Yesterday</span>
         </div>
-        <input
-          type="date"
-          v-model="adjustForm.work_date"
-          :min="minTimesheetDate"
-          :max="todayDate"
-          class="w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-          :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
-        />
+        <div class="relative flex items-center">
+          <svg class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <input
+            type="date"
+            v-model="adjustForm.work_date"
+            :min="minTimesheetDate"
+            :max="todayDate"
+            class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+            :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+          />
+        </div>
       </div>
 
       <!-- Start Time (From) + Quick Nudge Chips -->
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Start Time (From) *</label>
-          <span class="text-[10px] text-gray-400">Quick adjust</span>
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-gray-700 dark:text-gray-300">Corrected Start Time (From) *</label>
+          <span v-if="originalStartTimeFormatted" class="text-[11px] font-mono text-gray-400">Originally recorded: {{ originalStartTimeFormatted }}</span>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1 flex items-center">
+            <svg class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <input
+              type="time"
+              step="60"
+              v-model="adjustForm.from_time"
+              class="w-full pl-10 pr-3.5 py-2 rounded-xl border text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+            />
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', -30)" title="Started 30m earlier">-30m</f-button>
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
+            <f-button size="xs" variant="subtle" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', 15)" title="Started 15m later">+15m</f-button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes / Activity Log (Optional update) -->
+      <div class="space-y-1.5">
+        <label class="block font-bold text-gray-700 dark:text-gray-300">Live Notes / Activity Description</label>
+        <textarea
+          v-model="adjustForm.notes"
+          rows="3"
+          placeholder="Update or add bullets to your current session notes..."
+          class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+          :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- MODE B: STOP & LOG TO TIMESHEET (OR WHEN NOT TRACKING) -->
+    <div v-else class="space-y-4 text-xs">
+      <!-- Calculated Duration Hero Card -->
+      <div class="p-4 rounded-2xl border flex items-center justify-between transition-colors"
+        :class="adjustDurationMinutes > 0 ? (isDarkMode ? 'bg-emerald-950/20 border-emerald-900/50' : 'bg-emerald-50/60 border-emerald-100') : (isDarkMode ? 'bg-rose-950/20 border-rose-900/50' : 'bg-rose-50/60 border-rose-100')">
+        <div class="space-y-0.5">
+          <div class="text-[10px] uppercase font-bold tracking-wider" :class="adjustDurationMinutes > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">
+            Calculated Duration
+          </div>
+          <div class="text-xl sm:text-2xl font-black font-mono tracking-tight" :class="adjustDurationMinutes > 0 ? 'text-gray-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'">
+            {{ adjustDurationFormatted }}
+          </div>
+          <div class="text-[11px] text-gray-500 dark:text-gray-400">
+            {{ isTracking ? 'Clock will stop and write this window directly to your timesheet.' : 'Will be recorded to your timesheet.' }}
+          </div>
+        </div>
+        <f-badge :theme="adjustDurationMinutes > 0 ? 'green' : 'red'" variant="subtle" size="sm">
+          {{ adjustDurationMinutes > 0 ? '✓ Valid Duration' : 'Invalid Range' }}
+        </f-badge>
+      </div>
+
+      <!-- Session Date -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="font-bold text-gray-700 dark:text-gray-300">Session Date *</label>
+          <span v-if="!isManager" class="text-[10px] text-gray-400">Allowed: Today & Yesterday</span>
+        </div>
+        <div class="relative flex items-center">
+          <svg class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <input
-            type="time"
-            step="60"
-            v-model="adjustForm.from_time"
-            class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            type="date"
+            v-model="adjustForm.work_date"
+            :min="minTimesheetDate"
+            :max="todayDate"
+            class="w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
             :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
           />
-          <div class="flex items-center gap-1">
-            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
-            <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
-            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
+        </div>
+      </div>
+
+      <!-- Start Time (From) + Quick Nudge Chips -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-gray-700 dark:text-gray-300">Start Time (From) *</label>
+          <span class="text-[10px] text-gray-400 font-semibold">Quick adjust</span>
+        </div>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1 flex items-center">
+            <svg class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <input
+              type="time"
+              step="60"
+              v-model="adjustForm.from_time"
+              class="w-full pl-10 pr-3.5 py-2 rounded-xl border text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+            />
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', -15)" title="Started 15m earlier">-15m</f-button>
+            <f-button size="xs" variant="subtle" theme="blue" @click="nudgeAdjustTime('from', -5)" title="Started 5m earlier">-5m</f-button>
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('from', 5)" title="Started 5m later">+5m</f-button>
           </div>
         </div>
       </div>
 
       <!-- End Time (To) + Quick Nudge Chips -->
-      <div>
-        <div class="flex items-center justify-between mb-1">
-          <label class="font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">End Time (To) *</label>
-          <span class="text-[10px] text-gray-400">Quick adjust</span>
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="font-bold text-gray-700 dark:text-gray-300">End Time (To) *</label>
+          <span class="text-[10px] text-gray-400 font-semibold">Quick adjust</span>
         </div>
-        <div class="flex items-center gap-2">
-          <input
-            type="time"
-            step="60"
-            v-model="adjustForm.to_time"
-            class="flex-1 px-3.5 py-2.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-            :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
-          />
-          <div class="flex items-center gap-1">
-            <f-button size="xs" variant="outline" theme="gray" @click="nudgeAdjustTime('to', -5)" title="Finished 5m earlier">-5m</f-button>
-            <f-button size="xs" variant="outline" theme="blue" @click="nudgeAdjustTime('to', 5)" title="Finished 5m later">+5m</f-button>
-            <f-button size="xs" variant="outline" theme="green" @click="setAdjustEndNow" title="Set End Time to Right Now">Now</f-button>
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div class="relative flex-1 flex items-center">
+            <svg class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <input
+              type="time"
+              step="60"
+              v-model="adjustForm.to_time"
+              class="w-full pl-10 pr-3.5 py-2 rounded-xl border text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white' : 'bg-white border-gray-300 text-gray-900'"
+            />
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <f-button size="xs" variant="subtle" theme="gray" @click="nudgeAdjustTime('to', -5)" title="Finished 5m earlier">-5m</f-button>
+            <f-button size="xs" variant="subtle" theme="blue" @click="nudgeAdjustTime('to', 5)" title="Finished 5m later">+5m</f-button>
+            <f-button size="xs" variant="subtle" theme="green" @click="setAdjustEndNow" title="Set End Time to Right Now">Now</f-button>
           </div>
         </div>
       </div>
 
       <!-- Notes / Activity Log -->
-      <div>
-        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Notes / Activity Log</label>
+      <div class="space-y-1.5">
+        <label class="block font-bold text-gray-700 dark:text-gray-300">Notes / Activity Log *</label>
         <textarea
           v-model="adjustForm.notes"
           rows="3"
-          placeholder="What did you work on during this period?"
-          class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          placeholder="What did you work on during this period? (bullets recommended)"
+          class="w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
           :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
         ></textarea>
       </div>
@@ -4226,37 +4345,39 @@
 
     <!-- Footer Actions -->
     <template #actions>
-      <div class="flex flex-wrap items-center justify-between gap-2 w-full">
+      <div class="flex items-center justify-between gap-3 w-full">
         <f-button variant="ghost" theme="gray" size="sm" @click="showAdjustModal = false">
           Cancel
         </f-button>
         
-        <div class="flex items-center gap-2">
-          <!-- Two blue buttons side by side read as the same button. Say plainly which
-               one stops the clock and which one leaves it running. -->
-          <f-button
-            v-if="isTracking"
-            variant="outline"
-            theme="gray"
-            size="sm"
-            @click="applyAdjustedStartTime"
-            title="Correct the start time and carry on timing — nothing is written to your timesheet">
-            Fix start, keep running
-          </f-button>
+        <!-- Mode A Footer: Fix start & continue tracking -->
+        <f-button
+          v-if="isTracking && adjustMode === 'keep_running'"
+          variant="solid"
+          theme="blue"
+          size="sm"
+          @click="applyAdjustedStartTime"
+          title="Update the session start time and keep timing">
+          <template #prefix>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </template>
+          <span>Update Start Time & Keep Running</span>
+        </f-button>
 
-          <f-button
-            variant="solid"
-            theme="blue"
-            size="sm"
-            @click="submitAdjustedTimesheet"
-            :disabled="adjustDurationMinutes <= 0"
-            :title="isTracking ? 'Stop the clock and write this to your timesheet' : 'Write this to your timesheet'">
-            <template #prefix>
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            </template>
-            {{ isTracking ? 'Stop & log ' + adjustDurationShort : 'Log ' + adjustDurationShort }}
-          </f-button>
-        </div>
+        <!-- Mode B Footer: Stop and log to timesheet -->
+        <f-button
+          v-else
+          variant="solid"
+          theme="blue"
+          size="sm"
+          @click="submitAdjustedTimesheet"
+          :disabled="adjustDurationMinutes <= 0"
+          :title="isTracking ? 'Stop the live stopwatch and write this duration to your timesheet' : 'Write this duration to your timesheet'">
+          <template #prefix>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+          </template>
+          <span>{{ isTracking ? 'Stop & Log ' + adjustDurationShort + ' to Timesheet' : 'Log ' + adjustDurationShort + ' to Timesheet' }}</span>
+        </f-button>
       </div>
     </template>
   </f-dialog>
@@ -8050,6 +8171,8 @@
 
       // 2b. Adjust Timesheet Timing & Backdating
       const showAdjustModal = ref(false);
+      const adjustMode = ref('keep_running'); // 'keep_running' | 'stop_and_log'
+      const originalStartTimeFormatted = ref('');
       const adjustForm = ref({
         work_date: getLocalTodayISO(),
         from_time: '09:00',
@@ -8097,14 +8220,39 @@
         return `${h}h ${String(m).padStart(2, '0')}m (${dec} hrs)`;
       });
 
+      const keepRunningElapsedFormatted = computed(() => {
+        if (!adjustForm.value.from_time) return '0m 00s';
+        try {
+          const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
+          const parts = (adjustForm.value.work_date || todayDate.value).split('-').map(Number);
+          const startMs = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0).getTime();
+          const nowMs = Date.now();
+          const diffSecs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
+          const h = Math.floor(diffSecs / 3600);
+          const m = Math.floor((diffSecs % 3600) / 60);
+          const s = diffSecs % 60;
+          const dec = (diffSecs / 3600).toFixed(2);
+          if (h > 0) {
+            return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s (${dec} hrs)`;
+          }
+          return `${m}m ${String(s).padStart(2, '0')}s (${dec} hrs)`;
+        } catch (e) {
+          return '0m 00s';
+        }
+      });
+
       const openAdjustModal = () => {
         const pad = (n) => String(n).padStart(2, '0');
         const nowObj = new Date();
         let startObj = new Date();
         if (isTracking.value && trackerSeconds.value > 0) {
           startObj = new Date(Date.now() - (trackerSeconds.value * 1000));
+          originalStartTimeFormatted.value = `${pad(startObj.getHours())}:${pad(startObj.getMinutes())}`;
+          adjustMode.value = 'keep_running';
         } else {
           startObj = new Date(Date.now() - 3600 * 1000);
+          originalStartTimeFormatted.value = '';
+          adjustMode.value = 'stop_and_log';
         }
 
         const work_date = `${startObj.getFullYear()}-${pad(startObj.getMonth() + 1)}-${pad(startObj.getDate())}`;
@@ -10155,6 +10303,9 @@
         nudgeAdjustTime,
         setAdjustEndNow,
         adjustDurationShort,
+        adjustMode,
+        originalStartTimeFormatted,
+        keepRunningElapsedFormatted,
         applyAdjustedStartTime,
         submitAdjustedTimesheet,
         trackBlock,
