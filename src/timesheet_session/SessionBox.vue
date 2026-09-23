@@ -124,6 +124,7 @@
             <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
               <div class="relative flex-1">
                 <textarea
+                  data-session-input
                   ref="lineInputRef"
                   v-model="localLineText"
                   @input="autoGrowTextarea"
@@ -616,6 +617,8 @@
       <kbd class="font-mono text-gray-600 dark:text-gray-300">{{ modKey || '⌘' }}E</kbd> adjust times
       <span class="mx-1.5">·</span>
       <kbd class="font-mono text-gray-600 dark:text-gray-300">{{ modKey || '⌘' }}D</kbd> discard
+      <span class="mx-1.5">·</span>
+      <kbd class="font-mono text-gray-600 dark:text-gray-300">Shift+S</kbd> full focus
     </div>
   </div>
 </template>
@@ -1059,14 +1062,21 @@ function onDocumentClick(ev) {
   }
 }
 
+function onFocusSessionInput() {
+  activePaneTab.value = 'log';
+  focusLineInput();
+}
+
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentClick);
+  window.addEventListener('omnitrack:focus-session-input', onFocusSessionInput);
   checkRavenStatus();
   setupRealtimeChat();
 });
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentClick);
+  window.removeEventListener('omnitrack:focus-session-input', onFocusSessionInput);
 });
 
 // Watch for connected task change to refresh chat if chat tab is active

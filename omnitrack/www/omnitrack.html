@@ -151,8 +151,8 @@
         :theme="isTracking ? (isSessionElevated ? 'blue' : 'red') : 'gray'"
         size="sm"
         class="font-mono !rounded-full !px-3 !py-1 text-xs font-bold transition-all cursor-pointer"
-        :aria-label="isTracking ? (isSessionElevated ? 'Minimize session popup (Shift+S / Esc)' : 'Elevate session into full focus popup (Shift+S)') : 'Start an unplanned session (Shift+S)'"
-        :title="isTracking ? (isSessionElevated ? 'Minimize session popup (Shift+S / Esc)' : 'Elevate session into full focus popup (Shift+S)') : 'Start an unplanned session (Shift+S)'"
+        :aria-label="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
+        :title="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
         @click="toggleSessionFocus"
       >
         <template #prefix>
@@ -838,7 +838,7 @@
           <span aria-hidden="true">·</span>
           <span><kbd class="font-mono font-bold">{{ modKey }}D</kbd> discard it</span>
           <span aria-hidden="true">·</span>
-          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">S</kbd> session</span>
+          <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">S</kbd> full focus</span>
           <span aria-hidden="true">·</span>
           <span><kbd class="font-mono font-bold">Shift</kbd>+<kbd class="font-mono font-bold">P</kbd> plan</span>
           <span aria-hidden="true">·</span>
@@ -7339,7 +7339,7 @@
       let _lastClearedToast = 0;
       const handleRemoteSessionCleared = (opts) => {
         if (!isTracking.value) return;
-        if (Date.now() - _lastLocalUpdate < 3000) return;
+        if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 3000)) return;
 
         isTracking.value = false;
         if (trackerTimer.value) {
@@ -7370,8 +7370,9 @@
         if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
         _isCheckingActiveSession = true;
         try {
-          const res = await fetch('/api/method/omnitrack.api.get_active_session', {
-            headers: { 'Accept': 'application/json' }
+          const res = await fetch(`/api/method/omnitrack.api.get_active_session?_=${Date.now()}`, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store'
           });
           if (res.ok) {
             const data = await res.json();
@@ -7379,7 +7380,7 @@
             if (active && active.status === 'active') {
               reconcileActiveSession(active);
             } else if (!active && isTracking.value) {
-              handleRemoteSessionCleared();
+              handleRemoteSessionCleared({ authoritative: true });
             }
           }
         } catch (e) {
@@ -7619,9 +7620,12 @@
       const sessionPointInput = ref(null);
       const sessionNotesScroll = ref(null);
       const focusSessionPointInput = () => {
+        try {
+          window.dispatchEvent(new CustomEvent('omnitrack:focus-session-input'));
+        } catch (_) {}
         nextTick(() => {
-          const vueBoxInput = document.querySelector('#omnitrack-session-box-root textarea') ||
-                             document.querySelector('#omnitrack-session-box-root [data-session-input]');
+          const vueBoxInput = document.querySelector('#omnitrack-session-box-root [data-session-input]') ||
+                             document.querySelector('#omnitrack-session-box-root textarea');
           if (vueBoxInput && vueBoxInput.focus) {
             vueBoxInput.focus();
             if (vueBoxInput.select) vueBoxInput.select();
@@ -7768,13 +7772,19 @@
           const k = String(ev.key || '').toLowerCase();
           if (k === 't') { ev.preventDefault(); openNewTaskModal(); return; }
           if (k === 'p') { ev.preventDefault(); planBlockShortcut(); return; }
-          if (k === 's') { ev.preventDefault(); openSessionCard(); return; }
+          if (k === 's') { ev.preventDefault(); toggleSessionFocus(); return; }
           if (k === 'd') { ev.preventDefault(); openDayView(); return; }
         }
         if (ev.key !== '/') return;
         if (_typingIn(ev.target)) return;
-        if (!sessionPointInput.value) return;
+        const hasSessionInput = isTracking.value || !!sessionPointInput.value ||
+          !!document.querySelector('#omnitrack-session-box-root [data-session-input]') ||
+          !!document.querySelector('#omnitrack-session-box-root textarea');
+        if (!hasSessionInput) return;
         ev.preventDefault();
+        if (isTracking.value && activeTab.value !== 'dashboard' && !isSessionElevated.value) {
+          activeTab.value = 'dashboard';
+        }
         focusSessionPointInput();
       };
 
@@ -7949,8 +7959,8 @@
       // 8. API Methods
       const fetchWorkstationData = async (emp = 'All') => {
         try {
-          const url = `/api/method/omnitrack.api.get_workstation_data?employee=${encodeURIComponent(emp)}`;
-          const res = await fetch(url);
+          const url = `/api/method/omnitrack.api.get_workstation_data?employee=${encodeURIComponent(emp)}&_=${Date.now()}`;
+          const res = await fetch(url, { cache: 'no-store' });
           const data = await res.json();
           if (data && data.message) {
             const m = data.message;
@@ -7985,7 +7995,7 @@
               }
             } else if (m.active_session === null && isTracking.value) {
               const localAge = Date.now() - _lastLocalUpdate;
-              if (localAge > 8000) {
+              if (localAge > 2000) {
                 isTracking.value = false;
                 if (trackerTimer.value) clearInterval(trackerTimer.value);
                 trackerSeconds.value = 0;
@@ -10240,6 +10250,9 @@
           const ssrSession = session && session.active_session;
           if (ssrSession && ssrSession.status === 'active' && ssrSession.startTime) {
             restoreActiveSession(ssrSession);
+          } else if (session && session.active_session === null) {
+            // Server explicitly verified no active session exists for this user across devices
+            localStorage.removeItem('omnitrack_active_session');
           } else {
             const saved = localStorage.getItem('omnitrack_active_session');
             if (saved) {
@@ -10264,9 +10277,15 @@
         if (typeof io !== 'undefined') {
           try {
             const host = window.location.hostname;
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
             const siteName = "{{ frappe.local.site }}";
-            const socketPort = (window.frappe && frappe.boot && frappe.boot.socketio_port) || 9003;
-            const socketHost = `${window.location.protocol}//${host}:${socketPort}/${siteName}`;
+            let socketHost;
+            if (isLocal) {
+              const socketPort = (window.frappe && frappe.boot && frappe.boot.socketio_port) || 9003;
+              socketHost = `${window.location.protocol}//${host}:${socketPort}/${siteName}`;
+            } else {
+              socketHost = `${window.location.protocol}//${host}/${siteName}`;
+            }
             const socket = io(socketHost, {
               withCredentials: true,
               reconnectionAttempts: 10,
@@ -10279,7 +10298,7 @@
               }
             });
             socket.on('omnitrack:active_session_cleared', () => {
-              handleRemoteSessionCleared();
+              handleRemoteSessionCleared({ authoritative: true });
             });
           } catch (e) {
             console.debug('Socket.io connection bypassed, live poller active', e);
@@ -10289,7 +10308,7 @@
             if (data && data.status === 'active') reconcileActiveSession(data);
           });
           frappe.realtime.on('omnitrack:active_session_cleared', () => {
-            handleRemoteSessionCleared();
+            handleRemoteSessionCleared({ authoritative: true });
           });
         }
       });

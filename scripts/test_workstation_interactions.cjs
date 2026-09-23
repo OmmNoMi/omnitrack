@@ -538,7 +538,178 @@ assert.strictEqual(zoomInst.otherTarget > 0, true, 'FAIL: Other days must adjust
 
 console.log('✓ Test 15: Day at a glance 6-hour stretch zoom on Today & red line centering invariants verified.');
 
-console.log('\nSUCCESS: All 15 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 16: "/" Keydown Focus on Session Log Line Input Box Invariants
+// ---------------------------------------------------------------------------
+const listeners = {};
+const slashSandbox = {
+  ref: (val) => ({ value: val }),
+  window: {
+    addEventListener(name, fn) { (listeners[name] = listeners[name] || []).push(fn); },
+    removeEventListener(name, fn) {
+      if (listeners[name]) listeners[name] = listeners[name].filter(f => f !== fn);
+    },
+    dispatchEvent(ev) {
+      (listeners[ev.type] || []).forEach(fn => fn(ev));
+    }
+  },
+  CustomEvent: class CustomEvent {
+    constructor(type, detail) { this.type = type; this.detail = detail; }
+  },
+  document: {
+    querySelector(sel) {
+      if (sel.includes('#omnitrack-session-box-root')) {
+        return { focus() {}, select() {} };
+      }
+      return null;
+    }
+  }
+};
+vm.createContext(slashSandbox);
+const slashCode = `
+  const isTracking = ref(true);
+  const isSessionElevated = ref(false);
+  const activeTab = ref('dashboard');
+  const sessionPointInput = ref(null); // null in Frappe UI mode
+
+  let eventPrevented = false;
+  let focusCalled = false;
+  let customEventDispatched = false;
+
+  window.addEventListener('omnitrack:focus-session-input', () => {
+    customEventDispatched = true;
+  });
+
+  const _typingIn = (t) => {
+    const tag = t && t.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(t && t.isContentEditable);
+  };
+
+  const focusSessionPointInput = () => {
+    focusCalled = true;
+    try {
+      window.dispatchEvent(new CustomEvent('omnitrack:focus-session-input'));
+    } catch (_) {}
+  };
+
+  const _slashFocus = (ev) => {
+    if (ev.key !== '/') return;
+    if (_typingIn(ev.target)) return;
+    const hasSessionInput = isTracking.value || !!sessionPointInput.value ||
+      !!document.querySelector('#omnitrack-session-box-root [data-session-input]') ||
+      !!document.querySelector('#omnitrack-session-box-root textarea');
+    if (!hasSessionInput) return;
+    ev.preventDefault();
+    if (isTracking.value && activeTab.value !== 'dashboard' && !isSessionElevated.value) {
+      activeTab.value = 'dashboard';
+    }
+    focusSessionPointInput();
+  };
+
+  // Case A: User presses '/' while typing in an existing input -> must NOT focus or preventDefault
+  const inputEvent = { key: '/', target: { tagName: 'INPUT' }, preventDefault: () => { eventPrevented = true; } };
+  _slashFocus(inputEvent);
+  const typingIgnored = !focusCalled && !eventPrevented;
+
+  // Case B: User presses '/' on homepage with running session & Frappe UI box (sessionPointInput is null)
+  const slashEvent = { key: '/', target: { tagName: 'BODY' }, preventDefault: () => { eventPrevented = true; } };
+  _slashFocus(slashEvent);
+  const slashHandled = focusCalled && eventPrevented && customEventDispatched;
+
+  // Case C: User presses '/' from another tab while tracking -> brings user to dashboard
+  activeTab.value = 'planner';
+  _slashFocus(slashEvent);
+  const tabSwitched = activeTab.value === 'dashboard';
+
+  ({ typingIgnored, slashHandled, tabSwitched });
+`;
+const slashInst = vm.runInContext(slashCode, slashSandbox);
+assert.strictEqual(slashInst.typingIgnored, true, 'FAIL: "/" while typing inside an input must be ignored');
+assert.strictEqual(slashInst.slashHandled, true, 'FAIL: "/" must focus session input and dispatch event even when sessionPointInput is null');
+assert.strictEqual(slashInst.tabSwitched, true, 'FAIL: "/" when tracking must switch activeTab to dashboard');
+
+console.log('✓ Test 16: "/" keydown session log focus invariants verified.');
+
+// --- Test 17: Cross-device Active Session Sync & Authoritative Teardown Invariants ---
+const syncSandbox = {
+  ref: (v) => ({ value: v }),
+  localStorage: {
+    _data: {},
+    getItem(k) { return this._data[k] || null; },
+    setItem(k, v) { this._data[k] = String(v); },
+    removeItem(k) { delete this._data[k]; }
+  }
+};
+vm.createContext(syncSandbox);
+const syncCode = `
+  const isTracking = ref(true);
+  const trackerSeconds = ref(120);
+  const sessionNotesList = ref(['task line']);
+  const trackerNotes = ref('test notes');
+  const trackerBlockName = ref('PWB-TEST');
+  let timerCleared = false;
+  const trackerTimer = ref({ clear: () => { timerCleared = true; } });
+
+  let _lastLocalUpdate = Date.now();
+  let sessionEndedMarked = false;
+  const markSessionEnded = () => { sessionEndedMarked = true; };
+
+  const handleRemoteSessionCleared = (opts) => {
+    if (!isTracking.value) return;
+    if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 3000)) return;
+
+    isTracking.value = false;
+    if (trackerTimer.value) {
+      if (trackerTimer.value.clear) trackerTimer.value.clear();
+      trackerTimer.value = null;
+    }
+    trackerSeconds.value = 0;
+    sessionNotesList.value = [];
+    trackerNotes.value = '';
+    trackerBlockName.value = null;
+    markSessionEnded();
+    localStorage.removeItem('omnitrack_active_session');
+  };
+
+  // Case A: Non-authoritative clear during recent local edit is guarded
+  handleRemoteSessionCleared();
+  const guardedDuringRecentEdit = isTracking.value === true;
+
+  // Case B: Authoritative clear from remote device bypasses guard and stops timer
+  handleRemoteSessionCleared({ authoritative: true });
+  const authoritativeCleared = isTracking.value === false &&
+    trackerSeconds.value === 0 &&
+    trackerBlockName.value === null &&
+    sessionEndedMarked === true &&
+    localStorage.getItem('omnitrack_active_session') === null;
+
+  // Case C: Reloading page when server has active_session === null purges stale localStorage
+  localStorage.setItem('omnitrack_active_session', JSON.stringify({ status: 'active', startTime: Date.now() - 5000 }));
+  const session = { active_session: null };
+  let restored = false;
+  const restoreActiveSession = () => { restored = true; };
+
+  const ssrSession = session && session.active_session;
+  if (ssrSession && ssrSession.status === 'active' && ssrSession.startTime) {
+    restoreActiveSession(ssrSession);
+  } else if (session && session.active_session === null) {
+    localStorage.removeItem('omnitrack_active_session');
+  } else {
+    const saved = localStorage.getItem('omnitrack_active_session');
+    if (saved) restoreActiveSession();
+  }
+  const reloadResurrectionPrevented = !restored && (localStorage.getItem('omnitrack_active_session') === null);
+
+  ({ guardedDuringRecentEdit, authoritativeCleared, reloadResurrectionPrevented });
+`;
+const syncInst = vm.runInContext(syncCode, syncSandbox);
+assert.strictEqual(syncInst.guardedDuringRecentEdit, true, 'FAIL: Non-authoritative clear during recent local edit must be guarded');
+assert.strictEqual(syncInst.authoritativeCleared, true, 'FAIL: Authoritative remote clear must stop tracking, reset timer, and clear localStorage');
+assert.strictEqual(syncInst.reloadResurrectionPrevented, true, 'FAIL: When server active_session is null, page reload must purge localStorage instead of resurrecting');
+
+console.log('✓ Test 17: Cross-device active session sync and authoritative clear invariants verified.');
+
+console.log('\nSUCCESS: All 17 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
