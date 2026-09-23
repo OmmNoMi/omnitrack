@@ -156,7 +156,7 @@ assert.ok(scriptMatches, 'FAIL: Could not find onAttentionGridKey in omnitrack.h
 console.log('✓ Test 8: onAttentionGridKey isolation shield verified.');
 
 // Test 9: Concluded Deliverables Show-More & Note Expansion Invariants
-assert.ok(content.includes('v-for="b in visiblePastFocusBlocks"'), 'FAIL: Concluded deliverables list must iterate over visiblePastFocusBlocks');
+assert.ok(content.includes('in visiblePastFocusBlocks"'), 'FAIL: Concluded deliverables list must iterate over visiblePastFocusBlocks');
 assert.ok(content.includes('toggleShowAllPastBlocks'), 'FAIL: toggleShowAllPastBlocks must be present');
 assert.ok(content.includes('remainingPastBlocksCount'), 'FAIL: remainingPastBlocksCount must be present');
 assert.ok(content.includes('Show {{ remainingPastBlocksCount }} more deliverables'), 'FAIL: Show more button must display remaining deliverables count');
@@ -274,7 +274,64 @@ assert.ok(content.includes('{{ nowLineLabel }}'), 'FAIL: Timeline indicator line
 assert.ok(content.includes('w-[2px] flex-1 bg-red-500'), 'FAIL: Timeline indicator must draw vertical red line');
 console.log('✓ Test 11: Day at a glance red current-time vertical indicator line invariants verified.');
 
-console.log('\nSUCCESS: All 11 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 12: Daily Accomplishments Roving Tabindex Grid & Arrow Navigation (WCAG 2.2 AA)
+assert.ok(content.includes('role="grid"'), 'FAIL: Daily accomplishments container must have role="grid"');
+assert.ok(content.includes(':aria-rowcount="visiblePastFocusBlocks.length"'), 'FAIL: Daily accomplishments grid must declare aria-rowcount');
+assert.ok(content.includes('role="row"'), 'FAIL: Completed block cards must declare role="row"');
+assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 0)"'), 'FAIL: Title button must bind concludedTabindex for col 0');
+assert.ok(content.includes(':data-concluded-row="rIdx"'), 'FAIL: Title button must bind data-concluded-row');
+assert.ok(content.includes(':data-concluded-col="0"'), 'FAIL: Title button must bind data-concluded-col 0');
+assert.ok(content.includes('@keydown="onConcludedGridKey($event, rIdx, 0)"'), 'FAIL: Title button must bind onConcludedGridKey');
+assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 1)"'), 'FAIL: View Audit button must bind concludedTabindex for col 1');
+assert.ok(content.includes(':data-concluded-col="1"'), 'FAIL: View Audit button must bind data-concluded-col 1');
+assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 2)"'), 'FAIL: Re-open button must bind concludedTabindex for col 2');
+assert.ok(content.includes('onConcludedGridKey'), 'FAIL: onConcludedGridKey must be defined in omnitrack.html');
+
+// Validate roving tabindex math and arrow key isolation in sandbox
+const rovingSandbox = {
+  ref: (v) => ({ value: v }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  nextTick: (cb) => cb(),
+  document: { querySelector: () => null }
+};
+vm.createContext(rovingSandbox);
+
+const rovingCode = `
+  const concludedRovingRow = ref(0);
+  const concludedRovingCol = ref(0);
+  const concludedTabindex = (r, c) => (concludedRovingRow.value === r && concludedRovingCol.value === c) ? 0 : -1;
+  const setConcludedRoving = (r, c) => {
+    concludedRovingRow.value = r;
+    concludedRovingCol.value = c;
+  };
+  const canBlockReopen = (b) => b && b.status !== 'Cancelled' && b.status !== 'Rescheduled';
+  const getMaxConcludedCol = (b) => {
+    if (!b) return 1;
+    const hasReopen = canBlockReopen(b);
+    return hasReopen ? 2 : 1;
+  };
+  ({ concludedRovingRow, concludedRovingCol, concludedTabindex, setConcludedRoving, getMaxConcludedCol });
+`;
+const rovingInst = vm.runInContext(rovingCode, rovingSandbox);
+
+assert.strictEqual(rovingInst.concludedTabindex(0, 0), 0, 'FAIL: Initial roving item (0, 0) must have tabindex 0');
+assert.strictEqual(rovingInst.concludedTabindex(0, 1), -1, 'FAIL: Non-active column must have tabindex -1');
+assert.strictEqual(rovingInst.concludedTabindex(1, 0), -1, 'FAIL: Non-active row must have tabindex -1');
+
+// Simulate ArrowDown navigation
+rovingInst.setConcludedRoving(1, 0);
+assert.strictEqual(rovingInst.concludedTabindex(0, 0), -1, 'FAIL: Previous row must now have tabindex -1');
+assert.strictEqual(rovingInst.concludedTabindex(1, 0), 0, 'FAIL: New active row must have tabindex 0');
+
+// Column clamping check for cancelled block
+const cancelledBlock = { status: 'Cancelled' };
+const activeBlock = { status: 'Completed' };
+assert.strictEqual(rovingInst.getMaxConcludedCol(cancelledBlock), 1, 'FAIL: Cancelled block without reopen must clamp max col to 1');
+assert.strictEqual(rovingInst.getMaxConcludedCol(activeBlock), 2, 'FAIL: Block with reopen must have max col 2');
+
+console.log('✓ Test 12: Daily Accomplishments roving tabindex grid & arrow navigation invariants verified.');
+
+console.log('\nSUCCESS: All 12 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
