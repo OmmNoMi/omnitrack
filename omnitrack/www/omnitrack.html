@@ -4035,13 +4035,39 @@
         variant="solid"
         :theme="isTracking ? 'red' : 'blue'"
         size="lg"
-        class="relative shrink-0 !w-14 !h-14 !rounded-full !flex !flex-col !items-center !justify-center shadow-xl active:scale-90 transition-all -mt-6 ring-4 cursor-pointer !p-0"
-        :class="isDarkMode ? 'ring-[#1E1F22]' : 'ring-white'"
+        class="relative shrink-0 !h-14 !flex !flex-col !items-center !justify-center shadow-xl active:scale-90 transition-all -mt-6 ring-4 cursor-pointer !p-0"
+        :class="[
+          isDarkMode ? 'ring-[#1E1F22]' : 'ring-white',
+          (isTracking && bottomBarTimer.isHours) ? '!w-auto !min-w-[4.75rem] !px-3 !rounded-full shadow-2xl' : '!w-14 !rounded-full'
+        ]"
         aria-label="Open the current session timesheet"
         :title="isTracking ? 'Open the session timesheet — recording ' + formattedTime : 'Open the session timesheet'"
         @click="openSessionCard"
       >
-        <span v-if="isTracking" class="text-[13px] font-mono font-extrabold leading-none tabular-nums">{{ formattedTime.slice(0, 5) }}</span>
+        <template v-if="isTracking">
+          <!-- Under 1 hour: Show MM:SS with clear min:sec helper and live ticking -->
+          <div v-if="!bottomBarTimer.isHours" class="flex flex-col items-center justify-center leading-none select-none">
+            <span class="text-[13px] font-mono font-black tabular-nums tracking-tight text-white leading-none">
+              {{ bottomBarTimer.primary }}
+            </span>
+            <span class="text-[7px] font-mono font-bold uppercase tracking-wider text-red-100 opacity-90 mt-0.5 leading-none">
+              min:sec
+            </span>
+          </div>
+
+          <!-- 1 hour or more: Dynamically expand into a sleek stadium capsule showing hours, minutes, seconds -->
+          <div v-else class="flex flex-col items-center justify-center leading-none select-none px-0.5">
+            <div class="flex items-baseline gap-0.5 text-white leading-none">
+              <span class="text-[12px] font-mono font-black tabular-nums leading-none">{{ bottomBarTimer.hours }}h</span>
+              <span class="text-[12px] font-mono font-black tabular-nums leading-none">{{ bottomBarTimer.minutes }}m</span>
+              <span class="text-[10px] font-mono font-semibold tabular-nums text-red-200 opacity-95 ml-0.5 leading-none">{{ bottomBarTimer.seconds }}s</span>
+            </div>
+            <span class="text-[7px] font-mono font-bold uppercase tracking-wider text-red-100 opacity-90 mt-0.5 leading-none flex items-center gap-1">
+              <span class="w-1 h-1 rounded-full bg-white animate-ping"></span>
+              <span>REC</span>
+            </span>
+          </div>
+        </template>
         <span v-else class="text-[11px] font-extrabold uppercase tracking-wide leading-none">Log</span>
       </f-button>
 
@@ -6714,6 +6740,33 @@
         const mins = String(Math.floor((trackerSeconds.value % 3600) / 60)).padStart(2, '0');
         const secs = String(trackerSeconds.value % 60).padStart(2, '0');
         return `${hrs}:${mins}:${secs}`;
+      });
+
+      const bottomBarTimer = computed(() => {
+        const s = trackerSeconds.value || 0;
+        const hrs = Math.floor(s / 3600);
+        const mins = Math.floor((s % 3600) / 60);
+        const secs = s % 60;
+        const pad = (n) => String(n).padStart(2, '0');
+
+        if (hrs === 0) {
+          return {
+            isHours: false,
+            primary: `${pad(mins)}:${pad(secs)}`,
+            sub: 'min:sec',
+            mins: pad(mins),
+            secs: pad(secs)
+          };
+        }
+
+        return {
+          isHours: true,
+          hours: hrs,
+          minutes: pad(mins),
+          seconds: pad(secs),
+          primary: `${hrs}h ${pad(mins)}m`,
+          sub: `${pad(secs)}s`
+        };
       });
 
       // Dynamic Filtering of Work Blocks based on employee, nature, and status
@@ -10563,6 +10616,7 @@
         newTaskForm,
         openNewTaskModal,
         formattedTime,
+        bottomBarTimer,
         paciRatio,
         paciPlannedHours,
         paciUnplannedHours,

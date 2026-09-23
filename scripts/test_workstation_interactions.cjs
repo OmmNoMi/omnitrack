@@ -849,7 +849,15 @@ assert.ok(content.includes('live_active_session_seg'), 'FAIL: timedSegmentsForDa
 
 console.log('✓ Test 19: Live active running session in Day Timeline & Calendar grid invariants verified.');
 
-console.log('\nSUCCESS: All 19 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// 20. Bottom Dock Dynamic Timer Invariants (<1h min:sec, >=1h hours expansion)
+assert.ok(content.includes('bottomBarTimer'), 'FAIL: bottomBarTimer computed must be declared and bound');
+assert.ok(content.includes('bottomBarTimer.isHours'), 'FAIL: Dynamic switch between min:sec and hours must be present');
+assert.ok(content.includes('min:sec'), 'FAIL: Clear min:sec helper label must be present under 1h');
+assert.ok(content.includes('bottomBarTimer.hours') && content.includes('bottomBarTimer.minutes') && content.includes('bottomBarTimer.seconds'), 'FAIL: Hours, minutes, and seconds must be exposed when >= 1 hour');
+
+console.log('✓ Test 20: Bottom navigation bar dynamic timer invariants (<1h min:sec, >=1h hours) verified.');
+
+console.log('\nSUCCESS: All 20 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
