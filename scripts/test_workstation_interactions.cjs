@@ -987,7 +987,26 @@ assert.strictEqual(inactInst.governorCappedHrs, true, 'FAIL: 15m stop governor m
 
 console.log('✓ Test 21: 30-Minute inactivity notification & 15m stop governor invariants verified.');
 
-console.log('\nSUCCESS: All 21 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 22: Overnight Session Date Invariant & Notification Gesture Governance
+// ---------------------------------------------------------------------------
+// 1. Overnight date derivation invariant
+assert.ok(content.includes('sessionDate = from.getFullYear()'), 'FAIL: sessionDate must be derived from "from" (session start) to prevent overnight +1 day drift');
+assert.ok(content.includes('session_date: sessionDate'), 'FAIL: log_work_session must receive start-derived sessionDate');
+assert.ok(content.includes('work_date: sessionDate'), 'FAIL: quick_timer_punch must receive start-derived sessionDate');
+
+// 2. Notification user gesture permission request
+assert.ok(content.includes('Notification.permission === \'default\'') && content.includes('Notification.requestPermission()'), 'FAIL: Notification permission must be requested on user gesture (start tracking)');
+
+// 3. Notification onclick focus handler
+assert.ok(content.includes('notif.onclick'), 'FAIL: Notification must attach onclick handler to focus window and surface modal');
+
+// 4. Reactive clock ticker tracking in inactivity computed properties
+assert.ok(content.includes('const _ = trackerSeconds.value;'), 'FAIL: inactivityMinutes and suggestedStopHHMM must read trackerSeconds.value to ensure continuous reactive updates');
+
+console.log('✓ Test 22: Overnight session date & notification gesture governance invariants verified.');
+
+console.log('\nSUCCESS: All 22 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

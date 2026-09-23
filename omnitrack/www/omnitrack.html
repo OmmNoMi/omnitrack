@@ -7413,11 +7413,17 @@
         try {
           if (typeof window !== 'undefined' && 'Notification' in window) {
             if (Notification.permission === 'granted') {
-              new Notification('OmniTrack: Are you still working?', {
+              const notif = new Notification('OmniTrack: Are you still working?', {
                 body: msg || 'No activity logged for 30 minutes on active timesheet.',
                 icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
                 tag: 'omnitrack-inactivity'
               });
+              notif.onclick = () => {
+                try {
+                  window.focus();
+                  showInactivityModal.value = true;
+                } catch (e) {}
+              };
             } else if (Notification.permission === 'default') {
               Notification.requestPermission();
             }
@@ -7426,17 +7432,20 @@
       };
 
       const inactivityMinutes = computed(() => {
+        const _ = trackerSeconds.value;
         const ms = Date.now() - (lastActivityTime.value || Date.now());
         return Math.max(1, Math.floor(ms / 60000));
       });
 
       const lastActivityTimeHHMM = computed(() => {
+        const _ = trackerSeconds.value;
         const t = lastActivityTime.value ? new Date(lastActivityTime.value) : new Date();
         const pad = (n) => String(n).padStart(2, '0');
         return pad(t.getHours()) + ':' + pad(t.getMinutes());
       });
 
       const suggestedStopHHMM = computed(() => {
+        const _ = trackerSeconds.value;
         const base = lastActivityTime.value || Date.now();
         const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
         const t = new Date(targetMs);
@@ -8527,6 +8536,12 @@
           lastActivityTime.value = startTime;
           lastInactivityAlertTime.value = 0;
           syncActiveSession();
+          // Request browser notification permission on user gesture (clicking Start)
+          try {
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+              Notification.requestPermission();
+            }
+          } catch (e) {}
           trackerTimer.value = setInterval(() => {
             trackerSeconds.value = Math.floor((Date.now() - startTime) / 1000);
             checkInactivity();
@@ -8561,6 +8576,7 @@
           if (customEndMs && customEndMs < effectiveStopMs) {
             effectiveStopMs = customEndMs;
             if (sTime) {
+              if (effectiveStopMs < sTime) effectiveStopMs = sTime + 60000;
               elapsedSecs = Math.max(60, Math.floor((effectiveStopMs - sTime) / 1000));
             } else {
               elapsedSecs = Math.min(elapsedSecs, Math.max(60, Math.floor((effectiveStopMs - (Date.now() - elapsedSecs * 1000)) / 1000)));
@@ -8575,15 +8591,17 @@
           const finalNotes = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || `Focus session (${selectedNature.value})`);
           sessionNotesList.value = [];
 
+          const now = new Date(effectiveStopMs);
+          const from = new Date(now.getTime() - elapsedSecs * 1000);
+          const pad = (n) => String(n).padStart(2, '0');
+          const sessionDate = from.getFullYear() + '-' + pad(from.getMonth() + 1) + '-' + pad(from.getDate());
+
           if (boundBlock) {
             // Recorded against a Planner block -> a real Work Session (the timesheet).
             try {
-              const now = new Date(effectiveStopMs);
-              const from = new Date(now.getTime() - elapsedSecs * 1000);
-              const pad = (n) => String(n).padStart(2, '0');
               await postJSON('log_work_session', {
                 block_name: boundBlock,
-                session_date: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()),
+                session_date: sessionDate,
                 from_time: pad(from.getHours()) + ':' + pad(from.getMinutes()),
                 to_time: pad(now.getHours()) + ':' + pad(now.getMinutes()),
                 hours: hrs,
@@ -8609,6 +8627,9 @@
               action: 'stop',
               duration_seconds: elapsedSecs,
               duration_hours: hrs,
+              from_time: pad(from.getHours()) + ':' + pad(from.getMinutes()),
+              to_time: pad(now.getHours()) + ':' + pad(now.getMinutes()),
+              work_date: sessionDate,
               work_nature: selectedNature.value,
               task_nature: selectedNature.value,
               deliverable_notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
