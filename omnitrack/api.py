@@ -1959,6 +1959,8 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 			"task_nature": doc.task_nature,
 		})
 	doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		doc.flags.ignore_links = True
 	doc.save()
 
 	# Auto-create / update Timesheet connected to Project and Task
