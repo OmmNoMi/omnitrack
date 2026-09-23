@@ -608,3 +608,25 @@ if (frappe.router && frappe.router.on) {
 		setTimeout(omnitrack.mount_navbar_timer, 150);
 	});
 }
+
+// Desk Form Extension: Quick link from Task form to Raven Task Channel
+$(document).on('app_ready', function() {
+	if (typeof frappe !== 'undefined' && frappe.ui && frappe.ui.form) {
+		frappe.ui.form.on('Task', {
+			refresh: function(frm) {
+				if (!frm.is_new()) {
+					frm.add_custom_button(__('💬 Open Raven Channel'), function() {
+						frappe.call({
+							method: 'omnitrack.api.get_task_chat',
+							args: { task_id: frm.doc.name },
+							callback: function(r) {
+								window.open('/raven', '_blank');
+							}
+						});
+					}, __('Collaborate'));
+				}
+			}
+		});
+	}
+});
+

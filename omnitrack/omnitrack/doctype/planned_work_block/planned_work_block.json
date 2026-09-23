@@ -98,7 +98,7 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "\ud83c\udfaf Planned\n\u26a0\ufe0f Unplanned\n\ud83d\udd04 Review & Sync\n\u2615 Break\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
+      "options": "\ud83c\udfaf Planned\n\ud83e\udd1d Virtual Meeting\n\u26a0\ufe0f Unplanned\n\ud83d\udd04 Review & Sync\n\u2615 Break\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
       "label": "Task Nature",
       "default": "\ud83c\udfaf Planned",
       "in_list_view": 1
@@ -137,10 +137,30 @@
     {
       "fieldname": "status",
       "fieldtype": "Select",
-      "options": "Draft\nPlanned\nIn Progress\nCompleted\nCancelled",
+      "options": "Draft\nPlanned\nIn Progress\nCompleted\nLogged (Full)\nLogged (Partial)\nLogged (Over)\nCancelled\nRescheduled\nMissed",
       "label": "Status",
       "default": "Draft",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "cancel_reason",
+      "fieldtype": "Select",
+      "options": "\nClient No-Show\nClient Requested Reschedule\nDependency Blocked\nInternal Priority Shift\nMeeting Cancelled\nOther",
+      "label": "Cancellation Reason"
+    },
+    {
+      "fieldname": "rescheduled_to",
+      "fieldtype": "Link",
+      "options": "Planned Work Block",
+      "label": "Rescheduled To",
+      "read_only": 1
+    },
+    {
+      "fieldname": "rescheduled_from",
+      "fieldtype": "Link",
+      "options": "Planned Work Block",
+      "label": "Rescheduled From",
+      "read_only": 1
     },
     {
       "fieldname": "cb_sync_ts",
@@ -163,6 +183,12 @@
       "fieldname": "deliverable_notes",
       "fieldtype": "Small Text",
       "label": "Deliverable & Handoff Notes"
+    },
+    {
+      "description": "Connected task references and action checklist items (JSON)",
+      "fieldname": "connected_tasks",
+      "fieldtype": "Long Text",
+      "label": "Connected Tasks & Deliverables"
     },
     {
       "fieldname": "sb_historical_migration",
@@ -244,6 +270,14 @@
     {
       "role": "OmniTrack Auditor",
       "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack Client",
+      "read": 1,
+      "select": 1,
       "write": 0,
       "create": 0,
       "delete": 0

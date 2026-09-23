@@ -154,5 +154,16 @@ const scriptMatches = content.match(/const onAttentionGridKey = \([\s\S]*?\n\s*\
 assert.ok(scriptMatches, 'FAIL: Could not find onAttentionGridKey in omnitrack.html');
 
 console.log('✓ Test 8: onAttentionGridKey isolation shield verified.');
-console.log('\nSUCCESS: All 8 Tier 3 Workstation Interaction tests passed cleanly.\n');
+
+// Test 9: Concluded Deliverables Show-More & Note Expansion Invariants
+assert.ok(content.includes('v-for="b in visiblePastFocusBlocks"'), 'FAIL: Concluded deliverables list must iterate over visiblePastFocusBlocks');
+assert.ok(content.includes('toggleShowAllPastBlocks'), 'FAIL: toggleShowAllPastBlocks must be present');
+assert.ok(content.includes('remainingPastBlocksCount'), 'FAIL: remainingPastBlocksCount must be present');
+assert.ok(content.includes('Show {{ remainingPastBlocksCount }} more deliverables'), 'FAIL: Show more button must display remaining deliverables count');
+assert.ok(content.includes('toggleBlockNotes(b.name)'), 'FAIL: toggleBlockNotes must be bound to deliverable card notes');
+assert.ok(content.includes('isBlockNotesExpanded(b.name)'), 'FAIL: isBlockNotesExpanded must control note expansion');
+assert.ok(content.includes('-webkit-line-clamp: 2'), 'FAIL: Multi-line notes must be clamped when collapsed');
+console.log('✓ Test 9: Concluded deliverables show-more and note-expansion invariants verified.');
+
+console.log('\nSUCCESS: All 9 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);

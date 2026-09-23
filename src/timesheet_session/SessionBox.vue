@@ -10,99 +10,242 @@
       <!-- LEFT PANE: SESSION LOG -->
       <div class="lg:col-span-6 flex flex-col pb-5 lg:pb-0 lg:pr-6">
         <div class="flex-1 min-h-0 flex flex-col">
-          <!-- Header -->
+          <!-- Header with Tab Switcher (Single WAI-ARIA Tab Group with Arrow Navigation) -->
           <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-gray-200/80 dark:border-gray-800">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              Current Session Log
-            </h4>
-            <Badge
-              :theme="sessionNotesList && sessionNotesList.length > 0 ? 'blue' : 'gray'"
-              size="sm"
-              variant="subtle"
-              class="!rounded-full px-2"
-            >
-              {{ sessionNotesList ? sessionNotesList.length : 0 }}
-            </Badge>
-          </div>
-
-          <!-- Empty State -->
-          <div
-            v-if="!sessionNotesList || sessionNotesList.length === 0"
-            class="flex-1 flex flex-col items-center justify-center p-6 text-center rounded-2xl border border-dashed border-gray-200 dark:border-gray-800"
-          >
-            <div class="text-xs text-gray-500 dark:text-gray-400">
-              No lines yet — press <kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono border bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">/</kbd> to start
-            </div>
-            <div class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-              At least one line is needed to save this session
-            </div>
-          </div>
-
-          <!-- Running Lines List -->
-          <div v-else class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-56">
             <div
-              v-for="(line, idx) in sessionNotesList"
-              :key="idx"
-              class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200"
+              role="tablist"
+              aria-label="Session pane views"
+              class="flex items-center gap-1"
+              @keydown="onPaneTabKeydown"
             >
-              <div class="flex items-start gap-2 min-w-0">
-                <Badge theme="blue" size="sm" variant="subtle" class="!w-5 !h-5 !p-0 !gap-0 !rounded-full shrink-0 select-none justify-center text-center font-mono font-bold leading-none">
-                  {{ idx + 1 }}
+              <button
+                ref="tabNotesRef"
+                type="button"
+                role="tab"
+                id="tab-session-notes"
+                aria-controls="panel-session-notes"
+                :aria-selected="activePaneTab === 'notes'"
+                :tabindex="activePaneTab === 'notes' ? 0 : -1"
+                @click="activePaneTab = 'notes'"
+                class="text-xs uppercase tracking-wider pb-1 transition-all cursor-pointer font-bold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded px-1"
+                :class="activePaneTab === 'notes' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
+              >
+                <span>Session Log</span>
+                <Badge
+                  :theme="sessionNotesList && sessionNotesList.length > 0 ? 'blue' : 'gray'"
+                  size="sm"
+                  variant="subtle"
+                  class="!rounded-full px-1.5"
+                >
+                  {{ sessionNotesList ? sessionNotesList.length : 0 }}
                 </Badge>
-                <span class="font-medium leading-5 min-w-0 whitespace-pre-line break-words text-gray-800 dark:text-gray-200">
-                  {{ line }}
-                </span>
+              </button>
+              <button
+                v-if="isRavenAvailable"
+                ref="tabChatRef"
+                type="button"
+                role="tab"
+                id="tab-task-chat"
+                aria-controls="panel-task-chat"
+                :aria-selected="activePaneTab === 'chat'"
+                :tabindex="activePaneTab === 'chat' ? 0 : -1"
+                @click="openChatTab"
+                class="text-xs uppercase tracking-wider pb-1 transition-all cursor-pointer font-bold flex items-center gap-1.5 ml-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded px-1"
+                :class="activePaneTab === 'chat' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
+              >
+                <span>💬 Task Chat</span>
+                <Badge
+                  v-if="taskUnreadCount > 0"
+                  theme="red"
+                  size="sm"
+                  variant="solid"
+                  class="!rounded-full px-1.5"
+                >
+                  {{ taskUnreadCount }}
+                </Badge>
+              </button>
+            </div>
+            <span v-if="activePaneTab === 'chat' && connectedTaskId" class="text-[10px] text-gray-400 font-mono truncate max-w-[120px]">
+              #{{ connectedTaskId }}
+            </span>
+          </div>
+
+          <!-- TAB 1: SESSION LOG -->
+          <div
+            v-if="activePaneTab === 'notes'"
+            id="panel-session-notes"
+            role="tabpanel"
+            aria-labelledby="tab-session-notes"
+            class="flex-1 flex flex-col min-h-0"
+          >
+            <!-- Empty State -->
+            <div
+              v-if="!sessionNotesList || sessionNotesList.length === 0"
+              class="flex-1 flex flex-col items-center justify-center p-6 text-center rounded-2xl border border-dashed border-gray-200 dark:border-gray-800"
+            >
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                No lines yet — press <kbd class="px-1.5 py-0.5 rounded text-[10px] font-mono border bg-gray-100 border-gray-300 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">/</kbd> to start
+              </div>
+              <div class="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                At least one line is needed to save this session
+              </div>
+            </div>
+
+            <!-- Running Lines List -->
+            <div v-else class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-56">
+              <div
+                v-for="(line, idx) in sessionNotesList"
+                :key="idx"
+                class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200"
+              >
+                <div class="flex items-start gap-2 min-w-0">
+                  <Badge theme="blue" size="sm" variant="subtle" class="!w-5 !h-5 !p-0 !gap-0 !rounded-full shrink-0 select-none justify-center text-center font-mono font-bold leading-none">
+                    {{ idx + 1 }}
+                  </Badge>
+                  <span class="font-medium leading-5 min-w-0 whitespace-pre-line break-words text-gray-800 dark:text-gray-200">
+                    {{ line }}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  theme="red"
+                  size="xs"
+                  @click="$emit('remove-line', idx)"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity !p-1 !rounded-lg"
+                  title="Delete this line"
+                  aria-label="Delete line"
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+
+            <!-- Add Line Input Bar -->
+            <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
+              <div class="relative flex-1">
+                <textarea
+                  ref="lineInputRef"
+                  v-model="localLineText"
+                  @input="autoGrowTextarea"
+                  @keydown="handleTextareaKey"
+                  rows="1"
+                  placeholder="What did you just complete?"
+                  class="w-full min-h-[38px] text-xs font-medium rounded-xl pl-3.5 pr-3.5 lg:pr-9 py-2 outline-none border transition-colors shadow-xs bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 resize-none leading-relaxed max-h-36 block"
+                ></textarea>
+                <kbd
+                  v-if="!localLineText"
+                  title="Press / to start"
+                  class="hidden lg:block absolute right-2.5 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-200 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400"
+                >/</kbd>
               </div>
               <Button
-                variant="ghost"
-                theme="red"
-                size="xs"
-                @click="$emit('remove-line', idx)"
-                class="opacity-0 group-hover:opacity-100 transition-opacity !p-1 !rounded-lg"
-                title="Delete this line"
-                aria-label="Delete line"
+                variant="solid"
+                theme="blue"
+                size="sm"
+                tabindex="-1"
+                :disabled="!localLineText.trim()"
+                @click="submitLine"
+                title="Add this line (Enter)"
+                aria-keyshortcuts="Enter"
+                class="!h-[38px] !rounded-xl font-bold px-3.5 shadow-xs shrink-0 cursor-pointer"
               >
-                ✕
+                Add
+                <template #suffix>
+                  <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-0.5 rounded border border-white/30 bg-white/20 text-white">
+                    &crarr;
+                  </kbd>
+                </template>
               </Button>
             </div>
           </div>
 
-          <!-- Add Line Input Bar -->
-          <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
-            <div class="relative flex-1">
-              <textarea
-                ref="lineInputRef"
-                v-model="localLineText"
-                @input="autoGrowTextarea"
-                @keydown="handleTextareaKey"
-                rows="1"
-                placeholder="What did you just complete?"
-                class="w-full min-h-[38px] text-xs font-medium rounded-xl pl-3.5 pr-3.5 lg:pr-9 py-2 outline-none border transition-colors shadow-xs bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 resize-none leading-relaxed max-h-36 block"
-              ></textarea>
-              <kbd
-                v-if="!localLineText"
-                title="Press / to start"
-                class="hidden lg:block absolute right-2.5 bottom-[7px] pointer-events-none font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-200 bg-gray-100 text-gray-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400"
-              >/</kbd>
-            </div>
-            <Button
-              variant="solid"
-              theme="blue"
-              size="sm"
-              tabindex="-1"
-              :disabled="!localLineText.trim()"
-              @click="submitLine"
-              title="Add this line (Enter)"
-              aria-keyshortcuts="Enter"
-              class="!h-[38px] !rounded-xl font-bold px-3.5 shadow-xs shrink-0 cursor-pointer"
+          <!-- TAB 2: LIVE RAVEN TASK CHAT -->
+          <div
+            v-else-if="activePaneTab === 'chat'"
+            id="panel-task-chat"
+            role="tabpanel"
+            aria-labelledby="tab-task-chat"
+            class="flex-1 flex flex-col min-h-0"
+          >
+            <!-- Empty State if no connected task -->
+            <div
+              v-if="!connectedTaskId"
+              class="flex-1 flex flex-col items-center justify-center p-6 text-center rounded-2xl border border-dashed border-gray-200 dark:border-gray-800"
             >
-              Add
-              <template #suffix>
-                <kbd class="hidden lg:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-0.5 rounded border border-white/30 bg-white/20 text-white">
-                  &crarr;
-                </kbd>
-              </template>
-            </Button>
+              <div class="text-xs text-gray-500 dark:text-gray-400">
+                Select a Task or ToDo on the right to open its Raven living chat stream.
+              </div>
+            </div>
+
+            <!-- Active Messages Stream -->
+            <div v-else class="flex-1 min-h-0 flex flex-col">
+              <div ref="chatStreamRef" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1 max-h-56">
+                <div v-if="chatLoading && taskMessages.length === 0" class="py-6 text-center text-xs text-gray-400">
+                  Loading discussion…
+                </div>
+                <div v-else-if="taskMessages.length === 0" class="py-6 text-center text-xs text-gray-400">
+                  No messages yet. Ask a question or share progress!
+                </div>
+                <div
+                  v-for="msg in taskMessages"
+                  :key="msg.name"
+                  class="group rounded-xl p-2.5 text-xs transition-all border"
+                  :class="msg.is_self ? 'bg-blue-50/70 border-blue-200/80 dark:bg-blue-950/30 dark:border-blue-900/40 ml-3' : 'bg-gray-50 border-gray-200/90 dark:bg-[#2B2D30] dark:border-gray-700/80 mr-3'"
+                >
+                  <div class="flex items-center justify-between gap-1 mb-1">
+                    <div class="flex items-center gap-1.5 font-bold truncate" :class="msg.is_self ? 'text-blue-600 dark:text-blue-400' : 'text-gray-800 dark:text-gray-200'">
+                      <span class="truncate">{{ msg.sender_name }}</span>
+                      <span v-if="msg.is_bot_message" class="text-[9px] px-1 py-0.2 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 font-normal">BOT</span>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <span class="text-[10px] text-gray-400 font-mono">{{ formatMsgTime(msg.creation) }}</span>
+                      <button
+                        type="button"
+                        @click="pinSpec(msg.name)"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500 cursor-pointer"
+                        title="Pin as Task Spec 📌"
+                        aria-label="Pin as Task Spec"
+                      >
+                        📌
+                      </button>
+                    </div>
+                  </div>
+                  <div class="text-gray-800 dark:text-gray-200 whitespace-pre-line break-words leading-relaxed font-sans">
+                    {{ msg.content || msg.text }}
+                  </div>
+                  <div v-if="msg.file" class="mt-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-700 flex items-center gap-1 text-[11px]">
+                    <span>📎</span>
+                    <a :href="msg.file" target="_blank" class="text-blue-600 dark:text-blue-400 underline truncate hover:text-blue-700">
+                      {{ msg.file.split('/').pop() }}
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Chat Input Bar -->
+              <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
+                <div class="relative flex-1">
+                  <textarea
+                    v-model="chatInputText"
+                    @keydown.enter.exact.prevent="sendChatMessage"
+                    rows="1"
+                    placeholder="Message team on this task… (Enter to send)"
+                    class="w-full min-h-[38px] text-xs font-medium rounded-xl pl-3.5 pr-3.5 py-2 outline-none border transition-colors shadow-xs bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 resize-none leading-relaxed max-h-36 block"
+                  ></textarea>
+                </div>
+                <Button
+                  variant="solid"
+                  theme="blue"
+                  size="sm"
+                  tabindex="-1"
+                  :disabled="!chatInputText.trim() || chatSending"
+                  @click="sendChatMessage"
+                  class="!h-[38px] !rounded-xl font-bold px-3.5 shadow-xs shrink-0 cursor-pointer"
+                >
+                  {{ chatSending ? '…' : 'Send' }}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -125,16 +268,6 @@
                   Started {{ sessionStart.date }} &middot; {{ sessionStart.time }}
                 </div>
               </div>
-              <Badge
-                v-if="trackerBoundBlock"
-                theme="blue"
-                size="sm"
-                variant="solid"
-                class="!rounded-full px-2.5 ml-1 font-mono font-bold"
-                :title="'Bound to Planned Work Block: ' + trackerBoundBlock.name"
-              >
-                📦 {{ trackerBoundBlock.name }}
-              </Badge>
             </div>
 
             <!-- Toolbar Action Buttons (Single Tab Group with Arrow Key Navigation) -->
@@ -214,9 +347,9 @@
           <div v-if="trackerBoundBlock" class="mt-3 rounded-2xl border px-3.5 py-3 space-y-2 bg-blue-50/70 border-blue-200/90 dark:bg-blue-950/30 dark:border-blue-800/60 shadow-2xs">
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">
-                <Badge theme="blue" size="sm" variant="solid" class="!rounded-lg font-mono font-bold shrink-0 shadow-2xs">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-mono font-black bg-blue-600 text-white shadow-2xs shrink-0 dark:bg-blue-500 dark:text-gray-950">
                   📦 {{ trackerBoundBlock.name }}
-                </Badge>
+                </span>
                 <Badge theme="gray" size="sm" variant="subtle" class="!rounded-md text-[10px] shrink-0">
                   {{ trackerBoundBlock.status || 'Planned' }}
                 </Badge>
@@ -226,7 +359,7 @@
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[11px] font-mono font-bold text-blue-800 dark:text-blue-300">
-                  {{ trackerBoundBlock.start_time }}–{{ trackerBoundBlock.end_time }}
+                  {{ formatCleanTime(trackerBoundBlock.start_time) }}–{{ formatCleanTime(trackerBoundBlock.end_time) }}
                 </span>
                 <button
                   type="button"
@@ -250,8 +383,8 @@
               </div>
               <div class="flex items-center gap-1.5 min-w-0 sm:justify-end">
                 <span class="font-bold text-gray-500 dark:text-gray-400 shrink-0">🗂 Project:</span>
-                <span class="font-medium truncate text-blue-900 dark:text-blue-200" :title="trackerBoundBlock.project_name || trackerBoundBlock.project || 'General Work (Internal)'">
-                  {{ trackerBoundBlock.project_name || trackerBoundBlock.project || 'General Work (Internal)' }}
+                <span class="font-medium truncate text-blue-900 dark:text-blue-200" :title="currentProjectLabel">
+                  {{ currentProjectLabel }}
                 </span>
               </div>
               <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-blue-700/90 dark:text-blue-300/90 pt-0.5">
@@ -261,7 +394,7 @@
                 <span v-if="trackerBoundBlock.actual_hours">· logged {{ trackerBoundBlock.actual_hours }}h</span>
               </div>
               <div class="sm:text-right text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                Timesheet will log against <strong class="font-mono">{{ trackerBoundBlock.name }}</strong>
+                Timesheet will log against this planned block
               </div>
             </div>
           </div>
@@ -273,17 +406,14 @@
                 <label class="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">
                   Task / Open ToDo
                 </label>
-                <Badge
+                <span
                   v-if="trackerBoundBlock"
-                  theme="blue"
-                  size="sm"
-                  variant="subtle"
-                  class="!rounded-md text-[10px] px-1.5 py-0 font-medium truncate flex items-center gap-1"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200"
                   :title="'Auto-filled with task connected to ' + trackerBoundBlock.name"
                 >
-                  <span>🔗 From {{ trackerBoundBlock.name }}</span>
-                  <button type="button" @click="emit('unbind-block')" class="hover:text-red-500 font-bold ml-0.5" title="Unbind from block">✕</button>
-                </Badge>
+                  <span>🔗 Bound block</span>
+                  <button type="button" @click="$emit('unbind-block')" class="hover:text-red-500 font-bold ml-0.5 cursor-pointer" title="Unbind from block">✕</button>
+                </span>
               </div>
               <div v-if="openTodos.length > 0" class="text-[10px] text-gray-400 font-medium">
                 {{ openTodos.length }} open ToDo{{ openTodos.length > 1 ? 's' : '' }}
@@ -532,6 +662,198 @@ const lineInputRef = ref(null);
 const toolbarRef = ref(null);
 const activeToolIndex = ref(2); // Stop button is the default landing tab stop (index 2)
 
+// ---- Raven Real-Time Task Chat Integration ---------------------------------
+const activePaneTab = ref('notes'); // 'notes' | 'chat'
+const isRavenAvailable = ref(true);
+const taskMessages = ref([]);
+const chatLoading = ref(false);
+const chatInputText = ref('');
+const chatSending = ref(false);
+const taskUnreadCount = ref(0);
+const chatStreamRef = ref(null);
+const tabNotesRef = ref(null);
+const tabChatRef = ref(null);
+
+function onPaneTabKeydown(e) {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (activePaneTab.value === 'notes' && isRavenAvailable.value) {
+      openChatTab();
+      nextTick(() => tabChatRef.value?.focus());
+    } else {
+      activePaneTab.value = 'notes';
+      nextTick(() => tabNotesRef.value?.focus());
+    }
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    activePaneTab.value = 'notes';
+    nextTick(() => tabNotesRef.value?.focus());
+  } else if (e.key === 'End' && isRavenAvailable.value) {
+    e.preventDefault();
+    openChatTab();
+    nextTick(() => tabChatRef.value?.focus());
+  }
+}
+
+// Universal API caller compatible with both Frappe Desk and Web Portal pages
+async function callApi(method, args = {}) {
+  if (typeof window !== 'undefined' && window.frappe && typeof window.frappe.call === 'function') {
+    return await window.frappe.call({ method, args });
+  }
+  const fullMethod = method.startsWith('omnitrack.api.') ? method : `omnitrack.api.${method}`;
+  const csrfToken = (typeof window !== 'undefined' && (
+    (window.OMNITRACK_SESSION && window.OMNITRACK_SESSION.csrf_token) ||
+    window.frappe_csrf_token ||
+    (window.frappe && window.frappe.csrf_token) ||
+    window.csrf_token
+  )) || '';
+
+  const res = await fetch(`/api/method/${fullMethod}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Frappe-CSRF-Token': csrfToken
+    },
+    body: JSON.stringify(args)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data && (data._server_messages || data.message)) || 'Request failed');
+  }
+  return { message: data.message };
+}
+
+const connectedTaskId = computed(() => {
+  if (props.trackerBoundBlock && props.trackerBoundBlock.task) {
+    return props.trackerBoundBlock.task;
+  }
+  if (props.trackerBoundBlock && props.trackerBoundBlock.name) {
+    return props.trackerBoundBlock.name;
+  }
+  const match = (props.assignedTasks || []).find(t =>
+    (t.subject && t.subject === props.trackerNotes) ||
+    (t.title && t.title === props.trackerNotes) ||
+    t.name === props.trackerNotes
+  );
+  if (match) return match.name;
+  return null;
+});
+
+const connectedTaskName = computed(() => {
+  if (props.trackerBoundBlock) {
+    return props.trackerBoundBlock.task_subject || props.trackerBoundBlock.work_item_label || props.trackerBoundBlock.deliverable_notes || props.trackerBoundBlock.task || 'Client Support Session';
+  }
+  return props.trackerNotes || 'General Task';
+});
+
+function formatCleanTime(val) {
+  if (!val) return '';
+  const str = String(val).trim();
+  const parts = str.split(':');
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+  }
+  return str;
+}
+
+function formatMsgTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return String(iso).slice(11, 16);
+  }
+}
+
+async function checkRavenStatus() {
+  try {
+    const res = await callApi('is_raven_enabled');
+    isRavenAvailable.value = !!(res && res.message && res.message.available);
+  } catch (e) {
+    isRavenAvailable.value = false;
+  }
+}
+
+async function fetchTaskChat() {
+  if (!connectedTaskId.value || !isRavenAvailable.value) return;
+  chatLoading.value = true;
+  try {
+    const res = await callApi('get_task_chat', { task_id: connectedTaskId.value, limit: 50 });
+    if (res && res.message && res.message.messages) {
+      taskMessages.value = res.message.messages;
+      taskUnreadCount.value = 0;
+      nextTick(() => {
+        if (chatStreamRef.value) {
+          chatStreamRef.value.scrollTop = chatStreamRef.value.scrollHeight;
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Failed to fetch task chat', e);
+  } finally {
+    chatLoading.value = false;
+  }
+}
+
+function openChatTab() {
+  activePaneTab.value = 'chat';
+  taskUnreadCount.value = 0;
+  fetchTaskChat();
+}
+
+async function sendChatMessage() {
+  const text = chatInputText.value.trim();
+  if (!text || !connectedTaskId.value || chatSending.value) return;
+  chatSending.value = true;
+  try {
+    const res = await callApi('post_task_chat_message', {
+      task_id: connectedTaskId.value,
+      content: text
+    });
+    if (res && res.message && res.message.success) {
+      chatInputText.value = '';
+      await fetchTaskChat();
+    }
+  } catch (e) {
+    console.error('Error sending task message', e);
+  } finally {
+    chatSending.value = false;
+  }
+}
+
+async function pinSpec(msgId) {
+  if (!msgId || !connectedTaskId.value) return;
+  try {
+    const res = await callApi('pin_task_spec', {
+      message_id: msgId,
+      task_id: connectedTaskId.value
+    });
+    if (res && res.message && res.message.success) {
+      if (typeof window !== 'undefined' && window.frappe && window.frappe.show_alert) {
+        window.frappe.show_alert({ message: 'Pinned as Task Spec! 📌', indicator: 'green' });
+      }
+    }
+  } catch (e) {
+    console.error('Failed to pin message', e);
+  }
+}
+
+function setupRealtimeChat() {
+  if (typeof window !== 'undefined' && window.frappe && window.frappe.realtime) {
+    window.frappe.realtime.on('new_message', () => {
+      if (activePaneTab.value === 'chat') {
+        fetchTaskChat();
+      } else {
+        taskUnreadCount.value++;
+      }
+    });
+    window.frappe.realtime.on('message_edited', () => {
+      if (activePaneTab.value === 'chat') fetchTaskChat();
+    });
+  }
+}
+
 const formattedDuration = computed(() => {
   const sec = props.trackerSeconds || 0;
   const h = Math.floor(sec / 3600);
@@ -562,9 +884,14 @@ const sessionStart = computed(() => {
 });
 
 const currentProjectLabel = computed(() => {
-  if (!props.trackerProject) return 'General Work (Internal)';
-  const found = (props.projects || []).find(p => p.name === props.trackerProject);
-  return found ? (found.project_name || found.name) : props.trackerProject;
+  if (props.trackerProject) {
+    const found = (props.projects || []).find(p => p.name === props.trackerProject);
+    return found ? (found.project_name || found.name) : props.trackerProject;
+  }
+  if (props.trackerBoundBlock && (props.trackerBoundBlock.project_name || props.trackerBoundBlock.project)) {
+    return props.trackerBoundBlock.project_name || props.trackerBoundBlock.project;
+  }
+  return 'General Work (Internal)';
 });
 
 const projectDropdownOptions = computed(() => {
@@ -584,12 +911,12 @@ const projectDropdownOptions = computed(() => {
 });
 
 const currentNatureLabel = computed(() => {
-  if (!props.trackerNature) return 'Planned Work';
-  const found = (props.natureOptions || []).find(n => n.label === props.trackerNature);
+  const nat = props.trackerNature || (props.trackerBoundBlock && props.trackerBoundBlock.task_nature) || 'Planned Work';
+  const found = (props.natureOptions || []).find(n => n.label === nat || (n.label && nat.includes(n.label)));
   if (found) {
     return `${found.label} ${!found.is_working ? '(Non-Paid)' : ''}`;
   }
-  return props.trackerNature;
+  return nat;
 });
 
 const natureDropdownOptions = computed(() => {
@@ -734,10 +1061,19 @@ function onDocumentClick(ev) {
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentClick);
+  checkRavenStatus();
+  setupRealtimeChat();
 });
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentClick);
+});
+
+// Watch for connected task change to refresh chat if chat tab is active
+watch(() => connectedTaskId.value, (newId) => {
+  if (newId && activePaneTab.value === 'chat') {
+    fetchTaskChat();
+  }
 });
 
 // Auto-fill connected task whenever a Planned Work Block is bound

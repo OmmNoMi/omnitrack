@@ -58,7 +58,7 @@
    "fieldname": "task_nature",
    "fieldtype": "Select",
    "label": "Nature",
-   "options": "🎯 Planned\n⚠️ Unplanned\n🔄 Review & Sync\n☕ Break\n🚫 Out-of-Office\n🌴 Leave\n🤒 Absent"
+   "options": "🎯 Planned\n🤝 Virtual Meeting\n⚠️ Unplanned\n🔄 Review & Sync\n☕ Break\n🚫 Out-of-Office\n🌴 Leave\n🤒 Absent"
   },
   {
    "fieldname": "notes",

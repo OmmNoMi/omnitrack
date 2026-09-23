@@ -20,6 +20,8 @@ def get_context(context):
 	ctx.user_fullname = frappe.utils.get_fullname(user) or user
 	from omnitrack.permissions import is_omnitrack_manager
 	ctx.is_manager = 1 if is_omnitrack_manager(user) else 0
+	user_roles = frappe.get_roles(user)
+	ctx.is_client = 1 if ("OmniTrack Client" in user_roles and not ctx.is_manager) else 0
 	# Bundle URLs carried a hard-coded version, so a rebuilt HUD bundle never
 	# reached the browser. Key the query on the built file's mtime instead:
 	# changes bust the cache, unchanged builds keep it.
@@ -45,20 +47,29 @@ def get_context(context):
 
 	# Fetch today's Planned Work Blocks for the active user safely
 	try:
-		blocks = frappe.get_all(
-			"Planned Work Block",
-			filters={"employee": user, "work_date": nowdate()},
-			fields=["name", "start_time", "end_time", "duration_hours", "status", "cryptographic_hash", "task_nature", "project"],
-			order_by="start_time asc"
-		)
-		if not blocks:
+		if ctx.is_client:
 			blocks = frappe.get_all(
 				"Planned Work Block",
 				filters={"work_date": nowdate()},
-				fields=["name", "start_time", "end_time", "duration_hours", "status", "cryptographic_hash", "task_nature", "project"],
+				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
 				order_by="start_time asc",
-				limit=20
+				limit=50
 			)
+		else:
+			blocks = frappe.get_all(
+				"Planned Work Block",
+				filters={"employee": user, "work_date": nowdate()},
+				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
+				order_by="start_time asc"
+			)
+			if not blocks:
+				blocks = frappe.get_all(
+					"Planned Work Block",
+					filters={"work_date": nowdate()},
+					fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
+					order_by="start_time asc",
+					limit=20
+				)
 	except Exception:
 		blocks = []
 

@@ -93,10 +93,30 @@
     {
       "fieldname": "status",
       "fieldtype": "Select",
-      "options": "Draft\nIn Progress\nCompleted\nCancelled",
+      "options": "Draft\nPlanned\nIn Progress\nCompleted\nLogged (Full)\nLogged (Partial)\nLogged (Over)\nCancelled\nRescheduled\nMissed",
       "label": "Status",
       "default": "Draft",
       "in_list_view": 1
+    },
+    {
+      "fieldname": "cancel_reason",
+      "fieldtype": "Select",
+      "options": "\nClient No-Show\nClient Requested Reschedule\nDependency Blocked\nInternal Priority Shift\nMeeting Cancelled\nOther",
+      "label": "Cancellation Reason"
+    },
+    {
+      "fieldname": "rescheduled_to",
+      "fieldtype": "Link",
+      "options": "Planned Work Block",
+      "label": "Rescheduled To",
+      "read_only": 1
+    },
+    {
+      "fieldname": "rescheduled_from",
+      "fieldtype": "Link",
+      "options": "Planned Work Block",
+      "label": "Rescheduled From",
+      "read_only": 1
     },
     {
       "fieldname": "cb_sync_ts",
@@ -200,6 +220,14 @@
     {
       "role": "OmniTrack Auditor",
       "read": 1,
+      "write": 0,
+      "create": 0,
+      "delete": 0
+    },
+    {
+      "role": "OmniTrack Client",
+      "read": 1,
+      "select": 1,
       "write": 0,
       "create": 0,
       "delete": 0

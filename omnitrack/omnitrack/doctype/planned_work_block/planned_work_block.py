@@ -73,15 +73,19 @@ class PlannedWorkBlock(Document):
 
 	def calculate_duration(self):
 		if self.start_time and self.end_time:
-			# Calculate duration in hours
-			t1 = str(self.start_time)
-			t2 = str(self.end_time)
+			def _to_secs(t):
+				if hasattr(t, "total_seconds"):
+					return t.total_seconds()
+				parts = str(t).split(":")
+				h = int(parts[0]) if len(parts) > 0 else 0
+				m = int(parts[1]) if len(parts) > 1 else 0
+				s = int(float(parts[2])) if len(parts) > 2 else 0
+				return h * 3600 + m * 60 + s
+
 			try:
-				from datetime import datetime
-				fmt = "%H:%M:%S"
-				d1 = datetime.strptime(t1 if len(t1) == 8 else t1 + ":00", fmt)
-				d2 = datetime.strptime(t2 if len(t2) == 8 else t2 + ":00", fmt)
-				diff = (d2 - d1).total_seconds() / 3600.0
+				s1 = _to_secs(self.start_time)
+				s2 = _to_secs(self.end_time)
+				diff = (s2 - s1) / 3600.0
 				if diff < 0:
 					diff += 24.0  # Split over midnight
 				self.duration_hours = round(diff, 2)
@@ -98,12 +102,25 @@ class PlannedWorkBlock(Document):
 		self.actual_hours = round(actual, 2)
 		self.variance_hours = round(actual - flt(self.duration_hours), 2)
 
-		# Keep status in step with reality unless explicitly cancelled
-		if self.status != "Cancelled":
+		# Keep status in step with reality unless explicitly cancelled, rescheduled, or missed
+		if self.status not in ("Cancelled", "Rescheduled", "Missed"):
+			today = frappe.utils.getdate(frappe.utils.nowdate())
+			block_date = frappe.utils.getdate(self.work_date) if self.work_date else today
+
 			if actual <= 0:
-				if self.status in (None, "", "Draft"):
+				if block_date < today:
+					self.status = "Missed"
+				elif self.status in (None, "", "Draft"):
 					self.status = "Planned"
-			elif actual + 0.01 < flt(self.duration_hours):
+			elif self.status in ("Completed", "Logged (Full)", "Logged (Partial)", "Logged (Over)"):
+				# Categorize completion accuracy
+				if actual + 0.05 < flt(self.duration_hours):
+					self.status = "Logged (Partial)"
+				elif actual > flt(self.duration_hours) + 0.05:
+					self.status = "Logged (Over)"
+				else:
+					self.status = "Logged (Full)"
+			elif actual + 0.05 < flt(self.duration_hours):
 				self.status = "In Progress"
 			else:
 				self.status = "Completed"

@@ -5,6 +5,18 @@ All notable changes to **OmniTrack** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- **Three public Workspaces that were never requested**: `My Workstation`, `Operations & Delivery Hub` and `OmniTrack Command Center`. Their fixtures are deleted and `install.py::_ensure_workspaces()` no longer creates them, so `after_migrate` cannot bring them back; the corresponding Workspace, Desktop Icon and Workspace Sidebar records were cleared from ommnomi.local.
+
+### Fixed
+- **Duplicate `OmniTrack` desktop tile**: the exported fixture still carried the pre-rename identity `OmniTrack Operations & Workforce Cockpit` while `install.py` ensured `OmniTrack`, so the site maintained one record and shipped the other. Fixture and `install.py` now agree on `OmniTrack`.
+
+### Added
+- **`omnitrack/tests/test_workspace_fixtures.py`**: filesystem-only invariants (no DB) asserting that the only public Workspace shipped is `OmniTrack`, that each fixture's identity matches its own folder, that `install.py` ensures exactly the shipped names, and that the pre-rename string is gone from the app.
+- **`npm run test:fixtures` / `test:fast`** wired in `package.json`.
+
 ## [1.2.1] - 2026-09-17
 
 ### Fixed

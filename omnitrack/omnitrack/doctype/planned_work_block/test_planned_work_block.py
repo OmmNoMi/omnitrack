@@ -23,6 +23,8 @@ def _block(**kw):
 
 class TestPlannedWorkBlock(FrappeTestCase):
 	def setUp(self):
+		frappe.cache.hdel("omnitrack:active_session", "Administrator")
+		frappe.db.delete("DefaultValue", {"defkey": "omnitrack_active_session", "parent": "Administrator"})
 		# quick_timer_punch ends its stop branch in sync_active_session(), which calls
 		# frappe.db.commit(). That commit flushes every row the test just inserted, so
 		# tearDown's rollback cannot undo it and the blocks land in real site data.
@@ -58,16 +60,17 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		self.assertEqual(doc.variance_hours, 1.0)  # overran the plan
 
 	def test_status_tracks_reality_unless_cancelled(self):
-		doc = _block(start_time="09:00:00", end_time="12:00:00").insert()
+		today = frappe.utils.nowdate()
+		doc = _block(work_date=today, start_time="09:00:00", end_time="12:00:00").insert()
 		self.assertEqual(doc.status, "Planned")
 
-		doc.append("sessions", {"session_date": "2026-09-10", "hours": 1.0})
+		doc.append("sessions", {"session_date": today, "hours": 1.0})
 		doc.save()
 		self.assertEqual(doc.status, "In Progress")
 
-		doc.append("sessions", {"session_date": "2026-09-10", "hours": 2.0})
+		doc.append("sessions", {"session_date": today, "hours": 2.0})
 		doc.save()
-		self.assertEqual(doc.status, "Completed")
+		self.assertIn(doc.status, ("Completed", "Logged (Full)"))
 
 		doc.status = "Cancelled"
 		doc.save()
@@ -106,7 +109,7 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		blk = frappe.get_doc("Planned Work Block", block_name)
 		self.assertEqual(blk.duration_hours, 1.5)
 		self.assertEqual(blk.task_nature, "⚠️ Unplanned")
-		self.assertEqual(blk.status, "Completed")
+		self.assertIn(blk.status, ("Completed", "Logged (Full)"))
 
 	def test_quick_timer_punch_in(self):
 		from omnitrack.api import quick_timer_punch
@@ -925,6 +928,166 @@ console.log('SUCCESS');
 			self.assertEqual(res_cancel.get("new_state"), "Cancelled")
 			todo.reload()
 			self.assertEqual(todo.status, "Cancelled")
+
+	def test_attach_tasks_and_complete_block_task(self):
+		"""Attaching tasks via text and toggling completion updates status and syncs active session."""
+		from omnitrack.api import (
+			attach_tasks_to_block,
+			complete_block_task,
+			get_block_tasks,
+			sync_active_session,
+			get_active_session
+		)
+
+		doc = _block(work_date="2026-09-10", start_time="10:00:00", end_time="12:00:00").insert()
+
+		# Attach multiple action items
+		res = attach_tasks_to_block(
+			block_name=doc.name,
+			new_task_subjects="Review OTC data schema\nInvite OTC admin users\nSetup API keys"
+		)
+		self.assertEqual(res.get("status"), "success")
+		self.assertEqual(len(res.get("tasks", [])), 3)
+
+		# Verify get_block_tasks
+		tasks_info = get_block_tasks(doc.name)
+		self.assertEqual(len(tasks_info["tasks"]), 3)
+		task1_ref = tasks_info["tasks"][0]["ref"]
+
+		# Set up active session bound to this block
+		import time
+		sync_active_session({
+			"startTime": int(time.time() * 1000),
+			"trackerBlockName": doc.name,
+			"sessionNotesList": [],
+			"trackerNotes": ""
+		}, user="Administrator")
+
+		# Complete task 1
+		comp_res = complete_block_task(doc.name, task1_ref, completed=True)
+		self.assertEqual(comp_res["status"], "success")
+		self.assertIn(comp_res["task"]["status"], ("Completed", "Closed"))
+
+		# Check active session has accomplishment recorded
+		sess = get_active_session(user="Administrator")
+		self.assertTrue(any("Review OTC data schema" in line for line in (sess.get("sessionNotesList") or [])))
+
+		# Reopen task 1
+		reopen_res = complete_block_task(doc.name, task1_ref, completed=False)
+		self.assertEqual(reopen_res["task"]["status"], "Open")
+
+	def test_reschedule_unfinished_tasks(self):
+		"""Unfinished connected tasks are carried forward into a newly created planned work block."""
+		from omnitrack.api import attach_tasks_to_block, complete_block_task, reschedule_unfinished_tasks
+
+		doc = _block(work_date="2026-09-10", start_time="10:00:00", end_time="12:00:00").insert()
+		attach_tasks_to_block(
+			block_name=doc.name,
+			new_task_subjects="Completed item\nUnfinished item 1\nUnfinished item 2"
+		)
+
+		tasks = doc.reload().get("connected_tasks")
+		import json
+		parsed = json.loads(tasks)
+		complete_block_task(doc.name, parsed[0]["ref"], completed=True)
+
+		# Reschedule unfinished items
+		resched = reschedule_unfinished_tasks(doc.name, target_date="2026-09-11")
+		self.assertEqual(resched["status"], "success")
+		self.assertEqual(resched["rescheduled_count"], 2)
+		self.assertEqual(str(resched["target_date"]), "2026-09-11")
+
+		# Original block items marked as Rescheduled
+		doc.reload()
+		orig_parsed = json.loads(doc.connected_tasks)
+		self.assertEqual(orig_parsed[0]["status"], "Closed")
+		self.assertEqual(orig_parsed[1]["status"], "Rescheduled")
+		self.assertEqual(orig_parsed[2]["status"], "Rescheduled")
+
+		# New block has the 2 carried forward items in Open state
+		new_block = frappe.get_doc("Planned Work Block", resched["new_block"])
+		new_parsed = json.loads(new_block.connected_tasks)
+		self.assertEqual(len(new_parsed), 2)
+		self.assertEqual(new_parsed[0]["status"], "Open")
+		self.assertEqual(new_parsed[1]["status"], "Open")
+
+	def test_reschedule_work_block_non_destructive_lineage(self):
+		from omnitrack.api import reschedule_work_block
+		today = frappe.utils.nowdate()
+		tomorrow = frappe.utils.add_days(today, 1)
+
+		original = _block(
+			work_date=today,
+			start_time="21:30:00",
+			end_time="22:30:00",
+			deliverable_notes="Weekly Strategy Call"
+		).insert()
+
+		res = reschedule_work_block(
+			block_name=original.name,
+			new_date=tomorrow,
+			new_start_time="10:00:00",
+			new_end_time="11:00:00"
+		)
+		self.assertEqual(res["status"], "success")
+		self.assertEqual(res["original"], original.name)
+		cloned_name = res["rescheduled_to"]
+
+		# Original block must remain in place with Rescheduled status
+		original.reload()
+		self.assertEqual(original.status, "Rescheduled")
+		self.assertEqual(str(original.work_date), str(today))
+		self.assertEqual(str(original.start_time), "21:30:00")
+		self.assertEqual(original.rescheduled_to, cloned_name)
+
+		# Cloned block must be at target time slot with status Planned and link to original
+		clone = frappe.get_doc("Planned Work Block", cloned_name)
+		self.assertEqual(clone.status, "Planned")
+		self.assertEqual(str(clone.work_date), str(tomorrow))
+		self.assertEqual(str(clone.start_time), "10:00:00")
+		self.assertEqual(str(clone.end_time), "11:00:00")
+		self.assertEqual(clone.rescheduled_from, original.name)
+
+	def test_cancel_work_block_with_structured_reason(self):
+		from omnitrack.api import update_work_block
+		today = frappe.utils.nowdate()
+
+		block = _block(
+			work_date=today,
+			start_time="14:00:00",
+			end_time="15:00:00",
+			deliverable_notes="Client Touchpoint"
+		).insert()
+
+		res = update_work_block(
+			block_name=block.name,
+			status="Cancelled",
+			cancel_reason="Client No-Show"
+		)
+		self.assertEqual(res["status"], "success")
+
+		block.reload()
+		self.assertEqual(block.status, "Cancelled")
+		self.assertEqual(block.cancel_reason, "Client No-Show")
+
+	def test_mark_past_unworked_blocks_missed_cron(self):
+		from omnitrack.api import mark_past_unworked_blocks_missed
+		past_date = "2026-09-01"
+
+		# Create an unworked past block
+		past_block = _block(
+			work_date=past_date,
+			start_time="10:00:00",
+			end_time="11:00:00",
+			status="Planned"
+		)
+		past_block.flags.ignore_past_block_lock = True
+		past_block.insert()
+
+		mark_past_unworked_blocks_missed()
+
+		past_block.reload()
+		self.assertEqual(past_block.status, "Missed")
 
 	def tearDown(self):
 		frappe.db.rollback()

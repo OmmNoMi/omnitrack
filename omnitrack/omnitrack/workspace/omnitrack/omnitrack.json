@@ -20,7 +20,7 @@
  "idx": 0,
  "indicator_color": "blue",
  "is_hidden": 0,
- "label": "OmniTrack Operations & Workforce Cockpit",
+ "label": "OmniTrack",
  "links": [
   {
    "hidden": 0,
@@ -124,7 +124,7 @@
  "modified": "2026-09-07 10:52:50.852223",
  "modified_by": "Administrator",
  "module": "OmniTrack",
- "name": "OmniTrack Operations & Workforce Cockpit",
+ "name": "OmniTrack",
  "number_cards": [
   {
    "label": "Total Work Blocks",
@@ -198,6 +198,6 @@
    "type": "DocType"
   }
  ],
- "title": "OmniTrack Operations & Workforce Cockpit",
+ "title": "OmniTrack",
  "type": "Workspace"
 }

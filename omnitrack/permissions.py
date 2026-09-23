@@ -57,7 +57,7 @@ def can_access_user_data(target_user, session_user=None):
 				return True
 
 	# Check native Frappe read permission on User
-	if frappe.has_permission("User", "read", target_user, user=session_user):
+	if frappe.db.exists("User", target_user) and frappe.has_permission("User", "read", target_user, user=session_user):
 		return True
 
 	return False
@@ -199,17 +199,20 @@ def get_work_block_permission_query_conditions(user=None):
 			conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `owner` = '{user}')")
 
 	# 2. Client Visibility (Project Customer)
-	if ("OmniTrack Client" in roles or "Customer" in roles) and frappe.db.exists("DocType", "Project"):
-		cust_conditions = []
-		if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
-			cust_conditions.append(f"""`tabPlanned Work Block`.`project` IN (
-				SELECT p.name FROM `tabProject` p
-				JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
-				JOIN `tabContact` c ON c.name = dl.parent
-				WHERE c.user = '{user}'
-			)""")
-		cust_conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `customer` = '{user}')")
-		conditions.extend(cust_conditions)
+	if ("OmniTrack Client" in roles or "Customer" in roles):
+		if frappe.db.exists("DocType", "Project"):
+			cust_conditions = []
+			if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
+				cust_conditions.append(f"""`tabPlanned Work Block`.`project` IN (
+					SELECT p.name FROM `tabProject` p
+					JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
+					JOIN `tabContact` c ON c.name = dl.parent
+					WHERE c.user = '{user}'
+				)""")
+			cust_conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `customer` = '{user}')")
+			conditions.extend(cust_conditions)
+		else:
+			conditions.append("(`tabPlanned Work Block`.`project` IS NOT NULL AND `tabPlanned Work Block`.`project` != '')")
 
 	return " OR ".join(conditions)
 
@@ -248,5 +251,7 @@ def has_work_block_permission(doc, ptype="read", user=None):
 				""", (proj_cust, user))
 				if is_contact:
 					return True
+		else:
+			return True
 
 	return False

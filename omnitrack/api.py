@@ -397,6 +397,26 @@ def get_active_tasks_and_projects():
 	tasks = frappe.get_all("Task", filters={"status": ["in", ["Open", "Working"]]}, fields=["name", "subject", "project"], limit=50) if frappe.db.exists("DocType", "Task") else []
 	return {"projects": projects, "tasks": tasks}
 
+def _parse_block_tasks(val):
+	"""Safely parses connected_tasks field from JSON, list, or newline-separated string."""
+	if not val:
+		return []
+	if isinstance(val, list):
+		return val
+	if isinstance(val, str):
+		val = val.strip()
+		if not val:
+			return []
+		try:
+			parsed = json.loads(val)
+			if isinstance(parsed, list):
+				return parsed
+		except Exception:
+			lines = [line.strip("- •* \t") for line in val.split("\n") if line.strip("- •* \t")]
+			return [{"id": f"item:{idx}", "ref": f"item:{idx}", "doctype": "Item", "subject": line, "status": "Open"} for idx, line in enumerate(lines)]
+	return []
+
+
 @frappe.whitelist()
 def create_timesheet_from_work_block(block_name):
 	"""Converts a Planned Work Block into a Timesheet document.
@@ -471,6 +491,19 @@ def create_timesheet_from_work_block(block_name):
 			fallback_act = frappe.db.get_value("Activity Type", {"disabled": 0}, "name")
 			activity = fallback_act or desired_activity
 
+	# Build completed deliverables / tasks summary
+	completed_deliverables = []
+	if hasattr(block, "connected_tasks") and block.connected_tasks:
+		for item in _parse_block_tasks(block.connected_tasks):
+			if isinstance(item, dict) and item.get("status") in ("Closed", "Completed", "Done"):
+				subj = item.get("subject") or item.get("title") or item.get("task")
+				if subj:
+					completed_deliverables.append(subj)
+
+	accomplished_text = ""
+	if completed_deliverables:
+		accomplished_text = "\n\nAccomplished Tasks:\n" + "\n".join(f"• {s}" for s in completed_deliverables)
+
 	from datetime import datetime, timedelta
 
 	if block.sessions:
@@ -490,6 +523,10 @@ def create_timesheet_from_work_block(block_name):
 				except Exception:
 					s_to = s_from
 
+			base_desc = sess.notes or block.deliverable_notes or f"OmniTrack Session ({block.name})"
+			if accomplished_text and "Accomplished Tasks:" not in base_desc:
+				base_desc = f"{base_desc}{accomplished_text}"
+
 			row = {
 				"from_time": s_from,
 				"to_time": s_to,
@@ -498,7 +535,7 @@ def create_timesheet_from_work_block(block_name):
 				"task": task,
 				"activity_type": activity,
 				"is_billable": 0 if is_away else 1,
-				"description": sess.notes or block.deliverable_notes or f"OmniTrack Session ({block.name})"
+				"description": base_desc
 			}
 			ts.append("time_logs", row)
 	else:
@@ -517,6 +554,10 @@ def create_timesheet_from_work_block(block_name):
 			except Exception:
 				s_to = s_from
 
+		base_desc = block.deliverable_notes or f"OmniTrack Block {block.name} ({block.cryptographic_hash or ''})"
+		if accomplished_text and "Accomplished Tasks:" not in base_desc:
+			base_desc = f"{base_desc}{accomplished_text}"
+
 		row = {
 			"from_time": s_from,
 			"to_time": s_to,
@@ -525,7 +566,7 @@ def create_timesheet_from_work_block(block_name):
 			"task": task,
 			"activity_type": activity,
 			"is_billable": 0 if is_away else 1,
-			"description": block.deliverable_notes or f"OmniTrack Block {block.name} ({block.cryptographic_hash or ''})"
+			"description": base_desc
 		}
 		ts.append("time_logs", row)
 
@@ -689,7 +730,51 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	target_date = work_date or today
 
 	# 1. Planned Work Blocks (Live from DB)
-	if target_user and target_user != "All":
+	session_roles = frappe.get_roles(session_user)
+	from omnitrack.permissions import is_omnitrack_manager
+	is_manager = is_omnitrack_manager(session_user)
+	is_client = "OmniTrack Client" in session_roles and not is_manager
+
+	allowed_projects = []
+	if is_client and frappe.db.exists("DocType", "Project"):
+		if frappe.db.exists("DocType", "Project User"):
+			allowed_projects.extend(frappe.db.sql_list("SELECT parent FROM `tabProject User` WHERE `user` = %s", session_user))
+		allowed_projects.extend(frappe.db.sql_list("SELECT name FROM `tabProject` WHERE `customer` = %s", session_user))
+		if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
+			contact_projs = frappe.db.sql_list("""
+				SELECT p.name FROM `tabProject` p
+				JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
+				JOIN `tabContact` c ON c.name = dl.parent
+				WHERE c.user = %s
+			""", session_user)
+			allowed_projects.extend(contact_projs)
+		allowed_projects = list(set(allowed_projects))
+
+	if is_client:
+		if allowed_projects:
+			where_clause = "project IN %(allowed_projects)s"
+			params = {"allowed_projects": tuple(allowed_projects)}
+		else:
+			where_clause = "(project IS NOT NULL AND project != '')"
+			params = {}
+
+		if project:
+			where_clause += " AND project = %(filter_proj)s"
+			params["filter_proj"] = project
+
+		work_blocks = frappe.db.sql(f"""
+			SELECT name, employee, work_date, start_time, end_time, 
+			       duration_hours, actual_hours, variance_hours, project, task, 
+			       work_item, work_item_label, status, task_nature, 
+			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
+			       billing_status, associate_name, appsheet_id,
+			       cancel_reason, rescheduled_to, rescheduled_from
+			FROM `tabPlanned Work Block`
+			WHERE ({where_clause})
+			ORDER BY work_date DESC, start_time DESC
+			LIMIT 150
+		""", params, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []
+	elif target_user and target_user != "All":
 		has_employee = frappe.db.exists("DocType", "Employee")
 		user_emp = (frappe.db.get_value("Employee", {"user_id": target_user}, "name") if has_employee else None) or target_user
 		emp_fullname = frappe.db.get_value("User", target_user, "full_name") or (frappe.db.get_value("Employee", user_emp, "employee_name") if has_employee else None) or target_user
@@ -701,12 +786,17 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			"emp_fullname": emp_fullname
 		}
 
+		if project:
+			where_clause = f"({where_clause}) AND project = %(filter_proj)s"
+			params["filter_proj"] = project
+
 		work_blocks = frappe.db.sql(f"""
 			SELECT name, employee, work_date, start_time, end_time, 
 			       duration_hours, actual_hours, variance_hours, project, task, 
 			       work_item, work_item_label, status, task_nature, 
-			       unplanned_reason, deliverable_notes, cryptographic_hash, 
-			       billing_status, associate_name, appsheet_id
+			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
+			       billing_status, associate_name, appsheet_id,
+			       cancel_reason, rescheduled_to, rescheduled_from
 			FROM `tabPlanned Work Block`
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
@@ -719,8 +809,9 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 				"name", "employee", "work_date", "start_time", "end_time", 
 				"duration_hours", "actual_hours", "variance_hours", "project", "task", 
 				"work_item", "work_item_label", "status", "task_nature", 
-				"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
-				"billing_status", "associate_name", "appsheet_id"
+				"unplanned_reason", "deliverable_notes", "connected_tasks", "cryptographic_hash", 
+				"billing_status", "associate_name", "appsheet_id",
+				"cancel_reason", "rescheduled_to", "rescheduled_from"
 			],
 			order_by="work_date desc, start_time desc",
 			limit=150
@@ -748,6 +839,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
 		b["work_date"] = str(b.get("work_date") or "")
+		b["connected_tasks"] = _parse_block_tasks(b.get("connected_tasks"))
 
 		# Attach real child sessions
 		b["sessions"] = sessions_by_block.get(b.name, [])
@@ -768,7 +860,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		if flt(b.get("actual_hours")) <= 0 and b["sessions"]:
 			b["actual_hours"] = round(sum(flt(s.get("hours") or 0) for s in b["sessions"]), 2)
 
-		if b.project and frappe.db.exists("Project", b.project):
+		if b.project and frappe.db.exists("DocType", "Project") and frappe.db.exists("Project", b.project):
 			b["project_name"] = frappe.db.get_value("Project", b.project, "project_name") or b.project
 		else:
 			b["project_name"] = b.project or "General Work"
@@ -866,6 +958,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	return {
 		"current_user": current_user,
 		"current_user_fullname": frappe.utils.get_fullname(current_user) or current_user,
+		"is_client": is_client,
+		"client_project": (allowed_projects[0] if allowed_projects else "CampusCredit") if is_client else None,
 		"work_blocks": work_blocks,
 		"projects": projects,
 		"tasks": tasks,
@@ -1487,18 +1581,46 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 	else:
 		monday, sunday = _week_bounds(week_start)
 
+	session_roles = frappe.get_roles(frappe.session.user)
+	from omnitrack.permissions import is_omnitrack_manager
+	is_manager = is_omnitrack_manager(frappe.session.user)
+	is_client = "OmniTrack Client" in session_roles and not is_manager
+
+	planner_filters = {
+		"work_date": ["between", [str(monday - timedelta(days=1)), str(sunday)]]
+	}
+	if is_client:
+		allowed_projects = []
+		if frappe.db.exists("DocType", "Project"):
+			if frappe.db.exists("DocType", "Project User"):
+				allowed_projects.extend(frappe.db.sql_list("SELECT parent FROM `tabProject User` WHERE `user` = %s", frappe.session.user))
+			allowed_projects.extend(frappe.db.sql_list("SELECT name FROM `tabProject` WHERE `customer` = %s", frappe.session.user))
+			if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
+				contact_projs = frappe.db.sql_list("""
+					SELECT p.name FROM `tabProject` p
+					JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
+					JOIN `tabContact` c ON c.name = dl.parent
+					WHERE c.user = %s
+				""", frappe.session.user)
+				allowed_projects.extend(contact_projs)
+			allowed_projects = list(set(allowed_projects))
+		if allowed_projects:
+			planner_filters["project"] = ["in", allowed_projects]
+		else:
+			planner_filters["project"] = ["is", "set"]
+	else:
+		planner_filters["employee"] = target
+
 	blocks = []
 	if frappe.db.exists("DocType", "Planned Work Block"):
 		raw = frappe.get_all(
 			"Planned Work Block",
-			filters={
-				"employee": target,
-				"work_date": ["between", [str(monday - timedelta(days=1)), str(sunday)]],
-			},
+			filters=planner_filters,
 			fields=[
 				"name", "work_date", "start_time", "end_time", "duration_hours",
 				"actual_hours", "variance_hours", "status", "task", "project",
 				"work_item", "work_item_label", "task_nature", "deliverable_notes", "location",
+				"cancel_reason", "rescheduled_to", "rescheduled_from",
 			],
 			order_by="work_date asc, start_time asc",
 			limit=500,
@@ -1509,7 +1631,10 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			b["end_time"] = _time_str(b.get("end_time"))
 			b["work_date"] = str(b.get("work_date") or "")
 			if b.get("project") and b["project"] not in proj_names:
-				proj_names[b["project"]] = frappe.db.get_value("Project", b["project"], "project_name") or b["project"]
+				if frappe.db.exists("DocType", "Project"):
+					proj_names[b["project"]] = frappe.db.get_value("Project", b["project"], "project_name") or b["project"]
+				else:
+					proj_names[b["project"]] = b["project"]
 			subject = b.get("work_item_label")
 			if not subject and b.get("task") and frappe.db.exists("DocType", "Task"):
 				subject = frappe.db.get_value("Task", b["task"], "subject")
@@ -1634,13 +1759,16 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	if frappe.db.exists("User", target):
 		doc.associate_name = frappe.db.get_value("User", target, "full_name") or target
 	doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		doc.flags.ignore_links = True
 	doc.insert()
 	return {"status": "success", "name": doc.name, "duration_hours": doc.duration_hours}
 
 
 @frappe.whitelist()
 def update_work_block(block_name, work_date=None, start_time=None, end_time=None,
-					  task=None, project=None, deliverable_notes=None, status=None):
+					  task=None, project=None, deliverable_notes=None, status=None,
+					  cancel_reason=None):
 	"""Move / resize / re-target a planned block from the calendar."""
 	doc = frappe.get_doc("Planned Work Block", block_name)
 	if doc.employee != frappe.session.user and not _is_planner_manager():
@@ -1665,9 +1793,17 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 		doc.project = project or None
 	if deliverable_notes is not None:
 		doc.deliverable_notes = deliverable_notes
+	if cancel_reason:
+		doc.cancel_reason = cancel_reason
 	if status:
+		if status == "Cancelled":
+			today = frappe.utils.getdate(frappe.utils.nowdate())
+			block_date = frappe.utils.getdate(doc.work_date) if doc.work_date else today
+			if block_date < today:
+				frappe.throw(_("Past planned work blocks cannot be retroactively cancelled. They are recorded as Missed."), frappe.ValidationError)
 		doc.status = status
 	doc.flags.ignore_permissions = True
+	doc.flags.ignore_links = True
 	doc.save()
 	return {
 		"status": "success",
@@ -1675,6 +1811,56 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 		"duration_hours": doc.duration_hours,
 		"actual_hours": doc.actual_hours,
 		"variance_hours": doc.variance_hours,
+		"block_status": doc.status,
+		"cancel_reason": getattr(doc, "cancel_reason", None)
+	}
+
+
+@frappe.whitelist()
+def reschedule_work_block(block_name, new_date=None, new_start_time=None, new_end_time=None):
+	"""
+	Non-destructive reschedule: preserves the original block commitment in place,
+	marks it Rescheduled, and creates a linked copy in the target time slot.
+	"""
+	doc = frappe.get_doc("Planned Work Block", block_name)
+	if doc.employee != frappe.session.user and not _is_planner_manager():
+		frappe.throw(_("Not permitted to reschedule this work block."), frappe.PermissionError)
+
+	from omnitrack.permissions import check_planned_block_past_lock
+	check_planned_block_past_lock(doc, new_work_date=new_date)
+
+	target_date = new_date or doc.work_date
+	target_start = new_start_time or doc.start_time
+	target_end = new_end_time or doc.end_time
+
+	# Clone to target slot
+	new_block = frappe.copy_doc(doc)
+	new_block.work_date = target_date
+	new_block.start_time = target_start
+	new_block.end_time = target_end
+	new_block.status = "Planned"
+	new_block.actual_hours = 0.0
+	new_block.sessions = []
+	new_block.rescheduled_from = doc.name
+	new_block.rescheduled_to = None
+	new_block.flags.ignore_permissions = True
+	new_block.flags.ignore_links = True
+	new_block.insert()
+
+	# Mark original block as Rescheduled
+	doc.status = "Rescheduled"
+	doc.rescheduled_to = new_block.name
+	doc.flags.ignore_permissions = True
+	doc.flags.ignore_links = True
+	doc.save()
+
+	return {
+		"status": "success",
+		"original": doc.name,
+		"rescheduled_to": new_block.name,
+		"new_date": str(target_date),
+		"new_start_time": str(target_start),
+		"new_end_time": str(target_end)
 	}
 
 
@@ -1689,7 +1875,9 @@ def delete_work_block(block_name):
 	check_planned_block_past_lock(doc)
 
 	if flt(doc.actual_hours) > 0:
-		frappe.throw(_("This block has logged work sessions. Cancel it instead of deleting."))
+		frappe.throw(_("This block has logged work sessions. Cancel it with a reason instead of deleting."))
+	if doc.status in ("In Progress", "Completed", "Logged (Full)", "Logged (Partial)", "Logged (Over)", "Rescheduled", "Cancelled"):
+		frappe.throw(_("Committed, rescheduled, or cancelled blocks cannot be deleted to preserve reporting integrity."))
 	doc.flags.ignore_permissions = True
 	doc.flags.ignore_past_block_lock = True
 	frappe.delete_doc("Planned Work Block", block_name, force=True)
@@ -1780,6 +1968,18 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		except Exception:
 			pass
 
+	# Auto-post structured sprint accomplishment recap to Raven task thread
+	try:
+		from omnitrack.raven_bridge import post_session_accomplishment_recap
+		post_session_accomplishment_recap(
+			work_block_name=doc.name,
+			session_notes=notes,
+			duration_hours=flt(hours),
+			timesheet_name=getattr(doc, "timesheet", None),
+		)
+	except Exception:
+		pass
+
 	# Auto-clear any in-flight active session across devices
 	try:
 		sync_active_session(None)
@@ -1862,5 +2062,406 @@ def trigger_attendance_synthesis():
 			"status": "error",
 			"message": str(e)
 		}
+
+
+# ==============================================================================
+# Raven Real-Time Collaboration & Living Documentation Endpoints
+# ==============================================================================
+
+@frappe.whitelist()
+def is_raven_enabled():
+	"""Check whether Raven collaboration is available on the current site."""
+	from omnitrack.raven_bridge import is_raven_available
+	return {"available": is_raven_available()}
+
+
+@frappe.whitelist()
+def get_task_chat(task_id: str, limit: int = 50):
+	"""Fetch the live Raven message stream for a task."""
+	from omnitrack.raven_bridge import get_task_messages
+	return {"messages": get_task_messages(task_id, cint(limit) or 50)}
+
+
+@frappe.whitelist(methods=["POST"])
+def post_task_chat_message(
+	task_id: str,
+	content: str,
+	files=None,
+	is_reply: bool = False,
+	linked_message: str | None = None,
+	client_id: str | None = None,
+):
+	"""Send a chat message into the task's Raven channel."""
+	from omnitrack.raven_bridge import send_task_message
+	if isinstance(files, str):
+		try:
+			files = frappe.parse_json(files)
+		except Exception:
+			files = []
+	return send_task_message(
+		task_id=task_id,
+		content=content,
+		files=files,
+		is_reply=bool(cint(is_reply)),
+		linked_message=linked_message,
+		client_id=client_id,
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def pin_task_spec(message_id: str, task_id: str):
+	"""Elevate a key chat message or technical decision into authoritative Task documentation."""
+	from omnitrack.raven_bridge import pin_message_as_task_spec
+	return pin_message_as_task_spec(message_id, task_id)
+
+
+@frappe.whitelist(methods=["POST"])
+def broadcast_task_focus_start(task_id: str, duration_hours: float = None):
+	"""Broadcast session start presence event into Raven task thread."""
+	from omnitrack.raven_bridge import broadcast_session_start
+	broadcast_session_start(task_id, flt(duration_hours) if duration_hours else None)
+
+@frappe.whitelist()
+def get_task_details(task_id: str, doctype: str = "Task"):
+	"""Return rich details for a Task or ToDo, including full description, connected planned blocks, and timesheet logs."""
+	if not task_id:
+		return {}
+
+	doc = None
+	if doctype in ("Task", "ToDo") and frappe.db.exists(doctype, task_id):
+		doc = frappe.get_doc(doctype, task_id)
+	elif frappe.db.exists("Task", task_id):
+		doctype = "Task"
+		doc = frappe.get_doc("Task", task_id)
+	elif frappe.db.exists("ToDo", task_id):
+		doctype = "ToDo"
+		doc = frappe.get_doc("ToDo", task_id)
+
+	if not doc:
+		return {}
+
+	# Fetch connected planned work blocks
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters={"task": task_id, "docstatus": ["<", 2]},
+		fields=["name", "work_date", "start_time", "end_time", "duration_hours", "status", "actual_hours", "task_nature", "deliverable_notes"],
+		order_by="work_date desc, start_time desc",
+		limit=20,
+	)
+
+	# Fetch actual logged hours across timesheets
+	logged_hours = 0.0
+	try:
+		ts_records = frappe.db.sql(
+			"""
+			select coalesce(sum(hours), 0) as total_hours
+			from `tabTimesheet Detail`
+			where task = %s and docstatus < 2
+			""",
+			(task_id,),
+			as_dict=True,
+		)
+		if ts_records:
+			logged_hours = flt(ts_records[0].total_hours, 2)
+	except Exception:
+		pass
+
+	return {
+		"task": {
+			"name": doc.name,
+			"doctype": doctype,
+			"subject": getattr(doc, "subject", getattr(doc, "description", doc.name)),
+			"description": getattr(doc, "description", "") or "",
+			"project": getattr(doc, "project", "") or "",
+			"project_name": getattr(doc, "project_name", getattr(doc, "project", "")) or "",
+			"status": getattr(doc, "status", "Open"),
+			"priority": getattr(doc, "priority", "Medium"),
+			"expected_time": flt(getattr(doc, "expected_time", 0), 2),
+			"exp_start_date": str(getattr(doc, "exp_start_date", "") or ""),
+			"exp_end_date": str(getattr(doc, "exp_end_date", "") or ""),
+			"due_date": str(getattr(doc, "exp_end_date", getattr(doc, "date", "")) or ""),
+			"logged_hours": logged_hours,
+			"connected_blocks": blocks,
+		}
+	}
+
+
+@frappe.whitelist()
+def get_block_tasks(block_name):
+	"""Returns the list of connected tasks and action items for a work block."""
+	if not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block {0} not found").format(block_name))
+	raw_tasks = frappe.db.get_value("Planned Work Block", block_name, "connected_tasks")
+	return {"block_name": block_name, "tasks": _parse_block_tasks(raw_tasks)}
+
+
+@frappe.whitelist()
+def attach_tasks_to_block(block_name, task_refs=None, new_task_subjects=None):
+	"""Attaches existing Tasks/ToDos or creates new action items from text/paste for a work block."""
+	if not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block {0} not found").format(block_name))
+
+	block = frappe.get_doc("Planned Work Block", block_name)
+	items = _parse_block_tasks(block.connected_tasks)
+	existing_refs = {it.get("ref") or it.get("id") for it in items if isinstance(it, dict)}
+
+	# Process existing task_refs (e.g. from picker)
+	if task_refs:
+		if isinstance(task_refs, str):
+			try:
+				task_refs = json.loads(task_refs)
+			except Exception:
+				task_refs = [r.strip() for r in task_refs.split(",") if r.strip()]
+		if isinstance(task_refs, list):
+			for ref in task_refs:
+				ref = str(ref).strip()
+				if not ref or ref in existing_refs:
+					continue
+				if ref.startswith("todo:"):
+					td_id = ref.split(":", 1)[1]
+					if frappe.db.exists("ToDo", td_id):
+						td = frappe.get_doc("ToDo", td_id)
+						subj = frappe.utils.strip_html(td.description or "").strip().split("\n")[0][:140] or "Untitled to-do"
+						items.append({
+							"id": td.name,
+							"ref": f"todo:{td.name}",
+							"doctype": "ToDo",
+							"subject": subj,
+							"status": "Closed" if td.status in ("Closed", "Cancelled") else "Open",
+							"completed_at": None
+						})
+						existing_refs.add(ref)
+				elif ref.startswith("task:") or frappe.db.exists("Task", ref):
+					t_id = ref.split(":", 1)[1] if ref.startswith("task:") else ref
+					if frappe.db.exists("Task", t_id):
+						t = frappe.get_doc("Task", t_id)
+						items.append({
+							"id": t.name,
+							"ref": t.name,
+							"doctype": "Task",
+							"subject": t.subject or t.name,
+							"project": t.project,
+							"status": "Completed" if t.status in ("Completed", "Cancelled") else "Open",
+							"completed_at": None
+						})
+						existing_refs.add(ref)
+
+	# Process new_task_subjects (e.g. multi-line paste from meeting/chat/whatsapp)
+	if new_task_subjects:
+		lines = []
+		if isinstance(new_task_subjects, str):
+			lines = [line.strip("- •* \t") for line in new_task_subjects.split("\n") if line.strip("- •* \t")]
+		elif isinstance(new_task_subjects, list):
+			for s in new_task_subjects:
+				if isinstance(s, str):
+					lines.extend([line.strip("- •* \t") for line in s.split("\n") if line.strip("- •* \t")])
+		
+		target_user = block.employee or frappe.session.user
+		for line in lines:
+			if not line:
+				continue
+			# Try creating a native ToDo so it lives in the Frappe ecosystem
+			created_todo = None
+			try:
+				if frappe.db.exists("DocType", "ToDo"):
+					td = frappe.new_doc("ToDo")
+					td.description = line
+					td.allocated_to = target_user
+					if block.project and frappe.db.exists("DocType", "Project") and frappe.db.exists("Project", block.project):
+						td.reference_type = "Project"
+						td.reference_name = block.project
+					elif block.task and frappe.db.exists("DocType", "Task") and frappe.db.exists("Task", block.task):
+						td.reference_type = "Task"
+						td.reference_name = block.task
+					td.status = "Open"
+					td.flags.ignore_permissions = True
+					td.insert()
+					created_todo = td
+			except Exception:
+				created_todo = None
+
+			if created_todo:
+				ref = f"todo:{created_todo.name}"
+				items.append({
+					"id": created_todo.name,
+					"ref": ref,
+					"doctype": "ToDo",
+					"subject": line,
+					"status": "Open",
+					"completed_at": None
+				})
+				existing_refs.add(ref)
+			else:
+				new_id = f"item:{frappe.generate_hash(length=8)}"
+				items.append({
+					"id": new_id,
+					"ref": new_id,
+					"doctype": "Item",
+					"subject": line,
+					"status": "Open",
+					"completed_at": None
+				})
+				existing_refs.add(new_id)
+
+	block.connected_tasks = json.dumps(items)
+	block.flags.ignore_permissions = True
+	block.save()
+
+	return {"status": "success", "block_name": block.name, "tasks": items}
+
+
+@frappe.whitelist()
+def complete_block_task(block_name, task_ref, completed=True):
+	"""Toggles completion status of a connected task, updates the underlying Task/ToDo, and syncs active session notes."""
+	if not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block {0} not found").format(block_name))
+
+	is_done = frappe.utils.cint(completed) == 1 if isinstance(completed, (int, str)) else bool(completed)
+	block = frappe.get_doc("Planned Work Block", block_name)
+	items = _parse_block_tasks(block.connected_tasks)
+	matched_item = None
+
+	for it in items:
+		if it.get("ref") == task_ref or it.get("id") == task_ref:
+			matched_item = it
+			break
+
+	if not matched_item:
+		frappe.throw(_("Item {0} not found in connected tasks of block {1}").format(task_ref, block_name))
+
+	dtype = matched_item.get("doctype")
+	item_id = matched_item.get("id") or matched_item.get("ref")
+
+	if dtype == "Task":
+		target_status = "Completed" if is_done else "Open"
+		matched_item["status"] = target_status
+		clean_id = item_id.split(":", 1)[1] if str(item_id).startswith("task:") else str(item_id)
+		if frappe.db.exists("Task", clean_id):
+			frappe.db.set_value("Task", clean_id, "status", target_status)
+	elif dtype == "ToDo":
+		target_status = "Closed" if is_done else "Open"
+		matched_item["status"] = target_status
+		clean_id = item_id.split(":", 1)[1] if str(item_id).startswith("todo:") else str(item_id)
+		if frappe.db.exists("ToDo", clean_id):
+			frappe.db.set_value("ToDo", clean_id, "status", target_status)
+	else:
+		matched_item["status"] = "Completed" if is_done else "Open"
+
+	matched_item["completed_at"] = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S") if is_done else None
+
+	block.connected_tasks = json.dumps(items)
+	block.flags.ignore_permissions = True
+	block.save()
+
+	# If completed, append accomplishment to active session HUD and trackerNotes
+	if is_done:
+		target_user = block.employee or frappe.session.user
+		active_sess = get_active_session(user=target_user)
+		if active_sess:
+			subj = matched_item.get("subject") or "Task"
+			accomplishment = f"✓ Completed: {subj}"
+			sess_list = active_sess.get("sessionNotesList") or []
+			if accomplishment not in sess_list:
+				sess_list.append(accomplishment)
+				active_sess["sessionNotesList"] = sess_list
+
+			existing_notes = (active_sess.get("trackerNotes") or "").strip()
+			if accomplishment not in existing_notes:
+				active_sess["trackerNotes"] = f"{existing_notes}\n{accomplishment}".strip()
+
+			sync_active_session(active_sess, user=target_user)
+
+	return {"status": "success", "task": matched_item, "tasks": items}
+
+
+@frappe.whitelist()
+def reschedule_unfinished_tasks(block_name, target_date=None, start_time=None, end_time=None):
+	"""Carries forward any incomplete tasks from a block into a newly created planned work block."""
+	if not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block {0} not found").format(block_name))
+
+	block = frappe.get_doc("Planned Work Block", block_name)
+	items = _parse_block_tasks(block.connected_tasks)
+	unfinished = [it for it in items if it.get("status") not in ("Closed", "Completed", "Done", "Rescheduled")]
+
+	if not unfinished:
+		return {"status": "noop", "message": "No unfinished items to carry forward."}
+
+	# Compute target work_date (default: tomorrow)
+	if not target_date:
+		target_date = frappe.utils.add_days(block.work_date or nowdate(), 1)
+
+	# Compute time slot
+	s_time = start_time or block.start_time or "09:00:00"
+	e_time = end_time or block.end_time or "11:00:00"
+
+	# Build fresh items list for the new block
+	new_items = []
+	for it in unfinished:
+		new_items.append({
+			"id": it.get("id"),
+			"ref": it.get("ref"),
+			"doctype": it.get("doctype"),
+			"subject": it.get("subject"),
+			"project": it.get("project") or block.project,
+			"status": "Open",
+			"completed_at": None
+		})
+
+	new_block = frappe.new_doc("Planned Work Block")
+	new_block.employee = block.employee
+	new_block.associate_name = block.associate_name
+	new_block.project = block.project
+	new_block.task = block.task
+	new_block.work_item = block.work_item
+	new_block.work_item_label = f"Continuation: {block.get('work_item_label') or block.get('deliverable_notes') or block.name}"
+	new_block.task_nature = block.task_nature or "🎯 Planned"
+	new_block.work_date = target_date
+	new_block.start_time = s_time
+	new_block.end_time = e_time
+	new_block.duration_hours = block.duration_hours or 2.0
+	new_block.status = "Planned"
+	new_block.deliverable_notes = f"Carried forward from {block.name}:\n" + "\n".join(f"• {it.get('subject')}" for it in unfinished)
+	new_block.connected_tasks = json.dumps(new_items)
+	new_block.flags.ignore_permissions = True
+	new_block.insert()
+
+	# Mark carried forward items in original block
+	for it in items:
+		if it in unfinished or any(u.get("ref") == it.get("ref") for u in unfinished):
+			it["status"] = "Rescheduled"
+			it["rescheduled_to"] = new_block.name
+
+	block.connected_tasks = json.dumps(items)
+	block.flags.ignore_permissions = True
+	block.save()
+
+	return {
+		"status": "success",
+		"original_block": block.name,
+		"new_block": new_block.name,
+		"target_date": str(target_date),
+		"rescheduled_count": len(unfinished),
+		"new_tasks": new_items
+	}
+
+
+def mark_past_unworked_blocks_missed():
+	"""Nightly cron: Any Planned Work Block whose work_date is before today,
+	has actual_hours == 0, and status in ('Planned', 'Draft', 'In Progress')
+	is automatically transitioned to 'Missed'."""
+	today = nowdate()
+	if not frappe.db.exists("DocType", "Planned Work Block"):
+		return
+	frappe.db.sql("""
+		UPDATE `tabPlanned Work Block`
+		SET status = 'Missed'
+		WHERE work_date < %s
+		  AND (actual_hours IS NULL OR actual_hours = 0)
+		  AND status IN ('Planned', 'Draft', 'In Progress')
+	""", (today,))
+	frappe.db.commit()
+
+
 
 

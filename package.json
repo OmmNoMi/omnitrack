@@ -5,7 +5,9 @@
   "description": "Frontend bundles for OmniTrack (Vue 3 + Frappe UI).",
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "test:fixtures": "python3 -m unittest omnitrack.tests.test_workspace_fixtures -v",
+    "test:fast": "npm run test:fixtures && node scripts/check_www_js.cjs"
   },
   "dependencies": {
     "frappe-ui": "^0.1.278",

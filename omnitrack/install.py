@@ -320,7 +320,7 @@ def _ensure_workspaces():
 		{
 			"name": "OmniTrack",
 			"label": "OmniTrack",
-			"title": "OmniTrack Operations & Workforce Cockpit",
+			"title": "OmniTrack",
 			"icon": "shield-check",
 			"indicator_color": "blue",
 			"number_cards": [

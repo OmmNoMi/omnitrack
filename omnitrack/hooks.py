@@ -51,12 +51,20 @@ has_permission = {
 	"Planned Work Block": "omnitrack.permissions.has_work_block_permission"
 }
 
+# Document Timeline Hooks (Zero-Write Raven Live Stream)
+# ------------------------------------------------------
+additional_timeline_content = {
+	"Task": ["omnitrack.raven_bridge.get_task_raven_timeline_content"],
+	"Planned Work Block": ["omnitrack.raven_bridge.get_block_raven_timeline_content"]
+}
+
 # Scheduled Tasks
 # ---------------
 scheduler_events = {
 	"daily": [
 		"omnitrack.synthesizer.synthesize_all_active_employees",
-		"omnitrack.api.process_scheduled_timesheet_sync"
+		"omnitrack.api.process_scheduled_timesheet_sync",
+		"omnitrack.api.mark_past_unworked_blocks_missed"
 	],
 	"hourly": [
 		"omnitrack.sync.process_queued_sync_events"
