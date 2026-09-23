@@ -2044,6 +2044,7 @@
                     <!-- Badges & Taxonomy Row -->
                     <div class="flex items-center gap-2 flex-wrap">
                       <f-badge theme="gray" variant="outline" size="xs">
+                        <span v-if="b.work_date && selectedDashboardDate && b.work_date !== selectedDashboardDate" class="text-blue-500 font-bold mr-1">↩ (cont.)</span>
                         {{ formatBlockRange(b) }}
                       </f-badge>
 
@@ -5700,6 +5701,9 @@
         return `${y}-${m}-${day}`;
       };
 
+      const _utcDate = (iso) => { const [y, m, d] = (iso || '').split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+      const addDays = (iso, n) => { const d = _utcDate(iso); d.setUTCDate(d.getUTCDate() + n); return getLocalTodayISO(d); };
+
       // Google Meet-Style Dashboard State & Agenda
       const selectedDashboardDate = ref(getLocalTodayISO());
       const dashboardWeekOffset = ref(0);
@@ -6683,10 +6687,40 @@
         return filteredWorkBlocks.value.slice(0, 25);
       });
 
-      // Google Meet-Style Day Focus Block Groupings
+      // Time ordering & block position helpers
+      const _minsOf = (t) => { if (!t) return -1; const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
+
+      const _blockEffectiveStartMins = (b, targetDate) => {
+        if (!b) return -1;
+        if (targetDate && b.work_date !== targetDate && b.start_time && b.end_time) {
+          const sMins = _minsOf(b.start_time);
+          const eMins = _minsOf(b.end_time);
+          if (eMins < sMins) return 0; // midnight continuation starts at 00:00 on the continuation day
+        }
+        return _minsOf(b.start_time);
+      };
+
+      const _byTimeDesc = (list) => {
+        const dt = selectedDashboardDate.value;
+        return [...list].sort((x, y) => _blockEffectiveStartMins(y, dt) - _blockEffectiveStartMins(x, dt));
+      };
+      const _byTimeAsc = (list) => {
+        const dt = selectedDashboardDate.value;
+        return [...list].sort((x, y) => _blockEffectiveStartMins(x, dt) - _blockEffectiveStartMins(y, dt));
+      };
+
+      // Google Meet-Style Day Focus Block Groupings (supports midnight spillover into the next morning)
       const dayFocusBlocks = computed(() => {
         const dt = selectedDashboardDate.value;
-        return filteredWorkBlocks.value.filter(b => b.work_date === dt);
+        return filteredWorkBlocks.value.filter(b => {
+          if (b.work_date === dt) return true;
+          if (b.start_time && b.end_time && dt && b.work_date && addDays(b.work_date, 1) === dt) {
+            const sMins = _minsOf(b.start_time);
+            const eMins = _minsOf(b.end_time);
+            if (eMins < sMins) return true;
+          }
+          return false;
+        });
       });
 
       const awayFocusBlocks = computed(() => {
@@ -6700,11 +6734,6 @@
       // A block on a date that has already gone by is never "upcoming", whether or
       // not anyone marked it Completed — it belongs in the past list with its timesheet.
       const _isPastDay = () => !!(selectedDashboardDate.value && todayDate.value && selectedDashboardDate.value < todayDate.value);
-
-      // Time ordering helpers
-      const _minsOf = (t) => { if (!t) return -1; const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
-      const _byTimeDesc = (list) => [...list].sort((x, y) => _minsOf(y.start_time) - _minsOf(x.start_time));
-      const _byTimeAsc = (list) => [...list].sort((x, y) => _minsOf(x.start_time) - _minsOf(y.start_time));
 
       const isBlockCompleted = (b) => {
         if (!b) return false;
@@ -6956,10 +6985,13 @@
       // Narrow screens get 6h so a one-hour block is still readable; desktops get
       // the whole day at once.
       const timelineZoomOptions = [6, 12, 24];
-      const timelineZoom = ref((() => {
+      const getTimelineDefaultZoom = (dateStr) => {
+        const todayStr = todayDate.value || getLocalTodayISO();
+        if (dateStr === todayStr) return 6; // 6-hour stretch for Today so the red line stays centered with past & future blocks
         const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
         return w < 640 ? 6 : (w < 1024 ? 12 : 24);
-      })());
+      };
+      const timelineZoom = ref(getTimelineDefaultZoom(selectedDashboardDate.value));
       const timelineTrackWidth = computed(() => (24 / timelineZoom.value * 100) + '%');
 
       // Zoomed in, the left edge of the track is 3am and empty. Put the first block
@@ -6984,7 +7016,14 @@
         const planned = [], logged = [];
         blocks.forEach((bk) => {
           const s = _minsOf(bk.start_time), e = _minsOf(bk.end_time);
-          if (s >= 0 && e > s) planned.push({ s, e, block: bk });
+          const dt = selectedDashboardDate.value;
+          if (bk.work_date !== dt && e < s) {
+            planned.push({ s: 0, e: e, block: bk });
+          } else if (s >= 0 && e > s) {
+            planned.push({ s, e, block: bk });
+          } else if (s >= 0 && e < s) {
+            planned.push({ s, e: 1440, block: bk });
+          }
           (bk.sessions || []).forEach((x) => {
             const ss = _minsOf(x.from_time), ee = _minsOf(x.to_time);
             if (ss >= 0 && ee > ss) logged.push({
@@ -7033,13 +7072,19 @@
           syncTimelineEdges();
           const tl = dayTimeline.value;
           const track = box && box.firstElementChild;
-          if (box && tl && track && tl.firstMin >= 0) {
-            const isToday = selectedDashboardDate.value === todayDate.value;
-            const focusMin = (isToday && nowMinute.value !== undefined)
-              ? Math.min(tl.firstMin, Math.max(0, nowMinute.value - 60))
-              : tl.firstMin;
-            const target = Math.max(0, (focusMin / 1440) * track.offsetWidth - 24);
-            const reachable = Math.min(target, box.scrollWidth - box.clientWidth);
+          if (box && tl && track) {
+            const todayStr = todayDate.value || getLocalTodayISO();
+            const isToday = selectedDashboardDate.value === todayStr;
+            let target = 0;
+            if (isToday && nowMinute.value !== undefined) {
+              // Current time red line ALWAYS IN CENTER of the viewport
+              const nowX = (nowMinute.value / 1440) * track.offsetWidth;
+              target = Math.max(0, nowX - (box.clientWidth / 2));
+            } else if (tl.firstMin >= 0) {
+              // Other days: adjust to first hour automatically
+              target = Math.max(0, (tl.firstMin / 1440) * track.offsetWidth - 24);
+            }
+            const reachable = Math.min(target, Math.max(0, box.scrollWidth - box.clientWidth));
             box.scrollTo({ left: reachable, behavior: smooth ? 'smooth' : 'auto' });
             syncTimelineEdges();
             if (reachable <= 1 || Math.abs(box.scrollLeft - reachable) < 2) return;
@@ -7052,6 +7097,19 @@
       onMounted(() => {
         watch(timelineZoom, () => nextTick(() => scrollTimelineToWork(true)));
         watch(() => dayTimeline.value && dayTimeline.value.firstMin, () => nextTick(() => scrollTimelineToWork(false)));
+        watch(selectedDashboardDate, (newDate) => {
+          timelineZoom.value = getTimelineDefaultZoom(newDate);
+          nextTick(() => scrollTimelineToWork(false));
+        });
+        watch(nowMinute, () => {
+          const isToday = selectedDashboardDate.value === (todayDate.value || getLocalTodayISO());
+          if (isToday) {
+            scrollTimelineToWork(true);
+          }
+        });
+        if (typeof window !== 'undefined') {
+          window.addEventListener('resize', () => scrollTimelineToWork(false));
+        }
         nextTick(() => scrollTimelineToWork(false));
       });
 
@@ -8477,7 +8535,15 @@
       const plannerGridScroll = ref(null);
       const scrollPlannerToMorning = () => {
         nextTick(() => {
-          if (plannerGridScroll.value) plannerGridScroll.value.scrollTop = 7 * PLANNER_HOUR_PX;
+          if (!plannerGridScroll.value) return;
+          const isToday = plannerAnchor.value === todayISO();
+          if (isToday && nowMinute.value !== undefined) {
+            const boxH = plannerGridScroll.value.clientHeight || (6 * PLANNER_HOUR_PX);
+            const nowY = (nowMinute.value / 60) * PLANNER_HOUR_PX;
+            plannerGridScroll.value.scrollTop = Math.max(0, nowY - (boxH / 2));
+          } else {
+            plannerGridScroll.value.scrollTop = 7 * PLANNER_HOUR_PX;
+          }
         });
       };
       // Responsive Density: Mobile (<640px) -> Day, Mid-size (640-1024px) -> 4 Days, Desktop (>=1024px) -> Week
@@ -8573,9 +8639,8 @@
         const m = parseInt(p[1], 10) || 0;
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
       };
-      const _utc = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+      const _utc = (iso) => _utcDate(iso);
       const _iso = (dt) => getLocalTodayISO(dt);
-      const addDays = (iso, n) => { const d = _utc(iso); d.setUTCDate(d.getUTCDate() + n); return _iso(d); };
       const mondayOf = (iso) => { const dow = (_utc(iso).getUTCDay() + 6) % 7; return addDays(iso, -dow); };
       const todayISO = () => getLocalTodayISO();
       plannerAnchor.value = todayISO();

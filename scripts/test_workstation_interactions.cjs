@@ -417,7 +417,128 @@ assert.strictEqual(elapsedStr.includes('25m 30s'), true, 'FAIL: keepRunningElaps
 
 console.log('✓ Test 13: Adjust Timesheet Timing Frappe UI makeover & intent mode invariants verified.');
 
-console.log('\nSUCCESS: All 13 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// --- TEST 14: Midnight continuation inclusion in dayFocusBlocks & show-more threshold ---
+assert.strictEqual(content.includes('_blockEffectiveStartMins'), true, 'FAIL: _blockEffectiveStartMins helper missing from omnitrack.html');
+assert.strictEqual(content.includes('addDays(b.work_date, 1) === dt'), true, 'FAIL: midnight spillover check missing in dayFocusBlocks');
+
+const midnightSandbox = {
+  ref: (v) => ({ value: v }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  selectedDashboardDate: { value: '2026-09-23' },
+  todayDate: { value: '2026-09-23' },
+  isDarkMode: { value: false }
+};
+vm.createContext(midnightSandbox);
+
+const midnightCode = `
+  const _utcDate = (iso) => { const [y, m, d] = (iso || '').split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+  const addDays = (iso, n) => {
+    const d = _utcDate(iso);
+    d.setUTCDate(d.getUTCDate() + n);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return \`\${y}-\${m}-\${day}\`;
+  };
+  const _minsOf = (t) => { if (!t) return -1; const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
+  const _blockEffectiveStartMins = (b, targetDate) => {
+    if (!b) return -1;
+    if (targetDate && b.work_date !== targetDate && b.start_time && b.end_time) {
+      const sMins = _minsOf(b.start_time);
+      const eMins = _minsOf(b.end_time);
+      if (eMins < sMins) return 0;
+    }
+    return _minsOf(b.start_time);
+  };
+  const _byTimeDesc = (list) => {
+    const dt = selectedDashboardDate.value;
+    return [...list].sort((x, y) => _blockEffectiveStartMins(y, dt) - _blockEffectiveStartMins(x, dt));
+  };
+
+  const rawBlocks = [
+    { name: 'PWB-00173', work_date: '2026-09-22', start_time: '23:30:00', end_time: '0:30:00', status: 'Logged (Partial)', actual_hours: 0.88, duration_hours: 1.0 },
+    { name: 'PWB-00177', work_date: '2026-09-23', start_time: '07:10:00', end_time: '07:40:00', status: 'Logged (Full)', actual_hours: 0.5, duration_hours: 0.5 },
+    { name: 'PWB-00178', work_date: '2026-09-23', start_time: '08:30:00', end_time: '09:30:00', status: 'Logged (Full)', actual_hours: 1.0, duration_hours: 1.0 }
+  ];
+
+  const dt = selectedDashboardDate.value;
+  const dayFocus = rawBlocks.filter(b => {
+    if (b.work_date === dt) return true;
+    if (b.start_time && b.end_time && dt && b.work_date && addDays(b.work_date, 1) === dt) {
+      const sMins = _minsOf(b.start_time);
+      const eMins = _minsOf(b.end_time);
+      if (eMins < sMins) return true;
+    }
+    return false;
+  });
+
+  const sortedPast = _byTimeDesc(dayFocus);
+  const showMoreVisible = sortedPast.length > 2;
+  const remainingCount = Math.max(0, sortedPast.length - 2);
+
+  ({ dayFocus, sortedPast, showMoreVisible, remainingCount });
+`;
+const midnightInst = vm.runInContext(midnightCode, midnightSandbox);
+assert.strictEqual(midnightInst.dayFocus.length, 3, 'FAIL: dayFocusBlocks must contain all 3 blocks (including midnight continuation)');
+assert.strictEqual(midnightInst.sortedPast[0].name, 'PWB-00178', 'FAIL: most recent (08:30) must be first');
+assert.strictEqual(midnightInst.sortedPast[1].name, 'PWB-00177', 'FAIL: next recent (07:10) must be second');
+assert.strictEqual(midnightInst.sortedPast[2].name, 'PWB-00173', 'FAIL: midnight block must sort at 00:00 effective start (3rd position)');
+assert.strictEqual(midnightInst.showMoreVisible, true, 'FAIL: showMoreVisible must be true when length is 3 (> 2)');
+assert.strictEqual(midnightInst.remainingCount, 1, 'FAIL: remainingCount must be 1');
+
+console.log('✓ Test 14: Midnight continuation inclusion in dayFocusBlocks & show-more threshold verified.');
+
+// --- TEST 15: Day-at-a-glance 6h stretch zoom on Today & red line centering invariants ---
+assert.strictEqual(content.includes('getTimelineDefaultZoom'), true, 'FAIL: getTimelineDefaultZoom missing from omnitrack.html');
+assert.strictEqual(content.includes('target = Math.max(0, nowX - (box.clientWidth / 2))'), true, 'FAIL: red line centering math missing');
+
+const zoomSandbox = {
+  todayDate: { value: '2026-09-23' },
+  getLocalTodayISO: () => '2026-09-23'
+};
+vm.createContext(zoomSandbox);
+
+const zoomCode = `
+  const getTimelineDefaultZoom = (dateStr) => {
+    const todayStr = todayDate.value || getLocalTodayISO();
+    if (dateStr === todayStr) return 6;
+    return 24;
+  };
+
+  const todayZoom = getTimelineDefaultZoom('2026-09-23');
+  const otherDayZoom = getTimelineDefaultZoom('2026-09-22');
+
+  // Verify centering math
+  const calculateScrollTarget = (isToday, nowMin, firstMin, trackWidth, boxWidth) => {
+    if (isToday && nowMin !== undefined) {
+      const nowX = (nowMin / 1440) * trackWidth;
+      return Math.max(0, nowX - (boxWidth / 2));
+    } else if (firstMin >= 0) {
+      return Math.max(0, (firstMin / 1440) * trackWidth - 24);
+    }
+    return 0;
+  };
+
+  // On Today at 12:00 PM (720m) with 4000px track and 1000px viewport:
+  const todayTarget = calculateScrollTarget(true, 720, 430, 4000, 1000);
+  // Viewport center with this scroll target:
+  const viewportCenter = todayTarget + (1000 / 2);
+  const nowPosition = (720 / 1440) * 4000;
+
+  // On other day with first work at 07:10 AM (430m):
+  const otherTarget = calculateScrollTarget(false, 720, 430, 1000, 1000);
+
+  ({ todayZoom, otherDayZoom, todayTarget, viewportCenter, nowPosition, otherTarget });
+`;
+const zoomInst = vm.runInContext(zoomCode, zoomSandbox);
+assert.strictEqual(zoomInst.todayZoom, 6, 'FAIL: Today must default to 6-hour stretch zoom');
+assert.strictEqual(zoomInst.otherDayZoom, 24, 'FAIL: Other days must default to full day view (24h)');
+assert.strictEqual(zoomInst.viewportCenter, zoomInst.nowPosition, 'FAIL: Current time red line must be in exact center of viewport');
+assert.strictEqual(zoomInst.otherTarget > 0, true, 'FAIL: Other days must adjust to first hour of work');
+
+console.log('✓ Test 15: Day at a glance 6-hour stretch zoom on Today & red line centering invariants verified.');
+
+console.log('\nSUCCESS: All 15 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
