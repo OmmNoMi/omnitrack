@@ -10162,16 +10162,53 @@
         return (endMin || 0) <= nowMinute.value;
       };
       const yesterdayDate = computed(() => addDays(todayDate.value || todayISO(), -1));
+      const pastBlockGraceHours = computed(() => {
+        return (plannerData.value && plannerData.value.past_block_lock_grace_hours != null)
+          ? Number(plannerData.value.past_block_lock_grace_hours)
+          : 24;
+      });
+      const timesheetHorizonHours = computed(() => {
+        return (plannerData.value && plannerData.value.timesheet_modification_horizon_hours != null)
+          ? Number(plannerData.value.timesheet_modification_horizon_hours)
+          : 48;
+      });
+
       const isPastBlock = (b) => {
-        if (!b) return false;
-        const today = todayDate.value || todayISO();
-        return (b.work_date || '') < today;
+        if (!b || !b.work_date) return false;
+        const grace = pastBlockGraceHours.value;
+        const endT = b.end_time || '23:59:59';
+        const parts = b.work_date.split('-');
+        if (parts.length < 3) return false;
+        const timeParts = endT.split(':');
+        const blockDt = new Date(
+          parseInt(parts[0], 10),
+          parseInt(parts[1], 10) - 1,
+          parseInt(parts[2], 10),
+          parseInt(timeParts[0] || '23', 10),
+          parseInt(timeParts[1] || '59', 10),
+          parseInt(timeParts[2] || '59', 10)
+        );
+        const now = new Date();
+        const diffHours = (now.getTime() - blockDt.getTime()) / (1000 * 60 * 60);
+        return diffHours > grace;
       };
+
       const canLogTimesheet = (b) => {
         if (!b) return false;
         if (isManager.value) return true;
-        const dt = b.work_date || todayDate.value || todayISO();
-        return dt >= yesterdayDate.value;
+        const horizon = timesheetHorizonHours.value;
+        const dtStr = b.work_date || todayDate.value || todayISO();
+        const parts = dtStr.split('-');
+        if (parts.length < 3) return true;
+        const blockDt = new Date(
+          parseInt(parts[0], 10),
+          parseInt(parts[1], 10) - 1,
+          parseInt(parts[2], 10),
+          23, 59, 59
+        );
+        const now = new Date();
+        const diffHours = (now.getTime() - blockDt.getTime()) / (1000 * 60 * 60);
+        return diffHours <= horizon;
       };
       const isBlockLocked = (b) => {
         if (!b) return false;
@@ -11830,6 +11867,8 @@
         isPastBlock,
         canLogTimesheet,
         yesterdayDate,
+        pastBlockGraceHours,
+        timesheetHorizonHours,
         isPastSlot,
         pastBookingHint,
         hoverCard,

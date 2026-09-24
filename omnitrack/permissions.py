@@ -63,21 +63,63 @@ def can_access_user_data(target_user, session_user=None):
 	return False
 
 
+def get_timesheet_modification_horizon_hours():
+	"""Returns the configured horizon in hours for standard timesheet modifications (default: 48 hours)."""
+	horizon_hours = 48
+	try:
+		if frappe.db.exists("DocType", "OmniTrack Settings"):
+			meta = frappe.get_meta("OmniTrack Settings")
+			if meta.has_field("timesheet_modification_horizon_hours"):
+				val = frappe.db.get_single_value("OmniTrack Settings", "timesheet_modification_horizon_hours")
+				if val is not None and val != "":
+					val_int = int(val)
+					if val_int > 0:
+						horizon_hours = val_int
+	except Exception:
+		pass
+	return horizon_hours
+
+
+def get_past_block_lock_grace_hours():
+	"""Returns the configured grace period in hours before past planned work blocks lock (default: 24 hours)."""
+	grace_hours = 24
+	try:
+		if frappe.db.exists("DocType", "OmniTrack Settings"):
+			meta = frappe.get_meta("OmniTrack Settings")
+			if meta.has_field("past_block_lock_grace_hours"):
+				val = frappe.db.get_single_value("OmniTrack Settings", "past_block_lock_grace_hours")
+				if val is not None and val != "":
+					val_int = int(val)
+					if val_int > 0:
+						grace_hours = val_int
+	except Exception:
+		pass
+	return grace_hours
+
+
 def check_timesheet_date_permission(session_date, user=None):
 	"""
-	Rule: An OmniTrack User can only log or modify timesheets for TODAY and YESTERDAY.
-	Dates before yesterday require an OmniTrack Manager.
+	Rule: An OmniTrack User can only log or modify timesheets within the configured
+	horizon in hours (OmniTrack Settings > timesheet_modification_horizon_hours).
+	Default is 48 hours (2 days: today and yesterday). Configurable to 72h (3 days), 168h (1 week), etc.
+	Dates before the horizon require an OmniTrack Manager or Administrator.
 	"""
 	if not user:
 		user = frappe.session.user
 	if is_omnitrack_manager(user):
 		return True
 
-	cutoff_date = getdate(add_days(nowdate(), -1))
+	horizon_hours = get_timesheet_modification_horizon_hours()
+	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
+	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
 	target_date = getdate(session_date)
 	if target_date < cutoff_date:
+		horizon_desc = f"{horizon_hours} hours"
+		if horizon_hours % 24 == 0:
+			days = horizon_hours // 24
+			horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
 		frappe.throw(
-			_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+			_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
 			frappe.PermissionError
 		)
 	return True
@@ -85,44 +127,70 @@ def check_timesheet_date_permission(session_date, user=None):
 
 def check_planned_block_past_lock(doc, new_work_date=None):
 	"""
-	Rule: In the past (work_date < today), NO ONE (neither user nor manager) can
-	modify, reschedule, or move planned work blocks. Historical planning commitments are immutable.
+	Rule: Work blocks older than the configured Past Lock Grace Period (Hours)
+	cannot be modified, rescheduled, or moved. Historical planning commitments are immutable.
+	Default grace period is 24 hours. Accommodates late-night shifts and midnight crossing.
 	"""
-	today = getdate(nowdate())
-	if doc and doc.get("work_date") and getdate(doc.get("work_date")) < today:
-		frappe.throw(
-			_("Planned work blocks in the past cannot be modified or rescheduled."),
-			frappe.ValidationError
-		)
-	if new_work_date and getdate(new_work_date) < today:
-		frappe.throw(
-			_("Cannot reschedule or move a planned work block into the past."),
-			frappe.ValidationError
-		)
+	grace_hours = get_past_block_lock_grace_hours()
+	from frappe.utils import now_datetime, get_datetime, time_diff_in_hours
+	now_dt = now_datetime()
+
+	if doc and doc.get("work_date"):
+		end_t = doc.get("end_time") or "23:59:59"
+		try:
+			block_dt = get_datetime(f"{doc.get('work_date')} {end_t}")
+		except Exception:
+			block_dt = get_datetime(f"{doc.get('work_date')} 23:59:59")
+		diff = time_diff_in_hours(now_dt, block_dt)
+		if diff > grace_hours:
+			grace_desc = f"{grace_hours} hours"
+			if grace_hours % 24 == 0:
+				days = grace_hours // 24
+				grace_desc += f" ({days} day{'s' if days > 1 else ''})"
+			frappe.throw(
+				_("Planned work blocks older than the {0} grace period cannot be modified or rescheduled.").format(grace_desc),
+				frappe.ValidationError
+			)
+
+	if new_work_date:
+		new_dt = get_datetime(f"{new_work_date} 23:59:59")
+		diff = time_diff_in_hours(now_dt, new_dt)
+		if diff > grace_hours:
+			frappe.throw(
+				_("Cannot reschedule or move a planned work block older than the grace period into the past."),
+				frappe.ValidationError
+			)
 	return True
 
 
 def validate_timesheet_permission(doc, method=None):
-	"""DocEvent validation for standard Timesheet: users can only save logs for today & yesterday."""
+	"""DocEvent validation for standard Timesheet: users can only save logs within the configured horizon."""
 	user = frappe.session.user
 	if is_omnitrack_manager(user):
 		return
 	if getattr(doc.flags, "ignore_permissions", False):
 		return
 
-	cutoff_date = getdate(add_days(nowdate(), -1))
+	horizon_hours = get_timesheet_modification_horizon_hours()
+	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
+	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
+	horizon_desc = f"{horizon_hours} hours"
+	if horizon_hours % 24 == 0:
+		days = horizon_hours // 24
+		horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
+
 	# Check child time_logs if present
 	if hasattr(doc, "time_logs") and doc.time_logs:
 		for row in doc.time_logs:
 			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
 			if t_date < cutoff_date:
 				frappe.throw(
-					_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+					_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
 					frappe.PermissionError
 				)
 	elif doc.get("start_date") and getdate(doc.get("start_date")) < cutoff_date:
 		frappe.throw(
-			_("OmniTrack Users can only log or modify timesheets for today and yesterday. Contact an OmniTrack Manager for historical changes."),
+			_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
 			frappe.PermissionError
 		)
 
@@ -135,15 +203,27 @@ def validate_timesheet_trash_event(doc, method=None):
 	if getattr(doc.flags, "ignore_permissions", False):
 		return
 
-	cutoff_date = getdate(add_days(nowdate(), -1))
+	horizon_hours = get_timesheet_modification_horizon_hours()
+	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
+	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
+	horizon_desc = f"{horizon_hours} hours"
+	if horizon_hours % 24 == 0:
+		days = horizon_hours // 24
+		horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
+
 	if hasattr(doc, "time_logs") and doc.time_logs:
 		for row in doc.time_logs:
 			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
 			if t_date < cutoff_date:
 				frappe.throw(
-					_("OmniTrack Users can only delete timesheets for today and yesterday. Contact an OmniTrack Manager for historical deletions."),
+					_("OmniTrack Users can only delete timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical deletions.").format(horizon_desc),
 					frappe.PermissionError
 				)
+	elif doc.get("start_date") and getdate(doc.get("start_date")) < cutoff_date:
+		frappe.throw(
+			_("OmniTrack Users can only delete timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical deletions.").format(horizon_desc),
+			frappe.PermissionError
+		)
 
 
 def get_task_permission_query_conditions(user=None):

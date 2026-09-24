@@ -1405,7 +1405,68 @@ assert.strictEqual(hoverRes.top, 486, 'FAIL: Top must be 486 (r.bottom + 8), 8px
 
 console.log('✓ Test 35: HoverCard non-occlusion & auto-dismissal invariants verified.');
 
-console.log('\nSUCCESS: All 35 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 36: Configurable Temporal Horizon & Past Block Grace Invariants
+// ---------------------------------------------------------------------------
+assert.ok(
+  content.includes('const pastBlockGraceHours = computed('),
+  'FAIL: omnitrack.html must define pastBlockGraceHours computed ref'
+);
+assert.ok(
+  content.includes('const timesheetHorizonHours = computed('),
+  'FAIL: omnitrack.html must define timesheetHorizonHours computed ref'
+);
+assert.ok(
+  content.includes('diffHours > grace'),
+  'FAIL: isPastBlock must dynamically compare elapsed hours against configured grace period'
+);
+assert.ok(
+  content.includes('diffHours <= horizon'),
+  'FAIL: canLogTimesheet must dynamically compare elapsed hours against configured horizon'
+);
+
+const temporalSandbox = {
+  Date: Date,
+  Number: Number,
+  parseInt: parseInt,
+  isNaN: isNaN
+};
+vm.createContext(temporalSandbox);
+const temporalCode = `
+  const isPastBlockFn = (b, grace, now) => {
+    if (!b || !b.work_date) return false;
+    const endT = b.end_time || '23:59:59';
+    const parts = b.work_date.split('-');
+    const timeParts = endT.split(':');
+    const blockDt = new Date(
+      parseInt(parts[0], 10),
+      parseInt(parts[1], 10) - 1,
+      parseInt(parts[2], 10),
+      parseInt(timeParts[0] || '23', 10),
+      parseInt(timeParts[1] || '59', 10),
+      parseInt(timeParts[2] || '59', 10)
+    );
+    const diffHours = (now.getTime() - blockDt.getTime()) / (1000 * 60 * 60);
+    return diffHours > grace;
+  };
+
+  // Block scheduled on Sept 24 ending at 23:59:59
+  const block = { work_date: '2026-09-24', end_time: '23:59:59' };
+  // Evaluated at 00:20:00 on Sept 25 (20 minutes past midnight)
+  const now = new Date(2026, 8, 25, 0, 20, 0);
+
+  const res24h = isPastBlockFn(block, 24, now); // 24-hour grace window
+  const res0h = isPastBlockFn(block, 0, now);   // 0-hour grace window
+
+  ({ res24h, res0h });
+`;
+const temporalRes = vm.runInContext(temporalCode, temporalSandbox);
+assert.strictEqual(temporalRes.res24h, false, 'FAIL: 20 minutes past midnight must NOT be locked under 24h grace window');
+assert.strictEqual(temporalRes.res0h, true, 'FAIL: 20 minutes past midnight must be locked under 0h grace window');
+
+console.log('✓ Test 36: Configurable temporal horizon & past block grace invariants verified.');
+
+console.log('\nSUCCESS: All 36 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

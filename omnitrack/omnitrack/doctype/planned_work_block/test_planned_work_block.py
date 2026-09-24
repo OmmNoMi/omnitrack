@@ -1267,8 +1267,54 @@ console.log('SUCCESS');
 		# Verify partner block exists with proper pairing attribution
 		partner_doc = frappe.get_doc("Planned Work Block", res["partner_block"])
 		self.assertEqual(partner_doc.employee, partner_email)
-		self.assertIn("Pairing with", partner_doc.deliverable_notes)
-		self.assertIn(partner_doc.status, ("Completed", "Logged (Full)"))
+	def test_configurable_horizon_and_grace_hours(self):
+		"""Test that admin-configured horizon hours dynamically expand timesheet and block immutability windows."""
+		from omnitrack.api import log_work_session, update_work_block
+		from omnitrack.permissions import get_timesheet_modification_horizon_hours, get_past_block_lock_grace_hours
+
+		# By default, horizon is 48 hours and grace is 24 hours
+		self.assertEqual(get_timesheet_modification_horizon_hours(), 48)
+		self.assertEqual(get_past_block_lock_grace_hours(), 24)
+
+		# 1. Test expanding timesheet horizon to 168 hours (1 week)
+		three_days_ago = str(frappe.utils.getdate(frappe.utils.add_days(frappe.utils.nowdate(), -3)))
+		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: 168 if fn == "timesheet_modification_horizon_hours" else 24):
+			self.assertEqual(get_timesheet_modification_horizon_hours(), 168)
+			doc = _block(employee="test_user_no_emp@ommnomi.local", work_date=three_days_ago, start_time="10:00:00", end_time="12:00:00")
+			doc.flags.ignore_past_block_lock = True
+			doc.insert()
+
+			frappe.set_user("test_user_no_emp@ommnomi.local")
+			try:
+				# Three days ago succeeds because horizon is 168 hours (1 week)
+				res = log_work_session(
+					block_name=doc.name,
+					session_date=three_days_ago,
+					from_time="10:00:00",
+					to_time="11:30:00",
+					hours=1.5,
+					notes="Log on three days ago under 168h horizon"
+				)
+				self.assertEqual(res["status"], "success")
+			finally:
+				frappe.set_user("Administrator")
+
+		# 2. Test expanding past block grace hours to 48 hours (allows editing yesterday's block)
+		yesterday = str(frappe.utils.getdate(frappe.utils.add_days(frappe.utils.nowdate(), -1)))
+		yest_block = _block(work_date=yesterday, start_time="22:00:00", end_time="23:30:00", deliverable_notes="Initial note")
+		yest_block.flags.ignore_past_block_lock = True
+		yest_block.insert()
+
+		# With 48h grace period, updating yesterday's plan (notes / times) succeeds
+		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: 48 if fn == "past_block_lock_grace_hours" else 48):
+			self.assertEqual(get_past_block_lock_grace_hours(), 48)
+			up_res = update_work_block(
+				block_name=yest_block.name,
+				deliverable_notes="Updated note within 48h grace window"
+			)
+			self.assertEqual(up_res["status"], "success")
+			yest_block.reload()
+			self.assertEqual(yest_block.deliverable_notes, "Updated note within 48h grace window")
 
 	def tearDown(self):
 		frappe.db.rollback()

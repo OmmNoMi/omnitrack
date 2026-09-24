@@ -28,6 +28,8 @@ def get_system_status():
 		"task_switching_enabled": getattr(settings, "enable_task_switching", 1),
 		"pairing_sessions_enabled": getattr(settings, "enable_pairing_sessions", 1),
 		"lock_screen_actions_enabled": getattr(settings, "enable_lock_screen_actions", 1),
+		"past_block_lock_grace_hours": getattr(settings, "past_block_lock_grace_hours", 24) or 24,
+		"timesheet_modification_horizon_hours": getattr(settings, "timesheet_modification_horizon_hours", 48) or 48,
 		"timestamp": frappe.utils.now()
 	}
 
@@ -1970,6 +1972,8 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			"block_count": len(work_blocks),
 			"away_count": len(non_work_blocks),
 		},
+		"past_block_lock_grace_hours": getattr(frappe.get_single("OmniTrack Settings"), "past_block_lock_grace_hours", 24) or 24 if frappe.db.exists("DocType", "OmniTrack Settings") else 24,
+		"timesheet_modification_horizon_hours": getattr(frappe.get_single("OmniTrack Settings"), "timesheet_modification_horizon_hours", 48) or 48 if frappe.db.exists("DocType", "OmniTrack Settings") else 48,
 	}
 
 

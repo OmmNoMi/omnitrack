@@ -14,30 +14,51 @@ class PlannedWorkBlock(Document):
 		self.generate_cryptographic_hash()
 
 	def validate_past_plan_immutability(self):
-		"""Rule: In the past (work_date < today), NO ONE can change or reschedule planned work blocks."""
+		"""Rule: Work blocks older than the configured Past Lock Grace Period (Hours)
+		cannot have their core plan modified or rescheduled."""
 		if getattr(self.flags, "ignore_past_block_lock", False):
 			return
 
-		today = frappe.utils.getdate(frappe.utils.nowdate())
+		from omnitrack.permissions import get_past_block_lock_grace_hours
+		from frappe.utils import now_datetime, get_datetime, time_diff_in_hours
+
+		grace_hours = get_past_block_lock_grace_hours()
+		now_dt = now_datetime()
 
 		if not self.is_new():
-			db_date = frappe.utils.getdate(self.get_db_value("work_date") or self.work_date)
-			if db_date < today:
+			db_date = self.get_db_value("work_date") or self.work_date
+			db_end_time = self.get_db_value("end_time") or self.end_time or "23:59:59"
+			try:
+				block_dt = get_datetime(f"{db_date} {db_end_time}")
+			except Exception:
+				block_dt = get_datetime(f"{db_date} 23:59:59")
+
+			if time_diff_in_hours(now_dt, block_dt) > grace_hours:
 				plan_fields = ("work_date", "start_time", "end_time", "task", "project", "task_nature", "deliverable_notes")
 				for f in plan_fields:
 					if self.has_value_changed(f):
+						grace_desc = f"{grace_hours} hours"
+						if grace_hours % 24 == 0:
+							days = grace_hours // 24
+							grace_desc += f" ({days} day{'s' if days > 1 else ''})"
 						frappe.throw(
-							frappe._("Planned work blocks in the past cannot be modified or rescheduled."),
+							frappe._("Planned work blocks older than the {0} grace period cannot be modified or rescheduled.").format(grace_desc),
 							frappe.ValidationError
 						)
-			elif self.has_value_changed("work_date") and self.work_date and frappe.utils.getdate(self.work_date) < today:
-				frappe.throw(
-					frappe._("Cannot reschedule or move a planned work block into the past."),
-					frappe.ValidationError
-				)
+			elif self.has_value_changed("work_date") and self.work_date:
+				new_end = self.end_time or "23:59:59"
+				try:
+					new_dt = get_datetime(f"{self.work_date} {new_end}")
+				except Exception:
+					new_dt = get_datetime(f"{self.work_date} 23:59:59")
+				if time_diff_in_hours(now_dt, new_dt) > grace_hours:
+					frappe.throw(
+						frappe._("Cannot reschedule or move a planned work block older than the grace period into the past."),
+						frappe.ValidationError
+					)
 
 	def validate_timesheet_session_horizons(self):
-		"""Rule: OmniTrack Users can only log or modify timesheet sessions for today and yesterday."""
+		"""Rule: OmniTrack Users can only log or modify timesheet sessions within the configured horizon."""
 		if getattr(self.flags, "ignore_permissions", False):
 			return
 		from omnitrack.permissions import check_timesheet_date_permission
@@ -47,11 +68,21 @@ class PlannedWorkBlock(Document):
 
 	def on_trash(self):
 		if not getattr(self.flags, "ignore_past_block_lock", False):
-			if self.work_date and frappe.utils.getdate(self.work_date) < frappe.utils.getdate(frappe.utils.nowdate()):
-				frappe.throw(
-					frappe._("Past planned work blocks cannot be deleted."),
-					frappe.ValidationError
-				)
+			from omnitrack.permissions import get_past_block_lock_grace_hours
+			from frappe.utils import now_datetime, get_datetime, time_diff_in_hours
+			grace_hours = get_past_block_lock_grace_hours()
+			now_dt = now_datetime()
+			if self.work_date:
+				end_t = self.end_time or "23:59:59"
+				try:
+					block_dt = get_datetime(f"{self.work_date} {end_t}")
+				except Exception:
+					block_dt = get_datetime(f"{self.work_date} 23:59:59")
+				if time_diff_in_hours(now_dt, block_dt) > grace_hours:
+					frappe.throw(
+						frappe._("Past planned work blocks older than the grace period cannot be deleted."),
+						frappe.ValidationError
+					)
 
 
 	def resolve_project_from_task(self):

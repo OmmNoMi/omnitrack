@@ -192,6 +192,29 @@
       "options": "OmniTrack Project Policy"
     },
     {
+      "fieldname": "sb_temporal_governance",
+      "fieldtype": "Section Break",
+      "label": "Temporal Governance & Horizon Policies"
+    },
+    {
+      "fieldname": "timesheet_modification_horizon_hours",
+      "fieldtype": "Int",
+      "label": "Timesheet Modification Horizon (Hours)",
+      "default": 48,
+      "description": "Hours during which standard users can log or modify timesheets without manager sign-off (e.g. 48 for 2 days, 168 for 1 week)."
+    },
+    {
+      "fieldname": "cb_temporal_governance",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "past_block_lock_grace_hours",
+      "fieldtype": "Int",
+      "label": "Past Work Block Lock Grace Period (Hours)",
+      "default": 24,
+      "description": "Grace period in hours after a scheduled block before its plan becomes permanently immutable. Accommodates active night shifts and midnight boundary crossing (e.g. 24 for 1 day, 48 for 2 days)."
+    },
+    {
       "fieldname": "sb_cross_site_sync",
       "fieldtype": "Section Break",
       "label": "Universal Cross-Site Replication Engine"
