@@ -7008,14 +7008,14 @@
       const isBlockConcluded = (b) => {
         if (!b) return false;
         if (isBlockCompleted(b)) return true;
-        if (b.status === 'Cancelled' || b.status === 'Rescheduled' || b.status === 'Missed') return true;
+        if (b.status === 'Cancelled' || b.status === 'Rescheduled' || b.status === 'Missed' || b.status === 'Completed' || b.status === 'Logged (Full)' || b.status === 'Logged (Over)' || b.status === 'Logged (Partial)') return true;
         if (_isPastDay()) return true;
         const isToday = selectedDashboardDate.value === todayDate.value;
         if (isToday) {
           const endMin = _minsOf(b.end_time);
           const now = new Date();
           const nowMins = now.getHours() * 60 + now.getMinutes();
-          if (endMin > 0 && endMin <= nowMins && b.status !== 'In Progress' && !isBlockInNow(b)) return true;
+          if (endMin > 0 && endMin <= nowMins && (!isTracking.value || trackerBoundBlock.value?.name !== b.name) && !isBlockInNow(b)) return true;
         }
         return false;
       };
@@ -7580,6 +7580,24 @@
         const startMs = Number(sessionData.startTime);
         const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         if (elapsed >= 86400) return false; // expired past 24h
+
+        // Zombie timer eviction: if running for > 10 hours, evict immediately
+        if (elapsed >= 10 * 3600) {
+          markSessionEnded();
+          localStorage.removeItem('omnitrack_active_session');
+          postJSON('sync_active_session', { session_data: null }).catch(() => {});
+          return false;
+        }
+
+        // Zombie timer eviction: if session started on a prior calendar day and has run >= 6 hours
+        const sessionStartDate = new Date(startMs).toISOString().split('T')[0];
+        const todayStr = getLocalTodayISO();
+        if (sessionStartDate !== todayStr && elapsed >= 6 * 3600) {
+          markSessionEnded();
+          localStorage.removeItem('omnitrack_active_session');
+          postJSON('sync_active_session', { session_data: null }).catch(() => {});
+          return false;
+        }
 
         // Do not resurrect a session bound to a block that is already Logged, Completed, Missed or Cancelled
         if (sessionData.trackerBlockName) {
@@ -9245,11 +9263,13 @@
           const isBoundToExistingSeg = trackerBlockName.value && segments.some(s => s.block && s.block.name === trackerBlockName.value);
           if (!isBoundToExistingSeg) {
             const d = new Date(startTime.value);
-            const sMins = d.getHours() * 60 + d.getMinutes();
-            const curNow = new Date();
-            const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
-            const eMins = Math.max(sMins + 15, curNowMins);
-            const liveBlock = {
+            const startISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (startISO === iso) {
+              const sMins = d.getHours() * 60 + d.getMinutes();
+              const curNow = new Date();
+              const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
+              const eMins = Math.max(sMins + 15, curNowMins);
+              const liveBlock = {
               name: trackerBlockName.value || 'live_active_session',
               is_live_active: true,
               task_subject: trackerNotes.value || 'Active Work Session',
@@ -9272,6 +9292,7 @@
               end_mins: eMins,
               block: liveBlock
             });
+            }
           }
         }
 
