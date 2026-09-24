@@ -1369,7 +1369,43 @@ assert.strictEqual(calcDur, '0.47', 'FAIL: Duration between 19:32 and 20:00 must
 
 console.log('✓ Test 34: Logged work session direct in-drawer editing & deletion invariants verified.');
 
-console.log('\nSUCCESS: All 34 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 35: HoverCard Non-Occlusion & Auto-Dismissal Invariants
+// ---------------------------------------------------------------------------
+assert.ok(
+  content.includes('r.bottom + 8'),
+  'FAIL: showBlockHover must place tooltip below card (r.bottom + 8) when space permits'
+);
+assert.ok(
+  !content.includes('top: Math.max(8, Math.min(r.top - 8'),
+  'FAIL: Obsolete r.top - 8 positioning which occludes the hovered card must be eliminated'
+);
+assert.ok(
+  content.includes('const openBlockDrawer = (b) => {\n        hideBlockHover();'),
+  'FAIL: openBlockDrawer must immediately invoke hideBlockHover() to clear tooltip'
+);
+
+const hoverSandbox = {
+  window: { innerWidth: 1280, innerHeight: 900 },
+  r: { top: 450, bottom: 478, left: 300, width: 120 }
+};
+vm.createContext(hoverSandbox);
+const hoverCode = `
+  const CARD_EST_HEIGHT = 220;
+  const spaceBelow = window.innerHeight - r.bottom;
+  const placeBelow = spaceBelow >= CARD_EST_HEIGHT + 16 || spaceBelow >= r.top;
+  const top = placeBelow 
+    ? Math.min(r.bottom + 8, window.innerHeight - CARD_EST_HEIGHT - 10)
+    : Math.max(10, r.top - CARD_EST_HEIGHT - 8);
+  ({ placeBelow, top });
+`;
+const hoverRes = vm.runInContext(hoverCode, hoverSandbox);
+assert.strictEqual(hoverRes.placeBelow, true, 'FAIL: Mid-screen card must place hovercard below');
+assert.strictEqual(hoverRes.top, 486, 'FAIL: Top must be 486 (r.bottom + 8), 8px completely clear of card');
+
+console.log('✓ Test 35: HoverCard non-occlusion & auto-dismissal invariants verified.');
+
+console.log('\nSUCCESS: All 35 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
