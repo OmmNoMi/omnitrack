@@ -1928,6 +1928,16 @@
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         <span>Adjust</span>
                       </button>
+                      <button
+                        type="button"
+                        @click.stop="openSwitchTaskModal"
+                        aria-label="Switch to another task without losing time"
+                        title="Switch task (⇄) — log current session and transition to target immediately"
+                        class="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-bold border cursor-pointer transition-all active:scale-95 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                        :class="isDarkMode ? 'border-gray-700 text-gray-300 hover:bg-gray-800' : 'border-gray-300 text-gray-600 hover:bg-gray-100'">
+                        <span class="font-bold" aria-hidden="true">⇄</span>
+                        <span>Switch</span>
+                      </button>
                     </template>
                     <template v-else>
                       <!-- A block that has not happened yet is still a plan: let it move. -->
@@ -4381,6 +4391,7 @@
     title="Adjust Timesheet Timing"
     :subtitle="isTracking ? 'Fine-tune ongoing session start time or conclude and log to timesheet' : 'Backdate or record a past focus session window'"
     size="md"
+    z-index="z-[75]"
   >
     <template #header-icon>
       <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -4624,6 +4635,101 @@
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
           </template>
           <span>{{ isTracking ? 'Stop & Log ' + adjustDurationShort + ' to Timesheet' : 'Log ' + adjustDurationShort + ' to Timesheet' }}</span>
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- SWITCH ACTIVE TASK MODAL DIALOG            -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showSwitchTaskModal"
+    title="Switch Active Task"
+    subtitle="Log time on current work block and transition to another immediately"
+    size="md"
+    z-index="z-[80]"
+  >
+    <template #header-icon>
+      <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+    </template>
+
+    <div class="space-y-4 text-xs">
+      <!-- Current Session Summary & Wrap-Up Note -->
+      <div class="p-3 rounded-2xl bg-gray-50 dark:bg-[#18191B] border border-gray-200 dark:border-gray-800 space-y-2">
+        <div class="flex items-center justify-between text-gray-600 dark:text-gray-300 font-medium">
+          <span>Active Clock: <strong class="font-mono text-gray-900 dark:text-white">{{ formattedTime }}</strong></span>
+          <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
+            {{ trackerBoundBlock ? 'Bound to Block' : 'Unbound Focus' }}
+          </span>
+        </div>
+        <div>
+          <label for="switch-wrap-note" class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+            Current Session Wrap-Up Note (Saved to timesheet)
+          </label>
+          <input
+            id="switch-wrap-note"
+            type="text"
+            v-model="switchWrapUpNote"
+            class="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272A] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="What did you wrap up before switching?"
+          />
+        </div>
+      </div>
+
+      <!-- Search Candidate Blocks & Tasks -->
+      <div class="space-y-2">
+        <label for="switch-target-search" class="block font-bold text-gray-800 dark:text-gray-200">
+          Select Target Task to Switch To:
+        </label>
+        <div class="relative">
+          <input
+            id="switch-target-search"
+            type="search"
+            v-model="switchSearchQuery"
+            class="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272A] text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search today's planned blocks or assigned tasks..."
+            autocomplete="off"
+          />
+          <svg class="w-4 h-4 absolute left-3 top-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+      </div>
+
+      <!-- Candidate Selection List -->
+      <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+        <div v-if="switchCandidates.length === 0" class="py-6 text-center text-gray-400 italic">
+          No matching work blocks or tasks found for today.
+        </div>
+        <button
+          v-for="item in switchCandidates"
+          :key="item.id || item.name"
+          type="button"
+          @click="executeSwitchTask(item)"
+          class="w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 bg-white dark:bg-[#222427] border-gray-200 dark:border-gray-700/80 hover:border-blue-400 dark:hover:border-blue-500"
+        >
+          <div class="min-w-0 flex-1 space-y-0.5">
+            <div class="flex items-center gap-2">
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
+                :class="item.is_block ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'">
+                {{ item.is_block ? 'Planned Block' : 'Open Task' }}
+              </span>
+              <span class="font-bold text-gray-900 dark:text-white truncate text-xs">{{ item.label }}</span>
+            </div>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+              {{ item.sublabel || item.project || 'General' }}
+            </div>
+          </div>
+          <span class="shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            Switch →
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showSwitchTaskModal = false">
+          Cancel
         </f-button>
       </div>
     </template>
@@ -5111,12 +5217,29 @@
         this._triggerEl = document.activeElement;
         this.isOpen = true;
         window.dispatchEvent(new CustomEvent('omnitrack-close-menus', { detail: this }));
+        this.adjustPosition();
         this.$nextTick(() => {
           const items = this.getMenuItems();
           if (items.length > 0) {
             const idx = focusTarget === 'last' ? items.length - 1 : 0;
             this.focusedIdx = idx;
             items[idx].focus();
+          }
+        });
+      },
+      adjustPosition() {
+        this.$nextTick(() => {
+          if (!this.isOpen || !this.$el) return;
+          const menu = this.$el.querySelector('[role="menu"]');
+          if (!menu) return;
+          const rect = menu.getBoundingClientRect();
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+          if (rect.left < 8) {
+            menu.style.left = '0px';
+            menu.style.right = 'auto';
+          } else if (rect.right > viewportWidth - 8) {
+            menu.style.right = '0px';
+            menu.style.left = 'auto';
           }
         });
       },
@@ -5232,7 +5355,7 @@
           tabindex="-1"
           @keydown="onMenuKeydown"
           :aria-label="ariaLabel"
-          class="absolute z-50 mt-1.5 min-w-[19rem] w-max max-w-[min(30rem,calc(100vw-2rem))] rounded-2xl shadow-xl border py-1.5 transition-all outline-none bg-white border-gray-200 text-gray-900 shadow-gray-400/20 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:shadow-black/60"
+          class="absolute z-50 mt-1.5 min-w-[13.5rem] sm:min-w-[18rem] max-w-[calc(100vw-1.5rem)] rounded-2xl shadow-xl border py-1.5 transition-all outline-none bg-white border-gray-200 text-gray-900 shadow-gray-400/20 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:shadow-black/60"
           :class="align === 'left' ? 'left-0' : 'right-0'"
         >
           <div v-if="title" class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700/60 mb-1">
@@ -5276,7 +5399,7 @@
       title: { type: String, default: null },
       subtitle: { type: String, default: null },
       size: { type: String, default: 'md' },
-      zIndex: { type: String, default: 'z-50' },
+      zIndex: { type: String, default: 'z-[70]' },
       dismissible: { type: Boolean, default: true },
       ariaLabel: { type: String, default: null }
     },
@@ -9017,6 +9140,11 @@
       });
 
       const openAdjustModal = () => {
+        // If the timesheet popup is elevated in full focus, minimize it so the
+        // adjust dialog is directly centered and never occluded by the backdrop.
+        if (isSessionElevated.value) {
+          isSessionElevated.value = false;
+        }
         const pad = (n) => String(n).padStart(2, '0');
         const nowObj = new Date();
         let startObj = new Date();
@@ -9219,7 +9347,97 @@
         toggleTrack();
       };
 
-            const saveNewPlannedTask = async () => {
+      // 2c. 1-Click Atomic Switch Task Action (WCAG 2.2 AA)
+      const showSwitchTaskModal = ref(false);
+      const switchSearchQuery = ref('');
+      const switchWrapUpNote = ref('');
+
+      const openSwitchTaskModal = () => {
+        if (isSessionElevated.value) isSessionElevated.value = false;
+        switchSearchQuery.value = '';
+        const rawTitle = (trackerNotes.value || '').trim();
+        const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
+        switchWrapUpNote.value = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
+        showSwitchTaskModal.value = true;
+      };
+
+      const switchCandidates = computed(() => {
+        const q = (switchSearchQuery.value || '').toLowerCase().trim();
+        const curBlock = trackerBlockName.value;
+        const list = [];
+
+        // 1. Candidate Planned Work Blocks for today
+        const blocks = (plannerData.value && plannerData.value.blocks) || [];
+        blocks.forEach(b => {
+          if (b.name === curBlock) return;
+          if (b.status === 'Cancelled' || b.status === 'Logged (Full)') return;
+          const label = b.task_subject || b.work_item_label || b.name;
+          const sublabel = `${b.start_time || ''} – ${b.end_time || ''} · ${b.project || 'General'}`;
+          if (!q || label.toLowerCase().includes(q) || (b.project || '').toLowerCase().includes(q)) {
+            list.push({
+              id: b.name,
+              name: b.name,
+              label,
+              sublabel,
+              project: b.project,
+              is_block: true,
+              task_nature: b.task_nature
+            });
+          }
+        });
+
+        // 2. Candidate Open Tasks
+        const tasks = assignedTasks.value || [];
+        tasks.forEach(t => {
+          const label = t.subject || t.title || t.name;
+          const sublabel = `Task · ${t.project || 'General'}`;
+          if (!q || label.toLowerCase().includes(q) || (t.project || '').toLowerCase().includes(q)) {
+            list.push({
+              id: t.name || t.id,
+              name: t.name || t.id,
+              label,
+              sublabel,
+              project: t.project,
+              is_block: false,
+              task_nature: '🎯 Planned'
+            });
+          }
+        });
+
+        return list;
+      });
+
+      const executeSwitchTask = async (target) => {
+        triggerHaptic([30, 40]);
+        const isBlock = !!target.is_block;
+        const targetBlock = isBlock ? target.name : null;
+        const targetTask = !isBlock ? target.name : null;
+        const wrapNote = (switchWrapUpNote.value || '').trim();
+
+        showSwitchTaskModal.value = false;
+        try {
+          const res = await postJSON('switch_active_session', {
+            target_block: targetBlock,
+            target_task: targetTask,
+            current_session_notes: wrapNote
+          });
+          const loggedH = (res && res.elapsed_hours) ? `${res.elapsed_hours}h` : 'time';
+          showToast(`Switched task! Logged ${loggedH} on previous session.`, 'success');
+          trackerSeconds.value = 0;
+          startTime.value = Date.now();
+          lastActivityTime.value = Date.now();
+          lastInactivityAlertTime.value = 0;
+          trackerBlockName.value = targetBlock;
+          trackerNotes.value = target.label || '';
+          sessionNotesList.value = [];
+          fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') fetchPlannerData();
+        } catch (err) {
+          showToast('Failed to switch task: ' + (err && err.message || err), 'danger');
+        }
+      };
+
+      const saveNewPlannedTask = async () => {
         if (!newTaskForm.value.notes) {
           showToast('Please enter deliverable notes', 'danger');
           return;
@@ -10942,6 +11160,7 @@
         else if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
         else if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
+        else if (showSwitchTaskModal.value) showSwitchTaskModal.value = false;
         else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
         else if (showCancelModal.value) showCancelModal.value = false;
         else if (showNewTaskModal.value) showNewTaskModal.value = false;
@@ -10951,7 +11170,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showBookModal, showAdjustModal, showSwitchTaskModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -11214,6 +11433,12 @@
         applyAdjustedStartTime,
         submitAdjustedTimesheet,
         trackBlock,
+        showSwitchTaskModal,
+        switchSearchQuery,
+        switchWrapUpNote,
+        openSwitchTaskModal,
+        switchCandidates,
+        executeSwitchTask,
         saveNewPlannedTask,
         // Google Meet Dashboard & Agenda
         selectedDashboardDate,

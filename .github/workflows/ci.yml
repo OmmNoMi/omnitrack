@@ -2,9 +2,9 @@ name: OmniTrack CI & Cloud Alignment
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [ develop, version-16, main ]
   pull_request:
-    branches: [ develop, main ]
+    branches: [ develop, version-16, main ]
 
 jobs:
   test:
@@ -32,6 +32,14 @@ jobs:
       - name: Validate HTML5 Spec Compliance
         run: |
           python scripts/check_www_html.py omnitrack/www/omnitrack.html
+
+      - name: Run Standalone Python Architecture & Fixture Tests
+        run: |
+          python -m unittest omnitrack/tests/test_workspace_fixtures.py
+
+      - name: Verify JavaScript Compilation & VM Evaluation
+        run: |
+          node scripts/check_www_js.cjs
 
       - name: Run Tier 3 Workstation Interaction & A11y Tests
         run: |

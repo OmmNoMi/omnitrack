@@ -674,6 +674,80 @@ def sync_active_session(session_data=None, user=None):
 	return {"status": "success", "session": clean_data}
 
 
+@frappe.whitelist()
+def switch_active_session(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None):
+	"""
+	Atomically switches the user's active running timesheet session to another Planned Work Block or Task.
+	1. Closes the currently running session:
+	   - Computes elapsed time from session startTime to now.
+	   - Appends work session to current block with current_session_notes.
+	   - Synchronizes linked Timesheet.
+	2. Begins new session on target_block / target_task with startTime = now.
+	3. Persists to Redis and tabDefaultValue, broadcasting omnitrack:active_session_updated.
+	All within a single atomic database transaction.
+	"""
+	target_user = _resolve_planner_user() or frappe.session.user
+	if not target_user or target_user == "Guest":
+		frappe.throw(_("Authentication required to switch active session."), frappe.PermissionError)
+
+	now_dt = datetime.now()
+	now_ms = int(now_dt.timestamp() * 1000)
+
+	# 1. Close current active session if running
+	prev_block_name = None
+	elapsed_hours = 0.0
+	active = get_active_session(user=target_user)
+	if active and active.get("status") == "active":
+		prev_block_name = active.get("trackerBlockName")
+		start_ms = flt(active.get("startTime", 0))
+		if start_ms > 0:
+			diff_secs = max(60, (now_ms - start_ms) / 1000.0)
+			elapsed_hours = round(diff_secs / 3600.0, 2)
+			start_dt = datetime.fromtimestamp(start_ms / 1000.0)
+			if prev_block_name and frappe.db.exists("Planned Work Block", prev_block_name):
+				log_work_session(
+					block_name=prev_block_name,
+					from_time=start_dt.strftime("%H:%M:%S"),
+					to_time=now_dt.strftime("%H:%M:%S"),
+					hours=elapsed_hours,
+					session_date=start_dt.strftime("%Y-%m-%d"),
+					notes=current_session_notes or f"Switched task to {target_block or target_task or 'new focus block'}",
+					logged_via="Stopwatch"
+				)
+
+	# 2. Resolve target block or task metadata
+	if target_block and frappe.db.exists("Planned Work Block", target_block):
+		b_doc = frappe.get_doc("Planned Work Block", target_block)
+		target_project = b_doc.project or target_project
+		target_nature = b_doc.task_nature or target_nature or "🎯 Planned"
+	elif target_task and frappe.db.exists("Task", target_task):
+		t_doc = frappe.get_doc("Task", target_task)
+		target_project = t_doc.project or target_project
+		target_nature = target_nature or "🎯 Planned"
+
+	# 3. Start fresh session for target block
+	new_session_data = {
+		"startTime": now_ms,
+		"selectedNature": target_nature or "🎯 Planned",
+		"selectedProject": target_project or "",
+		"trackerNotes": "",
+		"trackerBlockName": target_block if target_block else None,
+		"sessionNotesList": [],
+		"lastActivityTime": now_ms,
+		"lastUpdated": now_ms,
+		"status": "active"
+	}
+	sync_res = sync_active_session(session_data=new_session_data, user=target_user)
+
+	return {
+		"status": "success",
+		"previous_block": prev_block_name,
+		"elapsed_hours": elapsed_hours,
+		"switched_to": target_block or target_task or "new_session",
+		"session": sync_res.get("session")
+	}
+
+
 @frappe.whitelist(allow_guest=True)
 def get_active_session(user=None):
 	"""

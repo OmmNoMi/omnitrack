@@ -11,7 +11,7 @@ const content = fs.readFileSync(omnitrackHtmlPath, 'utf8');
 
 // 1. Template Static Layout Assertions
 assert.ok(!content.includes('w-64 sm:w-72'), 'FAIL: Obsolete fixed width w-64 sm:w-72 should not be present in FDropdownMenu');
-assert.ok(content.includes('min-w-[19rem] w-max max-w-[min(30rem,calc(100vw-2rem))]'), 'FAIL: FDropdownMenu must use dynamic responsive width min-w-[19rem] w-max');
+assert.ok(content.includes('min-w-[13.5rem] sm:min-w-[18rem]') && content.includes('max-w-[calc(100vw-1.5rem)]'), 'FAIL: FDropdownMenu must use responsive min-w and max-w to prevent mobile clipping');
 assert.ok(content.includes('truncate') && content.includes(':title="item.label"'), 'FAIL: Menu item label must have truncate and title tooltip');
 assert.ok(content.includes('shrink-0 font-mono text-[10px]'), 'FAIL: Next-state badge must have shrink-0 font-mono styling');
 console.log('✓ Test 1: Spatial layout & dynamic width invariants verified.');
@@ -1095,7 +1095,82 @@ assert.ok(content.includes('enableNotificationsUserGesture,'), 'FAIL: enableNoti
 
 console.log('✓ Test 25: Mobile notification architecture, Service Worker & block overrun alerts verified.');
 
-console.log('\nSUCCESS: All 25 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 26: Adjust Dialog Stacking & De-Elevation Invariant (Issue #5)
+// ---------------------------------------------------------------------------
+// 1. openAdjustModal minimizes isSessionElevated so dialog is never occluded
+assert.ok(
+  content.includes('if (isSessionElevated.value) {\n          isSessionElevated.value = false;\n        }'),
+  'FAIL: openAdjustModal must de-elevate isSessionElevated to prevent dialog occlusion'
+);
+
+// 2. FDialog default zIndex is elevated above elevated session popup (z-[70])
+assert.ok(
+  content.includes("zIndex: { type: String, default: 'z-[70]' }"),
+  'FAIL: FDialog default zIndex must be at least z-[70] to render above elevated session cards'
+);
+
+// 3. showAdjustModal specifies z-index="z-[75]"
+assert.ok(
+  content.includes('z-index="z-[75]"'),
+  'FAIL: showAdjustModal dialog must specify z-index="z-[75]"'
+);
+
+console.log('✓ Test 26: Adjust dialog stacking & de-elevation invariants verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 27: Mobile Dropdown Viewport Clamping & Reflow (Issue #6)
+// ---------------------------------------------------------------------------
+// 1. FDropdownMenu defines adjustPosition method
+assert.ok(
+  content.includes('adjustPosition() {') &&
+  content.includes('menu.style.left = \'0px\';') &&
+  content.includes('menu.style.right = \'auto\';'),
+  'FAIL: FDropdownMenu must implement adjustPosition to clamp menu within viewport'
+);
+
+// 2. Responsive min-width and max-width classes on dropdown menu
+assert.ok(
+  content.includes('min-w-[13.5rem] sm:min-w-[18rem]') &&
+  content.includes('max-w-[calc(100vw-1.5rem)]'),
+  'FAIL: FDropdownMenu must use responsive min-w-[13.5rem] and max-w-[calc(100vw-1.5rem)] to prevent mobile clipping'
+);
+
+console.log('✓ Test 27: Mobile dropdown viewport clamping & reflow verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 28: 1-Click Atomic Switch Task Action (Issue #7)
+// ---------------------------------------------------------------------------
+// 1. switch_active_session API defined in omnitrack/api.py
+const apiContent = fs.readFileSync(path.join(__dirname, '../omnitrack/api.py'), 'utf8');
+assert.ok(
+  apiContent.includes('def switch_active_session('),
+  'FAIL: switch_active_session must be defined in omnitrack/api.py'
+);
+
+// 2. UI trigger button in session card toolbar
+assert.ok(
+  content.includes('@click.stop="openSwitchTaskModal"'),
+  'FAIL: Switch task button must be present in session card toolbar'
+);
+
+// 3. Switch Task modal dialog defined in template
+assert.ok(
+  content.includes('v-model="showSwitchTaskModal"'),
+  'FAIL: showSwitchTaskModal dialog must be defined in template'
+);
+
+// 4. Setup exposes switch task properties
+assert.ok(
+  content.includes('showSwitchTaskModal,') &&
+  content.includes('openSwitchTaskModal,') &&
+  content.includes('executeSwitchTask,'),
+  'FAIL: setup() must expose showSwitchTaskModal, openSwitchTaskModal, and executeSwitchTask'
+);
+
+console.log('✓ Test 28: 1-Click atomic Switch Task action and WCAG dialog verified.');
+
+console.log('\nSUCCESS: All 28 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

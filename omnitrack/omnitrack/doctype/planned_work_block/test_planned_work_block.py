@@ -1097,6 +1097,45 @@ console.log('SUCCESS');
 		past_block.reload()
 		self.assertEqual(past_block.status, "Missed")
 
+	def test_switch_active_session_atomic(self):
+		"""Invariant: Switching active sessions atomically logs elapsed time on the prior
+		block and begins a live session on the target block within one transaction."""
+		from datetime import datetime
+		from frappe.utils import nowdate, flt
+		from omnitrack.api import switch_active_session, sync_active_session, get_active_session
+		today = nowdate()
+
+		block_a = _block(work_date=today, start_time="09:00:00", end_time="10:00:00", status="In Progress")
+		block_a.insert()
+		block_b = _block(work_date=today, start_time="10:00:00", end_time="11:00:00", status="Planned")
+		block_b.insert()
+
+		now_ms = int(datetime.now().timestamp() * 1000)
+		start_ms = now_ms - (15 * 60 * 1000)
+		sync_active_session(session_data={
+			"startTime": start_ms,
+			"trackerBlockName": block_a.name,
+			"status": "active"
+		})
+
+		res = switch_active_session(
+			target_block=block_b.name,
+			current_session_notes="Wrapping up sprint testing on block A"
+		)
+
+		self.assertEqual(res["status"], "success")
+		self.assertEqual(res["previous_block"], block_a.name)
+		self.assertEqual(res["switched_to"], block_b.name)
+		self.assertGreater(res["elapsed_hours"], 0)
+
+		block_a.reload()
+		self.assertGreater(flt(block_a.actual_hours), 0)
+
+		active = get_active_session()
+		self.assertIsNotNone(active)
+		self.assertEqual(active.get("status"), "active")
+		self.assertEqual(active.get("trackerBlockName"), block_b.name)
+
 	def tearDown(self):
 		frappe.db.rollback()
 
