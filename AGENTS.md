@@ -172,3 +172,33 @@ Two defensive layers are mandatory:
 
 Long workflow action labels (e.g., *"Convert to Sales Invoice with Linked Delivery Note"*) and state transitions truncate with `.truncate`. Without `:title="item.label"`, users cannot inspect the full string on hover and must click blindly. Always bind `:title="item.label"` on truncated text elements and enforce responsive max-width bounds (`max-w-[min(30rem,calc(100vw-2rem))]`).
 
+
+## 🏛️ World-Class Frappe Engineering, Reuse & Code Organization Invariants
+
+### 1. Mandatory Reuse of Existing Built Functionality
+* **Do Not Reinvent the Wheel**: Before introducing any new table, API endpoint, or UI modal, exhaustively inspect and reuse existing core structures:
+  - Time Tracking & Plans: Always reuse `Planned Work Block`, `OmniTrack Work Session`, `OmniTrack Output Metric`, and standard `Timesheet`. Never create parallel data models.
+  - UI Component Layer: Always reuse standardized workstation controls (`f-dialog`, `f-button`, `f-combobox`, `f-dropdown-menu`). Prohibit ad-hoc HTML native inputs that break WCAG 2.2 AA standards.
+  - Work Session Logging: Consolidate all session logging through `log_work_session` and `quick_timer_punch`. Do not scatter divergent time-writing logic across different files.
+
+### 2. Frappe Native, Efficient & Secure
+* **Native ORM & Transaction Safety**: Always use Frappe document methods (`doc.append()`, `doc.save()`, `doc.insert()`) which automatically handle validation, timestamps, and database rollback on exceptions.
+* **Strict Permission & Temporal Boundaries**:
+  - Enforce `can_access_user_data()` and `check_timesheet_date_permission()` on every mutating endpoint.
+  - Prohibit raw unparameterized SQL queries (`frappe.db.sql("... %s ...", (val,))`).
+* **High-Performance Redis Caching**:
+  - Store in-flight state (stopwatch ticks, heartbeats, pairing) in Redis cache (`frappe.cache.hget` / `frappe.cache.hset`) with graceful fallback to durable database persistence (`frappe.db.set_default`).
+* **Realtime Pub/Sub**:
+  - Broadcast multi-device events via native Frappe WebSocket rooms (`frappe.publish_realtime(...)`).
+
+### 3. Clean Code Organization & Refactoring Invariants
+* **Surgical Module Separation**:
+  - Permissions and date rules belong strictly in `omnitrack/permissions.py`.
+  - Notifications, push relays, and service worker bridges belong in `omnitrack/notifications.py`.
+  - Core business logic, stopwatch APIs, and planner endpoints belong in `omnitrack/api.py`.
+  - Background cron tasks belong in `omnitrack/tasks.py` / scheduled hooks.
+* **Zero Debt Characterization**:
+  - Every enhancement or refactor MUST include automated tests in `omnitrack/tests/` (Python backend) and `scripts/test_workstation_interactions.cjs` (Frontend & A11y).
+  - Never accept changes that fail `check_www_html.py` (HTML5 spec parser) or `check_www_js.cjs` (VM compilation).
+
+

@@ -23,6 +23,11 @@ def get_system_status():
 		"sync_role_scope": getattr(settings, "sync_role_scope", "Master"),
 		"active_push_subscriptions": active_subs,
 		"today_work_blocks": active_blocks,
+		"output_metrics_enabled": getattr(settings, "enable_output_metrics", 1),
+		"flow_state_catch_up_enabled": getattr(settings, "enable_flow_state_catch_up", 1),
+		"task_switching_enabled": getattr(settings, "enable_task_switching", 1),
+		"pairing_sessions_enabled": getattr(settings, "enable_pairing_sessions", 1),
+		"lock_screen_actions_enabled": getattr(settings, "enable_lock_screen_actions", 1),
 		"timestamp": frappe.utils.now()
 	}
 
@@ -258,11 +263,13 @@ def _require_session_notes(notes):
 def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None,
 					  deliverable_notes=None, work_nature=None,
 					  duration_hours=None, notes=None, task_nature=None,
-					  from_time=None, to_time=None, work_date=None):
+					  from_time=None, to_time=None, work_date=None,
+					  output_metrics=None, pairing_partner=None):
 	"""
 	Quick Stopwatch Punch API from Desktop / Mobile HUD / Workstation.
 	Creates/Completes a Planned Work Block and triggers attendance synthesis.
-	Supports adjusted and backdated start/end datetimes.
+	Supports adjusted and backdated start/end datetimes, quantitative output metrics,
+	and collaborative pairing sessions with mirrored partner timesheets.
 	"""
 	user = frappe.session.user
 	today = nowdate()
@@ -332,6 +339,25 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 			"logged_via": "Stopwatch",
 			"task_nature": block.task_nature,
 		})
+
+		# Phase 2: Quantitative Deliverable Output Metrics
+		if output_metrics:
+			if isinstance(output_metrics, str):
+				try:
+					output_metrics = json.loads(output_metrics)
+				except Exception:
+					output_metrics = []
+			if isinstance(output_metrics, list):
+				for m in output_metrics:
+					if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
+						block.append("output_metrics", {
+							"metric_type": m.get("metric_type") or "Records Processed",
+							"quantity": flt(m.get("quantity", 1.0)),
+							"unit": m.get("unit") or "",
+							"reference_id": m.get("reference_id") or "",
+							"notes": m.get("notes") or ""
+						})
+
 		block.flags.ignore_permissions = True
 		block.insert()
 
@@ -342,6 +368,54 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 				ts_name = create_timesheet_from_work_block(block.name)
 			except Exception:
 				pass
+
+		# Phase 5: Collaborative / Pairing Sessions - Mirrored Timesheet for Partner
+		partner_block_name = None
+		partner_ts_name = None
+		if pairing_partner and pairing_partner != user and frappe.db.exists("User", pairing_partner):
+			try:
+				p_doc = frappe.new_doc("Planned Work Block")
+				p_doc.employee = pairing_partner
+				p_doc.work_date = target_date
+				p_doc.start_time = start_t
+				p_doc.end_time = end_t
+				p_doc.duration_hours = dur_hours
+				p_doc.actual_hours = dur_hours
+				p_doc.variance_hours = 0.0
+				p_doc.project = project
+				p_doc.task = task
+				p_doc.deliverable_notes = f"[Pairing with {user}]\n{block.deliverable_notes}"
+				p_doc.status = "Completed"
+				p_doc.task_nature = block.task_nature
+				p_doc.append("sessions", {
+					"session_date": target_date,
+					"from_time": start_t,
+					"to_time": end_t,
+					"hours": dur_hours,
+					"notes": f"[Pairing with {user}] {block.deliverable_notes}",
+					"logged_via": "Stopwatch",
+					"task_nature": block.task_nature,
+				})
+				if output_metrics and isinstance(output_metrics, list):
+					for m in output_metrics:
+						if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
+							p_doc.append("output_metrics", {
+								"metric_type": m.get("metric_type") or "Records Processed",
+								"quantity": flt(m.get("quantity", 1.0)),
+								"unit": m.get("unit") or "",
+								"reference_id": m.get("reference_id") or "",
+								"notes": m.get("notes") or ""
+							})
+				p_doc.flags.ignore_permissions = True
+				p_doc.insert()
+				partner_block_name = p_doc.name
+				if frappe.db.exists("DocType", "Timesheet"):
+					try:
+						partner_ts_name = create_timesheet_from_work_block(p_doc.name)
+					except Exception:
+						pass
+			except Exception as pe:
+				frappe.log_error(f"Pairing timesheet creation failed for {pairing_partner}: {pe}", "OmniTrack")
 
 		# Also log Employee Checkin if Employee exists
 		emp = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
@@ -368,6 +442,8 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 			"message": f"Logged {dur_hours} hours for {user}",
 			"block": block.name,
 			"timesheet": ts_name or block.timesheet,
+			"partner_block": partner_block_name,
+			"partner_timesheet": partner_ts_name,
 			"cryptographic_hash": block.cryptographic_hash
 		}
 
@@ -746,6 +822,112 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 		"switched_to": target_block or target_task or "new_session",
 		"session": sync_res.get("session")
 	}
+
+
+@frappe.whitelist()
+def heartbeat_active_session():
+	"""
+	Phase 4 Heartbeat Governor:
+	Extends active running session heartbeat, updates lastActivityTime in Redis cache,
+	and refreshes device presence telemetry.
+	"""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		return {"status": "ignored"}
+	active = get_active_session(user=user)
+	if active and active.get("status") == "active":
+		now_ms = int(datetime.now().timestamp() * 1000)
+		active["lastActivityTime"] = now_ms
+		active["lastUpdated"] = now_ms
+		frappe.cache.hset("omnitrack:active_session", user, active)
+		return {"status": "success", "lastActivityTime": now_ms}
+	return {"status": "no_active_session"}
+
+
+@frappe.whitelist()
+def extend_active_block_duration(extend_minutes=30):
+	"""
+	Phase 4 Lock-Screen / Mobile Action:
+	Extends the duration of the current active Planned Work Block by extend_minutes (default +30m).
+	"""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		return {"status": "ignored"}
+	active = get_active_session(user=user)
+	if not active or not active.get("trackerBlockName"):
+		return {"status": "no_active_block"}
+	block_name = active["trackerBlockName"]
+	if frappe.db.exists("Planned Work Block", block_name):
+		doc = frappe.get_doc("Planned Work Block", block_name)
+		if doc.employee != user and not _is_planner_manager():
+			frappe.throw(_("Permission denied."), frappe.PermissionError)
+		add_hours = round(flt(extend_minutes) / 60.0, 2)
+		doc.duration_hours = flt(doc.duration_hours or 0.0) + add_hours
+		if doc.end_time:
+			try:
+				dt_end = datetime.strptime(str(doc.end_time), "%H:%M:%S") + timedelta(minutes=int(extend_minutes))
+				doc.end_time = dt_end.strftime("%H:%M:%S")
+			except Exception:
+				pass
+		doc.flags.ignore_permissions = True
+		doc.save()
+		frappe.db.commit()
+		return {"status": "success", "block": doc.name, "new_duration": doc.duration_hours, "end_time": str(doc.end_time)}
+	return {"status": "block_not_found"}
+
+
+@frappe.whitelist()
+def log_catch_up_session(work_date=None, from_time=None, to_time=None, duration_hours=None,
+						 project=None, task=None, deliverable_notes=None, task_nature=None,
+						 output_metrics=None, pairing_partner=None, target_block=None):
+	"""
+	Phase 3 Retroactive Catch-Up Flow-State Time Entry:
+	Safely records sessions when engineers dive directly into flow-state work before starting a timer.
+	Strictly enforces temporal governance (today and yesterday only for standard users; earlier requires manager).
+	"""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		frappe.throw(_("Authentication required."), frappe.PermissionError)
+
+	target_date = work_date or nowdate()
+	from omnitrack.permissions import check_timesheet_date_permission
+	check_timesheet_date_permission(target_date, user)
+
+	deliverable_notes = _require_session_notes(deliverable_notes)
+
+	dur_hours = flt(duration_hours)
+	if dur_hours <= 0 and from_time and to_time:
+		dur_hours = _duration_hours(from_time, to_time)
+	if dur_hours <= 0:
+		dur_hours = 0.5
+
+	if target_block and frappe.db.exists("Planned Work Block", target_block):
+		res = log_work_session(
+			block_name=target_block,
+			from_time=from_time,
+			to_time=to_time,
+			hours=dur_hours,
+			session_date=target_date,
+			notes=deliverable_notes,
+			logged_via="Catch-Up",
+			output_metrics=output_metrics
+		)
+		return {"status": "success", "mode": "appended_to_block", "block": target_block, "res": res}
+	else:
+		res = quick_timer_punch(
+			action="stop",
+			work_date=target_date,
+			from_time=from_time,
+			to_time=to_time,
+			duration_hours=dur_hours,
+			project=project,
+			task=task,
+			deliverable_notes=deliverable_notes,
+			work_nature=task_nature or "🎯 Planned",
+			output_metrics=output_metrics,
+			pairing_partner=pairing_partner
+		)
+		return {"status": "success", "mode": "new_completed_block", "punch": res}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -1732,6 +1914,20 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 					order_by="session_date asc, from_time asc",
 				)
 			]
+			b["output_metrics"] = [
+				{
+					"metric_type": m.metric_type,
+					"quantity": flt(m.quantity),
+					"unit": m.unit,
+					"reference_id": m.reference_id,
+					"notes": m.notes,
+				}
+				for m in frappe.get_all(
+					"OmniTrack Output Metric",
+					filters={"parent": b["name"], "parenttype": "Planned Work Block"},
+					fields=["metric_type", "quantity", "unit", "reference_id", "notes"],
+				)
+			] if frappe.db.exists("DocType", "OmniTrack Output Metric") else []
 			blocks.append(b)
 
 	# Leave / absence / out-of-office / break are non-working & non-paid — flag them and keep
@@ -1962,7 +2158,8 @@ def delete_work_block(block_name):
 
 @frappe.whitelist()
 def log_work_session(block_name, from_time=None, to_time=None, hours=None,
-					 session_date=None, notes=None, logged_via="Manual"):
+					 session_date=None, notes=None, logged_via="Manual",
+					 output_metrics=None):
 	"""Record a REAL work session against a planned block. Actual vs planned variance
 	is recomputed on the block. Many sessions may be logged against one block."""
 	doc = frappe.get_doc("Planned Work Block", block_name)
@@ -2034,6 +2231,25 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 			"logged_via": logged_via or "Manual",
 			"task_nature": doc.task_nature,
 		})
+
+	# Phase 2: Quantitative Deliverable Output Metrics
+	if output_metrics:
+		if isinstance(output_metrics, str):
+			try:
+				output_metrics = json.loads(output_metrics)
+			except Exception:
+				output_metrics = []
+		if isinstance(output_metrics, list):
+			for m in output_metrics:
+				if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
+					doc.append("output_metrics", {
+						"metric_type": m.get("metric_type") or "Records Processed",
+						"quantity": flt(m.get("quantity", 1.0)),
+						"unit": m.get("unit") or "",
+						"reference_id": m.get("reference_id") or "",
+						"notes": m.get("notes") or ""
+					})
+
 	doc.flags.ignore_permissions = True
 	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
 		doc.flags.ignore_links = True

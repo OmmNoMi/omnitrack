@@ -1136,6 +1136,140 @@ console.log('SUCCESS');
 		self.assertEqual(active.get("status"), "active")
 		self.assertEqual(active.get("trackerBlockName"), block_b.name)
 
+	def test_quantitative_output_metrics_persistence(self):
+		"""Phase 2 Invariant: Planned Work Block and Work Session accurately persist
+		countable output metrics and KPI tags."""
+		from frappe.utils import nowdate, flt
+		from omnitrack.api import quick_timer_punch
+		today = nowdate()
+
+		metrics_payload = [
+			{"metric_type": "Records Processed", "quantity": 216, "unit": "Students", "reference_id": "Mesa/Miramar"},
+			{"metric_type": "PR Merged / Reviewed", "quantity": 3, "unit": "PRs", "reference_id": "#342"}
+		]
+
+		res = quick_timer_punch(
+			action="stop",
+			work_date=today,
+			duration_hours=1.5,
+			deliverable_notes="Imported 216 student records and reviewed PRs",
+			output_metrics=metrics_payload
+		)
+		self.assertEqual(res["status"], "success")
+
+		doc = frappe.get_doc("Planned Work Block", res["block"])
+		self.assertEqual(len(doc.output_metrics), 2)
+		self.assertEqual(flt(doc.output_metrics[0].quantity), 216.0)
+		self.assertEqual(doc.output_metrics[0].unit, "Students")
+		self.assertEqual(doc.output_metrics[0].reference_id, "Mesa/Miramar")
+		self.assertEqual(flt(doc.output_metrics[1].quantity), 3.0)
+		self.assertEqual(doc.output_metrics[1].unit, "PRs")
+
+	def test_retroactive_catch_up_session(self):
+		"""Phase 3 Invariant: Flow-state catch-up logging records sessions for today
+		and yesterday, while blocking pre-yesterday dates for standard users."""
+		from frappe.utils import nowdate, add_days, getdate
+		from omnitrack.api import log_catch_up_session
+		today = nowdate()
+		yesterday = str(getdate(add_days(today, -1)))
+		two_days_ago = str(getdate(add_days(today, -2)))
+
+		# 1. Today succeeds
+		res_today = log_catch_up_session(
+			work_date=today,
+			from_time="14:00:00",
+			to_time="15:30:00",
+			duration_hours=1.5,
+			deliverable_notes="Deep flow debugging authentication bridge"
+		)
+		self.assertEqual(res_today["status"], "success")
+
+		# 2. Yesterday succeeds
+		res_yest = log_catch_up_session(
+			work_date=yesterday,
+			from_time="10:00:00",
+			to_time="11:00:00",
+			duration_hours=1.0,
+			deliverable_notes="Yesterday retrospective review"
+		)
+		self.assertEqual(res_yest["status"], "success")
+
+		# 3. Two days ago is blocked for non-manager
+		frappe.set_user("test_user_no_emp@ommnomi.local")
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				log_catch_up_session(
+					work_date=two_days_ago,
+					from_time="09:00:00",
+					to_time="10:00:00",
+					duration_hours=1.0,
+					deliverable_notes="Attempted backdated catch-up entry"
+				)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_heartbeat_and_duration_extension(self):
+		"""Phase 4 Invariant: Active running sessions can refresh heartbeat and extend
+		planned block duration via lock-screen/mobile actions."""
+		from datetime import datetime
+		from frappe.utils import nowdate, flt
+		from omnitrack.api import sync_active_session, heartbeat_active_session, extend_active_block_duration
+		today = nowdate()
+
+		block = _block(work_date=today, start_time="14:00:00", end_time="15:00:00", duration_hours=1.0)
+		block.insert()
+
+		now_ms = int(datetime.now().timestamp() * 1000)
+		sync_active_session(session_data={
+			"startTime": now_ms,
+			"trackerBlockName": block.name,
+			"status": "active"
+		})
+
+		# Heartbeat updates lastActivityTime
+		hb_res = heartbeat_active_session()
+		self.assertEqual(hb_res["status"], "success")
+
+		# Extend block duration by 30 minutes
+		ext_res = extend_active_block_duration(extend_minutes=30)
+		self.assertEqual(ext_res["status"], "success")
+		block.reload()
+		self.assertEqual(flt(block.duration_hours), 1.5)
+		self.assertEqual(str(block.end_time), "15:30:00")
+
+	def test_collaborative_pairing_mirrored_timesheet(self):
+		"""Phase 5 Invariant: Starting or finishing a collaborative session with a pairing
+		partner automatically generates a mirrored Planned Work Block and Timesheet for the partner."""
+		from frappe.utils import nowdate
+		from omnitrack.api import quick_timer_punch
+		today = nowdate()
+
+		# Create a secondary test user for pairing
+		partner_email = "pairing_partner_test@ommnomi.local"
+		if not frappe.db.exists("User", partner_email):
+			u = frappe.new_doc("User")
+			u.email = partner_email
+			u.first_name = "Pairing"
+			u.last_name = "Partner"
+			u.flags.ignore_permissions = True
+			u.insert()
+
+		res = quick_timer_punch(
+			action="stop",
+			work_date=today,
+			duration_hours=2.0,
+			deliverable_notes="Joint architecture pairing session on OmniTrack PWA",
+			pairing_partner=partner_email
+		)
+		self.assertEqual(res["status"], "success")
+		self.assertIsNotNone(res.get("partner_block"))
+
+		# Verify partner block exists with proper pairing attribution
+		partner_doc = frappe.get_doc("Planned Work Block", res["partner_block"])
+		self.assertEqual(partner_doc.employee, partner_email)
+		self.assertIn("Pairing with", partner_doc.deliverable_notes)
+		self.assertIn(partner_doc.status, ("Completed", "Logged (Full)"))
+
 	def tearDown(self):
 		frappe.db.rollback()
 

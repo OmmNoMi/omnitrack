@@ -191,6 +191,13 @@
       "label": "Connected Tasks & Deliverables"
     },
     {
+      "description": "Countable deliverables and output metrics produced during this work block.",
+      "fieldname": "output_metrics",
+      "fieldtype": "Table",
+      "label": "Output Metrics & Deliverable KPIs",
+      "options": "OmniTrack Output Metric"
+    },
+    {
       "fieldname": "sb_historical_migration",
       "fieldtype": "Section Break",
       "label": "Historical AppSheet Migration Mapping"

@@ -1,0 +1,66 @@
+{
+ "actions": [],
+ "creation": "2026-09-24 18:40:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "metric_type",
+  "quantity",
+  "unit",
+  "reference_id",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "Records Processed",
+   "fieldname": "metric_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Metric Type",
+   "options": "Records Processed\nPR Merged / Reviewed\nBug / Issue Resolved\nDocument Pages\nCalls / Meetings\nDeployments / Releases\nCustom",
+   "reqd": 1
+  },
+  {
+   "default": "1.0",
+   "description": "Count or volume produced (e.g. 216 records, 3 PRs).",
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "description": "Unit of measure (e.g. Students, PRs, Tickets, Pages).",
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Unit"
+  },
+  {
+   "description": "Reference identifier (e.g. #342, Mesa/Miramar, INC-2026-09).",
+   "fieldname": "reference_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reference ID"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-24 18:40:00.000000",
+ "modified_by": "Administrator",
+ "module": "OmniTrack",
+ "name": "OmniTrack Output Metric",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

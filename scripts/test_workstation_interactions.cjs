@@ -1170,7 +1170,63 @@ assert.ok(
 
 console.log('✓ Test 28: 1-Click atomic Switch Task action and WCAG dialog verified.');
 
-console.log('\nSUCCESS: All 28 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 29: Quantitative Deliverable Output Metrics (Phase 2, Issue #8)
+// ---------------------------------------------------------------------------
+const metricDoctypeJson = path.join(__dirname, '../omnitrack/omnitrack/doctype/omnitrack_output_metric/omnitrack_output_metric.json');
+assert.ok(fs.existsSync(metricDoctypeJson), 'FAIL: omnitrack_output_metric.json must exist');
+const metricDoctype = JSON.parse(fs.readFileSync(metricDoctypeJson, 'utf8'));
+assert.strictEqual(metricDoctype.istable, 1, 'FAIL: OmniTrack Output Metric must be a child table');
+assert.ok(metricDoctype.fields.some(f => f.fieldname === 'metric_type'), 'FAIL: Output Metric must declare metric_type');
+assert.ok(metricDoctype.fields.some(f => f.fieldname === 'quantity'), 'FAIL: Output Metric must declare quantity');
+assert.ok(metricDoctype.fields.some(f => f.fieldname === 'unit'), 'FAIL: Output Metric must declare unit');
+assert.ok(metricDoctype.fields.some(f => f.fieldname === 'reference_id'), 'FAIL: Output Metric must declare reference_id');
+
+// Verify Planned Work Block schema carries output_metrics table field
+const pwbJson = path.join(__dirname, '../omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.json');
+const pwbDef = JSON.parse(fs.readFileSync(pwbJson, 'utf8'));
+assert.ok(
+  pwbDef.fields.some(f => f.fieldname === 'output_metrics' && f.options === 'OmniTrack Output Metric'),
+  'FAIL: Planned Work Block must carry output_metrics child table'
+);
+assert.ok(apiContent.includes('b["output_metrics"] ='), 'FAIL: get_planner_data must serialize output_metrics');
+console.log('✓ Test 29: Quantitative Output Metrics & Deliverable KPI architecture verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 30: Retroactive Flow-State Catch-Up Logging (Phase 3, Issue #9)
+// ---------------------------------------------------------------------------
+assert.ok(apiContent.includes('def log_catch_up_session('), 'FAIL: log_catch_up_session must be defined in api.py');
+const settingsJson = path.join(__dirname, '../omnitrack/omnitrack/doctype/omnitrack_settings/omnitrack_settings.json');
+const settingsDef = JSON.parse(fs.readFileSync(settingsJson, 'utf8'));
+assert.ok(
+  settingsDef.fields.some(f => f.fieldname === 'enable_flow_state_catch_up'),
+  'FAIL: OmniTrack Settings must declare enable_flow_state_catch_up toggle'
+);
+console.log('✓ Test 30: Retroactive Flow-State Catch-Up logging architecture verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 31: Actionable Lock-Screen & Mobile Push Notifications (Phase 4, Issue #10)
+// ---------------------------------------------------------------------------
+const swUpdatedContent = fs.readFileSync(path.join(__dirname, '../omnitrack/public/sw.js'), 'utf8');
+assert.ok(swUpdatedContent.includes("action === 'still_working'"), 'FAIL: sw.js must handle still_working action');
+assert.ok(swUpdatedContent.includes("action === 'add_30m'"), 'FAIL: sw.js must handle add_30m action');
+assert.ok(swUpdatedContent.includes("action === 'stop_session'"), 'FAIL: sw.js must handle stop_session action');
+assert.ok(apiContent.includes('def heartbeat_active_session('), 'FAIL: heartbeat_active_session must be defined in api.py');
+assert.ok(apiContent.includes('def extend_active_block_duration('), 'FAIL: extend_active_block_duration must be defined in api.py');
+console.log('✓ Test 31: Actionable lock-screen push notifications & heartbeat governor verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 32: Collaborative Pairing Sessions & Mirrored Timesheets (Phase 5, Issue #11)
+// ---------------------------------------------------------------------------
+assert.ok(apiContent.includes('pairing_partner=None'), 'FAIL: quick_timer_punch must accept pairing_partner');
+assert.ok(apiContent.includes('partner_block_name = p_doc.name'), 'FAIL: quick_timer_punch must create partner block');
+assert.ok(
+  settingsDef.fields.some(f => f.fieldname === 'enable_pairing_sessions'),
+  'FAIL: OmniTrack Settings must declare enable_pairing_sessions toggle'
+);
+console.log('✓ Test 32: Collaborative pairing sessions & mirrored timesheets verified.');
+
+console.log('\nSUCCESS: All 32 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

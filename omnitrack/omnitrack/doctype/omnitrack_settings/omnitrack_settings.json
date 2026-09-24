@@ -116,6 +116,36 @@
       "default": 1
     },
     {
+      "fieldname": "enable_output_metrics",
+      "fieldtype": "Check",
+      "label": "Enable Quantitative Output Metrics & Deliverable KPIs",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_flow_state_catch_up",
+      "fieldtype": "Check",
+      "label": "Enable Retroactive Flow-State Catch-Up Logging",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_task_switching",
+      "fieldtype": "Check",
+      "label": "Enable 1-Click Atomic Task Switching",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_pairing_sessions",
+      "fieldtype": "Check",
+      "label": "Enable Collaborative Pairing Sessions & Mirrored Timesheets",
+      "default": 1
+    },
+    {
+      "fieldname": "enable_lock_screen_actions",
+      "fieldtype": "Check",
+      "label": "Enable Lock-Screen Mobile Push Actions (+30m, Still Working, Stop)",
+      "default": 1
+    },
+    {
       "fieldname": "sb_roles_entitlements",
       "fieldtype": "Section Break",
       "label": "Multi-Tier Role & Capability Entitlements"
