@@ -3077,12 +3077,12 @@
                       <!-- Live recording fill bar when session is actively tracking on this block -->
                       <div v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)"
                         class="absolute left-0 right-0 bottom-0 pointer-events-none rounded-b-lg bg-red-500/25 border-t-2 border-red-500"
-                        :style="{ height: Math.min(100, Math.max(8, ((trackerElapsedSecs / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
-                        :title="'Live Recording: ' + trackerElapsedFormatted + ' elapsed'"></div>
+                        :style="{ height: Math.min(100, Math.max(8, ((trackerSeconds / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
+                        :title="'Live Recording: ' + formattedTime + ' elapsed'"></div>
                       <div class="relative text-[10px] font-bold leading-tight truncate flex items-center gap-1">
                         <span v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)" class="inline-flex items-center gap-1 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-red-600 text-white shrink-0 shadow-xs animate-pulse">
                           <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                          <span>REC {{ trackerElapsedFormatted }}</span>
+                          <span>REC {{ formattedTime }}</span>
                         </span>
                         <span v-if="seg.is_segment && seg.segment_type === 'head'" class="text-[9px] opacity-75 font-normal mr-1">↩ (cont.)</span>
                         <span class="truncate">{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}</span>
@@ -3091,7 +3091,7 @@
                       <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(seg) }}</div>
                       <div class="relative text-[9px] opacity-80" v-if="segHeight(seg) > 44">
                         <template v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)">
-                          <span class="text-red-500 font-extrabold">{{ fmtHrs(trackerElapsedSecs / 3600) }}h running</span> / {{ fmtHrs(seg.block.duration_hours) }}h
+                          <span class="text-red-500 font-extrabold">{{ fmtHrs(trackerSeconds / 3600) }}h running</span> / {{ fmtHrs(seg.block.duration_hours) }}h
                         </template>
                         <template v-else>
                           {{ fmtHrs(seg.block.actual_hours) }}/{{ fmtHrs(seg.block.duration_hours) }}h
@@ -3138,7 +3138,7 @@
     <div class="flex items-center gap-1.5 flex-wrap">
       <template v-if="hoverCard.source === 'logged'">
         <span v-if="hoverCard.seg && hoverCard.seg.is_live_active" class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 animate-pulse">
-          🔴 Recording {{ trackerElapsedFormatted }}
+          🔴 Recording {{ formattedTime }}
         </span>
         <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           ✓ Logged {{ fmtHrs((hoverCard.seg && hoverCard.seg.hours) || hoverCard.block.actual_hours) }}h
@@ -3318,48 +3318,62 @@
   <!-- ========================================== -->
   <f-dialog
     v-model="showInactivityModal"
-    title="Are you still working?"
-    subtitle="30 minutes without activity or notes"
+    :title="inactivityMinutes >= 60 ? 'Prolonged Inactivity Detected' : 'Are you still working?'"
+    :subtitle="inactivityMinutes >= 60 ? 'Active timer left running unattended' : '30 minutes without activity or notes'"
     size="sm"
     z-index="z-[60]"
   >
     <div class="space-y-3 py-1 text-xs">
       <div class="p-3 rounded-xl border flex items-start gap-2.5"
-        :class="isDarkMode ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-900'">
-        <span class="text-base select-none" aria-hidden="true">⏱️</span>
+        :class="inactivityMinutes >= 60 ? (isDarkMode ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-900') : (isDarkMode ? 'bg-blue-950/40 border-blue-800/60 text-blue-200' : 'bg-blue-50 border-blue-200 text-blue-900')">
+        <span class="text-base select-none shrink-0" aria-hidden="true">{{ inactivityMinutes >= 60 ? '⚠️' : '⏱️' }}</span>
         <div class="space-y-1">
           <div class="font-extrabold text-[12px] leading-snug">
-            No notes logged for {{ inactivityMinutes }} minutes
+            {{ inactivityMinutes >= 60 ? ('No notes logged for ' + Math.floor(inactivityMinutes / 60) + 'h ' + (inactivityMinutes % 60) + 'm') : ('No notes logged for ' + inactivityMinutes + ' minutes') }}
           </div>
           <p class="text-[11px] leading-relaxed opacity-90">
-            You normally log bullet updates every 10–15 minutes on active work.
+            {{ inactivityMinutes >= 60 ? 'This session appears to have been left running without updates. You can discard it, cap it at your last edit, or keep tracking.' : 'You normally log bullet updates every 10–15 minutes on active work.' }}
           </p>
         </div>
       </div>
 
-      <div class="rounded-xl border p-2.5 space-y-1"
+      <div class="rounded-xl border p-3 space-y-2"
         :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-700'">
-        <div class="flex items-center justify-between text-[11px]">
-          <span class="text-gray-400 font-medium">Active Task:</span>
-          <span class="font-bold truncate max-w-[190px]">{{ trackerNotes || (trackerBoundBlock ? trackerBoundBlock.work_item_label : 'Active Work') }}</span>
+        <div class="flex items-start justify-between text-[11px] gap-2">
+          <span class="text-gray-400 font-medium shrink-0">Active Task:</span>
+          <span class="font-bold text-right break-words line-clamp-2">{{ trackerNotes || (trackerBoundBlock ? (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label) : 'Active Work') }}</span>
+        </div>
+        <div v-if="sessionStart" class="flex items-center justify-between text-[11px]">
+          <span class="text-gray-400 font-medium">Session started:</span>
+          <span class="font-mono font-medium">{{ sessionStart.date }} · {{ sessionStart.time }}</span>
         </div>
         <div class="flex items-center justify-between text-[11px]">
           <span class="text-gray-400 font-medium">Last edit recorded:</span>
           <span class="font-mono font-bold">{{ lastActivityTimeHHMM }}</span>
         </div>
         <div class="flex items-center justify-between text-[11px]">
-          <span class="text-gray-400 font-medium">Current clock:</span>
-          <span class="font-mono font-bold">{{ formattedTime }}</span>
+          <span class="text-gray-400 font-medium">Current elapsed timer:</span>
+          <span class="font-mono font-black text-blue-600 dark:text-blue-400">{{ formattedTime }}</span>
         </div>
       </div>
 
       <p class="text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-        Would you like to continue tracking, stop the timesheet 15 minutes after your last edit, or stop now?
+        Would you like to keep tracking, stop 15 minutes after your last edit, or discard this session?
       </p>
     </div>
 
     <template #actions>
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 w-full">
+        <f-button
+          v-if="inactivityMinutes >= 60"
+          variant="ghost"
+          theme="red"
+          size="sm"
+          @click="discardInactivitySession"
+          title="Discard this unattended session without creating a timesheet"
+        >
+          Discard
+        </f-button>
         <f-button
           variant="ghost"
           theme="gray"
@@ -3375,7 +3389,7 @@
           @click="stopInactivitySessionAtLastEditPlus15"
           :title="'Log timesheet up to ' + suggestedStopHHMM"
         >
-          Stop at 15m after last edit ({{ suggestedStopHHMM }})
+          Stop at {{ suggestedStopHHMM }} (+15m)
         </f-button>
         <f-button
           variant="solid"
@@ -5271,17 +5285,10 @@
         if (this._engaged) return;
         this._engaged = true;
         this._returnFocus = document.activeElement;
-        // Counted, so closing an inner dialog does not unlock the page while an
-        // outer one is still open.
         const depth = (window.__omnitrackDialogDepth || 0) + 1;
         window.__omnitrackDialogDepth = depth;
-        if (depth === 1) {
-          // The scrolling element here is <html>, not <body>: locking body alone
-          // leaves the page behind the modal scrolling exactly as before.
-          this._prevOverflow = [document.documentElement.style.overflow, document.body.style.overflow];
-          document.documentElement.style.overflow = 'hidden';
-          document.body.style.overflow = 'hidden';
-        }
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
         this.$nextTick(() => {
           const items = this.focusables();
           // Skip the ✕: landing on "close" reads as "the only thing here is leaving".
@@ -5295,9 +5302,10 @@
         const depth = Math.max(0, (window.__omnitrackDialogDepth || 1) - 1);
         window.__omnitrackDialogDepth = depth;
         if (depth === 0) {
-          const prev = this._prevOverflow || ['', ''];
-          document.documentElement.style.overflow = prev[0] || '';
-          document.body.style.overflow = prev[1] || '';
+          document.documentElement.style.overflow = '';
+          document.body.style.overflow = '';
+          document.documentElement.style.removeProperty('overflow');
+          document.body.style.removeProperty('overflow');
         }
         const back = this._returnFocus;
         this._returnFocus = null;
@@ -5878,6 +5886,12 @@
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
       };
+      const todayISO = () => getLocalTodayISO();
+      const _minToHHMM = (m) => {
+        const mm = Math.max(0, Math.min(24 * 60, Math.round(m)));
+        return String(Math.floor(mm / 60) % 24).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0');
+      };
+      const nowMinute = ref((() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); })());
 
       const _utcDate = (iso) => { const [y, m, d] = (iso || '').split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
       const addDays = (iso, n) => { const d = _utcDate(iso); d.setUTCDate(d.getUTCDate() + n); return getLocalTodayISO(d); };
@@ -6305,6 +6319,7 @@
       // When the tracker was started from a Planner block, its logged time is
       // recorded as a real Work Session against that block (feeds actual_hours).
       const trackerBlockName = ref(null);
+      const startTime = ref(null);
 
       // 3. User & Filter State (Permission Scoped)
       const session = window.OMNITRACK_SESSION || { user: 'hardiksharma80912@gmail.com', user_fullname: 'Hardik Sharma', is_manager: true, is_client: false };
@@ -7017,7 +7032,10 @@
 
         const nextFuture = upcoming.find(b => _minsOf(b.start_time) >= nowMins);
         if (nextFuture) return nextFuture;
-        return upcoming.length > 0 ? upcoming[0] : null;
+
+        // If no future block, only show a block if its scheduled window hasn't elapsed
+        const currentWindow = upcoming.find(b => _minsOf(b.end_time) > nowMins);
+        return currentWindow || null;
       });
 
       const getStartsInText = (b) => {
@@ -7027,11 +7045,18 @@
         const [sh, sm] = b.start_time.split(':').map(Number);
         const sMins = sh * 60 + (sm || 0);
         const diff = sMins - nowMins;
-        if (diff <= 0) return 'Starts now';
-        if (diff < 60) return `Starts in ${diff}m`;
-        const h = Math.floor(diff / 60);
-        const m = diff % 60;
-        return m > 0 ? `Starts in ${h}h ${m}m` : `Starts in ${h}h`;
+        if (diff > 0 && diff < 60) return `Starts in ${diff}m`;
+        if (diff >= 60) {
+          const h = Math.floor(diff / 60);
+          const m = diff % 60;
+          return m > 0 ? `Starts in ${h}h ${m}m` : `Starts in ${h}h`;
+        }
+        const endMin = _minsOf(b.end_time);
+        if (endMin > nowMins) {
+          const rem = endMin - nowMins;
+          return `In progress · ${rem}m left`;
+        }
+        return 'Scheduled time passed';
       };
 
       const upcomingFocusBlocks = computed(() => {
@@ -7223,10 +7248,6 @@
         if (!box) return;
         box.scrollBy({ left: dir * Math.max(120, box.clientWidth * 0.8), behavior: 'smooth' });
         setTimeout(syncTimelineEdges, 400);
-      };
-      const _minToHHMM = (m) => {
-        const mm = Math.max(0, Math.min(24 * 60, Math.round(m)));
-        return String(Math.floor(mm / 60) % 24).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0');
       };
       const dayTimeline = computed(() => {
         const blocks = workFocusBlocks.value || [];
@@ -7492,6 +7513,13 @@
         await toggleTrack(cappedEndMs);
       };
 
+      const discardInactivitySession = () => {
+        showInactivityModal.value = false;
+        discardConfirm.value = true;
+        discardSession();
+        showToast('Abandoned timer discarded — no timesheet logged', 'info');
+      };
+
       const syncActiveSession = (immediate = false) => {
         if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
         _lastLocalUpdate = Date.now();
@@ -7553,10 +7581,11 @@
         const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
         if (elapsed >= 86400) return false; // expired past 24h
 
-        // Do not resurrect a session bound to a block that is already Logged (Full) or Cancelled
+        // Do not resurrect a session bound to a block that is already Logged, Completed, Missed or Cancelled
         if (sessionData.trackerBlockName) {
-          const matched = (workFocusBlocks.value || []).find(b => b.name === sessionData.trackerBlockName);
-          if (matched && (matched.status === 'Logged (Full)' || matched.status === 'Cancelled')) {
+          const matched = (workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName) ||
+                          (workFocusBlocks.value || []).find(b => b.name === sessionData.trackerBlockName);
+          if (matched && (matched.status === 'Logged (Full)' || matched.status === 'Logged (Over)' || matched.status === 'Logged (Partial)' || matched.status === 'Completed' || matched.status === 'Cancelled' || matched.status === 'Missed')) {
             markSessionEnded();
             localStorage.removeItem('omnitrack_active_session');
             postJSON('sync_active_session', { session_data: null }).catch(() => {});
@@ -7567,6 +7596,7 @@
         _isRestoring = true;
         try {
           isTracking.value = true;
+          startTime.value = startMs;
           trackerSeconds.value = elapsed;
           selectedNature.value = sessionData.selectedNature || '🎯 Planned';
           trackerNature.value = sessionData.selectedNature || '🎯 Planned';
@@ -7672,6 +7702,13 @@
           return;
         }
 
+        // If remote has a different block or new session start time, switch to remote session!
+        if (remote.startTime && (remote.trackerBlockName !== trackerBlockName.value || Math.abs(Number(remote.startTime) - (Number(startTime.value) || 0)) > 60000)) {
+          restoreActiveSession(remote);
+          showToast('Switched to active session from cloud', 'info');
+          return;
+        }
+
         // If local had an edit within the last 1200ms, let local write settle
         if (Date.now() - _lastLocalUpdate < 1200) return;
 
@@ -7726,6 +7763,7 @@
         if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 3000)) return;
 
         isTracking.value = false;
+        startTime.value = null;
         if (trackerTimer.value) {
           clearInterval(trackerTimer.value);
           trackerTimer.value = null;
@@ -7995,6 +8033,8 @@
         } else {
           document.documentElement.style.overflow = '';
           document.body.style.overflow = '';
+          document.documentElement.style.removeProperty('overflow');
+          document.body.style.removeProperty('overflow');
           if (_sessionPopupReturnFocus && _sessionPopupReturnFocus.focus) {
             _sessionPopupReturnFocus.focus();
           }
@@ -8395,6 +8435,27 @@
             if (m.current_user) currentUser.value = m.current_user;
             if (m.kpis) updateDashboardKPIs(m.kpis);
 
+            // Evict zombie local session if the bound block is already logged/completed
+            if (isTracking.value && trackerBlockName.value) {
+              const curBlock = (workBlocks.value || []).find(b => b.name === trackerBlockName.value);
+              if (curBlock && (curBlock.status === 'Logged (Full)' || curBlock.status === 'Logged (Over)' || curBlock.status === 'Logged (Partial)' || curBlock.status === 'Completed' || curBlock.status === 'Cancelled' || curBlock.status === 'Missed')) {
+                if (m.active_session && m.active_session.status === 'active' && m.active_session.trackerBlockName !== trackerBlockName.value) {
+                  restoreActiveSession(m.active_session);
+                } else {
+                  isTracking.value = false;
+                  if (trackerTimer.value) clearInterval(trackerTimer.value);
+                  trackerTimer.value = null;
+                  trackerSeconds.value = 0;
+                  startTime.value = null;
+                  sessionNotesList.value = [];
+                  trackerNotes.value = '';
+                  trackerBlockName.value = null;
+                  markSessionEnded();
+                  localStorage.removeItem('omnitrack_active_session');
+                }
+              }
+            }
+
             // Multi-device active session sync (computer <-> mobile phone)
             if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime
                 && !_isStoppingSession && (Date.now() - _lastLocalStop >= 10000)
@@ -8508,6 +8569,7 @@
         _lastLocalStop = Date.now();
         _isStoppingSession = true;
         isTracking.value = false;
+        startTime.value = null;
         isSessionElevated.value = false;
         if (trackerTimer.value) clearInterval(trackerTimer.value);
         trackerTimer.value = null;
@@ -8532,8 +8594,9 @@
         if (!isTracking.value) {
           isTracking.value = true;
           trackerSeconds.value = 0;
-          const startTime = Date.now();
-          lastActivityTime.value = startTime;
+          const sTime = Date.now();
+          startTime.value = sTime;
+          lastActivityTime.value = sTime;
           lastInactivityAlertTime.value = 0;
           syncActiveSession();
           // Request browser notification permission on user gesture (clicking Start)
@@ -8543,7 +8606,7 @@
             }
           } catch (e) {}
           trackerTimer.value = setInterval(() => {
-            trackerSeconds.value = Math.floor((Date.now() - startTime) / 1000);
+            trackerSeconds.value = Math.floor((Date.now() - sTime) / 1000);
             checkInactivity();
           }, 1000);
           showToast(`Focus timer started for ${selectedNature.value}`, 'info');
@@ -9091,7 +9154,6 @@
       const _utc = (iso) => _utcDate(iso);
       const _iso = (dt) => getLocalTodayISO(dt);
       const mondayOf = (iso) => { const dow = (_utc(iso).getUTCDay() + 6) % 7; return addDays(iso, -dow); };
-      const todayISO = () => getLocalTodayISO();
       plannerAnchor.value = todayISO();
 
       // Visible hour window: always the full day, 12a–11p.
@@ -9196,7 +9258,7 @@
               start_time: _minToHHMM(sMins),
               end_time: _minToHHMM(eMins),
               duration_hours: ((eMins - sMins) / 60).toFixed(2),
-              actual_hours: (trackerElapsedSecs.value / 3600).toFixed(2),
+              actual_hours: (trackerSeconds.value / 3600).toFixed(2),
               task_nature: selectedNature.value || '🎯 Planned',
               project: selectedProject.value || '',
               status: 'In Progress'
@@ -9788,7 +9850,6 @@
       };
 
       // --- Google-Calendar style "now" line ------------------------------------
-      const nowMinute = ref((() => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); })());
       let _nowTimer = null;
       const startNowClock = () => {
         if (_nowTimer) return;
@@ -10679,14 +10740,19 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
+          document.documentElement.style.overflow = 'hidden';
           document.body.style.overflow = 'hidden';
         } else {
           document.removeEventListener('keydown', onPlannerKeydown);
+          window.__omnitrackDialogDepth = 0;
+          document.documentElement.style.overflow = '';
           document.body.style.overflow = '';
+          document.documentElement.style.removeProperty('overflow');
+          document.body.style.removeProperty('overflow');
         }
       });
       watch(activeTab, (t) => {
@@ -10816,6 +10882,7 @@
         toggleTheme,
         showTrackerPopup,
         isTracking,
+        startTime,
         trackerSeconds,
         trackerNotes,
         trackerBlockName,
@@ -10873,6 +10940,7 @@
         confirmStillWorking,
         stopInactivitySessionNow,
         stopInactivitySessionAtLastEditPlus15,
+        discardInactivitySession,
         showEmptyStopModal,
         emptyStopQuickNote,
         emptyStopElapsedHrs,

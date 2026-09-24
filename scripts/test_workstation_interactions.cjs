@@ -1006,7 +1006,48 @@ assert.ok(content.includes('const _ = trackerSeconds.value;'), 'FAIL: inactivity
 
 console.log('✓ Test 22: Overnight session date & notification gesture governance invariants verified.');
 
-console.log('\nSUCCESS: All 22 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 23: Modal Scroll Release & Zombie Session Eviction Invariants
+// ---------------------------------------------------------------------------
+// 1. F-dialog release overflow cleanup on both html and body
+assert.ok(content.includes('document.documentElement.style.removeProperty(\'overflow\')'), 'FAIL: f-dialog or watcher must removeProperty overflow on documentElement');
+assert.ok(content.includes('document.body.style.removeProperty(\'overflow\')'), 'FAIL: f-dialog or watcher must removeProperty overflow on body');
+
+// 2. Dialog depth reset in root watcher when all modals are closed
+assert.ok(content.includes('window.__omnitrackDialogDepth = 0'), 'FAIL: Root watcher must reset __omnitrackDialogDepth to 0 when all modals close');
+
+// 3. Dropdowns excluded from page scroll locking
+assert.ok(!content.includes('watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter'), 'FAIL: In-page dropdowns showTrackerPopup and showNatureFilter must NOT lock scroll');
+
+// 4. Inactivity modal discard button and prolonged inactivity warning
+assert.ok(content.includes('discardInactivitySession'), 'FAIL: Inactivity modal must support discardInactivitySession action');
+assert.ok(content.includes('Prolonged Inactivity Detected'), 'FAIL: Inactivity modal must display prolonged inactivity alert when >=60m');
+
+// 5. WorkBlocks lookup for past-day completed blocks in restoreActiveSession
+assert.ok(content.includes('(workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName)'), 'FAIL: restoreActiveSession must look up workBlocks to catch completed blocks from past dates');
+
+console.log('✓ Test 23: Modal scroll release & zombie session eviction invariants verified.');
+
+// ---------------------------------------------------------------------------
+// TEST 24: Calendar Active Session Rendering & Variable Hoisting Invariants
+// ---------------------------------------------------------------------------
+// 1. Elimination of undeclared variables in calendar grid and hovercard
+assert.ok(!content.includes('trackerElapsedSecs'), 'FAIL: Undeclared variable trackerElapsedSecs must be replaced with trackerSeconds');
+assert.ok(!content.includes('trackerElapsedFormatted'), 'FAIL: Undeclared variable trackerElapsedFormatted must be replaced with formattedTime');
+
+// 2. Global hoisting of nowMinute and todayISO at the top of setup to avoid TDZ errors
+const setupIdx = content.indexOf('setup() {');
+const nowMinIdx = content.indexOf('const nowMinute = ref');
+const todayIsoIdx = content.indexOf('const todayISO = () => getLocalTodayISO()');
+assert.ok(setupIdx > 0 && nowMinIdx > setupIdx && nowMinIdx < setupIdx + 4000, 'FAIL: nowMinute must be declared at the top of setup()');
+assert.ok(setupIdx > 0 && todayIsoIdx > setupIdx && todayIsoIdx < setupIdx + 4000, 'FAIL: todayISO must be declared at the top of setup()');
+
+// 3. Export of startTime in setup return
+assert.ok(content.includes('startTime,\n        trackerSeconds,'), 'FAIL: startTime must be exported in setup() return');
+
+console.log('✓ Test 24: Calendar active session rendering & variable hoisting invariants verified.');
+
+console.log('\nSUCCESS: All 24 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
