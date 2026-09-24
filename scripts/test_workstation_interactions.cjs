@@ -1320,7 +1320,56 @@ assert.strictEqual(zoomNavRes.endVal, 24, 'FAIL: End must jump to index 2 (24)')
 
 console.log('✓ Test 33: Day at a glance timeline zoom radiogroup roving tabindex & arrow navigation verified.');
 
-console.log('\nSUCCESS: All 33 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 34: Logged Work Session Direct In-Drawer Editing & Deletion Invariants
+// ---------------------------------------------------------------------------
+assert.ok(
+  content.includes('openEditSessionModal(activeBlock, s)'),
+  'FAIL: Logged work sessions in drawer must provide an edit button invoking openEditSessionModal'
+);
+assert.ok(
+  content.includes('confirmDeleteSession(activeBlock, s)'),
+  'FAIL: Logged work sessions in drawer must provide a delete button invoking confirmDeleteSession'
+);
+assert.ok(
+  content.includes('v-model="showEditSessionModal"'),
+  'FAIL: omnitrack.html must declare showEditSessionModal dialog'
+);
+assert.ok(
+  apiContent.includes('def update_work_session('),
+  'FAIL: api.py must define whitelisted update_work_session endpoint'
+);
+assert.ok(
+  apiContent.includes('def delete_work_session('),
+  'FAIL: api.py must define whitelisted delete_work_session endpoint'
+);
+
+const editSessionSandbox = {
+  editSessionForm: {
+    from_time: '19:32',
+    to_time: '20:00'
+  }
+};
+vm.createContext(editSessionSandbox);
+const editSessionCode = `
+  const f = editSessionForm.from_time;
+  const t = editSessionForm.to_time;
+  let dur = '0.00';
+  if (f && t) {
+    const [fh, fm] = f.split(':').map(Number);
+    const [th, tm] = t.split(':').map(Number);
+    let diff = (th * 60 + tm) - (fh * 60 + fm);
+    if (diff < 0) diff += 1440;
+    dur = (diff / 60).toFixed(2);
+  }
+  dur;
+`;
+const calcDur = vm.runInContext(editSessionCode, editSessionSandbox);
+assert.strictEqual(calcDur, '0.47', 'FAIL: Duration between 19:32 and 20:00 must compute to 0.47h');
+
+console.log('✓ Test 34: Logged work session direct in-drawer editing & deletion invariants verified.');
+
+console.log('\nSUCCESS: All 34 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

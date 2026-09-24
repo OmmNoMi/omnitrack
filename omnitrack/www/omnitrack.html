@@ -3678,7 +3678,19 @@
               :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
               <div class="flex items-center justify-between">
                 <span class="font-mono text-[11px] text-gray-400">{{ s.session_date }}<span v-if="s.from_time"> · {{ hhmm(s.from_time) }}–{{ hhmm(s.to_time) }}</span></span>
-                <span class="font-bold text-emerald-500">{{ fmtHrs(s.hours) }}h</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-emerald-500">{{ fmtHrs(s.hours) }}h</span>
+                  <button type="button" class="p-1 rounded-md text-gray-400 hover:text-blue-500 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    title="Edit session timing and notes"
+                    @click="openEditSessionModal(activeBlock, s)">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </button>
+                  <button type="button" class="p-1 rounded-md text-gray-400 hover:text-rose-500 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    title="Delete this work session"
+                    @click="confirmDeleteSession(activeBlock, s)">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
               </div>
               <p v-if="s.notes" class="text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed text-[11px]">{{ s.notes }}</p>
               <div v-if="s.logged_via" class="text-[10px] text-gray-400">via {{ s.logged_via }}</div>
@@ -4808,6 +4820,75 @@
           @click="submitCancelBlock"
         >
           Confirm Cancellation
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- EDIT LOGGED WORK SESSION MODAL DIALOG       -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showEditSessionModal"
+    title="Edit Logged Work Session"
+    subtitle="Fine-tune start/end times and deliverable notes"
+    size="sm"
+  >
+    <template #header-icon>
+      <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    </template>
+
+    <div class="space-y-4 text-xs">
+      <!-- Session Date -->
+      <div>
+        <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">Session Date</label>
+        <input type="date" v-model="editSessionForm.session_date"
+          class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-blue-500"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'">
+      </div>
+
+      <!-- Start and End Time -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">Start Time</label>
+          <input type="time" v-model="editSessionForm.from_time"
+            class="w-full px-3 py-2 rounded-xl border font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500"
+            :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">End Time</label>
+          <input type="time" v-model="editSessionForm.to_time"
+            class="w-full px-3 py-2 rounded-xl border font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500"
+            :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'">
+        </div>
+      </div>
+
+      <!-- Calculated Duration Badge -->
+      <div class="flex items-center justify-between p-2.5 rounded-xl border"
+        :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-gray-50 border-gray-200'">
+        <span class="text-gray-500 dark:text-gray-400 font-medium">Calculated Duration</span>
+        <span class="font-mono font-bold text-emerald-500 text-sm">{{ editSessionDuration }}h</span>
+      </div>
+
+      <!-- Notes / Bullets -->
+      <div>
+        <label class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">Session Deliverables & Notes</label>
+        <textarea v-model="editSessionForm.notes" rows="4"
+          placeholder="Update deliverables or bullet notes for this session..."
+          class="w-full p-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed"
+          :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-200 text-gray-900 placeholder-gray-400'"></textarea>
+      </div>
+    </div>
+
+    <template #actions>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showEditSessionModal = false">
+          Cancel
+        </f-button>
+        <f-button variant="solid" theme="blue" size="sm" :loading="isSavingEditSession" @click="saveEditSession">
+          Save Changes
         </f-button>
       </div>
     </template>
@@ -9347,6 +9428,110 @@
         }
       };
 
+      // 2b-2. Edit & Delete Logged Work Sessions
+      const showEditSessionModal = ref(false);
+      const isSavingEditSession = ref(false);
+      const editSessionTargetBlock = ref(null);
+      const editSessionForm = ref({
+        name: '',
+        session_date: '',
+        from_time: '',
+        to_time: '',
+        notes: ''
+      });
+      const editSessionDuration = computed(() => {
+        const f = editSessionForm.value.from_time;
+        const t = editSessionForm.value.to_time;
+        if (!f || !t) return '0.00';
+        try {
+          const [fh, fm] = f.split(':').map(Number);
+          const [th, tm] = t.split(':').map(Number);
+          let diff = (th * 60 + tm) - (fh * 60 + fm);
+          if (diff < 0) diff += 1440;
+          return (diff / 60).toFixed(2);
+        } catch (e) {
+          return '0.00';
+        }
+      });
+
+      const openEditSessionModal = (block, session) => {
+        editSessionTargetBlock.value = block;
+        editSessionForm.value = {
+          name: session.name || '',
+          session_date: session.session_date || (block && block.work_date) || todayISO(),
+          from_time: session.from_time ? hhmm(session.from_time) : '',
+          to_time: session.to_time ? hhmm(session.to_time) : '',
+          notes: session.notes || ''
+        };
+        showEditSessionModal.value = true;
+      };
+
+      const saveEditSession = async () => {
+        if (!editSessionForm.value.name) return;
+        if (!editSessionForm.value.session_date) {
+          showToast('Session date is required', 'warning');
+          return;
+        }
+        if (!editSessionForm.value.from_time || !editSessionForm.value.to_time) {
+          showToast('Start and end times are required', 'warning');
+          return;
+        }
+        isSavingEditSession.value = true;
+        try {
+          const res = await postJSON('update_work_session', {
+            session_name: editSessionForm.value.name,
+            block_name: editSessionTargetBlock.value ? editSessionTargetBlock.value.name : null,
+            session_date: editSessionForm.value.session_date,
+            from_time: editSessionForm.value.from_time.length === 5 ? editSessionForm.value.from_time + ':00' : editSessionForm.value.from_time,
+            to_time: editSessionForm.value.to_time.length === 5 ? editSessionForm.value.to_time + ':00' : editSessionForm.value.to_time,
+            notes: editSessionForm.value.notes
+          });
+          if (res && res.status === 'success') {
+            showToast('Work session updated successfully', 'success');
+            showEditSessionModal.value = false;
+            fetchWorkstationData(selectedEmployee.value);
+            if (activeBlock.value && res.name === activeBlock.value.name) {
+              activeBlock.value.actual_hours = res.actual_hours;
+              activeBlock.value.variance_hours = res.variance_hours;
+              activeBlock.value.status = res.block_status;
+              if (res.sessions) activeBlock.value.sessions = res.sessions;
+            }
+          } else {
+            showToast(extractErrorMessage(res, 'Failed to update work session'), 'danger');
+          }
+        } catch (e) {
+          showToast(extractErrorMessage(e, 'Failed to update work session'), 'danger');
+        } finally {
+          isSavingEditSession.value = false;
+        }
+      };
+
+      const confirmDeleteSession = async (block, session) => {
+        if (!session || !session.name) return;
+        const timeLabel = session.from_time ? hhmm(session.from_time) + '–' + hhmm(session.to_time) : fmtHrs(session.hours) + 'h';
+        if (!confirm(`Delete work session (${timeLabel})? This will update actual hours on this block.`)) return;
+        try {
+          const res = await postJSON('delete_work_session', {
+            session_name: session.name,
+            block_name: block ? block.name : null
+          });
+          if (res && res.status === 'success') {
+            showToast('Work session deleted', 'info');
+            fetchWorkstationData(selectedEmployee.value);
+            if (activeBlock.value && res.name === activeBlock.value.name) {
+              activeBlock.value.actual_hours = res.actual_hours;
+              activeBlock.value.variance_hours = res.variance_hours;
+              activeBlock.value.status = res.block_status;
+              if (res.sessions) activeBlock.value.sessions = res.sessions;
+            }
+          } else {
+            showToast(extractErrorMessage(res, 'Failed to delete work session'), 'danger');
+          }
+        } catch (e) {
+          showToast(extractErrorMessage(e, 'Failed to delete work session'), 'danger');
+        }
+      };
+
       const trackBlock = (block) => {
         if (isTracking.value) {
           showToast('Stop the current timer first', 'danger');
@@ -11185,6 +11370,7 @@
         else if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
         else if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
+        else if (showEditSessionModal.value) showEditSessionModal.value = false;
         else if (showSwitchTaskModal.value) showSwitchTaskModal.value = false;
         else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
         else if (showCancelModal.value) showCancelModal.value = false;
@@ -11195,7 +11381,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showInactivityModal, showBookModal, showAdjustModal, showSwitchTaskModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showBookModal, showAdjustModal, showEditSessionModal, showSwitchTaskModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -11697,6 +11883,13 @@
         rescheduleForm,
         submitReschedule,
         generateTimesheet,
+        showEditSessionModal,
+        isSavingEditSession,
+        editSessionForm,
+        editSessionDuration,
+        openEditSessionModal,
+        saveEditSession,
+        confirmDeleteSession,
         submitSession,
         cancelActiveBlock,
         removeActiveBlock,

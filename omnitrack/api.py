@@ -2292,6 +2292,139 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 
 
 @frappe.whitelist()
+def update_work_session(session_name, block_name=None, from_time=None, to_time=None, hours=None, session_date=None, notes=None):
+	"""Update an existing logged work session (timing, notes, date) on a Planned Work Block,
+	recalculating block actuals, variance, and refreshing linked Timesheet."""
+	if not session_name:
+		frappe.throw(_("Session identifier is required."))
+
+	if not block_name:
+		block_name = frappe.db.get_value("OmniTrack Work Session", session_name, "parent")
+	if not block_name:
+		frappe.throw(_("Planned Work Block not found for session."))
+
+	doc = frappe.get_doc("Planned Work Block", block_name)
+	if doc.employee != frappe.session.user and not _is_planner_manager():
+		frappe.throw(_("Not permitted to modify sessions on this work block."), frappe.PermissionError)
+
+	base_date = session_date or doc.work_date or nowdate()
+	from omnitrack.permissions import check_timesheet_date_permission
+	check_timesheet_date_permission(base_date, frappe.session.user)
+
+	sess_row = None
+	for s in doc.sessions:
+		if s.name == session_name:
+			sess_row = s
+			break
+
+	if not sess_row:
+		frappe.throw(_("Work session not found in work block."))
+
+	if session_date:
+		sess_row.session_date = session_date
+	if from_time:
+		sess_row.from_time = from_time
+	if to_time:
+		sess_row.to_time = to_time
+	if notes is not None:
+		sess_row.notes = notes
+
+	if from_time and to_time:
+		sess_row.hours = flt(_duration_hours(from_time, to_time))
+	elif hours:
+		sess_row.hours = flt(hours)
+
+	# Recalculate block actual hours and variance
+	doc.actual_hours = round(sum(flt(s.hours) for s in doc.sessions), 2)
+	doc.variance_hours = round(doc.actual_hours - flt(doc.duration_hours), 2)
+	if doc.actual_hours >= flt(doc.duration_hours):
+		doc.status = "Completed" if doc.status != "Logged (Full)" else "Logged (Full)"
+	elif doc.actual_hours > 0:
+		doc.status = "Logged (Partial)"
+
+	doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		doc.flags.ignore_links = True
+	doc.save()
+
+	# If block has a draft timesheet, update it
+	if doc.timesheet and frappe.db.exists("Timesheet", doc.timesheet):
+		ts_status = frappe.db.get_value("Timesheet", doc.timesheet, "docstatus")
+		if ts_status == 0:
+			try:
+				create_timesheet_from_work_block(doc.name)
+			except Exception:
+				pass
+
+	frappe.db.commit()
+	return {
+		"status": "success",
+		"name": doc.name,
+		"actual_hours": doc.actual_hours,
+		"planned_hours": doc.duration_hours,
+		"variance_hours": doc.variance_hours,
+		"block_status": doc.status,
+		"sessions": doc.sessions,
+	}
+
+
+@frappe.whitelist()
+def delete_work_session(session_name, block_name=None):
+	"""Delete an erroneous work session from a Planned Work Block,
+	recalculating block actuals, variance, and refreshing linked Timesheet."""
+	if not session_name:
+		frappe.throw(_("Session identifier is required."))
+
+	if not block_name:
+		block_name = frappe.db.get_value("OmniTrack Work Session", session_name, "parent")
+	if not block_name:
+		frappe.throw(_("Planned Work Block not found for session."))
+
+	doc = frappe.get_doc("Planned Work Block", block_name)
+	if doc.employee != frappe.session.user and not _is_planner_manager():
+		frappe.throw(_("Not permitted to delete sessions on this work block."), frappe.PermissionError)
+
+	base_date = doc.work_date or nowdate()
+	from omnitrack.permissions import check_timesheet_date_permission
+	check_timesheet_date_permission(base_date, frappe.session.user)
+
+	doc.sessions = [s for s in doc.sessions if s.name != session_name]
+	doc.actual_hours = round(sum(flt(s.hours) for s in doc.sessions), 2)
+	doc.variance_hours = round(doc.actual_hours - flt(doc.duration_hours), 2)
+	if doc.actual_hours == 0:
+		doc.status = "Planned"
+	elif doc.actual_hours >= flt(doc.duration_hours):
+		doc.status = "Completed" if doc.status != "Logged (Full)" else "Logged (Full)"
+	else:
+		doc.status = "Logged (Partial)"
+
+	doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		doc.flags.ignore_links = True
+	doc.save()
+
+	# If block has a draft timesheet, update it
+	if doc.timesheet and frappe.db.exists("Timesheet", doc.timesheet):
+		ts_status = frappe.db.get_value("Timesheet", doc.timesheet, "docstatus")
+		if ts_status == 0:
+			try:
+				create_timesheet_from_work_block(doc.name)
+			except Exception:
+				pass
+
+	frappe.db.commit()
+	return {
+		"status": "success",
+		"name": doc.name,
+		"actual_hours": doc.actual_hours,
+		"planned_hours": doc.duration_hours,
+		"variance_hours": doc.variance_hours,
+		"block_status": doc.status,
+		"sessions": doc.sessions,
+	}
+
+
+@frappe.whitelist()
 def get_plan_vs_actual(employee=None, from_date=None, to_date=None):
 	"""Per-task planned vs actual rollup across all of a user's blocks in the window."""
 	target = _resolve_planner_user(employee)
