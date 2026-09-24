@@ -2311,19 +2311,6 @@
                     <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     <span>No timesheet sessions were recorded against this planned block.</span>
                   </div>
-
-                  <!-- Plan vs Logged Mini Progress Track -->
-                  <div class="flex items-center gap-3 pt-1">
-                    <div class="h-1 flex-1 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800/80"
-                      role="img" :aria-label="Number(b.actual_hours || 0).toFixed(1) + ' hours logged of ' + Number(b.duration_hours || 0).toFixed(1) + ' planned'">
-                      <div class="h-full rounded-full transition-all"
-                        :class="blockLogState(b) === 'over' ? 'bg-purple-500/80' : (blockLogState(b) === 'short' ? 'bg-amber-500/80' : 'bg-slate-400 dark:bg-slate-500')"
-                        :style="{ width: blockLogPct(b) + '%' }"></div>
-                    </div>
-                    <span class="text-[11px] font-mono font-medium shrink-0 text-gray-500 dark:text-gray-400">
-                      {{ blockLogPct(b) }}%
-                    </span>
-                  </div>
                 </div>
 
               </f-card>
