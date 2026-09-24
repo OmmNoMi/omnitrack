@@ -1226,7 +1226,101 @@ assert.ok(
 );
 console.log('✓ Test 32: Collaborative pairing sessions & mirrored timesheets verified.');
 
-console.log('\nSUCCESS: All 32 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 33: Day at a Glance Timeline Zoom Radiogroup & Arrow Nav Invariants
+// ---------------------------------------------------------------------------
+assert.ok(
+  content.includes('@keydown="onTimelineZoomKey"'),
+  'FAIL: Timeline zoom radiogroup must have @keydown="onTimelineZoomKey"'
+);
+assert.ok(
+  content.includes(':tabindex="timelineZoom === z ? 0 : -1"'),
+  'FAIL: Timeline zoom radio buttons must enforce roving tabindex (0 for active, -1 for others)'
+);
+assert.ok(
+  content.includes('data-timeline-zoom'),
+  'FAIL: Timeline zoom radio buttons must have data-timeline-zoom attribute for programmatic focus'
+);
+assert.ok(
+  content.includes('const onTimelineZoomKey = (ev) => {'),
+  'FAIL: onTimelineZoomKey must be defined in omnitrack.html setup'
+);
+
+const zoomNavSandbox = {
+  timelineZoomOptions: [6, 12, 24],
+  timelineZoom: { value: 6 },
+  focusedIndex: -1,
+  nextTick: (fn) => fn()
+};
+vm.createContext(zoomNavSandbox);
+const zoomNavCode = `
+  const onTimelineZoomKey = (ev) => {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+    if (keys.indexOf(ev.key) === -1) return;
+    ev.preventDefault();
+    const cur = Math.max(0, timelineZoomOptions.indexOf(timelineZoom.value));
+    let next = cur;
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % timelineZoomOptions.length;
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + timelineZoomOptions.length) % timelineZoomOptions.length;
+    else if (ev.key === 'Home') next = 0;
+    else next = timelineZoomOptions.length - 1;
+    timelineZoom.value = timelineZoomOptions[next];
+    nextTick(() => {
+      const group = ev.currentTarget;
+      const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-timeline-zoom]') : [];
+      if (btns[next]) btns[next].focus();
+    });
+  };
+
+  const dummyGroup = {
+    querySelectorAll: (sel) => [
+      { focus: () => { focusedIndex = 0; } },
+      { focus: () => { focusedIndex = 1; } },
+      { focus: () => { focusedIndex = 2; } }
+    ]
+  };
+
+  // 1. Right arrow from 6 -> 12
+  let prevented = false;
+  onTimelineZoomKey({ key: 'ArrowRight', preventDefault: () => { prevented = true; }, currentTarget: dummyGroup });
+  const rightVal = timelineZoom.value;
+  const rightFocus = focusedIndex;
+
+  // 2. Down arrow from 12 -> 24
+  onTimelineZoomKey({ key: 'ArrowDown', preventDefault: () => {}, currentTarget: dummyGroup });
+  const downVal = timelineZoom.value;
+
+  // 3. Right arrow from 24 wraps to 6
+  onTimelineZoomKey({ key: 'ArrowRight', preventDefault: () => {}, currentTarget: dummyGroup });
+  const wrapVal = timelineZoom.value;
+
+  // 4. Left arrow from 6 wraps to 24
+  onTimelineZoomKey({ key: 'ArrowLeft', preventDefault: () => {}, currentTarget: dummyGroup });
+  const leftWrapVal = timelineZoom.value;
+
+  // 5. Home key jumps to 6
+  onTimelineZoomKey({ key: 'Home', preventDefault: () => {}, currentTarget: dummyGroup });
+  const homeVal = timelineZoom.value;
+
+  // 6. End key jumps to 24
+  onTimelineZoomKey({ key: 'End', preventDefault: () => {}, currentTarget: dummyGroup });
+  const endVal = timelineZoom.value;
+
+  ({ prevented, rightVal, rightFocus, downVal, wrapVal, leftWrapVal, homeVal, endVal });
+`;
+const zoomNavRes = vm.runInContext(zoomNavCode, zoomNavSandbox);
+assert.strictEqual(zoomNavRes.prevented, true, 'FAIL: onTimelineZoomKey must prevent default on arrow key');
+assert.strictEqual(zoomNavRes.rightVal, 12, 'FAIL: ArrowRight must advance 6 -> 12');
+assert.strictEqual(zoomNavRes.rightFocus, 1, 'FAIL: ArrowRight must transfer focus to index 1');
+assert.strictEqual(zoomNavRes.downVal, 24, 'FAIL: ArrowDown must advance 12 -> 24');
+assert.strictEqual(zoomNavRes.wrapVal, 6, 'FAIL: ArrowRight at end must wrap 24 -> 6');
+assert.strictEqual(zoomNavRes.leftWrapVal, 24, 'FAIL: ArrowLeft at start must wrap 6 -> 24');
+assert.strictEqual(zoomNavRes.homeVal, 6, 'FAIL: Home must jump to index 0 (6)');
+assert.strictEqual(zoomNavRes.endVal, 24, 'FAIL: End must jump to index 2 (24)');
+
+console.log('✓ Test 33: Day at a glance timeline zoom radiogroup roving tabindex & arrow navigation verified.');
+
+console.log('\nSUCCESS: All 33 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

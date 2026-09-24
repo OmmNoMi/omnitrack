@@ -1732,10 +1732,13 @@
                 <span class="inline-flex items-center gap-1.5" title="Time logged when nothing was planned for it"><span class="w-3 h-2 rounded-sm bg-rose-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Off plan</span></span>
                 <span v-if="dayTimeline.gapH > 0.05" class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-amber-400" aria-hidden="true"></span><span class="text-amber-600 dark:text-amber-400">{{ dayTimeline.gapH.toFixed(1) }}h unlogged</span></span>
                 <div class="inline-flex items-center rounded-full p-0.5 border" role="radiogroup" aria-label="Hours visible across the timeline"
+                  @keydown="onTimelineZoomKey"
                   :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-100 border-gray-200'">
                   <button v-for="z in timelineZoomOptions" :key="z" type="button" role="radio"
                     :aria-checked="timelineZoom === z ? 'true' : 'false'"
                     :aria-label="z + ' hours across'"
+                    data-timeline-zoom
+                    :tabindex="timelineZoom === z ? 0 : -1"
                     @click="timelineZoom = z"
                     class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     :class="timelineZoom === z ? (isDarkMode ? 'bg-[#1E1F22] text-white' : 'bg-white text-gray-900 shadow-xs') : (isDarkMode ? 'text-gray-400' : 'text-gray-500')">{{ z }}h</button>
@@ -7412,6 +7415,24 @@
       };
       const timelineZoom = ref(getTimelineDefaultZoom(selectedDashboardDate.value));
       const timelineTrackWidth = computed(() => (24 / timelineZoom.value * 100) + '%');
+      // Segmented control = one tab stop; ←/→ move the selection (WAI-ARIA radiogroup).
+      const onTimelineZoomKey = (ev) => {
+        const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+        if (keys.indexOf(ev.key) === -1) return;
+        ev.preventDefault();
+        const cur = Math.max(0, timelineZoomOptions.indexOf(timelineZoom.value));
+        let next = cur;
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % timelineZoomOptions.length;
+        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + timelineZoomOptions.length) % timelineZoomOptions.length;
+        else if (ev.key === 'Home') next = 0;
+        else next = timelineZoomOptions.length - 1;
+        timelineZoom.value = timelineZoomOptions[next];
+        nextTick(() => {
+          const group = ev.currentTarget;
+          const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-timeline-zoom]') : [];
+          if (btns[next]) btns[next].focus();
+        });
+      };
 
       // Zoomed in, the left edge of the track is 3am and empty. Put the first block
       // of the day just inside the viewport instead of making the user hunt for it.
@@ -11603,6 +11624,7 @@
         timelineZoom,
         timelineZoomOptions,
         timelineTrackWidth,
+        onTimelineZoomKey,
         timelineScroller,
         timelineCanScrollLeft,
         timelineCanScrollRight,
