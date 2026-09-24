@@ -185,6 +185,23 @@
         <span>Raven Chat</span>
       </f-button>
 
+      <!-- Notification Status / Permission Button -->
+      <f-button
+        v-if="notificationPermission !== 'granted'"
+        variant="subtle"
+        :theme="notificationPermission === 'denied' ? 'red' : 'blue'"
+        size="sm"
+        class="!rounded-full !px-2.5 !py-1 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+        :title="notificationPermission === 'denied' ? 'Notifications blocked in browser settings' : 'Enable Mobile Notifications for timesheets'"
+        :aria-label="notificationPermission === 'denied' ? 'Notifications blocked' : 'Enable Mobile Notifications'"
+        @click="enableNotificationsUserGesture"
+      >
+        <template #prefix>
+          <span>{{ notificationPermission === 'denied' ? '🔕' : '🔔' }}</span>
+        </template>
+        <span class="hidden sm:inline">{{ notificationPermission === 'denied' ? 'Alerts Blocked' : 'Enable Alerts' }}</span>
+      </f-button>
+
       <!-- App Menu (Pure Frappe UI FDropdownMenu) -->
       <f-dropdown-menu
         :items="headerMenuItems"
@@ -219,6 +236,38 @@
   <!-- 4. MAIN WORKSPACE CONTAINER                -->
   <!-- ========================================== -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-3 pt-3 pb-32 sm:px-6 sm:pt-6 sm:pb-44 space-y-4 sm:space-y-6" :class="isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]'">
+
+    <!-- Notification Permission Banner (Mobile & Desktop) -->
+    <div
+      v-if="showNotificationBanner && notificationPermission === 'default'"
+      class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 shadow-xs"
+    >
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span class="text-lg shrink-0">🔔</span>
+        <div class="text-xs text-blue-900 dark:text-blue-200 truncate">
+          <span class="font-bold">Enable Mobile Notifications:</span>
+          Get alerts on your phone when your running timesheet is idle or a planned block ends.
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <f-button
+          variant="solid"
+          size="sm"
+          class="!bg-blue-600 hover:!bg-blue-700 !text-white text-xs font-semibold cursor-pointer"
+          @click="enableNotificationsUserGesture"
+        >
+          Enable Alerts
+        </f-button>
+        <button
+          type="button"
+          @click="showNotificationBanner = false"
+          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 cursor-pointer"
+          aria-label="Dismiss banner"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
 
     <!-- 1. Active Timesheet Card ("Desk Remote HUD") — Elevated Focus Popup or Inline -->
     <teleport to="body" :disabled="!isSessionElevated">
@@ -7435,26 +7484,149 @@
         } catch (e) {}
       };
 
-      const dispatchInactivityNotification = (msg) => {
+      const notificationPermission = ref(
+        typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+      );
+      const showNotificationBanner = ref(true);
+
+      const enableNotificationsUserGesture = async () => {
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          showToast('Notifications are not supported in this browser.', 'warning');
+          return;
+        }
         try {
-          if (typeof window !== 'undefined' && 'Notification' in window) {
-            if (Notification.permission === 'granted') {
-              const notif = new Notification('OmniTrack: Are you still working?', {
-                body: msg || 'No activity logged for 30 minutes on active timesheet.',
-                icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
-                tag: 'omnitrack-inactivity'
-              });
-              notif.onclick = () => {
-                try {
-                  window.focus();
-                  showInactivityModal.value = true;
-                } catch (e) {}
-              };
-            } else if (Notification.permission === 'default') {
-              Notification.requestPermission();
+          const perm = await Notification.requestPermission();
+          notificationPermission.value = perm;
+          if (perm === 'granted') {
+            showNotificationBanner.value = false;
+            showToast('Mobile notifications enabled! You will receive timesheet alerts.', 'success');
+            playInactivityChime();
+            if ('serviceWorker' in navigator) {
+              try {
+                const reg = await navigator.serviceWorker.register('/assets/omnitrack/sw.js');
+                if (reg && reg.showNotification) {
+                  await reg.showNotification('OmniTrack Notifications Enabled', {
+                    body: 'Timesheet reminders and planned block alerts are now active.',
+                    icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+                    badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+                    tag: 'omnitrack-test',
+                    vibrate: [200, 100, 200]
+                  });
+                }
+                if ('pushManager' in reg) {
+                  try {
+                    const sub = await reg.pushManager.getSubscription();
+                    if (sub) {
+                      const subJson = sub.toJSON();
+                      await postJSON('register_push_subscription', {
+                        endpoint: sub.endpoint,
+                        p256dh: subJson.keys ? subJson.keys.p256dh : null,
+                        auth: subJson.keys ? subJson.keys.auth : null,
+                        device_type: (navigator.userAgent || '').slice(0, 140)
+                      });
+                    }
+                  } catch (subErr) {}
+                }
+              } catch (e) {}
             }
+          } else if (perm === 'denied') {
+            showToast('Notifications are blocked in browser settings. Please enable them to receive timesheet alerts.', 'warning');
+          }
+        } catch (err) {
+          showToast('Could not enable notifications: ' + (err && err.message || err), 'danger');
+        }
+      };
+
+      const dispatchInactivityNotification = async (msg, tag = 'omnitrack-inactivity') => {
+        try {
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate([200, 100, 200, 100, 200]);
           }
         } catch (e) {}
+
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+        if (Notification.permission === 'granted') {
+          const title = 'OmniTrack: Are you still working?';
+          const options = {
+            body: msg || 'No activity logged for 30 minutes on active timesheet.',
+            icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+            badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+            tag: tag,
+            renotify: true,
+            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200],
+            data: { url: '/omnitrack' }
+          };
+
+          // 1. Mobile ServiceWorker showNotification (iOS Safari PWA & Android)
+          if ('serviceWorker' in navigator) {
+            try {
+              const reg = await navigator.serviceWorker.ready;
+              if (reg && reg.showNotification) {
+                await reg.showNotification(title, options);
+                return;
+              }
+            } catch (swErr) {}
+            try {
+              if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                  type: 'SHOW_NOTIFICATION',
+                  title: title,
+                  options: options
+                });
+                return;
+              }
+            } catch (swMsgErr) {}
+          }
+
+          // 2. Desktop Notification constructor fallback
+          try {
+            const notif = new Notification(title, options);
+            notif.onclick = () => {
+              try {
+                window.focus();
+                showInactivityModal.value = true;
+              } catch (e) {}
+            };
+          } catch (e) {}
+        } else if (Notification.permission === 'default') {
+          try {
+            const p = await Notification.requestPermission();
+            notificationPermission.value = p;
+          } catch (e) {}
+        }
+      };
+
+      const lastOverrunAlertTime = ref(0);
+      const checkBlockOverrun = () => {
+        if (!isTracking.value || !trackerBoundBlock.value) return;
+        const b = trackerBoundBlock.value;
+        if (!b.end_time) return;
+        const [eh, em] = b.end_time.split(':').map(Number);
+        if (isNaN(eh) || isNaN(em)) return;
+
+        const now = new Date();
+        const curMins = now.getHours() * 60 + now.getMinutes();
+        const endMins = eh * 60 + em;
+
+        if (curMins >= endMins) {
+          const overdueMins = curMins - endMins;
+          const nowMs = Date.now();
+          const timeSinceAlert = nowMs - (lastOverrunAlertTime.value || 0);
+          const REPEAT_MS = 30 * 60 * 1000;
+
+          if (!lastOverrunAlertTime.value || timeSinceAlert >= REPEAT_MS) {
+            lastOverrunAlertTime.value = nowMs;
+            playInactivityChime();
+            const blockTitle = b.work_item_label || b.task_subject || b.name;
+            const endHHMM = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+            const msg = overdueMins > 0
+              ? `Planned block "${blockTitle}" ended at ${endHHMM} (${overdueMins}m overdue). Wrap up or continue?`
+              : `Planned block "${blockTitle}" ended at ${endHHMM}. Wrap up or continue?`;
+
+            dispatchInactivityNotification(msg, 'omnitrack-block-overrun');
+          }
+        }
       };
 
       const inactivityMinutes = computed(() => {
@@ -7504,6 +7676,9 @@
         showInactivityModal.value = false;
         syncActiveSession(true);
         showToast('Timesheet confirmed active — timer continues!', 'success');
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().then(p => { notificationPermission.value = p; }).catch(() => {});
+        }
       };
 
       const stopInactivitySessionNow = () => {
@@ -7644,6 +7819,7 @@
           trackerTimer.value = setInterval(() => {
             trackerSeconds.value = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
             checkInactivity();
+            checkBlockOverrun();
           }, 1000);
 
           localStorage.setItem('omnitrack_active_session',
@@ -7927,6 +8103,11 @@
             label: isDarkMode.value ? '☀️ Light Mode' : '🌙 Dark Mode',
             action: 'toggle_theme',
             onClick: () => toggleTheme()
+          },
+          {
+            label: notificationPermission.value === 'granted' ? '🔔 Alerts Active' : (notificationPermission.value === 'denied' ? '🔕 Alerts Blocked (Browser Settings)' : '🔔 Enable Mobile Alerts'),
+            action: 'toggle_notifications',
+            onClick: () => enableNotificationsUserGesture()
           }
         ];
         const emps = employeeItems.value;
@@ -8628,12 +8809,13 @@
           // Request browser notification permission on user gesture (clicking Start)
           try {
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-              Notification.requestPermission();
+              Notification.requestPermission().then(p => { notificationPermission.value = p; }).catch(() => {});
             }
           } catch (e) {}
           trackerTimer.value = setInterval(() => {
             trackerSeconds.value = Math.floor((Date.now() - sTime) / 1000);
             checkInactivity();
+            checkBlockOverrun();
           }, 1000);
           showToast(`Focus timer started for ${selectedNature.value}`, 'info');
         } else {
@@ -10851,12 +11033,46 @@
           }
         } catch (e) {}
 
+        // Register service worker for PWA & mobile push notifications
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/assets/omnitrack/sw.js')
+            .then(reg => {
+              console.log('[OmniTrack] Service Worker registered:', reg.scope);
+            })
+            .catch(err => {
+              console.warn('[OmniTrack] SW registration skipped:', err);
+            });
+        }
+
+        // Unlock Web Audio context on first user tap/key for mobile chime reliability
+        const unlockAudio = () => {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              const ctx = new AudioCtx();
+              if (ctx.state === 'suspended') {
+                ctx.resume();
+              }
+            }
+          } catch (e) {}
+          window.removeEventListener('pointerdown', unlockAudio);
+          window.removeEventListener('keydown', unlockAudio);
+        };
+        window.addEventListener('pointerdown', unlockAudio, { passive: true });
+        window.addEventListener('keydown', unlockAudio, { passive: true });
+
         // Listen for visibility change to immediately sync timer & fetch fresh active session on phone wake
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             checkRemoteActiveSession();
             fetchWorkstationData(selectedEmployee.value);
+            checkInactivity();
+            checkBlockOverrun();
           }
+        });
+        window.addEventListener('focus', () => {
+          checkInactivity();
+          checkBlockOverrun();
         });
 
         // 1. Rock-solid background poller (every 2s for instant multi-device reflection)
@@ -11325,7 +11541,11 @@
         setAttentionFilter,
         onAttentionTabKeydown,
         setPlannerTaskFilter,
-        onPlannerTaskTabKeydown
+        onPlannerTaskTabKeydown,
+        notificationPermission,
+        showNotificationBanner,
+        enableNotificationsUserGesture,
+        checkBlockOverrun
       };
     }
   });

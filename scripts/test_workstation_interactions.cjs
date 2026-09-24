@@ -1047,7 +1047,55 @@ assert.ok(content.includes('startTime,\n        trackerSeconds,'), 'FAIL: startT
 
 console.log('✓ Test 24: Calendar active session rendering & variable hoisting invariants verified.');
 
-console.log('\nSUCCESS: All 24 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 25: Mobile Notification Architecture, SW & Block Overrun Governance
+// ---------------------------------------------------------------------------
+// 1. Service Worker registration in omnitrack.html
+assert.ok(
+  content.includes("navigator.serviceWorker.register('/assets/omnitrack/sw.js')"),
+  'FAIL: Service worker must be registered in omnitrack.html for mobile PWA push/local notifications'
+);
+
+// 2. Service Worker showNotification prioritized over direct constructor (WebKit / iOS Safari PWA requirement)
+assert.ok(
+  content.includes('reg.showNotification(title, options)'),
+  'FAIL: Notifications must use reg.showNotification to function on iOS Safari and WebKit PWAs'
+);
+
+// 3. Mobile physical haptic vibration
+assert.ok(
+  content.includes("navigator.vibrate([200, 100, 200, 100, 200])"),
+  'FAIL: Notifications must trigger physical haptic vibration for mobile users'
+);
+
+// 4. Overrun check on scheduled block end time
+assert.ok(
+  content.includes('checkBlockOverrun'),
+  'FAIL: checkBlockOverrun must exist to alert user when planned block end time arrives or overruns'
+);
+
+// 5. Visibility change wake-up checks
+assert.ok(
+  content.includes("document.addEventListener('visibilitychange'") &&
+  content.includes('checkBlockOverrun()') &&
+  content.includes('checkInactivity()'),
+  'FAIL: Phone wake (visibilitychange) must trigger immediate checkInactivity and checkBlockOverrun'
+);
+
+// 6. SW message listener in sw.js
+const swContent = fs.readFileSync(path.join(__dirname, '../omnitrack/public/sw.js'), 'utf8');
+assert.ok(
+  swContent.includes("event.data.type === 'SHOW_NOTIFICATION'"),
+  'FAIL: sw.js must listen for SHOW_NOTIFICATION message events'
+);
+
+// 7. Setup returns notification state & handlers
+assert.ok(content.includes('notificationPermission,'), 'FAIL: notificationPermission must be returned by setup()');
+assert.ok(content.includes('enableNotificationsUserGesture,'), 'FAIL: enableNotificationsUserGesture must be returned by setup()');
+
+console.log('✓ Test 25: Mobile notification architecture, Service Worker & block overrun alerts verified.');
+
+console.log('\nSUCCESS: All 25 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

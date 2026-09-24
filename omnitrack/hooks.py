@@ -61,6 +61,11 @@ additional_timeline_content = {
 # Scheduled Tasks
 # ---------------
 scheduler_events = {
+	"cron": {
+		"* * * * *": [
+			"omnitrack.notifications.check_active_timesheet_reminders"
+		]
+	},
 	"daily": [
 		"omnitrack.synthesizer.synthesize_all_active_employees",
 		"omnitrack.api.process_scheduled_timesheet_sync",
