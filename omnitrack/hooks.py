@@ -80,4 +80,27 @@ commands = ["omnitrack.commands.commands"]
 
 # Frappe Assistant Core (FAC) MCP Tools Integration
 # -------------------------------------------------
+assistant_tools = [
+	"omnitrack.fac.OmniTrackGetMyWorkspaceTool",
+	"omnitrack.fac.OmniTrackPlanWorkBlocksTool",
+	"omnitrack.fac.OmniTrackLogWorkSessionTool",
+	"omnitrack.fac.OmniTrackQuickCreateTaskTool",
+	"omnitrack.fac.OmniTrackQuickTimerActionTool",
+	"omnitrack.fac.OmniTrackStartTimerTool",
+	"omnitrack.fac.OmniTrackStopTimerTool",
+	"omnitrack.fac.OmniTrackDiscardTimerTool",
+	"omnitrack.fac.OmniTrackGetTimerStatusTool",
+	"omnitrack.fac.OmniTrackGetEODReconciliationTool",
+	"omnitrack.fac.OmniTrackSwitchTimerTool",
+	"omnitrack.fac.OmniTrackRescheduleBlockTool",
+	"omnitrack.fac.OmniTrackExtendActiveBlockTool",
+	"omnitrack.fac.OmniTrackAdjustWorkSessionTool",
+	"omnitrack.fac.OmniTrackDeleteWorkSessionTool",
+	"omnitrack.fac.OmniTrackGetAssignedTasksTool",
+	"omnitrack.fac.OmniTrackExecuteTaskWorkflowTool",
+	"omnitrack.fac.OmniTrackAttachTasksToBlockTool",
+	"omnitrack.fac.OmniTrackCompleteBlockTaskTool",
+	"omnitrack.fac.OmniTrackGetPlanVsActualTool",
+	"omnitrack.fac.OmniTrackApproveWorkBlocksTool",
+]
 fac_tools = "omnitrack.fac.get_fac_tools"

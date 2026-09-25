@@ -164,8 +164,10 @@
     {
       "fieldname": "default_timesheet_mode",
       "fieldtype": "Select",
-      "options": "Off\nManual On-Demand\nAuto Draft\nAuto Sync Draft",
-      "default": "Auto Sync Draft"
+      "label": "ERPNext Timesheet Sync Mode",
+      "options": "Never\nOn Approval\nImmediate",
+      "default": "Never",
+      "description": "Never: Sessions stay in OmniTrack Planned Work Blocks only; zero ERPNext Timesheet documents created. On Approval: Created/synced to ERPNext Timesheet only after manager or HR approves the work block. Immediate: Synchronized automatically upon session logging."
     },
     {
       "fieldname": "default_timesheet_frequency",
@@ -202,6 +204,13 @@
       "label": "Timesheet Modification Horizon (Hours)",
       "default": 48,
       "description": "Hours during which standard users can log or modify timesheets without manager sign-off (e.g. 48 for 2 days, 168 for 1 week)."
+    },
+    {
+      "fieldname": "allow_submitted_timesheet_amendment",
+      "fieldtype": "Check",
+      "label": "Allow Auto-Amendment of Submitted Timesheets",
+      "default": 1,
+      "description": "When sessions are edited or deleted on an already-submitted timesheet within the allowed horizon, automatically cancel, amend, and re-submit the linked ERPNext Timesheet."
     },
     {
       "fieldname": "cb_temporal_governance",

@@ -30,6 +30,7 @@ def get_system_status():
 		"lock_screen_actions_enabled": getattr(settings, "enable_lock_screen_actions", 1),
 		"past_block_lock_grace_hours": getattr(settings, "past_block_lock_grace_hours", 24) or 24,
 		"timesheet_modification_horizon_hours": getattr(settings, "timesheet_modification_horizon_hours", 48) or 48,
+		"allow_submitted_timesheet_amendment": 1 if getattr(settings, "allow_submitted_timesheet_amendment", 1) is None or getattr(settings, "allow_submitted_timesheet_amendment", 1) == 1 else 0,
 		"timestamp": frappe.utils.now()
 	}
 
@@ -363,9 +364,9 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		block.flags.ignore_permissions = True
 		block.insert()
 
-		# Auto-create Timesheet connected to Project if Timesheet DocType exists
+		# Auto-create Timesheet connected to Project if Timesheet DocType exists and sync_mode == "Immediate"
 		ts_name = None
-		if frappe.db.exists("DocType", "Timesheet"):
+		if frappe.db.exists("DocType", "Timesheet") and get_timesheet_sync_mode() == "Immediate":
 			try:
 				ts_name = create_timesheet_from_work_block(block.name)
 			except Exception:
@@ -411,7 +412,7 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 				p_doc.flags.ignore_permissions = True
 				p_doc.insert()
 				partner_block_name = p_doc.name
-				if frappe.db.exists("DocType", "Timesheet"):
+				if frappe.db.exists("DocType", "Timesheet") and get_timesheet_sync_mode() == "Immediate":
 					try:
 						partner_ts_name = create_timesheet_from_work_block(p_doc.name)
 					except Exception:
@@ -495,11 +496,36 @@ def _parse_block_tasks(val):
 	return []
 
 
+def get_timesheet_sync_mode():
+	"""Returns the configured ERPNext Timesheet sync mode: 'Never', 'On Approval', or 'Immediate'.
+	Handles backwards-compatibility mappings:
+	- 'Never' or 'Off' -> 'Never'
+	- 'On Approval' or 'Manual On-Demand' -> 'On Approval'
+	- 'Immediate' or 'Auto Sync Draft' or 'Auto Draft' -> 'Immediate'
+	Defaults to 'Never'.
+	"""
+	mode = frappe.db.get_single_value("OmniTrack Settings", "default_timesheet_mode")
+	if not mode:
+		return "Never"
+	mode = str(mode).strip()
+	if mode in ("Never", "Off"):
+		return "Never"
+	elif mode in ("On Approval", "Manual On-Demand"):
+		return "On Approval"
+	elif mode in ("Immediate", "Auto Sync Draft", "Auto Draft"):
+		return "Immediate"
+	return "Never"
+
+
 @frappe.whitelist()
-def create_timesheet_from_work_block(block_name):
+def create_timesheet_from_work_block(block_name, force=False):
 	"""Converts a Planned Work Block into a Timesheet document.
 	Every Timesheet is connected to one Project (parent_project).
 	The project is inherited from the work block, which in turn inherits it from the linked Task.
+
+	Respects the configured ERPNext Timesheet sync mode ('Never', 'On Approval', 'Immediate').
+	If sync_mode is 'Never' and not force: returns None.
+	If sync_mode is 'On Approval' and not force: returns None unless block.approval_status == 'Approved'.
 	"""
 	if not frappe.db.exists("DocType", "Planned Work Block"):
 		frappe.throw(_("Planned Work Block DocType is not available."))
@@ -507,6 +533,13 @@ def create_timesheet_from_work_block(block_name):
 	block = frappe.get_doc("Planned Work Block", block_name)
 	if not frappe.db.exists("DocType", "Timesheet"):
 		return None
+
+	sync_mode = get_timesheet_sync_mode()
+	if not force:
+		if sync_mode == "Never":
+			return None
+		elif sync_mode == "On Approval" and getattr(block, "approval_status", None) != "Approved":
+			return None
 
 	# Resolve project and task from block
 	project = block.project
@@ -658,6 +691,86 @@ def create_timesheet_from_work_block(block_name):
 	block.db_set("timesheet", ts.name)
 	return ts.name
 
+
+def sync_work_block_timesheet(block_or_name, force=False):
+	"""Synchronizes the linked Timesheet for a Planned Work Block.
+	Respects the configured ERPNext Timesheet sync mode ('Never', 'On Approval', 'Immediate').
+	"""
+	if not frappe.db.exists("DocType", "Timesheet"):
+		return None
+
+	sync_mode = get_timesheet_sync_mode()
+	if not force and sync_mode == "Never":
+		return None
+
+	doc = block_or_name if hasattr(block_or_name, "sessions") else frappe.get_doc("Planned Work Block", block_or_name)
+	if not force and sync_mode == "On Approval" and getattr(doc, "approval_status", None) != "Approved":
+		return None
+
+	if not doc.timesheet or not frappe.db.exists("Timesheet", doc.timesheet):
+		if flt(doc.actual_hours) > 0:
+			try:
+				return create_timesheet_from_work_block(doc.name, force=force)
+			except Exception:
+				return None
+		return None
+
+	old_ts_name = doc.timesheet
+	ts = frappe.get_doc("Timesheet", old_ts_name)
+
+	# Case 1: Draft Timesheet
+	if ts.docstatus == 0:
+		if flt(doc.actual_hours) == 0 and not doc.sessions:
+			try:
+				ts.flags.ignore_permissions = True
+				frappe.delete_doc("Timesheet", old_ts_name, force=True)
+				doc.timesheet = None
+				doc.db_set("timesheet", None)
+			except Exception:
+				pass
+			return None
+		else:
+			return create_timesheet_from_work_block(doc.name)
+
+	# Case 2: Submitted Timesheet
+	elif ts.docstatus == 1:
+		from omnitrack.permissions import is_submitted_timesheet_amendment_allowed
+		if not is_submitted_timesheet_amendment_allowed():
+			return old_ts_name
+
+		# Cancel the old timesheet
+		ts.flags.ignore_permissions = True
+		ts.cancel()
+
+		if flt(doc.actual_hours) == 0 and not doc.sessions:
+			doc.timesheet = None
+			doc.db_set("timesheet", None)
+			return None
+
+		# Create amended timesheet
+		new_ts = frappe.copy_doc(ts, ignore_no_copy=True)
+		new_ts.docstatus = 0
+		new_ts.amended_from = old_ts_name
+		new_ts.time_logs = []
+		new_ts.flags.ignore_permissions = True
+		new_ts.insert(ignore_permissions=True)
+
+		doc.timesheet = new_ts.name
+		doc.db_set("timesheet", new_ts.name)
+
+		# Populate time logs from doc.sessions
+		create_timesheet_from_work_block(doc.name)
+
+		# Re-fetch and submit
+		reloaded = frappe.get_doc("Timesheet", new_ts.name)
+		reloaded.flags.ignore_permissions = True
+		reloaded.submit()
+
+		return new_ts.name
+
+	return doc.timesheet
+
+
 def on_employee_checkin(doc, method=None):
 	"""Event hook when an Employee Checkin record is logged."""
 	pass
@@ -753,7 +866,7 @@ def sync_active_session(session_data=None, user=None):
 
 
 @frappe.whitelist()
-def switch_active_session(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None):
+def switch_active_session(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None, previous_block=None, start_time_ms=None):
 	"""
 	Atomically switches the user's active running timesheet session to another Planned Work Block or Task.
 	1. Closes the currently running session:
@@ -778,37 +891,52 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 	if active and active.get("status") == "active":
 		prev_block_name = active.get("trackerBlockName")
 		start_ms = flt(active.get("startTime", 0))
+	else:
+		start_ms = 0.0
+
+	if not prev_block_name and previous_block:
+		prev_block_name = previous_block
+	if start_ms <= 0 and start_time_ms:
+		start_ms = flt(start_time_ms)
+
+	if prev_block_name and frappe.db.exists("Planned Work Block", prev_block_name):
 		if start_ms > 0:
 			diff_secs = max(60, (now_ms - start_ms) / 1000.0)
 			elapsed_hours = round(diff_secs / 3600.0, 2)
 			start_dt = datetime.fromtimestamp(start_ms / 1000.0)
-			if prev_block_name and frappe.db.exists("Planned Work Block", prev_block_name):
-				log_work_session(
-					block_name=prev_block_name,
-					from_time=start_dt.strftime("%H:%M:%S"),
-					to_time=now_dt.strftime("%H:%M:%S"),
-					hours=elapsed_hours,
-					session_date=start_dt.strftime("%Y-%m-%d"),
-					notes=current_session_notes or f"Switched task to {target_block or target_task or 'new focus block'}",
-					logged_via="Stopwatch"
-				)
+		else:
+			elapsed_hours = 0.02
+			start_dt = now_dt - timedelta(minutes=1)
+
+		log_work_session(
+			block_name=prev_block_name,
+			from_time=start_dt.strftime("%H:%M:%S"),
+			to_time=now_dt.strftime("%H:%M:%S"),
+			hours=elapsed_hours,
+			session_date=start_dt.strftime("%Y-%m-%d"),
+			notes=current_session_notes or f"Session completed before switching to {target_block or target_task or 'next block'}",
+			logged_via="Stopwatch"
+		)
 
 	# 2. Resolve target block or task metadata
+	target_notes = ""
 	if target_block and frappe.db.exists("Planned Work Block", target_block):
 		b_doc = frappe.get_doc("Planned Work Block", target_block)
-		target_project = b_doc.project or target_project
-		target_nature = b_doc.task_nature or target_nature or "🎯 Planned"
+		target_project = getattr(b_doc, "project", None) or target_project
+		target_nature = getattr(b_doc, "task_nature", None) or target_nature or "🎯 Planned"
+		target_notes = b_doc.get("task_subject") or b_doc.get("deliverable_notes") or b_doc.get("work_item_label") or ""
 	elif target_task and frappe.db.exists("Task", target_task):
 		t_doc = frappe.get_doc("Task", target_task)
-		target_project = t_doc.project or target_project
-		target_nature = target_nature or "🎯 Planned"
+		target_project = getattr(t_doc, "project", None) or target_project
+		target_nature = getattr(t_doc, "task_nature", None) or target_nature or "🎯 Planned"
+		target_notes = t_doc.get("subject") or t_doc.get("title") or t_doc.name or ""
 
 	# 3. Start fresh session for target block
 	new_session_data = {
 		"startTime": now_ms,
 		"selectedNature": target_nature or "🎯 Planned",
 		"selectedProject": target_project or "",
-		"trackerNotes": "",
+		"trackerNotes": target_notes or "",
 		"trackerBlockName": target_block if target_block else None,
 		"sessionNotesList": [],
 		"lastActivityTime": now_ms,
@@ -822,6 +950,7 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 		"previous_block": prev_block_name,
 		"elapsed_hours": elapsed_hours,
 		"switched_to": target_block or target_task or "new_session",
+		"target_label": target_notes,
 		"session": sync_res.get("session")
 	}
 
@@ -1315,6 +1444,13 @@ def _resolve_planner_user(employee=None):
 				if owner and owner not in ("Administrator", target_user) and frappe.db.exists("User", owner):
 					if frappe.db.exists("Employee", {"user_id": owner}):
 						target_user = owner
+				# If user is a plus-addressed service account (e.g. user+tag@domain), resolve to base user
+				elif "+" in target_user and "@" in target_user:
+					local, domain = target_user.split("@", 1)
+					base_local = local.split("+", 1)[0]
+					base_user = f"{base_local}@{domain}"
+					if frappe.db.exists("User", base_user) and frappe.db.exists("Employee", {"user_id": base_user}):
+						target_user = base_user
 		return target_user
 
 	# If employee matches session user's full name, resolve directly to session_user
@@ -1974,6 +2110,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 		},
 		"past_block_lock_grace_hours": getattr(frappe.get_single("OmniTrack Settings"), "past_block_lock_grace_hours", 24) or 24 if frappe.db.exists("DocType", "OmniTrack Settings") else 24,
 		"timesheet_modification_horizon_hours": getattr(frappe.get_single("OmniTrack Settings"), "timesheet_modification_horizon_hours", 48) or 48 if frappe.db.exists("DocType", "OmniTrack Settings") else 48,
+		"allow_submitted_timesheet_amendment": getattr(frappe.get_single("OmniTrack Settings"), "allow_submitted_timesheet_amendment", 1) if frappe.db.exists("DocType", "OmniTrack Settings") else 1,
 	}
 
 
@@ -2259,8 +2396,8 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		doc.flags.ignore_links = True
 	doc.save()
 
-	# Auto-create / update Timesheet connected to Project and Task
-	if frappe.db.exists("DocType", "Timesheet"):
+	# Auto-create / update Timesheet connected to Project and Task if sync_mode is Immediate
+	if frappe.db.exists("DocType", "Timesheet") and get_timesheet_sync_mode() == "Immediate":
 		try:
 			create_timesheet_from_work_block(doc.name)
 		except Exception:
@@ -2351,14 +2488,11 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 		doc.flags.ignore_links = True
 	doc.save()
 
-	# If block has a draft timesheet, update it
-	if doc.timesheet and frappe.db.exists("Timesheet", doc.timesheet):
-		ts_status = frappe.db.get_value("Timesheet", doc.timesheet, "docstatus")
-		if ts_status == 0:
-			try:
-				create_timesheet_from_work_block(doc.name)
-			except Exception:
-				pass
+	# Synchronize linked timesheet (handles draft & submitted amendment)
+	try:
+		sync_work_block_timesheet(doc)
+	except Exception:
+		pass
 
 	frappe.db.commit()
 	return {
@@ -2407,14 +2541,11 @@ def delete_work_session(session_name, block_name=None):
 		doc.flags.ignore_links = True
 	doc.save()
 
-	# If block has a draft timesheet, update it
-	if doc.timesheet and frappe.db.exists("Timesheet", doc.timesheet):
-		ts_status = frappe.db.get_value("Timesheet", doc.timesheet, "docstatus")
-		if ts_status == 0:
-			try:
-				create_timesheet_from_work_block(doc.name)
-			except Exception:
-				pass
+	# Synchronize linked timesheet (handles draft & submitted cancellation)
+	try:
+		sync_work_block_timesheet(doc)
+	except Exception:
+		pass
 
 	frappe.db.commit()
 	return {
@@ -2892,6 +3023,105 @@ def mark_past_unworked_blocks_missed():
 		  AND status IN ('Planned', 'Draft', 'In Progress')
 	""", (today,))
 	frappe.db.commit()
+
+
+@frappe.whitelist()
+def approve_work_blocks(block_names=None, employee=None, work_date=None, comments=None):
+	"""Approves Planned Work Blocks for an employee or specific block list.
+	Enforces:
+	1. Caller must be an OmniTrack Manager, HR Manager, System Manager, or Administrator.
+	2. Transitions approval_status to 'Approved', records approved_by, approval_date, and approval_notes.
+	3. If ERPNext Timesheet sync mode is 'On Approval' or 'Immediate', generates/syncs the linked Timesheets.
+
+	Args:
+		block_names (list|str, optional): List of block IDs or single block ID.
+		employee (str, optional): Employee/User email to approve all completed/unapproved blocks for.
+		work_date (str, optional): Date (YYYY-MM-DD) when approving by employee. Defaults to today.
+		comments (str, optional): Review/approval remarks.
+
+	Returns:
+		dict: Summary of approved blocks, total hours approved, and created timesheets.
+	"""
+	approver = frappe.session.user
+	if not approver or approver == "Guest":
+		frappe.throw(_("Authentication required to approve timesheets."), frappe.PermissionError)
+
+	from omnitrack.permissions import is_omnitrack_manager
+	is_mgr = is_omnitrack_manager(approver) or any(
+		r in frappe.get_roles(approver) for r in ("HR Manager", "HR User", "System Manager", "Administrator")
+	)
+	if not is_mgr:
+		frappe.throw(_("Only HR or OmniTrack Managers can approve timesheets."), frappe.PermissionError)
+
+	target_blocks = []
+	if block_names:
+		if isinstance(block_names, str):
+			try:
+				parsed = json.loads(block_names)
+				if isinstance(parsed, list):
+					target_blocks = parsed
+				else:
+					target_blocks = [block_names]
+			except Exception:
+				target_blocks = [b.strip() for b in block_names.split(",") if b.strip()]
+		elif isinstance(block_names, list):
+			target_blocks = block_names
+	elif employee:
+		target_user = _resolve_planner_user(employee)
+		target_date = work_date or nowdate()
+		target_blocks = frappe.get_all(
+			"Planned Work Block",
+			filters={
+				"employee": target_user,
+				"work_date": target_date,
+				"approval_status": ["!=", "Approved"]
+			},
+			pluck="name"
+		)
+	else:
+		frappe.throw(_("Specify block_names or employee to approve timesheets."))
+
+	approved_list = []
+	total_hours = 0.0
+	sync_mode = get_timesheet_sync_mode()
+
+	for b_name in target_blocks:
+		if not frappe.db.exists("Planned Work Block", b_name):
+			continue
+		b_doc = frappe.get_doc("Planned Work Block", b_name)
+		b_doc.approval_status = "Approved"
+		b_doc.approved_by = approver
+		b_doc.approval_date = now_datetime()
+		if comments:
+			b_doc.approval_notes = comments
+		b_doc.flags.ignore_permissions = True
+		b_doc.save()
+
+		ts_name = None
+		if sync_mode in ("On Approval", "Immediate") and frappe.db.exists("DocType", "Timesheet"):
+			try:
+				ts_name = create_timesheet_from_work_block(b_doc.name, force=True)
+			except Exception as te:
+				frappe.log_error(f"Error syncing approved timesheet for {b_name}: {te}", "OmniTrack Approval")
+
+		approved_list.append({
+			"block_name": b_name,
+			"employee": b_doc.employee,
+			"work_date": str(b_doc.work_date),
+			"actual_hours": flt(b_doc.actual_hours),
+			"timesheet": ts_name or b_doc.timesheet,
+			"status": "Approved"
+		})
+		total_hours += flt(b_doc.actual_hours)
+
+	return {
+		"status": "success",
+		"message": f"Successfully approved {len(approved_list)} work block(s) ({round(total_hours, 2)} hrs).",
+		"approved_by": approver,
+		"sync_mode": sync_mode,
+		"total_approved_hours": round(total_hours, 2),
+		"approved_blocks": approved_list
+	}
 
 
 

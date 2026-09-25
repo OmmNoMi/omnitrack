@@ -3165,77 +3165,59 @@
 
   </main>
 
-  <!-- hover card: full detail without opening the drawer -->
-  <div v-if="hoverCard" class="fixed z-50 w-72 rounded-2xl border shadow-2xl p-3.5 space-y-2 pointer-events-none"
-    :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'"
+  <!-- hover card: short, simple, informative preview with view details link -->
+  <div v-if="hoverCard" class="fixed z-50 w-64 rounded-xl border shadow-xl p-2.5 space-y-1.5 pointer-events-auto"
+    :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100 shadow-black/40' : 'bg-white border-gray-200 text-gray-900 shadow-gray-400/20'"
     :style="{ left: hoverCard.left + 'px', top: hoverCard.top + 'px' }"
+    @mouseenter="cancelHideHover"
+    @mouseleave="hideBlockHover"
     role="tooltip">
     
-    <!-- Title -->
-    <div class="text-xs font-extrabold leading-snug break-words">
-      <template v-if="hoverCard.source === 'logged'">
-        {{ (hoverCard.seg && hoverCard.seg.notes) || hoverCard.block.task_subject || hoverCard.block.work_item_label || 'Logged Work Session' }}
-      </template>
-      <template v-else>
-        {{ hoverCard.block.task_subject || hoverCard.block.work_item_label || hoverCard.block.deliverable_notes || 'Work block' }}
-      </template>
+    <!-- Title & Compact Status Badge -->
+    <div class="flex items-start justify-between gap-1.5">
+      <div class="text-xs font-bold leading-tight break-words line-clamp-2">
+        <template v-if="hoverCard.source === 'logged'">
+          {{ (hoverCard.seg && hoverCard.seg.notes) || hoverCard.block.task_subject || hoverCard.block.work_item_label || 'Logged Work Session' }}
+        </template>
+        <template v-else>
+          {{ hoverCard.block.task_subject || hoverCard.block.work_item_label || hoverCard.block.deliverable_notes || 'Work block' }}
+        </template>
+      </div>
+      <span v-if="hoverCard.seg && hoverCard.seg.is_live_active" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 animate-pulse">
+        🔴 Live
+      </span>
+      <span v-else-if="hoverCard.source === 'logged'" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+        ✓ {{ fmtHrs((hoverCard.seg && hoverCard.seg.hours) || hoverCard.block.actual_hours) }}h
+      </span>
+      <span v-else-if="isBlockLocked(hoverCard.block)" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+        🔒 Past
+      </span>
     </div>
 
-    <!-- Status Badges -->
-    <div class="flex items-center gap-1.5 flex-wrap">
-      <template v-if="hoverCard.source === 'logged'">
-        <span v-if="hoverCard.seg && hoverCard.seg.is_live_active" class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 animate-pulse">
-          🔴 Recording {{ formattedTime }}
-        </span>
-        <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-          ✓ Logged {{ fmtHrs((hoverCard.seg && hoverCard.seg.hours) || hoverCard.block.actual_hours) }}h
-        </span>
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-          :class="hoverCard.seg && hoverCard.seg.onPlan ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'">
-          {{ hoverCard.seg && hoverCard.seg.onPlan ? 'On Plan' : 'Off Plan' }}
-        </span>
-      </template>
-      <template v-else>
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider" :class="getBlockTimingInfo(hoverCard.block).pillClass">{{ getBlockTimingInfo(hoverCard.block).label }}</span>
-        <span class="text-[10px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">{{ hoverStateText }}</span>
-        <span v-if="isBlockLocked(hoverCard.block)" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider" :class="isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'">🔒 Read-only</span>
-      </template>
+    <!-- Meta row: Time & Project -->
+    <div class="flex items-center justify-between gap-2 text-[10px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+      <div class="font-mono font-medium flex items-center gap-1">
+        <span>⏱</span>
+        <span>{{ segTimeTitle(hoverCard.seg) }}</span>
+      </div>
+      <div v-if="hoverCard.block.project_name || hoverCard.block.project" class="truncate max-w-[120px]" :title="hoverCard.block.project_name || hoverCard.block.project">
+        📁 {{ hoverCard.block.project_name || hoverCard.block.project }}
+      </div>
     </div>
 
-    <!-- Date & Time range -->
-    <div class="text-[11px] font-mono font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
-      {{ hoverCard.block.work_date }} · {{ segTimeTitle(hoverCard.seg) }}
-      <span v-if="hoverCard.seg && hoverCard.seg.hours" class="font-sans font-semibold text-emerald-500">({{ fmtHrs(hoverCard.seg.hours) }}h)</span>
-    </div>
-
-    <!-- Timesheet ID & Project -->
-    <div class="flex flex-wrap items-center gap-2 text-[11px]">
-      <span v-if="hoverCard.block.timesheet || (hoverCard.seg && hoverCard.seg.timesheet)" class="font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 font-bold">
+    <!-- Footer Action: View Details link -->
+    <div class="pt-1 border-t flex items-center justify-between text-[11px]" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
+      <span v-if="hoverCard.block.timesheet || (hoverCard.seg && hoverCard.seg.timesheet)" class="text-[9px] font-mono font-semibold text-blue-600 dark:text-blue-400 truncate max-w-[120px]">
         TS: {{ hoverCard.seg && hoverCard.seg.timesheet ? hoverCard.seg.timesheet : hoverCard.block.timesheet }}
       </span>
-      <span v-if="hoverCard.block.project_name || hoverCard.block.project" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-        📁 {{ hoverCard.block.project_name || hoverCard.block.project }}
-      </span>
-    </div>
+      <span v-else class="text-[9px] text-gray-400">{{ hoverCard.block.work_date }}</span>
 
-    <!-- Task Subject if different from note -->
-    <div v-if="hoverCard.source === 'logged' && hoverCard.block.task_subject && hoverCard.seg && hoverCard.seg.notes" class="text-[11px] text-gray-500 dark:text-gray-400">
-      📋 {{ hoverCard.block.task_subject }}
-    </div>
-
-    <!-- Log Session Notes -->
-    <div v-if="hoverCard.source === 'logged' && hoverCard.seg && hoverCard.seg.notes" class="text-[11px] leading-snug break-words max-h-24 overflow-hidden rounded p-1.5 border"
-      :class="isDarkMode ? 'bg-[#25262A] border-gray-800 text-gray-200' : 'bg-gray-50 border-gray-200 text-gray-800'">
-      <div class="text-[9px] uppercase font-bold text-gray-400 mb-0.5">Session Log</div>
-      <p class="whitespace-pre-line">{{ hoverCard.seg.notes }}</p>
-    </div>
-    <div v-else-if="hoverCard.block.deliverable_notes && hoverCard.block.deliverable_notes !== (hoverCard.block.task_subject || hoverCard.block.work_item_label)" class="text-[11px] leading-snug break-words max-h-20 overflow-hidden" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">
-      {{ hoverCard.block.deliverable_notes }}
-    </div>
-
-    <!-- Interaction hint -->
-    <div class="text-[10px] pt-0.5 border-t border-gray-100 dark:border-gray-800" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'">
-      {{ hoverCard.source === 'logged' ? 'Click to open session & timesheet details' : (hoverCard.source === 'timeline' ? 'Click to open this block' : (isBlockLocked(hoverCard.block) ? 'In the past — click to view, editing is locked' : 'Click to open · drag to move · drag an edge to change start/end')) }}
+      <button type="button"
+        @click.stop="openBlockDrawer(hoverCard.block); hideBlockHoverNow()"
+        class="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-auto">
+        <span>View Details</span>
+        <span aria-hidden="true">&rarr;</span>
+      </button>
     </div>
   </div>
 
@@ -4733,6 +4715,105 @@
       <div class="flex items-center justify-end gap-2 w-full">
         <f-button variant="ghost" theme="gray" size="sm" @click="showSwitchTaskModal = false">
           Cancel
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- WRAP & START NEXT SESSION CONFIRMATION     -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showSwitchConfirmModal"
+    title="Wrap & Start Next Session"
+    subtitle="Save your running session and transition immediately"
+    size="md"
+  >
+    <template #header-icon>
+      <svg class="w-4 h-4 text-blue-500 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    </template>
+
+    <div class="space-y-4 text-xs">
+      <!-- 1. Current Running Session Card -->
+      <div class="p-3.5 rounded-2xl border bg-amber-50/70 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/60 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+            <span class="text-[10px] uppercase font-bold tracking-wider text-amber-800 dark:text-amber-200">Current Session to Wrap</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-white/80 dark:bg-black/40 text-amber-900 dark:text-amber-100 border border-amber-300 dark:border-amber-700">
+            ⏱ {{ formattedTime }}
+          </span>
+        </div>
+        <div class="font-extrabold text-sm text-gray-900 dark:text-white">
+          {{ (trackerBoundBlock && (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || trackerBoundBlock.deliverable_notes)) || trackerNotes || 'Active Work Session' }}
+        </div>
+        <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
+          <span v-if="selectedProject">📁 {{ selectedProject }}</span>
+          <span>🏷 {{ selectedNature }}</span>
+        </div>
+
+        <!-- Session Summary Notes -->
+        <div class="pt-1">
+          <label for="switch-confirm-notes" class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
+            Session Summary & Work Logged (will be saved to timesheet) *
+          </label>
+          <textarea
+            id="switch-confirm-notes"
+            v-model="switchWrapUpNote"
+            rows="3"
+            class="w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
+            :class="isDarkMode ? 'bg-[#121212] border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
+            placeholder="Review or add notes for this completed session..."
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- Transition Indicator -->
+      <div class="flex items-center justify-center gap-2 text-gray-400 text-xs font-bold">
+        <span>↓</span>
+        <span>Transitioning to</span>
+        <span>↓</span>
+      </div>
+
+      <!-- 2. Target Block to Start Immediately Card -->
+      <div v-if="switchTargetItem" class="p-3.5 rounded-2xl border bg-blue-50/70 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800/60 space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] uppercase font-bold tracking-wider text-blue-700 dark:text-blue-300">
+            {{ switchTargetItem.is_block ? 'Next Planned Block' : 'Next Task' }}
+          </span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+            Starts Immediately
+          </span>
+        </div>
+        <div class="font-extrabold text-sm text-gray-900 dark:text-white">
+          {{ switchTargetItem.label }}
+        </div>
+        <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
+          <span v-if="switchTargetItem.sublabel">{{ switchTargetItem.sublabel }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <template #actions>
+      <div class="flex items-center justify-between gap-3 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showSwitchConfirmModal = false">
+          Cancel (Keep Current)
+        </f-button>
+        <f-button
+          variant="solid"
+          theme="blue"
+          size="sm"
+          class="!font-bold shadow-md"
+          :loading="isSwitchingSession"
+          :disabled="isSwitchingSession"
+          @click="confirmSwitchAndStart"
+        >
+          <template #prefix>
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </template>
+          <span>Save & Start Next Session</span>
         </f-button>
       </div>
     </template>
@@ -8710,12 +8791,24 @@
       };
 
       const startFocusBlock = (b) => {
+        if (!b) return;
         if (isTracking.value && trackerBlockName.value === b.name) {
           toggleTrack();
           return;
         }
         if (isTracking.value) {
-          showToast('Please stop your current active session first.', 'danger');
+          promptSwitchSession({
+            id: b.name,
+            name: b.name,
+            label: b.task_subject || b.work_item_label || b.name,
+            sublabel: `${b.start_time || ''} – ${b.end_time || ''} · ${b.project || 'General'}`,
+            project: b.project,
+            is_block: true,
+            task_nature: b.task_nature,
+            work_date: b.work_date,
+            start_time: b.start_time,
+            end_time: b.end_time,
+          });
           return;
         }
         trackBlock(b);
@@ -9533,8 +9626,20 @@
       };
 
       const trackBlock = (block) => {
-        if (isTracking.value) {
-          showToast('Stop the current timer first', 'danger');
+        if (!block) return;
+        if (isTracking.value && trackerBlockName.value !== block.name) {
+          promptSwitchSession({
+            id: block.name,
+            name: block.name,
+            label: block.task_subject || block.work_item_label || block.name,
+            sublabel: `${block.start_time || ''} – ${block.end_time || ''} · ${block.project || 'General'}`,
+            project: block.project,
+            is_block: true,
+            task_nature: block.task_nature,
+            work_date: block.work_date,
+            start_time: block.start_time,
+            end_time: block.end_time,
+          });
           return;
         }
         _explicitBoundBlock.value = block;
@@ -9559,8 +9664,34 @@
 
       // 2c. 1-Click Atomic Switch Task Action (WCAG 2.2 AA)
       const showSwitchTaskModal = ref(false);
+      const showSwitchConfirmModal = ref(false);
+      const switchTargetItem = ref(null);
+      const isSwitchingSession = ref(false);
       const switchSearchQuery = ref('');
       const switchWrapUpNote = ref('');
+
+      const promptSwitchSession = (target) => {
+        if (!target) return;
+        triggerHaptic([20]);
+        switchTargetItem.value = target;
+        const rawTitle = (trackerNotes.value || '').trim();
+        const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
+        switchWrapUpNote.value = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
+        showSwitchConfirmModal.value = true;
+      };
+
+      const confirmSwitchAndStart = async () => {
+        if (!switchTargetItem.value) return;
+        const target = switchTargetItem.value;
+        isSwitchingSession.value = true;
+        try {
+          await executeSwitchTask(target);
+          showSwitchConfirmModal.value = false;
+          switchTargetItem.value = null;
+        } finally {
+          isSwitchingSession.value = false;
+        }
+      };
 
       const openSwitchTaskModal = () => {
         if (isSessionElevated.value) isSessionElevated.value = false;
@@ -9625,14 +9756,17 @@
         const wrapNote = (switchWrapUpNote.value || '').trim();
 
         showSwitchTaskModal.value = false;
+        showSwitchConfirmModal.value = false;
         try {
           const res = await postJSON('switch_active_session', {
             target_block: targetBlock,
             target_task: targetTask,
-            current_session_notes: wrapNote
+            current_session_notes: wrapNote,
+            previous_block: trackerBlockName.value || null,
+            start_time_ms: startTime.value || null
           });
           const loggedH = (res && res.elapsed_hours) ? `${res.elapsed_hours}h` : 'time';
-          showToast(`Switched task! Logged ${loggedH} on previous session.`, 'success');
+          showToast(`Switched session! Logged ${loggedH} on previous session.`, 'success');
           trackerSeconds.value = 0;
           startTime.value = Date.now();
           lastActivityTime.value = Date.now();
@@ -9640,6 +9774,16 @@
           trackerBlockName.value = targetBlock;
           trackerNotes.value = target.label || '';
           sessionNotesList.value = [];
+          if (isBlock && targetBlock) {
+            const foundB = (plannerData.value?.blocks || []).find(b => b.name === targetBlock);
+            if (foundB) {
+              _explicitBoundBlock.value = foundB;
+              selectedProject.value = foundB.project || '';
+              trackerProject.value = foundB.project || '';
+              selectedNature.value = getNatureBadge(foundB.task_nature).label;
+              trackerNature.value = getNatureBadge(foundB.task_nature).label;
+            }
+          }
           fetchWorkstationData(selectedEmployee.value);
           if (typeof fetchPlannerData === 'function') fetchPlannerData();
         } catch (err) {
@@ -10225,13 +10369,32 @@
         away: 'Non-working',
         cancelled: 'Cancelled'
       };
+      let _hoverCardTimer = null;
       const hoverCard = ref(null);
+      const cancelHideHover = () => {
+        if (_hoverCardTimer) {
+          clearTimeout(_hoverCardTimer);
+          _hoverCardTimer = null;
+        }
+      };
+      const hideBlockHover = (immediate = false) => {
+        cancelHideHover();
+        if (immediate === true) {
+          hoverCard.value = null;
+          return;
+        }
+        _hoverCardTimer = setTimeout(() => {
+          hoverCard.value = null;
+        }, 160);
+      };
+      const hideBlockHoverNow = () => hideBlockHover(true);
       const showBlockHover = (ev, seg, source) => {
         if (plannerDrag.value || slotSel.value) return;
+        cancelHideHover();
         const b = (seg && seg.block) || seg;
         if (!b) return;
         const r = ev.currentTarget.getBoundingClientRect();
-        const CARD_EST_HEIGHT = 220;
+        const CARD_EST_HEIGHT = 85;
         const spaceBelow = window.innerHeight - r.bottom;
         // Never position on top of the card! Place below if there is room, otherwise above
         const placeBelow = spaceBelow >= CARD_EST_HEIGHT + 16 || spaceBelow >= r.top;
@@ -10246,11 +10409,10 @@
           state: source === 'logged' ? 'logged' : blockVisualState(b),
           // Fixed-position so the scroll container cannot clip it; flipped when it
           // would run off the right edge.
-          left: Math.max(10, Math.min(r.left, window.innerWidth - 310)),
+          left: Math.max(10, Math.min(r.left, window.innerWidth - 280)),
           top: Math.round(top)
         };
       };
-      const hideBlockHover = () => { hoverCard.value = null; };
       const hoverStateText = computed(() => {
         const hc = hoverCard.value;
         return hc ? (STATE_TEXT[hc.state] || hc.state) : '';
@@ -10710,7 +10872,7 @@
         if (!block || !block.name) return;
         plannerBusy.value = true;
         try {
-          const res = await postJSON('create_timesheet_from_work_block', { block_name: block.name });
+          const res = await postJSON('create_timesheet_from_work_block', { block_name: block.name, force: true });
           const tsName = res && (res.message || res.name || res);
           showToast(`Timesheet ${tsName || ''} created for Project ${block.project_name || block.project || ''}`, 'success');
           await fetchPlannerData();
@@ -11301,8 +11463,17 @@
       };
 
       const startTaskImmediately = (t) => {
+        if (!t) return;
         if (isTracking.value) {
-          showToast('Stop current active session first.', 'danger');
+          promptSwitchSession({
+            id: t.name || t.id,
+            name: t.name || t.id,
+            label: t.subject || t.title || t.name,
+            sublabel: `Task · ${t.project || 'General'}`,
+            project: t.project,
+            is_block: false,
+            task_nature: '🎯 Planned',
+          });
           return;
         }
         trackerBlockName.value = '';
@@ -11418,6 +11589,7 @@
         else if (showAdjustModal.value) showAdjustModal.value = false;
         else if (showEditSessionModal.value) showEditSessionModal.value = false;
         else if (showSwitchTaskModal.value) showSwitchTaskModal.value = false;
+        else if (showSwitchConfirmModal.value) showSwitchConfirmModal.value = false;
         else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
         else if (showCancelModal.value) showCancelModal.value = false;
         else if (showNewTaskModal.value) showNewTaskModal.value = false;
@@ -11427,7 +11599,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showInactivityModal, showBookModal, showAdjustModal, showEditSessionModal, showSwitchTaskModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showBookModal, showAdjustModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -11691,6 +11863,11 @@
         submitAdjustedTimesheet,
         trackBlock,
         showSwitchTaskModal,
+        showSwitchConfirmModal,
+        switchTargetItem,
+        isSwitchingSession,
+        promptSwitchSession,
+        confirmSwitchAndStart,
         switchSearchQuery,
         switchWrapUpNote,
         openSwitchTaskModal,
@@ -11874,6 +12051,8 @@
         hoverCard,
         showBlockHover,
         hideBlockHover,
+        cancelHideHover,
+        hideBlockHoverNow,
         hoverStateText,
         officeStart,
         officeEnd,

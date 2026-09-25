@@ -1370,7 +1370,7 @@ assert.strictEqual(calcDur, '0.47', 'FAIL: Duration between 19:32 and 20:00 must
 console.log('✓ Test 34: Logged work session direct in-drawer editing & deletion invariants verified.');
 
 // ---------------------------------------------------------------------------
-// TEST 35: HoverCard Non-Occlusion & Auto-Dismissal Invariants
+// TEST 35: HoverCard Non-Occlusion, Interactivity & Quick View Details Invariants
 // ---------------------------------------------------------------------------
 assert.ok(
   content.includes('r.bottom + 8'),
@@ -1384,6 +1384,18 @@ assert.ok(
   content.includes('const openBlockDrawer = (b) => {\n        hideBlockHover();'),
   'FAIL: openBlockDrawer must immediately invoke hideBlockHover() to clear tooltip'
 );
+assert.ok(
+  content.includes('pointer-events-auto'),
+  'FAIL: HoverCard must have pointer-events-auto so user can interact with the details link'
+);
+assert.ok(
+  content.includes('openBlockDrawer(hoverCard.block)'),
+  'FAIL: HoverCard must provide an explicit View Details action invoking openBlockDrawer(hoverCard.block)'
+);
+assert.ok(
+  content.includes('cancelHideHover') && content.includes('hideBlockHoverNow'),
+  'FAIL: HoverCard lifecycle must include cancelHideHover and hideBlockHoverNow for hover retention'
+);
 
 const hoverSandbox = {
   window: { innerWidth: 1280, innerHeight: 900 },
@@ -1391,19 +1403,20 @@ const hoverSandbox = {
 };
 vm.createContext(hoverSandbox);
 const hoverCode = `
-  const CARD_EST_HEIGHT = 220;
+  const CARD_EST_HEIGHT = 85;
   const spaceBelow = window.innerHeight - r.bottom;
   const placeBelow = spaceBelow >= CARD_EST_HEIGHT + 16 || spaceBelow >= r.top;
   const top = placeBelow 
     ? Math.min(r.bottom + 8, window.innerHeight - CARD_EST_HEIGHT - 10)
     : Math.max(10, r.top - CARD_EST_HEIGHT - 8);
-  ({ placeBelow, top });
+  ({ placeBelow, top, CARD_EST_HEIGHT });
 `;
 const hoverRes = vm.runInContext(hoverCode, hoverSandbox);
 assert.strictEqual(hoverRes.placeBelow, true, 'FAIL: Mid-screen card must place hovercard below');
 assert.strictEqual(hoverRes.top, 486, 'FAIL: Top must be 486 (r.bottom + 8), 8px completely clear of card');
+assert.strictEqual(hoverRes.CARD_EST_HEIGHT, 85, 'FAIL: CARD_EST_HEIGHT must be compact (85px)');
 
-console.log('✓ Test 35: HoverCard non-occlusion & auto-dismissal invariants verified.');
+console.log('✓ Test 35: HoverCard non-occlusion, interactivity & View Details action verified.');
 
 // ---------------------------------------------------------------------------
 // TEST 36: Configurable Temporal Horizon & Past Block Grace Invariants
@@ -1466,7 +1479,73 @@ assert.strictEqual(temporalRes.res0h, true, 'FAIL: 20 minutes past midnight must
 
 console.log('✓ Test 36: Configurable temporal horizon & past block grace invariants verified.');
 
-console.log('\nSUCCESS: All 36 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 37: 1-Click Wrap & Start Next Session Universal Transition Invariants
+// ---------------------------------------------------------------------------
+assert.ok(content.includes('Wrap & Start Next Session'), 'FAIL: Wrap & Start Next Session dialog title must exist in omnitrack.html');
+assert.ok(content.includes('showSwitchConfirmModal'), 'FAIL: showSwitchConfirmModal must exist in omnitrack.html');
+assert.ok(content.includes('switch-confirm-notes'), 'FAIL: switch-confirm-notes textarea id must exist in omnitrack.html');
+assert.ok(content.includes('promptSwitchSession'), 'FAIL: promptSwitchSession must exist in omnitrack.html');
+
+const wrapStartSandbox = {
+  ref: (val) => ({ value: val }),
+  computed: (fn) => ({ get value() { return fn(); } }),
+  triggerHaptic: () => {},
+  showToast: () => {}
+};
+vm.createContext(wrapStartSandbox);
+const wrapStartCode = `
+  const isTracking = ref(true);
+  const trackerBlockName = ref('PWB-100');
+  const trackerNotes = ref('Current active sprint session');
+  const sessionNotesList = ref(['Implemented core feature', 'Tested edge cases']);
+  const showSwitchConfirmModal = ref(false);
+  const switchTargetItem = ref(null);
+  const switchWrapUpNote = ref('');
+
+  const promptSwitchSession = (target) => {
+    switchTargetItem.value = target;
+    const rawTitle = (trackerNotes.value || '').trim();
+    const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => '• ' + p.trim()).join('\\n');
+    switchWrapUpNote.value = (rawTitle && bullets) ? (rawTitle + '\\n\\n' + bullets) : (rawTitle || bullets || '');
+    showSwitchConfirmModal.value = true;
+  };
+
+  const startFocusBlock = (b) => {
+    if (!b) return;
+    if (isTracking.value && trackerBlockName.value === b.name) {
+      return;
+    }
+    if (isTracking.value) {
+      promptSwitchSession({
+        id: b.name,
+        name: b.name,
+        label: b.task_subject || b.name,
+        is_block: true
+      });
+      return;
+    }
+  };
+
+  // Test 1: Clicking start on another block while tracking prompts confirmation
+  const targetBlock = { name: 'PWB-200', task_subject: 'Campus Credit Support (Angela Drumm)' };
+  startFocusBlock(targetBlock);
+
+  const modalOpened = showSwitchConfirmModal.value;
+  const targetName = switchTargetItem.value && switchTargetItem.value.name;
+  const notePrefilled = switchWrapUpNote.value.includes('Implemented core feature') &&
+                        switchWrapUpNote.value.includes('Current active sprint session');
+
+  ({ modalOpened, targetName, notePrefilled });
+`;
+const wrapStartRes = vm.runInContext(wrapStartCode, wrapStartSandbox);
+assert.strictEqual(wrapStartRes.modalOpened, true, 'FAIL: Clicking start on another block while tracking must open switch confirm modal');
+assert.strictEqual(wrapStartRes.targetName, 'PWB-200', 'FAIL: Switch target item must match target block');
+assert.strictEqual(wrapStartRes.notePrefilled, true, 'FAIL: Switch wrap-up notes must prefill with current session notes & bullets');
+
+console.log('✓ Test 37: 1-Click Wrap & Start Next Session universal transition invariants verified.');
+
+console.log('\nSUCCESS: All 37 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

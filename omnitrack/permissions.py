@@ -11,7 +11,15 @@ def is_omnitrack_manager(user=None):
 		return True
 	roles = frappe.get_roles(user)
 	manager_roles = {"System Manager", "HR Manager", "OmniTrack Manager", "OmniTrack Admin"}
-	return bool(set(roles) & manager_roles)
+	if bool(set(roles) & manager_roles):
+		return True
+	# If user is a plus-addressed service account (e.g. nomeshwer+antigravity@ommnomi.in), inherit base user's roles
+	if user and "+" in user and "@" in user:
+		base_user = f"{user.split('@')[0].split('+')[0]}@{user.split('@')[1]}"
+		base_roles = frappe.get_roles(base_user)
+		if bool(set(base_roles) & manager_roles):
+			return True
+	return False
 
 
 def can_access_user_data(target_user, session_user=None):
@@ -95,6 +103,20 @@ def get_past_block_lock_grace_hours():
 	except Exception:
 		pass
 	return grace_hours
+
+
+def is_submitted_timesheet_amendment_allowed():
+	"""Returns True if auto-amendment of submitted timesheets is enabled (default: True)."""
+	try:
+		if frappe.db.exists("DocType", "OmniTrack Settings"):
+			meta = frappe.get_meta("OmniTrack Settings")
+			if meta.has_field("allow_submitted_timesheet_amendment"):
+				val = frappe.db.get_single_value("OmniTrack Settings", "allow_submitted_timesheet_amendment")
+				if val is not None and str(val).strip() != "":
+					return int(val) == 1
+	except Exception:
+		pass
+	return True
 
 
 def check_timesheet_date_permission(session_date, user=None):

@@ -129,3 +129,202 @@ class TestOmniTrackFAC(unittest.TestCase):
 		self.assertTrue(can_access_user_data("standard_employee@example.com", session_user="standard_employee@example.com"))
 		# Administrator access is always permitted
 		self.assertTrue(can_access_user_data("standard_employee@example.com", session_user="Administrator"))
+
+	def test_assistant_tools_hook_registered(self):
+		"""Verifies that hooks.py assistant_tools contains all 20 BaseTool classes."""
+		import omnitrack.hooks as hooks
+		self.assertTrue(hasattr(hooks, "assistant_tools"))
+		expected_classes = [
+			"omnitrack.fac.OmniTrackGetMyWorkspaceTool",
+			"omnitrack.fac.OmniTrackPlanWorkBlocksTool",
+			"omnitrack.fac.OmniTrackLogWorkSessionTool",
+			"omnitrack.fac.OmniTrackQuickCreateTaskTool",
+			"omnitrack.fac.OmniTrackQuickTimerActionTool",
+			"omnitrack.fac.OmniTrackStartTimerTool",
+			"omnitrack.fac.OmniTrackStopTimerTool",
+			"omnitrack.fac.OmniTrackDiscardTimerTool",
+			"omnitrack.fac.OmniTrackGetTimerStatusTool",
+			"omnitrack.fac.OmniTrackGetEODReconciliationTool",
+			"omnitrack.fac.OmniTrackSwitchTimerTool",
+			"omnitrack.fac.OmniTrackRescheduleBlockTool",
+			"omnitrack.fac.OmniTrackExtendActiveBlockTool",
+			"omnitrack.fac.OmniTrackAdjustWorkSessionTool",
+			"omnitrack.fac.OmniTrackDeleteWorkSessionTool",
+			"omnitrack.fac.OmniTrackGetAssignedTasksTool",
+			"omnitrack.fac.OmniTrackExecuteTaskWorkflowTool",
+			"omnitrack.fac.OmniTrackAttachTasksToBlockTool",
+			"omnitrack.fac.OmniTrackCompleteBlockTaskTool",
+			"omnitrack.fac.OmniTrackGetPlanVsActualTool",
+			"omnitrack.fac.OmniTrackApproveWorkBlocksTool",
+		]
+		self.assertEqual(len(hooks.assistant_tools), 21)
+		for c_path in expected_classes:
+			self.assertIn(c_path, hooks.assistant_tools)
+
+	def test_basetool_subclasses_instantiation(self):
+		"""Verifies that all 21 BaseTool classes can be instantiated and provide correct metadata."""
+		from omnitrack.fac import (
+			OmniTrackGetMyWorkspaceTool,
+			OmniTrackPlanWorkBlocksTool,
+			OmniTrackLogWorkSessionTool,
+			OmniTrackQuickCreateTaskTool,
+			OmniTrackQuickTimerActionTool,
+			OmniTrackStartTimerTool,
+			OmniTrackStopTimerTool,
+			OmniTrackDiscardTimerTool,
+			OmniTrackGetTimerStatusTool,
+			OmniTrackGetEODReconciliationTool,
+			OmniTrackSwitchTimerTool,
+			OmniTrackRescheduleBlockTool,
+			OmniTrackExtendActiveBlockTool,
+			OmniTrackAdjustWorkSessionTool,
+			OmniTrackDeleteWorkSessionTool,
+			OmniTrackGetAssignedTasksTool,
+			OmniTrackExecuteTaskWorkflowTool,
+			OmniTrackAttachTasksToBlockTool,
+			OmniTrackCompleteBlockTaskTool,
+			OmniTrackGetPlanVsActualTool,
+			OmniTrackApproveWorkBlocksTool,
+		)
+		tool_classes = [
+			OmniTrackGetMyWorkspaceTool,
+			OmniTrackPlanWorkBlocksTool,
+			OmniTrackLogWorkSessionTool,
+			OmniTrackQuickCreateTaskTool,
+			OmniTrackQuickTimerActionTool,
+			OmniTrackStartTimerTool,
+			OmniTrackStopTimerTool,
+			OmniTrackDiscardTimerTool,
+			OmniTrackGetTimerStatusTool,
+			OmniTrackGetEODReconciliationTool,
+			OmniTrackSwitchTimerTool,
+			OmniTrackRescheduleBlockTool,
+			OmniTrackExtendActiveBlockTool,
+			OmniTrackAdjustWorkSessionTool,
+			OmniTrackDeleteWorkSessionTool,
+			OmniTrackGetAssignedTasksTool,
+			OmniTrackExecuteTaskWorkflowTool,
+			OmniTrackAttachTasksToBlockTool,
+			OmniTrackCompleteBlockTaskTool,
+			OmniTrackGetPlanVsActualTool,
+			OmniTrackApproveWorkBlocksTool,
+		]
+		self.assertEqual(len(tool_classes), 21)
+		for cls in tool_classes:
+			inst = cls()
+			self.assertTrue(inst.name.startswith("omnitrack_"))
+			self.assertTrue(len(inst.description) > 10)
+			self.assertIsInstance(inst.inputSchema, dict)
+			self.assertEqual(inst.inputSchema.get("type"), "object")
+			meta = inst.get_metadata()
+			self.assertEqual(meta["name"], inst.name)
+			self.assertEqual(meta["source_app"], "omnitrack")
+
+	def test_timer_lifecycle_helpers(self):
+		"""Verifies dedicated timer functions: start_timer, get_timer_status, discard_timer."""
+		from omnitrack.fac import start_timer, get_timer_status, discard_timer
+
+		# Start session
+		res = start_timer(notes="Unit test running focus session")
+		self.assertEqual(res.get("status"), "success")
+
+		# Check status
+		status = get_timer_status()
+		self.assertEqual(status.get("status"), "running")
+		self.assertIn("elapsed_seconds", status)
+
+		# Discard session (zero empty timesheets)
+		discard_res = discard_timer()
+		self.assertEqual(discard_res.get("status"), "success")
+
+		# Check status is now idle
+		status_after = get_timer_status()
+		self.assertEqual(status_after.get("status"), "idle")
+
+	def test_analytics_and_task_helpers(self):
+		"""Verifies get_assigned_tasks_data and get_plan_vs_actual_analytics."""
+		from omnitrack.fac import get_assigned_tasks_data, get_plan_vs_actual_analytics
+
+		tasks_res = get_assigned_tasks_data()
+		self.assertIn("employee", tasks_res)
+		self.assertIn("tasks", tasks_res)
+		self.assertIsInstance(tasks_res["tasks"], list)
+
+		analytics = get_plan_vs_actual_analytics()
+		self.assertIn("employee", analytics)
+		self.assertIn("pai", analytics)
+		self.assertIn("plan_vs_actual", analytics)
+
+	def test_timesheet_sync_mode_governance(self):
+		"""Verifies ERPNext Timesheet sync mode: Never, On Approval, Immediate."""
+		from omnitrack.api import (
+			book_work_block,
+			log_work_session,
+			get_timesheet_sync_mode,
+			approve_work_blocks
+		)
+
+		original_mode = frappe.db.get_single_value("OmniTrack Settings", "default_timesheet_mode")
+
+		try:
+			# 1. Mode: Never -> No Timesheet created on book or log
+			frappe.db.set_single_value("OmniTrack Settings", "default_timesheet_mode", "Never")
+			self.assertEqual(get_timesheet_sync_mode(), "Never")
+
+			bk = book_work_block(
+				work_date=nowdate(),
+				start_time="14:00:00",
+				end_time="15:00:00",
+				deliverable_notes="Test block for sync mode Never",
+				employee=frappe.session.user
+			)
+			block_name = bk["name"]
+			block_doc = frappe.get_doc("Planned Work Block", block_name)
+			self.assertIsNone(block_doc.timesheet)
+
+			log_work_session(
+				block_name=block_name,
+				hours=1.0,
+				notes="Completed work under Never sync mode"
+			)
+			block_doc.reload()
+			self.assertIsNone(block_doc.timesheet)
+
+			# 2. Mode: On Approval -> Timesheet created ONLY when approved by manager
+			frappe.db.set_single_value("OmniTrack Settings", "default_timesheet_mode", "On Approval")
+			self.assertEqual(get_timesheet_sync_mode(), "On Approval")
+
+			bk2 = book_work_block(
+				work_date=nowdate(),
+				start_time="15:00:00",
+				end_time="16:00:00",
+				deliverable_notes="Test block for On Approval mode",
+				employee=frappe.session.user
+			)
+			b2_name = bk2["name"]
+			log_work_session(
+				block_name=b2_name,
+				hours=1.0,
+				notes="Work done pending approval"
+			)
+			b2_doc = frappe.get_doc("Planned Work Block", b2_name)
+			self.assertIsNone(b2_doc.timesheet)
+			self.assertEqual(b2_doc.approval_status, "Draft")
+
+			# Manager approves the block
+			appr_res = approve_work_blocks(
+				block_names=[b2_name],
+				comments="Approved by manager"
+			)
+			self.assertEqual(appr_res["status"], "success")
+			b2_doc.reload()
+			self.assertEqual(b2_doc.approval_status, "Approved")
+			self.assertEqual(b2_doc.approved_by, frappe.session.user)
+			if frappe.db.exists("DocType", "Timesheet"):
+				self.assertIsNotNone(b2_doc.timesheet)
+
+		finally:
+			frappe.db.set_single_value("OmniTrack Settings", "default_timesheet_mode", "Never")
+
+
+

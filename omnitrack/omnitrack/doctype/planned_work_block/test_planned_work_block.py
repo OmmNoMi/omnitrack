@@ -255,7 +255,8 @@ class TestPlannedWorkBlock(FrappeTestCase):
 			return True
 
 		with patch("frappe.db.exists", side_effect=fake_exists), \
-		     patch("frappe.new_doc", return_value=mock_ts):
+		     patch("frappe.new_doc", return_value=mock_ts), \
+		     patch("omnitrack.api.get_timesheet_sync_mode", return_value="Immediate"):
 			ts_name = create_timesheet_from_work_block(b.name)
 			self.assertEqual(ts_name, "TS-2026-00042")
 			self.assertEqual(mock_ts.parent_project, "PROJ-ALPHA-100")
@@ -1315,6 +1316,75 @@ console.log('SUCCESS');
 			self.assertEqual(up_res["status"], "success")
 			yest_block.reload()
 			self.assertEqual(yest_block.deliverable_notes, "Updated note within 48h grace window")
+
+	def test_submitted_timesheet_auto_amendment_on_session_update_and_delete(self):
+		from omnitrack.api import (
+			log_work_session,
+			update_work_session,
+			delete_work_session,
+			create_timesheet_from_work_block,
+		)
+
+		if not frappe.db.exists("DocType", "Timesheet"):
+			return
+
+		# 1. Create a block and log a session
+		block = _block(work_date=frappe.utils.nowdate(), start_time="10:00:00", end_time="12:00:00").insert()
+		log_res = log_work_session(
+			block_name=block.name,
+			from_time="10:00:00",
+			to_time="11:30:00",
+			hours=1.5,
+			notes="Initial engineering session"
+		)
+		self.assertEqual(log_res["status"], "success")
+		block.reload()
+		session = block.sessions[0]
+
+		# 2. Generate and submit timesheet
+		ts_name = create_timesheet_from_work_block(block.name)
+		self.assertTrue(bool(ts_name))
+		ts = frappe.get_doc("Timesheet", ts_name)
+		ts.flags.ignore_permissions = True
+		ts.submit()
+		self.assertEqual(ts.docstatus, 1)
+
+		# 3. Update session (change hours to 2.0 and update notes)
+		up_res = update_work_session(
+			session_name=session.name,
+			block_name=block.name,
+			from_time="10:00:00",
+			to_time="12:00:00",
+			hours=2.0,
+			notes="Expanded engineering session"
+		)
+		self.assertEqual(up_res["status"], "success")
+		block.reload()
+		self.assertEqual(block.actual_hours, 2.0)
+
+		# Verify old timesheet was cancelled and amended timesheet created & submitted
+		old_ts = frappe.get_doc("Timesheet", ts_name)
+		self.assertEqual(old_ts.docstatus, 2, "Original submitted timesheet must be cancelled on update")
+
+		new_ts_name = block.timesheet
+		self.assertNotEqual(new_ts_name, ts_name, "Block must point to newly amended timesheet")
+		new_ts = frappe.get_doc("Timesheet", new_ts_name)
+		self.assertEqual(new_ts.docstatus, 1, "Amended timesheet must be re-submitted")
+		self.assertEqual(new_ts.amended_from, ts_name, "Amended timesheet must link to original")
+		self.assertEqual(len(new_ts.time_logs), 1)
+		self.assertEqual(flt(new_ts.time_logs[0].hours), 2.0)
+		self.assertIn("Expanded engineering session", new_ts.time_logs[0].description)
+
+		# 4. Delete session -> should cancel timesheet and clear block.timesheet
+		del_res = delete_work_session(session_name=session.name, block_name=block.name)
+		self.assertEqual(del_res["status"], "success")
+		block.reload()
+		self.assertEqual(block.actual_hours, 0)
+		self.assertEqual(block.status, "Planned")
+		self.assertIsNone(block.timesheet)
+
+		cancelled_amended_ts = frappe.get_doc("Timesheet", new_ts_name)
+		self.assertEqual(cancelled_amended_ts.docstatus, 2, "Amended timesheet must be cancelled when all sessions are deleted")
 
 	def tearDown(self):
 		frappe.db.rollback()

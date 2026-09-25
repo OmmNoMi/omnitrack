@@ -568,8 +568,217 @@ def quick_timer_action(
 		sync_active_session(None, user=user)
 		return {"status": "success", "message": f"Active session discarded for {user}."}
 
+	elif action in ("add_line", "add_note"):
+		active = get_active_session(user)
+		if not active or active.get("status") != "active":
+			frappe.throw(_("No active session running to append notes to."))
+		if not notes or len(str(notes).strip()) < 3:
+			frappe.throw(_("Note line must be at least 3 characters."))
+		lines = list(active.get("sessionNotesList") or [])
+		new_line = str(notes).strip()
+		if new_line not in lines:
+			lines.append(new_line)
+		active["sessionNotesList"] = lines
+		active["trackerNotes"] = "• " + "\n• ".join(lines)
+		sync_active_session(active, user=user)
+		return {
+			"status": "success",
+			"message": f"Added line to session log for {user}.",
+			"sessionNotesList": lines
+		}
+
 	else:
-		frappe.throw(_("Invalid timer action '{0}'. Choose 'start', 'stop', 'discard', or 'status'.").format(action))
+		frappe.throw(_("Invalid timer action '{0}'. Choose 'start', 'stop', 'discard', 'status', or 'add_note'.").format(action))
+
+
+@frappe.whitelist()
+def add_timer_note(note, employee=None):
+	"""Appends an accomplishment bullet line to the user's active running session log in real time."""
+	return quick_timer_action(action="add_note", notes=note, employee=employee)
+
+
+@frappe.whitelist()
+def start_timer(block_name=None, notes=None, project=None, task=None, nature="🎯 Planned", employee=None):
+	"""Starts an active live stopwatch session for the target user (defaults to human operator).
+	The live stopwatch immediately begins ticking in the OmniTrack workstation UI across all devices.
+	"""
+	return quick_timer_action(
+		action="start",
+		block_name=block_name,
+		notes=notes,
+		project=project,
+		task=task,
+		nature=nature,
+		employee=employee
+	)
+
+
+@frappe.whitelist()
+def stop_timer(notes=None, block_name=None, project=None, task=None, employee=None):
+	"""Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session
+	into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00.
+	Session notes describing what was accomplished are strictly required (>= 3 chars).
+	"""
+	return quick_timer_action(
+		action="stop",
+		block_name=block_name,
+		notes=notes,
+		project=project,
+		task=task,
+		employee=employee
+	)
+
+
+@frappe.whitelist()
+def discard_timer(employee=None):
+	"""Discards an active live stopwatch session without creating any empty or fractional timesheet."""
+	return quick_timer_action(action="discard", employee=employee)
+
+
+@frappe.whitelist()
+def get_timer_status(employee=None):
+	"""Checks whether a stopwatch session is currently running for the user, returning elapsed time and active task/block."""
+	return quick_timer_action(action="status", employee=employee)
+
+
+@frappe.whitelist()
+def switch_timer(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None, employee=None):
+	"""Atomically switches the active running stopwatch session to another block or task.
+	Closes the active session, logs its elapsed time with current_session_notes, and starts
+	a fresh session on the target block/task with zero dropped time.
+	"""
+	from omnitrack.api import switch_active_session
+	return switch_active_session(
+		target_block=target_block,
+		target_task=target_task,
+		target_project=target_project,
+		target_nature=target_nature,
+		current_session_notes=current_session_notes
+	)
+
+
+@frappe.whitelist()
+def reschedule_block(block_name, new_date=None, new_start_time=None, new_end_time=None, employee=None):
+	"""Non-destructively reschedules an unworked or unfinished Planned Work Block.
+	Preserves the original block's history (marked 'Rescheduled') and creates a linked copy in the target time slot.
+	"""
+	from omnitrack.api import reschedule_work_block as api_reschedule_work_block
+	return api_reschedule_work_block(
+		block_name=block_name,
+		new_date=new_date,
+		new_start_time=new_start_time,
+		new_end_time=new_end_time
+	)
+
+
+@frappe.whitelist()
+def extend_active_block(extend_minutes=30, employee=None):
+	"""Extends the scheduled end time of the user's currently active work block (default: 30 minutes)."""
+	from omnitrack.api import extend_active_block_duration
+	return extend_active_block_duration(extend_minutes=int(extend_minutes or 30))
+
+
+@frappe.whitelist()
+def adjust_work_session(session_name, block_name=None, from_time=None, to_time=None, hours=None, session_date=None, notes=None, employee=None):
+	"""Adjusts a previously logged work session's time, duration, or deliverable notes.
+	Automatically synchronizes or amends the linked ERPNext Timesheet. Users can only adjust today and yesterday.
+	"""
+	from omnitrack.api import update_work_session as api_update_work_session
+	target_user = _resolve_planner_user(employee)
+	target_date = session_date or nowdate()
+	check_timesheet_date_permission(target_date, target_user)
+	if notes:
+		notes = _require_session_notes(notes)
+	return api_update_work_session(
+		session_name=session_name,
+		block_name=block_name,
+		from_time=from_time,
+		to_time=to_time,
+		hours=flt(hours) if hours is not None else None,
+		session_date=target_date,
+		notes=notes
+	)
+
+
+@frappe.whitelist()
+def delete_work_session(session_name, block_name, employee=None):
+	"""Deletes an erroneously logged work session from a Planned Work Block.
+	Automatically recalculates block actuals and cancels/amends the linked ERPNext Timesheet.
+	"""
+	from omnitrack.api import delete_work_session as api_delete_work_session
+	return api_delete_work_session(session_name=session_name, block_name=block_name)
+
+
+@frappe.whitelist()
+def get_assigned_tasks_data(employee=None, status=None):
+	"""Retrieves assigned tasks and ToDos categorized with attention status and workflow actions."""
+	target_user = _resolve_planner_user(employee)
+	data = get_assigned_tasks(target_user)
+	task_list = data.get("tasks", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+	if status:
+		s_low = str(status).lower()
+		task_list = [t for t in task_list if s_low in str(t.get("status", "")).lower() or s_low in str(t.get("attention_badge", "")).lower()]
+	return {
+		"employee": target_user,
+		"tasks_count": len(task_list),
+		"tasks": task_list
+	}
+
+
+@frappe.whitelist()
+def execute_task_workflow(doctype, docname, action, comment=None):
+	"""Executes a workflow state transition or status change on a Task or ToDo document.
+	Allowed actions: 'Start Work', 'Close Task', 'Submit for Review', 'Put on Hold', 'Cancel Task'.
+	"""
+	from omnitrack.api import execute_task_workflow_action
+	return execute_task_workflow_action(
+		doctype=doctype,
+		docname=docname,
+		action=action,
+		comment=comment
+	)
+
+
+@frappe.whitelist()
+def attach_tasks_to_block_action(block_name, task_refs=None, new_task_subjects=None):
+	"""Attaches tasks, ToDos, or new checklist items to a Planned Work Block."""
+	from omnitrack.api import attach_tasks_to_block
+	return attach_tasks_to_block(
+		block_name=block_name,
+		task_refs=task_refs,
+		new_task_subjects=new_task_subjects
+	)
+
+
+@frappe.whitelist()
+def complete_block_task_action(block_name, task_ref, completed=True):
+	"""Marks a checklist item connected to a Planned Work Block as completed or pending."""
+	from omnitrack.api import complete_block_task
+	return complete_block_task(
+		block_name=block_name,
+		task_ref=task_ref,
+		completed=bool(completed)
+	)
+
+
+@frappe.whitelist()
+def get_plan_vs_actual_analytics(employee=None, from_date=None, to_date=None):
+	"""Generates Plan vs Actual performance analytics and Plan Adherence Index (PAI %)."""
+	from omnitrack.api import calculate_plan_adherence_index, get_plan_vs_actual
+	target_user = _resolve_planner_user(employee)
+	f_date = from_date or str(add_days(nowdate(), -7))
+	t_date = to_date or nowdate()
+	pai_data = calculate_plan_adherence_index(employee=target_user, from_date=f_date, to_date=t_date)
+	pva_data = get_plan_vs_actual(employee=target_user, from_date=f_date, to_date=t_date)
+	return {
+		"employee": target_user,
+		"from_date": str(f_date),
+		"to_date": str(t_date),
+		"pai": pai_data,
+		"plan_vs_actual": pva_data
+	}
+
+
 
 
 # ==============================================================================
@@ -626,213 +835,715 @@ def get_eod_reconciliation(work_date=None, employee=None):
 
 
 # ==============================================================================
-# 7. MCP TOOL DEFINITIONS FOR FRACTIONLESS LLM CALLS
+# 7. MANAGER / HR APPROVAL & TIMESHEET GOVERNANCE
 # ==============================================================================
+
+@frappe.whitelist()
+def approve_work_blocks(block_names=None, employee=None, work_date=None, comments=None):
+	"""Approves Planned Work Blocks for an employee or specific block list.
+	Enforces manager/HR permissions and triggers ERPNext Timesheet generation when sync mode is 'On Approval'.
+	"""
+	from omnitrack.api import approve_work_blocks as api_approve_work_blocks
+	return api_approve_work_blocks(
+		block_names=block_names,
+		employee=employee,
+		work_date=work_date,
+		comments=comments
+	)
+
+
+# ==============================================================================
+# 8. MCP TOOL DEFINITIONS & BASETOOL SUBCLASSES FOR FRAPPE ASSISTANT CORE
+# ==============================================================================
+
+try:
+	from frappe_assistant_core.core.base_tool import BaseTool
+except Exception:
+	class BaseTool:
+		def __init__(self):
+			self.name = ""
+			self.description = ""
+			self.inputSchema = {}
+			self.requires_permission = None
+			self.category = "OmniTrack"
+			self.source_app = "omnitrack"
+			self.dependencies = []
+			self.default_config = {}
+
+		def execute(self, arguments):
+			raise NotImplementedError
+
+		def _safe_execute(self, arguments):
+			return {"success": True, "result": self.execute(arguments)}
+
+		def get_metadata(self):
+			return {
+				"name": self.name,
+				"description": self.description,
+				"class": self.__class__.__name__,
+				"module": self.__class__.__module__,
+				"source_app": self.source_app,
+				"category": self.category,
+				"requires_permission": self.requires_permission,
+				"dependencies": self.dependencies,
+				"inputSchema": self.inputSchema,
+				"default_config": self.default_config,
+			}
+
+
+class OmniTrackGetMyWorkspaceTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_my_workspace"
+		self.description = "Retrieves the employee's live workstation data: active stopwatch timer, today's planned work blocks, total actual hours logged, plan adherence, and assigned tasks."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {
+					"type": "string",
+					"description": "Optional email/user id. Non-managers are strictly scoped to themselves."
+				},
+				"work_date": {
+					"type": "string",
+					"description": "Date in YYYY-MM-DD. Defaults to today."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_my_workspace(**arguments)
+
+
+class OmniTrackPlanWorkBlocksTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_plan_work_blocks"
+		self.description = "Batch schedules planned work blocks for a day (e.g. 'from 9am to 11am work on Task-01'). Cannot plan in the past (historical plans are immutable)."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["blocks"],
+			"properties": {
+				"blocks": {
+					"type": "array",
+					"description": "Array of block items to schedule.",
+					"items": {
+						"type": "object",
+						"required": ["start_time", "end_time"],
+						"properties": {
+							"start_time": {"type": "string", "description": "e.g. '09:00:00'"},
+							"end_time": {"type": "string", "description": "e.g. '11:00:00'"},
+							"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001)"},
+							"project": {"type": "string", "description": "Project ID"},
+							"deliverable_notes": {"type": "string", "description": "What will be accomplished"},
+							"task_nature": {"type": "string", "description": "'🎯 Planned', '⚠️ Unplanned', or '🚫 Out-of-Office'"}
+						}
+					}
+				},
+				"work_date": {
+					"type": "string",
+					"description": "Work date (YYYY-MM-DD). Defaults to today."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email (managers only)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return plan_work_blocks(**arguments)
+
+
+class OmniTrackLogWorkSessionTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_log_work_session"
+		self.description = "Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. Notes are mandatory (>= 3 chars). Users can only log for today & yesterday."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["notes"],
+			"properties": {
+				"notes": {
+					"type": "string",
+					"description": "Mandatory detailed description of what was completed."
+				},
+				"hours": {
+					"type": "number",
+					"description": "Duration in hours (e.g. 1.5)."
+				},
+				"from_time": {
+					"type": "string",
+					"description": "Start time (HH:MM:SS)."
+				},
+				"to_time": {
+					"type": "string",
+					"description": "End time (HH:MM:SS)."
+				},
+				"task": {
+					"type": "string",
+					"description": "ERPNext Task ID."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project ID."
+				},
+				"block_name": {
+					"type": "string",
+					"description": "Specific Planned Work Block ID (e.g. PWB-2026-00012)."
+				},
+				"session_date": {
+					"type": "string",
+					"description": "Date of work (YYYY-MM-DD). Defaults to today."
+				},
+				"auto_create_block_if_missing": {
+					"type": "boolean",
+					"description": "Auto-creates a planned block if none matches. Defaults to true."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return log_work_session(**arguments)
+
+
+class OmniTrackQuickCreateTaskTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_quick_create_task"
+		self.description = "Creates an ERPNext Task (or ToDo), assigns it to the user, and optionally books a planned work block immediately."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["subject"],
+			"properties": {
+				"subject": {
+					"type": "string",
+					"description": "Title or summary of the task."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project ID."
+				},
+				"priority": {
+					"type": "string",
+					"description": "'Low', 'Medium', 'High', 'Urgent'."
+				},
+				"expected_time": {
+					"type": "number",
+					"description": "Estimated hours."
+				},
+				"description": {
+					"type": "string",
+					"description": "Detailed task description."
+				},
+				"book_block": {
+					"type": "boolean",
+					"description": "If true, schedules a planned work block for this task today."
+				},
+				"block_start": {
+					"type": "string",
+					"description": "Start time for booked block (default '10:00:00')."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return quick_create_task(**arguments)
+
+
+class OmniTrackQuickTimerActionTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_quick_timer_action"
+		self.description = "Controls live stopwatch session for the user ('start', 'stop', 'discard', 'status')."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["action"],
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["start", "stop", "discard", "status"],
+					"description": "'start' (Start Session), 'stop' (requires notes), 'discard' (2-step discard), 'status'."
+				},
+				"notes": {
+					"type": "string",
+					"description": "Session notes (required when stopping)."
+				},
+				"task": {
+					"type": "string",
+					"description": "Task ID."
+				},
+				"project": {
+					"type": "string",
+					"description": "Project ID."
+				},
+				"block_name": {
+					"type": "string",
+					"description": "Planned Work Block ID."
+				},
+				"nature": {
+					"type": "string",
+					"description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return quick_timer_action(**arguments)
+
+
+class OmniTrackStartTimerTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_start_timer"
+		self.description = "Starts a live running stopwatch session for the user. Live ticking starts immediately in the OmniTrack workstation UI across all devices. Terminates previous idle state."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"block_name": {
+					"type": "string",
+					"description": "Target Planned Work Block ID (e.g. PWB-2026-12413)."
+				},
+				"notes": {
+					"type": "string",
+					"description": "Initial deliverable or focus notes for the session."
+				},
+				"project": {
+					"type": "string",
+					"description": "ERPNext Project ID."
+				},
+				"task": {
+					"type": "string",
+					"description": "ERPNext Task ID."
+				},
+				"nature": {
+					"type": "string",
+					"description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'. Defaults to '🎯 Planned'."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email or ID (defaults to current human operator)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return start_timer(**arguments)
+
+
+class OmniTrackStopTimerTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_stop_timer"
+		self.description = "Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00. Session notes describing what was accomplished are strictly required (>= 3 chars)."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["notes"],
+			"properties": {
+				"notes": {
+					"type": "string",
+					"description": "Mandatory session notes describing what was accomplished (>= 3 characters)."
+				},
+				"block_name": {
+					"type": "string",
+					"description": "Optional override Planned Work Block ID."
+				},
+				"project": {
+					"type": "string",
+					"description": "Optional Project ID."
+				},
+				"task": {
+					"type": "string",
+					"description": "Optional Task ID."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email (defaults to current human user)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return stop_timer(**arguments)
+
+
+class OmniTrackDiscardTimerTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_discard_timer"
+		self.description = "Discards an active live stopwatch session without creating any empty or fractional timesheet."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {
+					"type": "string",
+					"description": "Target employee email (defaults to current human user)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return discard_timer(**arguments)
+
+
+class OmniTrackGetTimerStatusTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_timer_status"
+		self.description = "Checks whether a stopwatch session is currently running for the user, returning elapsed time and active task/block."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {
+					"type": "string",
+					"description": "Target employee email (defaults to current human user)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_timer_status(**arguments)
+
+
+class OmniTrackGetEODReconciliationTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_eod_reconciliation"
+		self.description = "Audits the employee's day: checks total logged hours vs 8h target, unallocated gaps, missing session notes, and temporal compliance."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"work_date": {
+					"type": "string",
+					"description": "Date in YYYY-MM-DD. Defaults to today."
+				},
+				"employee": {
+					"type": "string",
+					"description": "Target employee email (managers only)."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_eod_reconciliation(**arguments)
+
+
+class OmniTrackSwitchTimerTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_switch_timer"
+		self.description = "Atomically switches the active running stopwatch session to another block or task. Closes the current session, logs its elapsed time with session notes, and starts a fresh session on the target block/task with zero dropped time."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"target_block": {"type": "string", "description": "Target Planned Work Block ID to switch to."},
+				"target_task": {"type": "string", "description": "Target Task ID to switch to."},
+				"target_project": {"type": "string", "description": "Target Project ID."},
+				"target_nature": {"type": "string", "description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'."},
+				"current_session_notes": {"type": "string", "description": "Session notes to log for the block/session being closed."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return switch_timer(**arguments)
+
+
+class OmniTrackRescheduleBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_reschedule_block"
+		self.description = "Non-destructively reschedules an unworked or unfinished Planned Work Block. Preserves original block with 'Rescheduled' status and clones it to the target date/time."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Planned Work Block ID to reschedule."},
+				"new_date": {"type": "string", "description": "New work date (YYYY-MM-DD). Defaults to original date."},
+				"new_start_time": {"type": "string", "description": "New start time (HH:MM:SS)."},
+				"new_end_time": {"type": "string", "description": "New end time (HH:MM:SS)."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return reschedule_block(**arguments)
+
+
+class OmniTrackExtendActiveBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_extend_active_block"
+		self.description = "Extends the scheduled end time of the user's currently active work block (default: 30 minutes) when work requires more time."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"extend_minutes": {"type": "integer", "description": "Minutes to add to the block's scheduled end time (default: 30)."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return extend_active_block(**arguments)
+
+
+class OmniTrackAdjustWorkSessionTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_adjust_work_session"
+		self.description = "Adjusts a previously logged work session's time, duration, or deliverable notes in a Planned Work Block. Automatically recalculates block totals and updates/amends the linked ERPNext Timesheet."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["session_name"],
+			"properties": {
+				"session_name": {"type": "string", "description": "Row name of the session child table entry to modify."},
+				"block_name": {"type": "string", "description": "Parent Planned Work Block ID."},
+				"from_time": {"type": "string", "description": "Updated start time (HH:MM:SS)."},
+				"to_time": {"type": "string", "description": "Updated end time (HH:MM:SS)."},
+				"hours": {"type": "number", "description": "Updated duration in hours."},
+				"session_date": {"type": "string", "description": "Work date (YYYY-MM-DD). Regular users can only adjust today and yesterday."},
+				"notes": {"type": "string", "description": "Updated deliverable notes describing work accomplished."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return adjust_work_session(**arguments)
+
+
+class OmniTrackDeleteWorkSessionTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_delete_work_session"
+		self.description = "Deletes an erroneously logged work session from a Planned Work Block. Automatically recalculates block actuals and cancels/amends the linked ERPNext Timesheet."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["session_name", "block_name"],
+			"properties": {
+				"session_name": {"type": "string", "description": "Row name of the session child table entry to remove."},
+				"block_name": {"type": "string", "description": "Parent Planned Work Block ID."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return delete_work_session(**arguments)
+
+
+class OmniTrackGetAssignedTasksTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_assigned_tasks"
+		self.description = "Retrieves assigned tasks and ToDos categorized by attention level ('Overdue & Unplanned', 'Due Today', 'Open'), deficit hours, and available workflow actions."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."},
+				"status": {"type": "string", "description": "Optional filter by status or attention level ('Open', 'Overdue', 'Working')."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_assigned_tasks_data(**arguments)
+
+
+class OmniTrackExecuteTaskWorkflowTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_execute_task_workflow"
+		self.description = "Executes a workflow state transition or status change on an ERPNext Task or ToDo document ('Start Work', 'Close Task', 'Submit for Review', 'Put on Hold', 'Cancel Task')."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["doctype", "docname", "action"],
+			"properties": {
+				"doctype": {"type": "string", "enum": ["Task", "ToDo"], "description": "DocType ('Task' or 'ToDo')."},
+				"docname": {"type": "string", "description": "Document name or ID."},
+				"action": {"type": "string", "description": "Action/Transition to apply (e.g. 'Start Work', 'Close Task', 'Put on Hold', 'Submit for Review')."},
+				"comment": {"type": "string", "description": "Optional comment recorded in document timeline."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return execute_task_workflow(**arguments)
+
+
+class OmniTrackAttachTasksToBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_attach_tasks_to_block"
+		self.description = "Attaches existing Tasks/ToDos or creates new checklist items on a Planned Work Block."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Target Planned Work Block ID."},
+				"task_refs": {"type": "array", "items": {"type": "string"}, "description": "List of task or todo references (e.g. ['TASK-2026-0001', 'todo:12345'])."},
+				"new_task_subjects": {"type": "array", "items": {"type": "string"}, "description": "List of new checklist item subjects to create."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return attach_tasks_to_block_action(**arguments)
+
+
+class OmniTrackCompleteBlockTaskTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_complete_block_task"
+		self.description = "Marks a checklist item connected to a Planned Work Block as completed or pending."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name", "task_ref"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Target Planned Work Block ID."},
+				"task_ref": {"type": "string", "description": "Checklist item reference or task ID."},
+				"completed": {"type": "boolean", "description": "True to mark completed, False to mark pending."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return complete_block_task_action(**arguments)
+
+
+class OmniTrackGetPlanVsActualTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_plan_vs_actual"
+		self.description = "Generates Plan vs Actual performance analytics, Plan Adherence Index (PAI %), total planned hours, actual hours, variance, and project distribution."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."},
+				"from_date": {"type": "string", "description": "Start date (YYYY-MM-DD). Defaults to 7 days ago."},
+				"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Defaults to today."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_plan_vs_actual_analytics(**arguments)
+
+
+class OmniTrackApproveWorkBlocksTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_approve_work_blocks"
+		self.description = "Approves Planned Work Blocks for an employee or specific block IDs as Manager or HR. When timesheet sync mode is configured as 'On Approval', triggers generation/synchronization of ERPNext Timesheets."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"properties": {
+				"employee": {
+					"type": "string",
+					"description": "Target employee email whose unapproved blocks will be approved."
+				},
+				"work_date": {
+					"type": "string",
+					"description": "Date of work (YYYY-MM-DD) to approve. Defaults to today."
+				},
+				"block_names": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "Specific Planned Work Block IDs to approve (e.g. ['PWB-2026-12413'])."
+				},
+				"comments": {
+					"type": "string",
+					"description": "Manager approval comments or review notes."
+				}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return approve_work_blocks(**arguments)
+
 
 def get_fac_tools():
 	"""Returns MCP tool definitions so Frappe Assistant Core and any MCP client
 	can expose OmniTrack domain capabilities natively.
 	"""
-	return [
-		{
-			"name": "omnitrack_get_my_workspace",
-			"description": "Retrieves the employee's live workstation data: active stopwatch timer, today's planned work blocks, total actual hours logged, plan adherence, and assigned tasks.",
-			"inputSchema": {
-				"type": "object",
-				"properties": {
-					"employee": {
-						"type": "string",
-						"description": "Optional email/user id. Non-managers are strictly scoped to themselves."
-					},
-					"work_date": {
-						"type": "string",
-						"description": "Date in YYYY-MM-DD. Defaults to today."
-					}
-				}
-			},
-			"handler": get_my_workspace
-		},
-		{
-			"name": "omnitrack_plan_work_blocks",
-			"description": "Batch schedules planned work blocks for a day (e.g. 'from 9am to 11am work on Task-01'). Cannot plan in the past (historical plans are immutable).",
-			"inputSchema": {
-				"type": "object",
-				"required": ["blocks"],
-				"properties": {
-					"blocks": {
-						"type": "array",
-						"description": "Array of block items to schedule.",
-						"items": {
-							"type": "object",
-							"required": ["start_time", "end_time"],
-							"properties": {
-								"start_time": {"type": "string", "description": "e.g. '09:00:00'"},
-								"end_time": {"type": "string", "description": "e.g. '11:00:00'"},
-								"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001)"},
-								"project": {"type": "string", "description": "Project ID"},
-								"deliverable_notes": {"type": "string", "description": "What will be accomplished"},
-								"task_nature": {"type": "string", "description": "'🎯 Planned', '⚠️ Unplanned', or '🚫 Out-of-Office'"}
-							}
-						}
-					},
-					"work_date": {
-						"type": "string",
-						"description": "Work date (YYYY-MM-DD). Defaults to today."
-					},
-					"employee": {
-						"type": "string",
-						"description": "Target employee email (managers only)."
-					}
-				}
-			},
-			"handler": plan_work_blocks
-		},
-		{
-			"name": "omnitrack_log_work_session",
-			"description": "Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. Notes are mandatory (>= 3 chars). Users can only log for today & yesterday.",
-			"inputSchema": {
-				"type": "object",
-				"required": ["notes"],
-				"properties": {
-					"notes": {
-						"type": "string",
-						"description": "Mandatory detailed description of what was completed."
-					},
-					"hours": {
-						"type": "number",
-						"description": "Duration in hours (e.g. 1.5)."
-					},
-					"from_time": {
-						"type": "string",
-						"description": "Start time (HH:MM:SS)."
-					},
-					"to_time": {
-						"type": "string",
-						"description": "End time (HH:MM:SS)."
-					},
-					"task": {
-						"type": "string",
-						"description": "ERPNext Task ID."
-					},
-					"project": {
-						"type": "string",
-						"description": "Project ID."
-					},
-					"block_name": {
-						"type": "string",
-						"description": "Specific Planned Work Block ID (e.g. PWB-2026-00012)."
-					},
-					"session_date": {
-						"type": "string",
-						"description": "Date of work (YYYY-MM-DD). Defaults to today."
-					},
-					"auto_create_block_if_missing": {
-						"type": "boolean",
-						"description": "Auto-creates a planned block if none matches. Defaults to true."
-					},
-					"employee": {
-						"type": "string",
-						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
-					}
-				}
-			},
-			"handler": log_work_session
-		},
-		{
-			"name": "omnitrack_quick_create_task",
-			"description": "Creates an ERPNext Task (or ToDo), assigns it to the user, and optionally books a planned work block immediately.",
-			"inputSchema": {
-				"type": "object",
-				"required": ["subject"],
-				"properties": {
-					"subject": {
-						"type": "string",
-						"description": "Title or summary of the task."
-					},
-					"project": {
-						"type": "string",
-						"description": "Project ID."
-					},
-					"priority": {
-						"type": "string",
-						"description": "'Low', 'Medium', 'High', 'Urgent'."
-					},
-					"expected_time": {
-						"type": "number",
-						"description": "Estimated hours."
-					},
-					"description": {
-						"type": "string",
-						"description": "Detailed task description."
-					},
-					"book_block": {
-						"type": "boolean",
-						"description": "If true, schedules a planned work block for this task today."
-					},
-					"block_start": {
-						"type": "string",
-						"description": "Start time for booked block (default '10:00:00')."
-					},
-					"employee": {
-						"type": "string",
-						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
-					}
-				}
-			},
-			"handler": quick_create_task
-		},
-		{
-			"name": "omnitrack_quick_timer_action",
-			"description": "Controls live stopwatch session for the user ('start', 'stop', 'discard', 'status').",
-			"inputSchema": {
-				"type": "object",
-				"required": ["action"],
-				"properties": {
-					"action": {
-						"type": "string",
-						"enum": ["start", "stop", "discard", "status"],
-						"description": "'start' (Start Session), 'stop' (requires notes), 'discard' (2-step discard), 'status'."
-					},
-					"notes": {
-						"type": "string",
-						"description": "Session notes (required when stopping)."
-					},
-					"task": {
-						"type": "string",
-						"description": "Task ID."
-					},
-					"project": {
-						"type": "string",
-						"description": "Project ID."
-					},
-					"block_name": {
-						"type": "string",
-						"description": "Planned Work Block ID."
-					},
-					"employee": {
-						"type": "string",
-						"description": "Target employee email or name (defaults to current human user, e.g. Nomeshwer)."
-					}
-				}
-			},
-			"handler": quick_timer_action
-		},
-		{
-			"name": "omnitrack_get_eod_reconciliation",
-			"description": "Audits the employee's day: checks total logged hours vs 8h target, unallocated gaps, missing session notes, and temporal compliance.",
-			"inputSchema": {
-				"type": "object",
-				"properties": {
-					"work_date": {
-						"type": "string",
-						"description": "Date in YYYY-MM-DD. Defaults to today."
-					},
-					"employee": {
-						"type": "string",
-						"description": "Target employee email (managers only)."
-					}
-				}
-			},
-			"handler": get_eod_reconciliation
-		}
+	tool_classes = [
+		OmniTrackGetMyWorkspaceTool,
+		OmniTrackPlanWorkBlocksTool,
+		OmniTrackLogWorkSessionTool,
+		OmniTrackQuickCreateTaskTool,
+		OmniTrackQuickTimerActionTool,
+		OmniTrackStartTimerTool,
+		OmniTrackStopTimerTool,
+		OmniTrackDiscardTimerTool,
+		OmniTrackGetTimerStatusTool,
+		OmniTrackGetEODReconciliationTool,
+		OmniTrackSwitchTimerTool,
+		OmniTrackRescheduleBlockTool,
+		OmniTrackExtendActiveBlockTool,
+		OmniTrackAdjustWorkSessionTool,
+		OmniTrackDeleteWorkSessionTool,
+		OmniTrackGetAssignedTasksTool,
+		OmniTrackExecuteTaskWorkflowTool,
+		OmniTrackAttachTasksToBlockTool,
+		OmniTrackCompleteBlockTaskTool,
+		OmniTrackGetPlanVsActualTool,
+		OmniTrackApproveWorkBlocksTool,
 	]
+	tools = []
+	for cls in tool_classes:
+		instance = cls()
+		tools.append({
+			"name": instance.name,
+			"description": instance.description,
+			"inputSchema": instance.inputSchema,
+			"handler": instance.execute,
+		})
+	return tools
+
+

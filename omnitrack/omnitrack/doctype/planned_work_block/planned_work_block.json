@@ -198,6 +198,43 @@
       "options": "OmniTrack Output Metric"
     },
     {
+      "fieldname": "sb_approval",
+      "fieldtype": "Section Break",
+      "label": "Manager / HR Approval & Governance",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "approval_status",
+      "fieldtype": "Select",
+      "label": "Approval Status",
+      "options": "Draft\nPending Approval\nApproved\nRejected",
+      "default": "Draft",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "approved_by",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "Approved By",
+      "read_only": 1
+    },
+    {
+      "fieldname": "cb_approval",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "approval_date",
+      "fieldtype": "Datetime",
+      "label": "Approval Date & Time",
+      "read_only": 1
+    },
+    {
+      "fieldname": "approval_notes",
+      "fieldtype": "Small Text",
+      "label": "Manager Review & Approval Notes"
+    },
+    {
       "fieldname": "sb_historical_migration",
       "fieldtype": "Section Break",
       "label": "Historical AppSheet Migration Mapping"
