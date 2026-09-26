@@ -107,7 +107,7 @@
 {% raw %}
 <body class="min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
-<div id="app" v-cloak class="min-h-screen flex flex-col flex-1 transition-colors duration-200" :class="isDarkMode ? 'dark bg-[#121212] text-gray-100' : 'bg-[#F8F9FA] text-gray-900'">
+<div id="app" v-cloak class="min-h-screen flex flex-col flex-1 transition-colors duration-200" :class="[isDarkMode ? 'dark bg-[#121212] text-gray-100' : 'bg-[#F8F9FA] text-gray-900', activeTab === 'planner' ? 'lg:h-screen lg:max-h-screen lg:overflow-hidden' : '']">
 
   <!-- ========================================== -->
   <!-- FLOATING TOAST NOTIFICATION               -->
@@ -127,7 +127,7 @@
   <!-- ========================================== -->
   <!-- 1. TOP APP BAR                             -->
   <!-- ========================================== -->
-  <header class="sticky top-0 z-40 border-b px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-colors duration-200" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200 shadow-xs'">
+  <header class="sticky top-0 z-40 border-b px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-colors duration-200 shrink-0" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200 shadow-xs'">
     
     <!-- Authentic Brand Identity -->
     <div class="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
@@ -242,12 +242,18 @@
   <!-- ========================================== -->
   <!-- 4. MAIN WORKSPACE CONTAINER                -->
   <!-- ========================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-3 pt-3 pb-32 sm:px-6 sm:pt-6 sm:pb-44 space-y-4 sm:space-y-6" :class="isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]'">
+  <main 
+    class="flex-1 max-w-7xl w-full mx-auto px-3 pt-3 pb-32 sm:px-6 sm:pt-6 sm:pb-44 space-y-4 sm:space-y-6 transition-all" 
+    :class="[
+      isDarkMode ? 'bg-[#121212]' : 'bg-[#F8F9FA]',
+      activeTab === 'planner' ? 'lg:flex lg:flex-col lg:min-h-0 lg:max-h-full lg:overflow-hidden lg:pt-3.5 lg:pb-[72px] lg:space-y-0 xl:max-w-[1440px] 2xl:max-w-[1680px]' : ''
+    ]"
+  >
 
     <!-- Notification Permission Banner (Mobile & Desktop) -->
     <div
       v-if="showNotificationBanner && notificationPermission === 'default'"
-      class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 shadow-xs"
+      class="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 shadow-xs shrink-0 lg:mb-3"
     >
       <div class="flex items-center gap-2.5 min-w-0">
         <span class="text-lg shrink-0">🔔</span>
@@ -373,7 +379,7 @@
           <!-- LEFT PANE: the lines of this session — Shift+S lands here, Tab reaches Stop & Save -->
           <div class="lg:col-span-6 flex flex-col pb-5 lg:pb-0 lg:pr-6">
             
-            <div class="flex-1 min-h-0 flex flex-col">
+            <div class="flex-1 min-h-0 flex flex-col justify-between">
               <!-- Header -->
               <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-gray-200/80 dark:border-gray-800">
                 <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Current Session Log</h4>
@@ -428,7 +434,7 @@
             </div>
 
             <!-- Single-Line Add Input Bar at the Bottom -->
-            <div class="flex items-end gap-2 pt-3 border-t mt-2.5" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
+            <div class="flex items-end gap-2 pt-3 border-t mt-auto" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200/80'">
               <div class="relative flex-1">
                 <textarea
                   rows="1"
@@ -2887,48 +2893,13 @@
     <!-- ======================================== -->
     <!-- TAB 8: PLANNER (Calendar Work-Block Self-Booking) -->
     <!-- ======================================== -->
-    <div v-if="activeTab === 'planner'" class="space-y-4 sm:space-y-5">
+    <div v-if="activeTab === 'planner'" class="space-y-4 sm:space-y-5 lg:space-y-0 lg:flex-1 lg:min-h-0 lg:h-full lg:flex lg:flex-col">
 
-      <!-- Week adherence summary (Frappe UI FCard) -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <f-card :padded="true" class="!p-3.5">
-          <div class="flex items-center justify-between">
-            <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Planned this week</div>
-            <f-badge v-if="plannerData.totals && plannerData.totals.away_count" theme="amber" variant="subtle" size="xs">
-              🌴 {{ plannerData.totals.away_count }} away
-            </f-badge>
-          </div>
-          <div class="text-2xl font-extrabold mt-1" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ fmtHrs(plannerData.totals.planned_hours) }}<span class="text-sm font-normal text-gray-400">h</span></div>
-          <div class="text-[11px] text-gray-400 mt-0.5">{{ plannerData.totals.block_count }} work block{{ plannerData.totals.block_count === 1 ? '' : 's' }}</div>
-        </f-card>
-
-        <f-card :padded="true" class="!p-3.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Actually logged</div>
-          <div class="text-2xl font-extrabold text-emerald-500 mt-1">{{ fmtHrs(plannerData.totals.actual_hours) }}<span class="text-sm font-normal text-gray-400">h</span></div>
-          <div class="text-[11px] text-gray-400 mt-0.5">across real sessions</div>
-        </f-card>
-
-        <f-card :padded="true" class="!p-3.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Plan vs actual</div>
-          <div class="text-2xl font-extrabold mt-1" :class="plannerData.totals.variance_hours < 0 ? 'text-amber-500' : (plannerData.totals.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
-            {{ plannerData.totals.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(plannerData.totals.variance_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
-          </div>
-          <div class="text-[11px] text-gray-400 mt-0.5">{{ plannerData.totals.variance_hours < 0 ? 'under-logged vs plan' : (plannerData.totals.variance_hours > 0 ? 'overran the plan' : 'on plan') }}</div>
-        </f-card>
-
-        <f-card :padded="true" class="!p-3.5">
-          <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Adherence</div>
-          <div class="text-2xl font-extrabold text-blue-500 mt-1">{{ plannerData.totals.adherence_pct }}<span class="text-sm font-normal text-gray-400">%</span></div>
-          <div class="mt-1 h-1.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
-            <div class="h-full bg-blue-500 rounded-full transition-all duration-300" :style="{ width: Math.min(100, plannerData.totals.adherence_pct) + '%' }"></div>
-          </div>
-        </f-card>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
+      <!-- 3-Column Responsive Grid on Big Large Screens: Left Assigned Work · Center Calendar · Right Stats -->
+      <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr_220px] xl:grid-cols-[280px_1fr_260px] gap-3.5 sm:gap-4 items-stretch lg:h-full lg:min-h-0 flex-1">
 
         <!-- Left rail: assigned tasks (Frappe UI FCard) -->
-        <f-card :padded="true" class="w-full flex flex-col space-y-2.5 !p-3.5 min-h-0 overflow-hidden max-h-[500px] lg:max-h-[calc(100vh-210px)] lg:min-h-[580px]">
+        <f-card :padded="true" class="w-full flex flex-col space-y-2.5 !p-3.5 min-h-0 overflow-hidden max-h-[500px] lg:max-h-full lg:h-full lg:min-h-0 order-2 lg:order-1">
           <div class="flex items-center justify-between shrink-0">
             <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">My Assigned Work</h3>
             <f-badge theme="gray" variant="subtle" size="xs">{{ filteredPlannerTasks.length }}</f-badge>
@@ -3030,7 +3001,7 @@
         </f-card>
 
         <!-- Calendar (Frappe UI FCard Container) -->
-        <f-card :padded="false" class="-mx-3 sm:mx-0 rounded-none sm:rounded-3xl border-x-0 sm:border-x overflow-hidden flex flex-col min-h-0 h-[640px] lg:h-[calc(100vh-210px)] min-h-[520px]">
+        <f-card :padded="false" class="-mx-3 sm:mx-0 rounded-none sm:rounded-3xl border-x-0 sm:border-x overflow-hidden flex flex-col min-h-0 h-[640px] lg:h-full lg:max-h-full lg:min-h-0 order-1 lg:order-2">
           <!-- toolbar (Frappe UI Controls) -->
           <div class="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 border-b transition-colors" :class="isDarkMode ? 'border-gray-800 bg-[#25262A]' : 'border-gray-200 bg-gray-50/60'">
             
@@ -3319,7 +3290,64 @@
             </div>
           </div>  <!-- /overflow-x-auto -->
         </f-card>  <!-- /planner calendar card -->
-      </div>  <!-- /planner two-column grid -->
+
+        <!-- Right side rail: Statistical Counts Cards (Right side panel on big screens) -->
+        <div class="order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full min-h-0 lg:h-full lg:max-h-full overflow-hidden">
+          <div class="flex items-center justify-between px-1 shrink-0">
+            <h3 class="font-bold text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Week Performance</h3>
+            <span class="text-[10px] font-mono text-gray-400 font-semibold">{{ plannerRangeLabel }}</span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-2.5 sm:gap-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
+            <!-- Card 1: Planned this week -->
+            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+              <div class="flex items-center justify-between">
+                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Planned this week</div>
+                <f-badge v-if="plannerData.totals && plannerData.totals.away_count" theme="amber" variant="subtle" size="xs">
+                  🌴 {{ plannerData.totals.away_count }} away
+                </f-badge>
+              </div>
+              <div class="text-xl xl:text-2xl font-extrabold mt-1" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                {{ fmtHrs(plannerData.totals.planned_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              </div>
+              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">
+                {{ plannerData.totals.block_count }} work block{{ plannerData.totals.block_count === 1 ? '' : 's' }}
+              </div>
+            </f-card>
+
+            <!-- Card 2: Actually logged -->
+            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Actually logged</div>
+              <div class="text-xl xl:text-2xl font-extrabold text-emerald-500 mt-1">
+                {{ fmtHrs(plannerData.totals.actual_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              </div>
+              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">across real sessions</div>
+            </f-card>
+
+            <!-- Card 3: Plan vs actual -->
+            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Plan vs actual</div>
+              <div class="text-xl xl:text-2xl font-extrabold mt-1" :class="plannerData.totals.variance_hours < 0 ? 'text-amber-500' : (plannerData.totals.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
+                {{ plannerData.totals.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(plannerData.totals.variance_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              </div>
+              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">
+                {{ plannerData.totals.variance_hours < 0 ? 'under-logged vs plan' : (plannerData.totals.variance_hours > 0 ? 'overran the plan' : 'on plan') }}
+              </div>
+            </f-card>
+
+            <!-- Card 4: Adherence -->
+            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+              <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Adherence</div>
+              <div class="text-xl xl:text-2xl font-extrabold text-blue-500 mt-1">
+                {{ plannerData.totals.adherence_pct }}<span class="text-sm font-normal text-gray-400">%</span>
+              </div>
+              <div class="mt-1.5 h-1.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
+                <div class="h-full bg-blue-500 rounded-full transition-all duration-300" :style="{ width: Math.min(100, plannerData.totals.adherence_pct) + '%' }"></div>
+              </div>
+            </f-card>
+          </div>
+        </div>
+      </div>  <!-- /planner three-column grid -->
     </div>  <!-- /TAB 8: PLANNER -->
     <!-- The live tracker lives in the header pill only — no floating HUD (duplicate UI). -->
 
@@ -8281,7 +8309,7 @@
             notif.onclick = () => {
               try {
                 window.focus();
-                showInactivityModal.value = true;
+                confirmStillWorking();
               } catch (e) {}
             };
           } catch (e) {}
@@ -8439,8 +8467,12 @@
         recordUserActivity();
         lastInactivityAlertTime.value = 0;
         showInactivityModal.value = false;
+        isSessionElevated.value = true;
         syncActiveSession(true);
-        showToast('Timesheet confirmed active — timer continues!', 'success');
+        nextTick(() => {
+          focusSessionPointInput();
+        });
+        showToast('Timesheet active — add your recent activity!', 'success');
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission().then(p => { notificationPermission.value = p; }).catch(() => {});
         }
@@ -9258,7 +9290,16 @@
         if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
         if (ev.shiftKey && !_typingIn(ev.target)) {
           const k = String(ev.key || '').toLowerCase();
-          if (k === 't') { ev.preventDefault(); openNewTaskModal(); return; }
+          if (k === 't') {
+            ev.preventDefault();
+            if (isTracking.value) {
+              isSessionElevated.value = true;
+              focusSessionPointInput();
+            } else {
+              openNewTaskModal();
+            }
+            return;
+          }
           if (k === 'p') { ev.preventDefault(); planBlockShortcut(); return; }
           if (k === 's') { ev.preventDefault(); toggleSessionFocus(); return; }
           if (k === 'd') { ev.preventDefault(); openDayView(); return; }
@@ -10600,9 +10641,10 @@
       });
       const plannerDays = computed(() => {
         if (plannerView.value === 'day') return [plannerAnchor.value];
-        if (plannerView.value === '4days') return Array.from({ length: 4 }, (_, i) => addDays(plannerAnchor.value, i));
-        const mon = mondayOf(plannerAnchor.value);
-        return Array.from({ length: 7 }, (_, i) => addDays(mon, i));
+        // 4 Days view: Today is on the 2nd day (index 1), with Yesterday (index 0), Tomorrow (index 2), and Day-After-Tomorrow (index 3)
+        if (plannerView.value === '4days') return Array.from({ length: 4 }, (_, i) => addDays(plannerAnchor.value, i - 1));
+        // Rolling 7-Day Week view: Today is on the 3rd day (index 2), with 2 days of past context (indices 0-1) and 4 days ahead (indices 3-6)
+        return Array.from({ length: 7 }, (_, i) => addDays(plannerAnchor.value, i - 2));
       });
       const plannerRangeLabel = computed(() => {
         const opts = { month: 'short', day: 'numeric', timeZone: 'UTC' };
@@ -11111,7 +11153,7 @@
         if (d.mode === 'move') {
           let ns = Math.max(0, Math.min(1440 - dur, d.origStart + dMin));
           d.curStart = ns; d.curEnd = ns + dur;
-          if (plannerView.value === 'week' && d.colW > 0) {
+          if ((plannerView.value === 'week' || plannerView.value === '4days') && d.colW > 0) {
             const dCol = Math.round(dx / d.colW);
             d.curDayIdx = Math.max(0, Math.min(plannerDays.value.length - 1, d.origDayIdx + dCol));
           }
@@ -11233,7 +11275,7 @@
           const days = plannerDays.value;
           const sDate = days[0] || plannerAnchor.value;
           const eDate = days[days.length - 1] || plannerAnchor.value;
-          const ws = mondayOf(plannerAnchor.value);
+          const ws = days[0] || plannerAnchor.value;
           const url = `/api/method/omnitrack.api.get_planner_data?week_start=${ws}&start_date=${sDate}&end_date=${eDate}`;
           const res = await fetch(url);
           const data = await res.json();
@@ -12407,7 +12449,31 @@
             .catch(err => {
               console.warn('[OmniTrack] SW registration skipped:', err);
             });
+
+          navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'STILL_WORKING_ELEVATE_FOCUS') {
+              confirmStillWorking();
+            } else if (event.data && event.data.type === 'REMOTE_STOP_PROMPT') {
+              if (isTracking.value) toggleTrack();
+            }
+          });
         }
+
+        // Handle URL action parameter from push notification tap (e.g. ?action=still_working)
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('action') === 'still_working') {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setTimeout(() => {
+              confirmStillWorking();
+            }, 300);
+          } else if (urlParams.get('action') === 'stop') {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setTimeout(() => {
+              if (isTracking.value) toggleTrack();
+            }, 300);
+          }
+        } catch (_) {}
 
         // Unlock Web Audio context on first user tap/key for mobile chime reliability
         const unlockAudio = () => {

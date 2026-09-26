@@ -247,19 +247,8 @@ def get_team_heatmap_data(days=14):
 	return {"days": days, "team": team_data}
 
 def _require_session_notes(notes):
-	"""A timesheet with no description is not a record of anything — it is an hour
-	with nothing attached to it. Refuse the write rather than inventing a
-	placeholder, so the number in the report always has work behind it."""
-	text = str(notes or "")
-	# Strip the bullet/whitespace scaffolding the HUD wraps each line in, so a
-	# payload of "\u2022 \n\u2022 " does not pass as a description.
-	for ch in ("\u2022", "-", "*"):
-		text = text.replace(ch, " ")
-	if len(text.strip()) < 3:
-		frappe.throw(_("Add at least one line describing what you did before saving this timesheet. "
-					   "A manager — and often the client being billed — reads this text, and an hour "
-					   "with nothing written against it looks like an hour that was not worked."))
-	return str(notes).strip()
+	from omnitrack.utils.validators import require_session_notes
+	return require_session_notes(notes)
 
 
 @frappe.whitelist()
@@ -497,24 +486,9 @@ def _parse_block_tasks(val):
 
 
 def get_timesheet_sync_mode():
-	"""Returns the configured ERPNext Timesheet sync mode: 'Never', 'On Approval', or 'Immediate'.
-	Handles backwards-compatibility mappings:
-	- 'Never' or 'Off' -> 'Never'
-	- 'On Approval' or 'Manual On-Demand' -> 'On Approval'
-	- 'Immediate' or 'Auto Sync Draft' or 'Auto Draft' -> 'Immediate'
-	Defaults to 'Never'.
-	"""
-	mode = frappe.db.get_single_value("OmniTrack Settings", "default_timesheet_mode")
-	if not mode:
-		return "Never"
-	mode = str(mode).strip()
-	if mode in ("Never", "Off"):
-		return "Never"
-	elif mode in ("On Approval", "Manual On-Demand"):
-		return "On Approval"
-	elif mode in ("Immediate", "Auto Sync Draft", "Auto Draft"):
-		return "Immediate"
-	return "Never"
+	"""Returns the configured ERPNext Timesheet sync mode: 'Never', 'On Approval', or 'Immediate'."""
+	from omnitrack.services import TimesheetBridge
+	return TimesheetBridge.get_timesheet_sync_mode()
 
 
 @frappe.whitelist()
@@ -1450,74 +1424,8 @@ def _is_planner_manager(user=None):
 
 
 def _resolve_planner_user(employee=None):
-	"""Resolves the target user and strictly enforces permission boundaries.
-
-	Rules:
-	1. If employee is not specified, defaults to the session user. If the session user
-	   has no Employee record (e.g. an API/service account), falls back to the user's owner.
-	2. If employee is specified:
-	   - Resolves target via User ID, Employee ID, employee_name, or full_name.
-	   - If target == session_user: Allowed.
-	   - If target != session_user: Checks can_access_user_data(target, session_user).
-	     If the session user can see/access the target, it is ALLOWED.
-	     If the session user cannot access the target, raises frappe.PermissionError!
-	"""
-	from omnitrack.permissions import can_access_user_data
-
-	session_user = frappe.session.user
-	if not session_user or session_user == "Guest":
-		frappe.throw(_("Authentication required."), frappe.PermissionError)
-
-	# Default target if unspecified
-	if not employee or employee in ("All", "me", session_user):
-		target_user = session_user
-		if frappe.db.exists("DocType", "Employee"):
-			if not frappe.db.exists("Employee", {"user_id": target_user}):
-				owner = frappe.db.get_value("User", target_user, "owner")
-				if owner and owner not in ("Administrator", target_user) and frappe.db.exists("User", owner):
-					if frappe.db.exists("Employee", {"user_id": owner}):
-						target_user = owner
-				# If user is a plus-addressed service account (e.g. user+tag@domain), resolve to base user
-				elif "+" in target_user and "@" in target_user:
-					local, domain = target_user.split("@", 1)
-					base_local = local.split("+", 1)[0]
-					base_user = f"{base_local}@{domain}"
-					if frappe.db.exists("User", base_user) and frappe.db.exists("Employee", {"user_id": base_user}):
-						target_user = base_user
-		return target_user
-
-	# If employee matches session user's full name, resolve directly to session_user
-	session_fullname = (frappe.utils.get_fullname(session_user) or "").strip().lower()
-	if session_fullname and str(employee).strip().lower() == session_fullname:
-		return session_user
-
-	# Resolve employee argument
-	target_user = None
-	if frappe.db.exists("User", employee):
-		target_user = employee
-	elif frappe.db.exists("DocType", "Employee"):
-		target_user = (
-			frappe.db.get_value("Employee", employee, "user_id")
-			or frappe.db.get_value("Employee", {"employee_name": employee}, "user_id")
-			or frappe.db.get_value("Employee", {"prefered_contact_email": employee}, "user_id")
-		)
-		if not target_user and frappe.db.exists("Employee", employee):
-			target_user = employee
-
-	if not target_user:
-		target_user = frappe.db.get_value("User", {"full_name": employee}, "name")
-
-	if not target_user:
-		frappe.throw(_("Could not resolve employee or user '{0}'.").format(employee), frappe.DoesNotExistError)
-
-	# Generic permission enforcement: Can session_user access target_user?
-	if not can_access_user_data(target_user, session_user):
-		frappe.throw(
-			_("You do not have permission to view or manage timesheet data for {0}.").format(employee),
-			frappe.PermissionError
-		)
-
-	return target_user
+	from omnitrack.utils.user_resolver import resolve_planner_user
+	return resolve_planner_user(employee)
 
 
 def _week_bounds(week_start=None):
@@ -2160,13 +2068,8 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 
 
 def _duration_hours(start_time, end_time):
-	try:
-		diff = time_diff_in_hours(end_time, start_time)
-		if diff < 0:
-			diff += 24.0
-		return round(diff, 2)
-	except Exception:
-		return 0.0
+	from omnitrack.utils.time_math import duration_hours
+	return duration_hours(start_time, end_time)
 
 
 @frappe.whitelist()
@@ -2426,51 +2329,21 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 
 	base_date = session_date or doc.work_date or nowdate()
 
-	from omnitrack.permissions import check_timesheet_date_permission
+	from omnitrack.services import TemporalGovernor, MidnightSplitter, PairingEngine
 	# OmniTrack Users can only log timesheets for today and yesterday; earlier dates require Manager
-	check_timesheet_date_permission(base_date, frappe.session.user)
+	TemporalGovernor.check_timesheet_date_permission(base_date, frappe.session.user)
 
-	is_overnight = False
-	if from_time and to_time:
-		try:
-			diff = time_diff_in_hours(to_time, from_time)
-			if diff < 0:
-				is_overnight = True
-		except Exception:
-			pass
-
-	if is_overnight:
-		def _t_mins(t_val):
-			try:
-				p = str(t_val).split(":")
-				return int(p[0]) * 60 + int(p[1])
-			except Exception:
-				return 0
-
-		s_mins = _t_mins(from_time)
-		e_mins = _t_mins(to_time)
-		h1 = max(round((1440 - s_mins) / 60.0, 2), 0.01)
-		h2 = max(round(e_mins / 60.0, 2), 0.01)
-
-		doc.append("sessions", {
-			"session_date": base_date,
-			"from_time": from_time,
-			"to_time": "23:59:59",
-			"hours": h1,
-			"notes": f"{notes} (pt 1)" if notes else "Overnight session (pt 1)",
-			"logged_via": logged_via or "Manual",
-			"task_nature": doc.task_nature,
-		})
-		next_date = str(getdate(base_date) + timedelta(days=1))
-		doc.append("sessions", {
-			"session_date": next_date,
-			"from_time": "00:00:00",
-			"to_time": to_time,
-			"hours": h2,
-			"notes": f"{notes} (pt 2)" if notes else "Overnight session (pt 2)",
-			"logged_via": logged_via or "Manual",
-			"task_nature": doc.task_nature,
-		})
+	if MidnightSplitter.is_overnight(from_time, to_time):
+		p1, p2 = MidnightSplitter.split_session_rows(
+			base_date=base_date,
+			from_time=from_time,
+			to_time=to_time,
+			notes=notes,
+			logged_via=logged_via,
+			task_nature=doc.task_nature
+		)
+		doc.append("sessions", p1)
+		doc.append("sessions", p2)
 	else:
 		if not hours and from_time and to_time:
 			hours = _duration_hours(from_time, to_time)
@@ -2511,59 +2384,17 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		doc.flags.ignore_links = True
 	doc.save()
 
-	# Reciprocal pairing sync: mirror session row to paired partner block
-	if getattr(doc, "paired_block", None) and frappe.db.exists("Planned Work Block", doc.paired_block):
-		try:
-			partner_doc = frappe.get_doc("Planned Work Block", doc.paired_block)
-			already_logged = any(
-				str(s.session_date) == str(base_date) and str(s.from_time) == str(from_time) and str(s.to_time) == str(to_time)
-				for s in (partner_doc.sessions or [])
-			)
-			if not already_logged:
-				if is_overnight:
-					partner_doc.append("sessions", {
-						"session_date": base_date,
-						"from_time": from_time,
-						"to_time": "23:59:59",
-						"hours": h1,
-						"notes": f"{notes} (pt 1)" if notes else "Overnight session (pt 1)",
-						"logged_via": logged_via or "Manual",
-						"task_nature": partner_doc.task_nature,
-					})
-					partner_doc.append("sessions", {
-						"session_date": next_date,
-						"from_time": "00:00:00",
-						"to_time": to_time,
-						"hours": h2,
-						"notes": f"{notes} (pt 2)" if notes else "Overnight session (pt 2)",
-						"logged_via": logged_via or "Manual",
-						"task_nature": partner_doc.task_nature,
-					})
-				else:
-					partner_doc.append("sessions", {
-						"session_date": base_date,
-						"from_time": from_time,
-						"to_time": to_time,
-						"hours": hours,
-						"notes": notes,
-						"logged_via": logged_via or "Manual",
-						"task_nature": partner_doc.task_nature,
-					})
-				if output_metrics and isinstance(output_metrics, list):
-					for m in output_metrics:
-						if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
-							partner_doc.append("output_metrics", {
-								"metric_type": m.get("metric_type") or "Records Processed",
-								"quantity": flt(m.get("quantity", 1.0)),
-								"unit": m.get("unit") or "",
-								"reference_id": m.get("reference_id") or "",
-								"notes": m.get("notes") or ""
-							})
-				partner_doc.flags.ignore_permissions = True
-				partner_doc.flags.ignore_links = True
-				partner_doc.save()
-		except Exception as e:
-			frappe.log_error(f"Error mirroring session to paired block {doc.paired_block}: {e}", "OmniTrack Pairing")
+	# Reciprocal pairing sync: mirror session row to paired partner block via PairingEngine
+	PairingEngine.mirror_session_to_partner(
+		source_doc=doc,
+		session_date=base_date,
+		from_time=from_time,
+		to_time=to_time,
+		hours=hours,
+		notes=notes,
+		logged_via=logged_via,
+		output_metrics=output_metrics
+	)
 
 	# Update Task KPI progress if linked to a Task
 	if doc.task:

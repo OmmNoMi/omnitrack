@@ -1,1 +1,4 @@
+[pre_model_sync]
 
+[post_model_sync]
+omnitrack.patches.v1_3.backfill_pairing_partner_links

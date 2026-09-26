@@ -73,6 +73,19 @@ self.addEventListener('notificationclick', function(event) {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' }
 			}).catch(function(e) { console.error('Heartbeat push action error:', e); })
+			.then(function() {
+				return clients.matchAll({ type: 'window', includeUncontrolled: true });
+			}).then(function(clientList) {
+				for (let client of clientList) {
+					if (client.url.includes('/omnitrack') && 'focus' in client) {
+						client.postMessage({ type: 'STILL_WORKING_ELEVATE_FOCUS' });
+						return client.focus();
+					}
+				}
+				if (clients.openWindow) {
+					return clients.openWindow('/omnitrack?action=still_working');
+				}
+			})
 		);
 		return;
 	} else if (action === 'add_30m') {
@@ -102,15 +115,21 @@ self.addEventListener('notificationclick', function(event) {
 
 	if (action === 'view' || !action) {
 		const targetUrl = nData.url || '/omnitrack';
+		const notifTitle = (event.notification && event.notification.title) || (nData && nData.title) || '';
+		const isStillWorkingAlert = notifTitle.toLowerCase().includes('still working');
 		event.waitUntil(
 			clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
 				for (let client of clientList) {
 					if ((client.url.includes('/omnitrack') || client.url === targetUrl) && 'focus' in client) {
+						if (isStillWorkingAlert) {
+							client.postMessage({ type: 'STILL_WORKING_ELEVATE_FOCUS' });
+						}
 						return client.focus();
 					}
 				}
 				if (clients.openWindow) {
-					return clients.openWindow(targetUrl);
+					const dest = isStillWorkingAlert ? '/omnitrack?action=still_working' : targetUrl;
+					return clients.openWindow(dest);
 				}
 			})
 		);

@@ -24,11 +24,11 @@
                 role="tab"
                 id="tab-session-notes"
                 aria-controls="panel-session-notes"
-                :aria-selected="activePaneTab === 'notes'"
-                :tabindex="activePaneTab === 'notes' ? 0 : -1"
+                :aria-selected="activePaneTab !== 'chat'"
+                :tabindex="activePaneTab !== 'chat' ? 0 : -1"
                 @click="activePaneTab = 'notes'"
                 class="text-xs uppercase tracking-wider pb-1 transition-all cursor-pointer font-bold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded px-1"
-                :class="activePaneTab === 'notes' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
+                :class="activePaneTab !== 'chat' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
               >
                 <span>Session Log</span>
                 <Badge
@@ -72,11 +72,11 @@
 
           <!-- TAB 1: SESSION LOG -->
           <div
-            v-if="activePaneTab === 'notes'"
+            v-if="activePaneTab !== 'chat'"
             id="panel-session-notes"
             role="tabpanel"
             aria-labelledby="tab-session-notes"
-            class="flex-1 flex flex-col min-h-0"
+            class="flex-1 flex flex-col min-h-0 justify-between"
           >
             <!-- Empty State -->
             <div
@@ -97,7 +97,7 @@
               ref="notesListRef"
               role="feed"
               aria-label="Session Log Lines"
-              class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-56"
+              class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1"
             >
               <div
                 v-for="(line, idx) in sessionNotesList"
@@ -135,7 +135,7 @@
             </div>
 
             <!-- Add Line Input Bar -->
-            <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
+            <div class="flex items-end gap-2 pt-3 border-t mt-auto border-gray-200/80 dark:border-gray-800">
               <div class="relative flex-1">
                 <textarea
                   data-session-input
@@ -180,7 +180,7 @@
             id="panel-task-chat"
             role="tabpanel"
             aria-labelledby="tab-task-chat"
-            class="flex-1 flex flex-col min-h-0"
+            class="flex-1 flex flex-col min-h-0 justify-between"
           >
             <!-- Empty State if no connected task -->
             <div
@@ -193,8 +193,8 @@
             </div>
 
             <!-- Active Messages Stream -->
-            <div v-else class="flex-1 min-h-0 flex flex-col">
-              <div ref="chatStreamRef" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1 max-h-56">
+            <div v-else class="flex-1 min-h-0 flex flex-col justify-between">
+              <div ref="chatStreamRef" class="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
                 <div v-if="chatLoading && taskMessages.length === 0" class="py-6 text-center text-xs text-gray-400">
                   Loading discussion…
                 </div>
@@ -238,7 +238,7 @@
               </div>
 
               <!-- Chat Input Bar -->
-              <div class="flex items-end gap-2 pt-3 border-t mt-2.5 border-gray-200/80 dark:border-gray-800">
+              <div class="flex items-end gap-2 pt-3 border-t mt-auto border-gray-200/80 dark:border-gray-800">
                 <div class="relative flex-1">
                   <textarea
                     v-model="chatInputText"
@@ -632,7 +632,7 @@
       <span class="mx-1.5">·</span>
       <kbd class="font-mono text-gray-600 dark:text-gray-300">{{ modKey || '⌘' }}D</kbd> discard
       <span class="mx-1.5">·</span>
-      <kbd class="font-mono text-gray-600 dark:text-gray-300">Shift+S</kbd> full focus
+      <kbd class="font-mono text-gray-600 dark:text-gray-300">Shift+S / Shift+T</kbd> full focus
     </div>
   </div>
 </template>
@@ -1091,6 +1091,14 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('pointerdown', onDocumentClick);
   window.removeEventListener('omnitrack:focus-session-input', onFocusSessionInput);
+});
+
+// Ensure Session Log tab is always active and input focused when full focus elevates
+watch(() => props.isElevated, (elevated) => {
+  if (elevated) {
+    activePaneTab.value = 'notes';
+    nextTick(() => focusLineInput());
+  }
 });
 
 // Watch for connected task change to refresh chat if chat tab is active

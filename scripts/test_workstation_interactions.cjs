@@ -1582,7 +1582,92 @@ assert.ok(
 
 console.log('✓ Test 38: Session Log roving tabindex, ArrowRight to delete button & shortcut invariants verified.');
 
-console.log('\nSUCCESS: All 38 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 39: Elevation tab resilience, bottom docking, and Shift+T timesheet elevation
+assert.ok(
+  sessionBoxContent.includes("watch(() => props.isElevated") &&
+  sessionBoxContent.includes("activePaneTab.value = 'notes'"),
+  'FAIL: SessionBox.vue must watch props.isElevated and reset activePaneTab to notes'
+);
+assert.ok(
+  sessionBoxContent.includes("v-if=\"activePaneTab !== 'chat'\"") &&
+  sessionBoxContent.includes(":class=\"activePaneTab !== 'chat' ?"),
+  'FAIL: SessionBox.vue must use activePaneTab !== chat to prevent blank tab state'
+);
+assert.ok(
+  sessionBoxContent.includes("mt-auto") &&
+  sessionBoxContent.includes("min-h-0"),
+  'FAIL: SessionBox.vue must dock input bar to bottom with mt-auto and fill height with min-h-0'
+);
+assert.ok(
+  content.includes("if (k === 't') {") &&
+  content.includes("if (isTracking.value) {") &&
+  content.includes("isSessionElevated.value = true;"),
+  'FAIL: omnitrack.html must elevate session timesheet on Shift+T when tracking'
+);
+
+console.log('✓ Test 39: Elevation tab resilience, bottom docking, and Shift+T shortcut verified.');
+
+// Test 40: "Yes, Still Working" notification interaction elevates session timesheet and focuses input
+const freshSwContent = fs.readFileSync(path.resolve(__dirname, '../omnitrack/public/sw.js'), 'utf8');
+assert.ok(
+  freshSwContent.includes("client.postMessage({ type: 'STILL_WORKING_ELEVATE_FOCUS' })") &&
+  freshSwContent.includes("openWindow('/omnitrack?action=still_working')"),
+  'FAIL: sw.js must message client with STILL_WORKING_ELEVATE_FOCUS and open URL with action=still_working'
+);
+assert.ok(
+  content.includes("isSessionElevated.value = true;") &&
+  content.includes("focusSessionPointInput();") &&
+  content.includes("STILL_WORKING_ELEVATE_FOCUS"),
+  'FAIL: omnitrack.html confirmStillWorking must elevate timesheet and focus input, and listen for STILL_WORKING_ELEVATE_FOCUS'
+);
+
+console.log('✓ Test 40: Still working notification interaction popup elevation & input focus verified.');
+
+// Test 41: 4 Days Planner View places Today in 2nd day (Yesterday in 1st day, Tomorrow in 3rd day, Day+2 in 4th day)
+assert.ok(
+  content.includes("Array.from({ length: 4 }, (_, i) => addDays(plannerAnchor.value, i - 1))"),
+  'FAIL: omnitrack.html 4days view must use i - 1 to place Yesterday in index 0 and Today in index 1'
+);
+assert.ok(
+  content.includes("(plannerView.value === 'week' || plannerView.value === '4days') && d.colW > 0"),
+  'FAIL: omnitrack.html must support horizontal block drag across days in both week and 4days views'
+);
+
+console.log('✓ Test 41: 4 Days planner layout (Yesterday context + Today on 2nd day) and drag across days verified.');
+
+// Test 42: Planner large screen 3-column layout (Left Assigned Work, Center Calendar, Right Stats Rail)
+assert.ok(
+  content.includes("xl:grid-cols-[280px_1fr_260px]") &&
+  content.includes("order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full") &&
+  content.includes("items-stretch lg:h-full lg:min-h-0 flex-1"),
+  'FAIL: omnitrack.html must layout Planner in 3 columns on big screens (xl:grid-cols-[280px_1fr_260px]) with right stats rail'
+);
+
+console.log('✓ Test 42: Planner large screen 3-column layout & right stats rail verified.');
+
+// Test 43: Rolling 7-day Week Planner View places Today in 3rd day (2 days past context, Today at index 2, 4 days ahead)
+assert.ok(
+  content.includes("Array.from({ length: 7 }, (_, i) => addDays(plannerAnchor.value, i - 2))"),
+  'FAIL: omnitrack.html week view must use i - 2 to place Today in index 2 (3rd day) with 2 days past and 4 days ahead'
+);
+
+console.log('✓ Test 43: Rolling 7-day Week planner layout (Today in 3rd day + 2 days past + 4 days ahead) verified.');
+
+// Test 44: Computer screen desktop viewport height freeze & isolated component scrolling invariants
+assert.ok(
+  content.includes("activeTab === 'planner' ? 'lg:h-screen lg:max-h-screen lg:overflow-hidden' : ''") &&
+  content.includes("activeTab === 'planner' ? 'lg:flex lg:flex-col lg:min-h-0 lg:max-h-full lg:overflow-hidden lg:pt-3.5 lg:pb-[72px] lg:space-y-0") &&
+  content.includes("lg:space-y-0 lg:flex-1 lg:min-h-0 lg:h-full lg:flex lg:flex-col") &&
+  content.includes("lg:h-full lg:max-h-full lg:min-h-0 order-1 lg:order-2") &&
+  content.includes("overflow-y-auto overscroll-contain flex-1 min-h-0") &&
+  content.includes("lg:max-h-full lg:h-full lg:min-h-0 order-2 lg:order-1") &&
+  content.includes("order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full min-h-0 lg:h-full lg:max-h-full overflow-hidden"),
+  'FAIL: omnitrack.html must freeze outer viewport height on desktop for Planner and isolate vertical scrolling strictly inside component scrollers'
+);
+
+console.log('✓ Test 44: Desktop viewport height freeze & internal component scrolling invariants verified.');
+
+console.log('\nSUCCESS: All 44 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 
