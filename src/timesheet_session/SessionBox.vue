@@ -92,11 +92,22 @@
             </div>
 
             <!-- Running Lines List -->
-            <div v-else class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-56">
+            <div 
+              v-else 
+              ref="notesListRef"
+              role="feed"
+              aria-label="Session Log Lines"
+              class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-56"
+            >
               <div
                 v-for="(line, idx) in sessionNotesList"
                 :key="idx"
-                class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200"
+                data-log-row
+                :tabindex="activeRowIndex === idx ? 0 : -1"
+                @focus="activeRowIndex = idx"
+                @keydown="onRowKeydown($event, idx)"
+                :aria-label="'Line ' + (idx + 1) + ': ' + line + '. Press Enter or Delete to remove, Right Arrow for delete button.'"
+                class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200 focus-visible:ring-2 focus-visible:ring-blue-500/70 focus:border-blue-400 dark:focus:border-blue-500"
               >
                 <div class="flex items-start gap-2 min-w-0">
                   <Badge theme="blue" size="sm" variant="subtle" class="!w-5 !h-5 !p-0 !gap-0 !rounded-full shrink-0 select-none justify-center text-center font-mono font-bold leading-none">
@@ -107,12 +118,15 @@
                   </span>
                 </div>
                 <Button
+                  data-remove-line-btn
                   variant="ghost"
                   theme="red"
                   size="xs"
-                  @click="$emit('remove-line', idx)"
-                  class="opacity-0 group-hover:opacity-100 transition-opacity !p-1 !rounded-lg"
-                  title="Delete this line"
+                  :tabindex="activeRowIndex === idx ? 0 : -1"
+                  @keydown="onRemoveBtnKeydown($event, idx)"
+                  @click.stop="$emit('remove-line', idx)"
+                  class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity !p-1 !rounded-lg text-gray-400 hover:text-red-500 focus:text-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                  title="Delete this line (Delete / Enter)"
                   aria-label="Delete line"
                 >
                   ✕
@@ -1063,7 +1077,7 @@ function onDocumentClick(ev) {
 }
 
 function onFocusSessionInput() {
-  activePaneTab.value = 'log';
+  activePaneTab.value = 'notes';
   focusLineInput();
 }
 
@@ -1103,6 +1117,97 @@ function autoGrowTextarea(e) {
   el.style.height = Math.min(el.scrollHeight, 140) + 'px';
 }
 
+const activeRowIndex = ref(0);
+const notesListRef = ref(null);
+
+function focusRow(idx) {
+  if (!props.sessionNotesList || !props.sessionNotesList.length) {
+    focusLineInput();
+    return;
+  }
+  const nextIdx = Math.max(0, Math.min(props.sessionNotesList.length - 1, idx));
+  activeRowIndex.value = nextIdx;
+  nextTick(() => {
+    const list = notesListRef.value;
+    if (list) {
+      const rows = list.querySelectorAll('[data-log-row]');
+      if (rows && rows[nextIdx]) {
+        rows[nextIdx].focus();
+      }
+    }
+  });
+}
+
+function focusRowDeleteBtn(idx) {
+  const list = notesListRef.value;
+  if (!list) return;
+  const rows = list.querySelectorAll('[data-log-row]');
+  if (rows && rows[idx]) {
+    const btn = rows[idx].querySelector('[data-remove-line-btn]');
+    if (btn) btn.focus();
+  }
+}
+
+function onRowKeydown(ev, idx) {
+  const total = (props.sessionNotesList || []).length;
+  if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    if (idx > 0) {
+      focusRow(idx - 1);
+    }
+  } else if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    if (idx < total - 1) {
+      focusRow(idx + 1);
+    } else {
+      focusLineInput();
+    }
+  } else if (ev.key === 'ArrowRight') {
+    ev.preventDefault();
+    focusRowDeleteBtn(idx);
+  } else if (ev.key === 'Escape') {
+    ev.preventDefault();
+    focusLineInput();
+  } else if (ev.key === 'Enter' || ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault();
+    emit('remove-line', idx);
+    nextTick(() => {
+      const remaining = (props.sessionNotesList || []).length;
+      if (!remaining) {
+        focusLineInput();
+      } else {
+        focusRow(Math.min(idx, remaining - 1));
+      }
+    });
+  }
+}
+
+function onRemoveBtnKeydown(ev, idx) {
+  const total = (props.sessionNotesList || []).length;
+  if (ev.key === 'ArrowLeft' || ev.key === 'Escape') {
+    ev.preventDefault();
+    focusRow(idx);
+  } else if (ev.key === 'ArrowUp') {
+    ev.preventDefault();
+    if (idx > 0) focusRow(idx - 1);
+  } else if (ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    if (idx < total - 1) focusRow(idx + 1);
+    else focusLineInput();
+  } else if (ev.key === 'Enter' || ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault();
+    emit('remove-line', idx);
+    nextTick(() => {
+      const remaining = (props.sessionNotesList || []).length;
+      if (!remaining) {
+        focusLineInput();
+      } else {
+        focusRow(Math.min(idx, remaining - 1));
+      }
+    });
+  }
+}
+
 function handleTextareaKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1111,6 +1216,11 @@ function handleTextareaKey(e) {
     // Tab from input line focuses directly on the Stop button in the toolbar
     e.preventDefault();
     focusStopButton();
+  } else if (e.key === 'ArrowUp' && e.target.selectionStart === 0 && e.target.selectionEnd === 0) {
+    if (props.sessionNotesList && props.sessionNotesList.length > 0) {
+      e.preventDefault();
+      focusRow(props.sessionNotesList.length - 1);
+    }
   }
 }
 

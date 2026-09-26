@@ -1545,7 +1545,44 @@ assert.strictEqual(wrapStartRes.notePrefilled, true, 'FAIL: Switch wrap-up notes
 
 console.log('✓ Test 37: 1-Click Wrap & Start Next Session universal transition invariants verified.');
 
-console.log('\nSUCCESS: All 37 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// ---------------------------------------------------------------------------
+// TEST 38: Session Log Line Roving Tabindex & Delete Button Accessibility
+// ---------------------------------------------------------------------------
+assert.ok(
+  content.includes(':tabindex="activeSessionRowIndex === row.i ? 0 : -1"') &&
+  content.includes('data-remove-line-btn') &&
+  content.includes('focusLogRowDeleteBtn'),
+  'FAIL: Session notes rows and remove-line buttons must support roving tabindex and focusLogRowDeleteBtn'
+);
+
+assert.ok(
+  content.includes("if (ev.key === 'ArrowRight') {") &&
+  content.includes('focusLogRowDeleteBtn('),
+  'FAIL: ArrowRight on session log row must focus the delete button'
+);
+
+assert.ok(
+  content.includes("if (ev.key === 'ArrowLeft' || ev.key === 'Escape') {") &&
+  content.includes('focusLogRow('),
+  'FAIL: ArrowLeft or Escape on delete button must return focus to the session log row'
+);
+
+// Verify SessionBox.vue also has correct tab name ('notes' not 'log')
+const sessionBoxContent = fs.readFileSync(path.resolve(__dirname, '../src/timesheet_session/SessionBox.vue'), 'utf8');
+assert.ok(
+  sessionBoxContent.includes("activePaneTab.value = 'notes'") &&
+  !sessionBoxContent.includes("activePaneTab.value = 'log'"),
+  'FAIL: onFocusSessionInput in SessionBox.vue must set activePaneTab to notes, not log'
+);
+assert.ok(
+  sessionBoxContent.includes('focusRowDeleteBtn') &&
+  sessionBoxContent.includes('onRemoveBtnKeydown'),
+  'FAIL: SessionBox.vue must implement focusRowDeleteBtn and onRemoveBtnKeydown'
+);
+
+console.log('✓ Test 38: Session Log roving tabindex, ArrowRight to delete button & shortcut invariants verified.');
+
+console.log('\nSUCCESS: All 38 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

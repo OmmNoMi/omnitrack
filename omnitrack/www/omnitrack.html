@@ -134,6 +134,13 @@
       <img src="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg" alt="OmniTrack" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl shadow-xs object-contain cursor-pointer" @click="activeTab = 'dashboard'">
       <div class="flex items-center gap-2">
         <span class="font-bold text-sm sm:text-base tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">OmniTrack</span>
+        <span 
+          class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-semibold border flex items-center gap-1.5 select-none transition-colors"
+          :class="isProductionEnv ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'"
+          :title="isProductionEnv ? 'Connected to Production (ommnomi.in)' : 'Local Development Instance (ommnomi.local:8003)'">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="isProductionEnv ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+          <span>{{ isProductionEnv ? 'Production' : 'Local Dev' }}</span>
+        </span>
         <span v-if="isClient" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
           <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
           Client Portal
@@ -383,23 +390,27 @@
                   v-for="row in sessionNotesRows" 
                   :key="row.i"
                   data-log-row
-                  tabindex="0"
+                  :tabindex="activeSessionRowIndex === row.i ? 0 : -1"
+                  @focus="activeSessionRowIndex = row.i"
                   @keydown="onLogRowKey($event, row)"
-                  :aria-label="'Line ' + row.n + ': ' + row.t + '. Press Enter to remove.'"
-                  class="flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200">
+                  :aria-label="'Line ' + row.n + ': ' + row.t + '. Press Enter to remove, Right Arrow for delete button.'"
+                  class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200">
                   <div class="flex items-start gap-2 min-w-0">
                     <f-badge theme="blue" size="xs" variant="subtle" class="!w-5 !h-5 !p-0 shrink-0 select-none">{{ row.n }}</f-badge>
                     <!-- a line can be a paragraph now, so keep the author's breaks -->
                     <span class="font-medium min-w-0 whitespace-pre-line break-words">{{ row.t }}</span>
                   </div>
                   <f-button 
+                    data-remove-line-btn
                     variant="ghost"
                     theme="red"
                     size="xs"
-                    @click="removeSessionPoint(row.i)"
-                    title="Remove this line"
+                    :tabindex="activeSessionRowIndex === row.i ? 0 : -1"
+                    @click.stop="removeSessionPoint(row.i)"
+                    @keydown="onRemoveBtnKey($event, row)"
+                    title="Remove this line (Delete / Enter)"
                     aria-label="Remove line"
-                    class="!p-0.5 !h-auto !w-auto text-gray-400 hover:text-red-500">
+                    class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 transition-opacity !p-0.5 !h-auto !w-auto text-gray-400 hover:text-red-500 focus:text-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400">
                     ✕
                   </f-button>
                 </div>
@@ -559,6 +570,24 @@
                   <span>No-Show</span>
                 </f-button>
 
+                <!-- 1-Click Unplanned Urgent Escalation Action -->
+                <f-button
+                  v-if="!isTracking"
+                  data-session-tool="unplanned"
+                  :tabindex="sessionToolTabindex('unplanned')"
+                  variant="subtle"
+                  theme="amber"
+                  size="sm"
+                  @click="startUnplannedEscalation"
+                  class="font-bold py-2 px-3 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60"
+                  title="Start an ad-hoc, urgent, or spontaneous session (logs exclusively to Logged lane)"
+                  aria-label="Start ad-hoc urgent session">
+                  <template #prefix>
+                    <span aria-hidden="true">⚠️</span>
+                  </template>
+                  <span>Ad-hoc / Urgent</span>
+                </f-button>
+
                 <f-button
                   data-session-tool="stop"
                   :tabindex="sessionToolTabindex('stop')"
@@ -637,6 +666,26 @@
                 </div>
                 <div class="sm:text-right text-[10px] text-blue-600 dark:text-blue-400 font-medium">
                   Timesheet will log against <strong class="font-mono">{{ trackerBoundBlock.name }}</strong>
+                </div>
+
+                <!-- Early Start Recognition Badge -->
+                <div v-if="earlyStartMinutes > 0" class="col-span-full pt-1">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Started {{ earlyStartMinutes }}m early &middot; Scheduled plan: {{ trackerBoundBlock.start_time }}</span>
+                  </span>
+                </div>
+
+                <!-- Overrun Grace Banner -->
+                <div v-if="isBlockOverrun" class="col-span-full pt-1 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800 text-[11px] shadow-2xs">
+                  <div class="flex items-center gap-1.5 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                    <span>Session exceeded planned end time by <strong class="font-bold">{{ overrunMinutes }}m</strong></span>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" @click="quickExtendActiveBlock(15)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/80 hover:bg-amber-300 text-amber-900 dark:bg-amber-900 dark:hover:bg-amber-800 dark:text-amber-100 transition-colors cursor-pointer" title="Extend planned block by +15 minutes">+15m</button>
+                    <button type="button" @click="quickExtendActiveBlock(30)" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/80 hover:bg-amber-300 text-amber-900 dark:bg-amber-900 dark:hover:bg-amber-800 dark:text-amber-100 transition-colors cursor-pointer" title="Extend planned block by +30 minutes">+30m</button>
+                  </div>
                 </div>
               </div>
 
@@ -8081,6 +8130,30 @@
       const lastInactivityAlertTime = ref(0);
       const showInactivityModal = ref(false);
 
+      // Phase 4: Instant Cross-Tab Broadcast Channel Sync
+      let _omnitrackChannel = null;
+      if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+        try {
+          _omnitrackChannel = new BroadcastChannel('omnitrack_workstation_channel');
+          _omnitrackChannel.onmessage = (event) => {
+            const data = event.data;
+            if (!data || !data.type) return;
+            if (data.type === 'session_sync' && data.payload) {
+              if (!_isStoppingSession) {
+                restoreActiveSession(data.payload);
+              }
+            } else if (data.type === 'session_cleared') {
+              if (isTracking.value) {
+                isTracking.value = false;
+                if (trackerTimer.value) clearInterval(trackerTimer.value);
+                trackerTimer.value = null;
+                trackerSeconds.value = 0;
+              }
+            }
+          };
+        } catch (e) {}
+      }
+
       const recordUserActivity = () => {
         lastActivityTime.value = Date.now();
         if (showInactivityModal.value) {
@@ -8252,6 +8325,73 @@
         }
       };
 
+      const isProductionEnv = computed(() => {
+        if (typeof window === 'undefined') return true;
+        const host = (window.location.hostname || '').toLowerCase();
+        return host.includes('ommnomi.in') || host.includes('frappecloud.com');
+      });
+
+      const isBlockOverrun = computed(() => {
+        const _ = trackerSeconds.value;
+        if (!isTracking.value || !trackerBoundBlock.value) return false;
+        const b = trackerBoundBlock.value;
+        if (!b.end_time) return false;
+        const [eh, em] = b.end_time.split(':').map(Number);
+        if (isNaN(eh) || isNaN(em)) return false;
+        const now = new Date();
+        const curMins = now.getHours() * 60 + now.getMinutes();
+        const endMins = eh * 60 + em;
+        return curMins > endMins;
+      });
+
+      const overrunMinutes = computed(() => {
+        const _ = trackerSeconds.value;
+        if (!isBlockOverrun.value || !trackerBoundBlock.value) return 0;
+        const [eh, em] = trackerBoundBlock.value.end_time.split(':').map(Number);
+        const now = new Date();
+        const curMins = now.getHours() * 60 + now.getMinutes();
+        return Math.max(0, curMins - (eh * 60 + em));
+      });
+
+      const earlyStartMinutes = computed(() => {
+        const _ = trackerSeconds.value;
+        if (!isTracking.value || !trackerBoundBlock.value || !startTime.value) return 0;
+        const b = trackerBoundBlock.value;
+        if (!b.start_time) return 0;
+        const [sh, sm] = b.start_time.split(':').map(Number);
+        if (isNaN(sh) || isNaN(sm)) return 0;
+        const sDate = new Date(Number(startTime.value));
+        const startMins = sDate.getHours() * 60 + sDate.getMinutes();
+        const plannedMins = sh * 60 + sm;
+        return startMins < plannedMins ? (plannedMins - startMins) : 0;
+      });
+
+      const quickExtendActiveBlock = async (mins) => {
+        triggerHaptic([30]);
+        try {
+          const res = await postJSON('extend_active_block_duration', { extend_minutes: mins });
+          if (res && res.status === 'success') {
+            showToast(`Extended planned block by +${mins}m`, 'success');
+            await loadWorkstationData(false);
+          } else {
+            showToast('Could not extend block: ' + (res.status || 'unknown'), 'warning');
+          }
+        } catch (e) {
+          showToast('Failed to extend block: ' + (e.message || e), 'error');
+        }
+      };
+
+      const startUnplannedEscalation = () => {
+        triggerHaptic([40]);
+        selectedNature.value = '⚠️ Unplanned';
+        trackerNature.value = '⚠️ Unplanned';
+        trackerBlockName.value = null;
+        trackerNotes.value = 'Urgent Escalation / Ad-hoc Session';
+        sessionNotesList.value = [];
+        toggleTrack();
+        showToast('Started ⚠️ Unplanned focus session (Logged lane only)', 'warning');
+      };
+
       const inactivityMinutes = computed(() => {
         const _ = trackerSeconds.value;
         const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
@@ -8353,6 +8493,11 @@
           status: 'active'
         };
         localStorage.setItem('omnitrack_active_session', JSON.stringify(payload));
+        try {
+          if (_omnitrackChannel) {
+            _omnitrackChannel.postMessage({ type: 'session_sync', payload });
+          }
+        } catch (e) {}
 
         const sendToServer = () => {
           postJSON('sync_active_session', { session_data: payload }).catch(() => {});
@@ -8936,13 +9081,26 @@
         const box = sessionNotesScroll.value;
         return box ? Array.from(box.querySelectorAll('[data-log-row]')) : [];
       };
+      const activeSessionRowIndex = ref(0);
       const focusLogRow = (idx) => {
         const rows = _logRows();
         if (!rows.length) return;
-        const el = rows[Math.max(0, Math.min(rows.length - 1, idx))];
+        const targetIdx = Math.max(0, Math.min(rows.length - 1, idx));
+        activeSessionRowIndex.value = targetIdx;
+        const el = rows[targetIdx];
         if (el) el.focus();
       };
-      // ↑/↓ walk the log, Enter or Delete removes the focused line, Esc goes back to typing.
+      const focusLogRowDeleteBtn = (idx) => {
+        const rows = _logRows();
+        if (!rows.length) return;
+        const targetIdx = Math.max(0, Math.min(rows.length - 1, idx));
+        const el = rows[targetIdx];
+        if (el) {
+          const btn = el.querySelector('[data-remove-line-btn]');
+          if (btn) btn.focus();
+        }
+      };
+      // ↑/↓ walk the log, → moves to delete button, Enter or Delete removes the focused line, Esc goes back to typing.
       const onLogRowKey = (ev, row) => {
         const rows = _logRows();
         const at = rows.indexOf(ev.currentTarget);
@@ -8950,6 +9108,11 @@
         if (ev.key === 'ArrowDown') {
           ev.preventDefault();
           if (at < rows.length - 1) focusLogRow(at + 1); else focusSessionPointInput();
+          return;
+        }
+        if (ev.key === 'ArrowRight') {
+          ev.preventDefault();
+          focusLogRowDeleteBtn(at >= 0 ? at : row.i);
           return;
         }
         if (ev.key === 'Escape') { ev.preventDefault(); focusSessionPointInput(); return; }
@@ -8960,6 +9123,34 @@
             const left = _logRows();
             if (!left.length) focusSessionPointInput();
             else focusLogRow(Math.min(at, left.length - 1));
+          });
+        }
+      };
+      const onRemoveBtnKey = (ev, row) => {
+        const rows = _logRows();
+        const at = rows.findIndex(r => r.contains(ev.currentTarget));
+        if (ev.key === 'ArrowLeft' || ev.key === 'Escape') {
+          ev.preventDefault();
+          focusLogRow(at >= 0 ? at : row.i);
+          return;
+        }
+        if (ev.key === 'ArrowUp') {
+          ev.preventDefault();
+          if (at > 0) focusLogRow(at - 1);
+          return;
+        }
+        if (ev.key === 'ArrowDown') {
+          ev.preventDefault();
+          if (at < rows.length - 1) focusLogRow(at + 1); else focusSessionPointInput();
+          return;
+        }
+        if (ev.key === 'Enter' || ev.key === 'Delete' || ev.key === 'Backspace') {
+          ev.preventDefault();
+          removeSessionPoint(row.i);
+          nextTick(() => {
+            const left = _logRows();
+            if (!left.length) focusSessionPointInput();
+            else focusLogRow(Math.min(at >= 0 ? at : 0, left.length - 1));
           });
         }
       };
@@ -9495,7 +9686,7 @@
         // Identify by position, not by the attribute's value: Frappe UI's button
         // renders through to a real <button> but drops data-* values on the way,
         // so the attribute is only good as a marker, never as a label.
-        const ids = isTracking.value ? (trackerBoundBlock.value ? ['discard', 'adjust', 'noshow', 'stop'] : ['discard', 'adjust', 'stop']) : ['stop'];
+        const ids = isTracking.value ? (trackerBoundBlock.value ? ['discard', 'adjust', 'noshow', 'stop'] : ['discard', 'adjust', 'stop']) : ['unplanned', 'stop'];
         sessionToolFocus.value = ids[next] || 'stop';
         items[next].focus();
       };
@@ -9535,6 +9726,11 @@
         // after the clear and the server is active again one beat later.
         if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
         postJSON('sync_active_session', { session_data: null }).catch(() => {});
+        try {
+          if (_omnitrackChannel) {
+            _omnitrackChannel.postMessage({ type: 'session_cleared' });
+          }
+        } catch (e) {}
         trackerSeconds.value = 0;
         trackerBlockName.value = null;
         trackerNotes.value = '';
@@ -9593,6 +9789,11 @@
           // after the clear and the server is active again one beat later.
           if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
+          try {
+            if (_omnitrackChannel) {
+              _omnitrackChannel.postMessage({ type: 'session_cleared' });
+            }
+          } catch (e) {}
           // snapshot, then zero the clock: a standby HUD showing the last
           // session's elapsed time reads like a session that is still open
           let elapsedSecs = trackerSeconds.value;
@@ -12451,6 +12652,12 @@
         trapSessionPopupTab,
         toggleSessionFocus,
         trackerBoundBlock,
+        isProductionEnv,
+        isBlockOverrun,
+        overrunMinutes,
+        earlyStartMinutes,
+        quickExtendActiveBlock,
+        startUnplannedEscalation,
         showAppMenu,
         headerMenuItems,
         openDropdown,
@@ -12469,8 +12676,11 @@
         onSessionPointUp,
         sessionNotesScroll,
         focusSessionPointInput,
+        activeSessionRowIndex,
         focusLogRow,
+        focusLogRowDeleteBtn,
         onLogRowKey,
+        onRemoveBtnKey,
         newSessionPoint,
         triggerHaptic,
         syncActiveSession,
