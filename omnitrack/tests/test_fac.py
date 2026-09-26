@@ -324,7 +324,18 @@ class TestOmniTrackFAC(unittest.TestCase):
 				self.assertIsNotNone(b2_doc.timesheet)
 
 		finally:
-			frappe.db.set_single_value("OmniTrack Settings", "default_timesheet_mode", "Never")
+			frappe.db.set_single_value("OmniTrack Settings", "default_timesheet_mode", original_mode or "Never")
+			if "b2_doc" in locals() and b2_doc:
+				try:
+					b2_doc.reload()
+					if getattr(b2_doc, "timesheet", None) and frappe.db.exists("Timesheet", b2_doc.timesheet):
+						frappe.delete_doc("Timesheet", b2_doc.timesheet, force=True)
+				except Exception:
+					pass
+			if "b2_name" in locals() and b2_name and frappe.db.exists("Planned Work Block", b2_name):
+				frappe.delete_doc("Planned Work Block", b2_name, force=True)
+			if "block_name" in locals() and block_name and frappe.db.exists("Planned Work Block", block_name):
+				frappe.delete_doc("Planned Work Block", block_name, force=True)
 
 
 

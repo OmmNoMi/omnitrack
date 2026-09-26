@@ -149,7 +149,9 @@ def check_active_timesheet_reminders():
 			continue
 
 		session_updated = False
-		last_act = flt(data.get("lastActivityTime") or data.get("lastUpdated") or start_time)
+		last_act = max(flt(data.get("lastActivityTime") or 0), flt(data.get("lastUpdated") or 0))
+		if last_act <= 0:
+			last_act = start_time
 		idle_mins = int(max(0, (now_ms - last_act) / 60000))
 		last_inact_alert = flt(data.get("lastInactivityAlertTime", 0))
 		mins_since_inact_alert = int(max(0, (now_ms - last_inact_alert) / 60000)) if last_inact_alert else 999

@@ -2582,6 +2582,8 @@
 
     </div>
 
+  </div>  <!-- /TAB 1: DASHBOARD -->
+
 
     <!-- ======================================== -->
     <!-- TAB 2: SUMMARIZED TIMESHEETS             -->
@@ -2671,6 +2673,116 @@
     <!-- ======================================== -->
     <div v-if="activeTab === 'attendance'" class="space-y-4 sm:space-y-6">
       
+      <!-- TEAM WORK BLOCK & TIMESHEET APPROVALS (Manager Governance) -->
+      <div v-if="isManager" class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+        <div class="p-4 border-b flex flex-wrap items-center justify-between gap-3 transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-800' : 'bg-gray-50/60 border-gray-200'">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">Team Work Block &amp; Timesheet Approvals</h3>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">Review logged team actuals, deliverables, and grant official timesheet approval.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold" :class="isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-700'">
+              {{ pendingApprovals.length }} Pending
+            </span>
+            <f-button
+              v-if="pendingApprovals.length > 0"
+              variant="solid"
+              theme="blue"
+              size="sm"
+              :disabled="loadingApprovals"
+              @click="approveAllPending"
+            >
+              Approve All ({{ pendingApprovals.length }})
+            </f-button>
+            <f-button
+              variant="ghost"
+              theme="gray"
+              size="sm"
+              :disabled="loadingApprovals"
+              @click="fetchPendingApprovals"
+            >
+              Refresh
+            </f-button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead>
+              <tr class="font-bold text-xs border-b" :class="isDarkMode ? 'bg-[#252528] text-gray-400 border-gray-800' : 'bg-gray-100/70 text-gray-600 border-gray-200'">
+                <th class="py-3.5 px-4">Teammate</th>
+                <th class="py-3.5 px-4">Date &amp; Time Window</th>
+                <th class="py-3.5 px-4">Work Item &amp; Project</th>
+                <th class="py-3.5 px-4">Logged Actuals</th>
+                <th class="py-3.5 px-4">Collaboration</th>
+                <th class="py-3.5 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y" :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-200'">
+              <tr v-for="b in pendingApprovals" :key="b.name" class="transition-colors" :class="isDarkMode ? 'hover:bg-gray-800/60' : 'hover:bg-gray-50/80'">
+                <td class="py-3.5 px-4 font-bold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold shrink-0">
+                      {{ (b.associate_name || b.employee || '?').substring(0, 1).toUpperCase() }}
+                    </div>
+                    <div>
+                      <div class="leading-tight">{{ b.associate_name || b.employee }}</div>
+                      <div class="text-[10px] text-gray-400 font-mono">{{ b.employee }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-3.5 px-4" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+                  <div class="font-semibold">{{ b.work_date }}</div>
+                  <div class="text-[11px] text-gray-400 font-mono">{{ hhmm(b.start_time) }} – {{ hhmm(b.end_time) }}</div>
+                </td>
+                <td class="py-3.5 px-4">
+                  <div class="font-bold leading-snug line-clamp-1" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
+                    {{ b.work_item_label || b.deliverable_notes || b.name }}
+                  </div>
+                  <div class="text-[11px] text-gray-400 flex items-center gap-1.5 mt-0.5">
+                    <span v-if="b.project">📁 {{ b.project }}</span>
+                    <span>· {{ b.task_nature || '🎯 Planned' }}</span>
+                  </div>
+                </td>
+                <td class="py-3.5 px-4 font-mono">
+                  <div class="font-extrabold text-emerald-500">{{ fmtHrs(b.actual_hours) }} hrs</div>
+                  <div class="text-[10px] text-gray-400">plan: {{ fmtHrs(b.duration_hours) }}h</div>
+                </td>
+                <td class="py-3.5 px-4">
+                  <span v-if="b.pairing_partner" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
+                    👥 {{ b.pairing_partner_name || b.pairing_partner }}
+                  </span>
+                  <span v-else class="text-[11px] text-gray-400">— Solo —</span>
+                </td>
+                <td class="py-3.5 px-4 text-right">
+                  <f-button
+                    variant="solid"
+                    theme="blue"
+                    size="xs"
+                    :disabled="loadingApprovals"
+                    @click="approveWorkBlockSingle(b)"
+                  >
+                    ✓ Approve
+                  </f-button>
+                </td>
+              </tr>
+              <tr v-if="pendingApprovals.length === 0">
+                <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+                  <div class="text-xl mb-1">🎉</div>
+                  <div class="font-bold">All team work blocks and timesheets are up to date!</div>
+                  <div class="text-[11px] text-gray-400 mt-0.5">No logged sessions are currently awaiting manager approval.</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
         
         <div class="p-4 border-b flex items-center justify-between transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-800' : 'bg-gray-50/60 border-gray-200'">
@@ -2719,9 +2831,7 @@
 
       </div>
 
-      </div>
-
-    </div>
+    </div>  <!-- /TAB 5: ATTENDANCE ENGINE -->
 
 
 
@@ -3133,6 +3243,7 @@
                         </span>
                         <span v-if="seg.is_segment && seg.segment_type === 'head'" class="text-[9px] opacity-75 font-normal mr-1">↩ (cont.)</span>
                         <span class="truncate">{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}</span>
+                        <span v-if="seg.block.pairing_partner" class="text-[9px] px-1 py-0.2 rounded bg-purple-500/30 text-purple-100 border border-purple-400/40 shrink-0 font-normal" :title="'Paired with ' + (seg.block.pairing_partner_name || seg.block.pairing_partner)">👥</span>
                         <span v-if="seg.is_segment && seg.segment_type === 'tail'" class="text-[9px] opacity-75 font-normal ml-1">↪</span>
                       </div>
                       <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(seg) }}</div>
@@ -3250,6 +3361,20 @@
           aria-label="Task or work item"
         ></f-combobox>
       </div>
+      <!-- Collaborative Pairing Partner (Reciprocal Mirroring) -->
+      <div v-if="bookForm.mode === 'work'" class="block space-y-1">
+        <label class="text-[11px] font-bold text-gray-500 flex items-center justify-between">
+          <span>👥 Collaborative Pairing Partner (optional)</span>
+          <span class="text-[10px] font-normal text-blue-500">Auto-mirrors block &amp; session</span>
+        </label>
+        <f-combobox
+          v-model="bookForm.pairing_partner"
+          :options="comboboxPairingPartnerOptions"
+          placeholder="— Solo Session (No pairing) —"
+          search-placeholder="Search teammate..."
+          aria-label="Pairing partner"
+        ></f-combobox>
+      </div>
       <!-- full detail of the picked task -->
       <div v-if="bookForm.mode === 'work' && bookFormTask" class="rounded-xl border px-3 py-2 space-y-1"
         :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
@@ -3259,6 +3384,16 @@
           <span v-if="bookFormTask.priority">· {{ bookFormTask.priority }}</span>
           <span v-if="bookFormTask.due_date">· due {{ bookFormTask.due_date }}</span>
           <span v-if="bookFormTask.status">· {{ bookFormTask.status }}</span>
+        </div>
+        <!-- Task KPI Progress (if defined on Task) -->
+        <div v-if="bookFormTask.kpi_target" class="py-1">
+          <div class="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <span>🎯 KPI Target: {{ bookFormTask.kpi_name || 'Deliverable' }}</span>
+            <span>{{ bookFormTask.kpi_completed || 0 }} / {{ bookFormTask.kpi_target }} {{ bookFormTask.kpi_unit }} ({{ bookFormTask.kpi_progress || 0 }}%)</span>
+          </div>
+          <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1">
+            <div class="bg-emerald-500 h-full rounded-full transition-all" :style="{ width: Math.min(bookFormTask.kpi_progress || 0, 100) + '%' }"></div>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-x-2 text-[11px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
           <span>planned <b :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">{{ fmtHrs(bookFormTask.booked_hours) }}h</b></span>
@@ -3338,6 +3473,61 @@
         >
           Save &amp; Log ({{ fmtHrs(emptyStopElapsedHrs) }}h)
         </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ============================================== -->
+  <!-- WORKSTATION: START TIME CHOICE MODAL (On-Time) -->
+  <!-- ============================================== -->
+  <f-dialog
+    v-model="showStartTimeChoiceModal"
+    title="Choose Session Start Time"
+    :dismissable="true"
+    size="sm"
+    z-index="z-[60]"
+    @close="showStartTimeChoiceModal = false; pendingStartBlock = null"
+  >
+    <div class="space-y-3 py-2">
+      <div class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+        You are starting work on
+        <span class="font-bold text-gray-900 dark:text-white">{{ pendingStartBlock && (pendingStartBlock.task_subject || pendingStartBlock.work_item_label || pendingStartBlock.name) }}</span>,
+        which was scheduled earlier today. How would you like to anchor your session start?
+      </div>
+
+      <div class="space-y-2 mt-2">
+        <button
+          v-for="opt in pendingStartTimeOptions"
+          :key="opt.label"
+          type="button"
+          @click="selectStartTimeChoice(opt.epoch)"
+          class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-start gap-3 cursor-pointer group"
+          :class="opt.isOntime
+            ? (isDarkMode ? 'bg-emerald-950/40 border-emerald-800 hover:bg-emerald-950/70 hover:border-emerald-700' : 'bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300')
+            : (isDarkMode ? 'bg-[#252528] border-gray-700 hover:bg-[#2b2b2f]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100')"
+        >
+          <div
+            class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+            :class="opt.isOntime ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+          >
+            <span v-if="opt.isOntime" class="text-sm">🎯</span>
+            <span v-else class="text-sm">⏱️</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-bold leading-tight" :class="opt.isOntime ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-800 dark:text-gray-200'">
+              {{ opt.label }}
+            </div>
+            <div class="text-[11px] mt-0.5 text-gray-500 dark:text-gray-400">
+              {{ opt.sublabel }}
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <template #actions>
+      <div class="flex justify-end gap-2 w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showStartTimeChoiceModal = false; pendingStartBlock = null">Cancel</f-button>
       </div>
     </template>
   </f-dialog>
@@ -3517,6 +3707,15 @@
               <f-badge v-if="activeBlock.rescheduled_to" theme="gray" variant="outline" size="xs">↷ to {{ activeBlock.rescheduled_to }}</f-badge>
               <f-badge v-if="activeBlock.rescheduled_from" theme="gray" variant="outline" size="xs">↶ from {{ activeBlock.rescheduled_from }}</f-badge>
               <f-badge v-if="activeBlock.task_nature" theme="gray" variant="outline" size="xs">{{ activeBlock.task_nature }}</f-badge>
+              <f-badge v-if="activeBlock.pairing_partner" theme="purple" variant="subtle" size="xs">
+                👥 Paired with {{ activeBlock.pairing_partner_name || activeBlock.pairing_partner }}
+              </f-badge>
+              <f-badge v-if="activeBlock.approval_status === 'Approved'" theme="green" variant="subtle" size="xs">
+                ✓ Approved
+              </f-badge>
+              <f-badge v-else-if="activeBlock.actual_hours > 0" theme="amber" variant="subtle" size="xs">
+                ⏳ Pending Approval
+              </f-badge>
               <span v-if="activeBlock.project_name || activeBlock.project" class="text-gray-400 truncate max-w-[150px]">📁 {{ activeBlock.project_name || activeBlock.project }}</span>
             </div>
           </div>
@@ -3547,6 +3746,28 @@
             <button type="button" v-else-if="isBlockCompleted(activeBlock)" class="text-blue-500 hover:underline text-[11px] font-semibold cursor-pointer" @click="generateTimesheet(activeBlock)">
               Generate Timesheet ↗
             </button>
+          </div>
+        </div>
+
+        <!-- Deliverable Output Metrics / KPIs -->
+        <div v-if="activeBlock.output_metrics && activeBlock.output_metrics.length" class="rounded-2xl p-3.5 border space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
+          <div class="flex items-center justify-between text-xs font-bold">
+            <span class="text-gray-500 uppercase tracking-wider text-[10px]">Produced Deliverables &amp; Output KPIs</span>
+            <span class="text-emerald-500 font-mono text-[11px]">{{ activeBlock.output_metrics.length }} logged</span>
+          </div>
+          <div class="space-y-1.5 pt-1">
+            <div v-for="(m, mi) in activeBlock.output_metrics" :key="mi" class="flex items-center justify-between p-2 rounded-xl border text-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+              <div class="flex items-center gap-2">
+                <span class="text-emerald-500">🎯</span>
+                <div>
+                  <div class="font-bold leading-tight" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">{{ m.metric_type || 'Output' }}</div>
+                  <div v-if="m.notes" class="text-[10px] text-gray-400">{{ m.notes }}</div>
+                </div>
+              </div>
+              <div class="font-mono font-black text-emerald-600 dark:text-emerald-400">
+                +{{ m.quantity }} {{ m.unit || '' }}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -4266,60 +4487,116 @@
   </nav>
 
   <!-- ========================================== -->
-  <!-- DEFINE PLANNED TASK MODAL DIALOG           -->
+  <!-- ========================================== -->
+  <!-- PLAN FOCUS BLOCK MODAL DIALOG              -->
   <!-- ========================================== -->
   <f-dialog
     v-model="showNewTaskModal"
-    title="Define Planned Task"
-    subtitle="Assign work blocks directly to team members"
+    title="Plan Focus Block"
+    subtitle="Schedule dedicated time to protect your focus and deliver results"
     size="md"
   >
     <template #header-icon>
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+      <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
     </template>
 
-    <div class="space-y-3.5 text-xs">
-      <!-- Deliverable Notes -->
+    <div class="space-y-4 text-xs">
+      <!-- What will you focus on -->
       <div>
-        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Deliverable Notes *</label>
+        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
+          What will you focus on? <span class="text-rose-500">*</span>
+        </label>
         <f-input
           size="md"
           v-model="newTaskForm.notes"
-          placeholder="e.g. Implement Cold-Chain Telemetry Logging API"
+          placeholder="e.g. Website Timetable & Dynamic Branch Configuration"
+          aria-label="What will you focus on"
         ></f-input>
       </div>
 
-      <!-- Assignee & Project Grid -->
+      <!-- Project & Task Grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label class="block font-bold mb-1 flex items-center justify-between" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
-            <span>Assign To (Team Member) *</span>
-            <span class="text-[10px] text-blue-500 font-semibold">Authorized</span>
-          </label>
-          <f-combobox
-            v-model="newTaskForm.assignee"
-            :options="comboboxAssigneeOptions"
-            placeholder="Select team member..."
-            search-placeholder="Search team member..."
-            aria-label="Assign To Team Member"
-          ></f-combobox>
-        </div>
-
-        <div>
-          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Project *</label>
+          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Project</label>
           <f-combobox
             v-model="newTaskForm.project"
             :options="comboboxProjectOptions"
             placeholder="Select project..."
-            search-placeholder="Search project..."
+            search-placeholder="Search projects..."
             aria-label="Project"
+          ></f-combobox>
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Task (Optional)</label>
+          <f-combobox
+            v-model="newTaskForm.task"
+            :options="comboboxTaskOptions"
+            placeholder="Link to task (optional)..."
+            search-placeholder="Search tasks..."
+            aria-label="Task"
           ></f-combobox>
         </div>
       </div>
 
-      <!-- Work Nature SVG Selection Pills -->
+      <!-- Schedule & Time Window Card -->
+      <div class="p-3.5 rounded-2xl border" :class="isDarkMode ? 'bg-[#25272B] border-gray-800' : 'bg-gray-50/80 border-gray-200'">
+        <div class="flex items-center justify-between gap-2 mb-2.5">
+          <span class="font-bold text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-400">Schedule & Time Window</span>
+          <span class="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/80 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-900">
+            {{ newTaskForm.duration ? newTaskForm.duration.toFixed(1) : '1.0' }}h duration
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div>
+            <label class="block text-[11px] font-semibold mb-1 text-gray-600 dark:text-gray-400">Date</label>
+            <input 
+              type="date" 
+              v-model="newTaskForm.date" 
+              class="w-full rounded-xl px-2.5 py-2 outline-none border transition-colors text-xs font-mono" 
+              :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white focus:border-blue-500' : 'bg-white border-gray-300 text-gray-800 focus:border-blue-500'">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold mb-1 text-gray-600 dark:text-gray-400">Start Time</label>
+            <input 
+              type="time" 
+              v-model="newTaskForm.startTime" 
+              @change="onNewTaskTimeChange"
+              class="w-full rounded-xl px-2.5 py-2 outline-none border transition-colors text-xs font-mono" 
+              :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white focus:border-blue-500' : 'bg-white border-gray-300 text-gray-800 focus:border-blue-500'">
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold mb-1 text-gray-600 dark:text-gray-400">End Time</label>
+            <input 
+              type="time" 
+              v-model="newTaskForm.endTime" 
+              @change="onNewTaskTimeChange"
+              class="w-full rounded-xl px-2.5 py-2 outline-none border transition-colors text-xs font-mono" 
+              :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white focus:border-blue-500' : 'bg-white border-gray-300 text-gray-800 focus:border-blue-500'">
+          </div>
+        </div>
+
+        <!-- Quick Duration Chips -->
+        <div class="flex items-center gap-1.5 pt-2.5 flex-wrap">
+          <span class="text-[10px] text-gray-400 mr-1">Quick presets:</span>
+          <button
+            v-for="dur in [0.5, 1, 1.5, 2, 3, 4]"
+            :key="dur"
+            type="button"
+            @click="setNewTaskDurationPreset(dur)"
+            class="px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer select-none active:scale-95"
+            :class="newTaskForm.duration === dur ? 'bg-blue-600 border-blue-600 text-white shadow-xs' : (isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-300 hover:bg-gray-700' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100')">
+            {{ dur >= 1 ? (dur % 1 === 0 ? dur + 'h' : dur + 'h') : '30m' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Work Nature Chips -->
       <div>
-        <label class="block font-bold mb-1.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Nature *</label>
+        <label class="block font-bold mb-1.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Nature</label>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button 
             v-for="opt in natureOptions" 
@@ -4330,26 +4607,23 @@
             :class="newTaskForm.nature === opt.label ? (isDarkMode ? opt.darkActiveClass : opt.lightActiveClass) : (isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-gray-400 hover:bg-[#333333]' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100')">
             <span v-html="opt.svgIcon" class="w-3.5 h-3.5 flex items-center justify-center"></span>
             <span>{{ opt.label }}</span>
-            <span v-if="!opt.is_working" 
-              class="text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider"
-              :class="newTaskForm.nature === opt.label ? (isDarkMode ? 'bg-rose-900 text-rose-200' : 'bg-rose-200 text-rose-900') : (isDarkMode ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60' : 'bg-rose-100 text-rose-700 border border-rose-200')">
-              Non-Paid
-            </span>
           </button>
         </div>
       </div>
 
-      <!-- Work Date & Duration Grid -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Work Date</label>
-          <input type="date" v-model="newTaskForm.date" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-        </div>
-
-        <div>
-          <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Duration (Hours)</label>
-          <input type="number" step="0.5" min="0.5" max="24" v-model="newTaskForm.duration" class="w-full rounded-xl px-3 py-2.5 outline-none border transition-colors text-xs" :class="isDarkMode ? 'bg-[#2A2A2A] border-[#3A3A3A] text-white' : 'bg-white border-gray-300 text-gray-800'">
-        </div>
+      <!-- Assignee / Team Member (if multiple members) -->
+      <div v-if="teamMembers && teamMembers.length > 1">
+        <label class="block font-bold mb-1 flex items-center justify-between" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+          <span>Assignee (Team Member)</span>
+          <span class="text-[10px] text-gray-400">Defaults to you</span>
+        </label>
+        <f-combobox
+          v-model="newTaskForm.assignee"
+          :options="comboboxAssigneeOptions"
+          placeholder="Select team member..."
+          search-placeholder="Search team member..."
+          aria-label="Assign To Team Member"
+        ></f-combobox>
       </div>
     </div>
 
@@ -4360,9 +4634,9 @@
         </f-button>
         <f-button variant="solid" theme="blue" size="sm" @click="saveNewPlannedTask">
           <template #prefix>
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
           </template>
-          Assign & Save Task
+          Schedule Focus Block
         </f-button>
       </div>
     </template>
@@ -5932,9 +6206,6 @@
             ]"
           >
             <span class="flex items-center gap-2 min-w-0 flex-1 truncate">
-              <span v-if="selectedOption && selectedOption.kind" class="shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/70 dark:border-blue-800 dark:text-blue-300">
-                {{ selectedOption.kind }}
-              </span>
               <span v-if="displayLabel" class="truncate font-medium text-gray-900 dark:text-gray-100">
                 {{ displayLabel }}
               </span>
@@ -6013,14 +6284,11 @@
             >
               <div class="min-w-0 flex-1 flex flex-col gap-0.5">
                 <div class="flex items-center gap-1.5 truncate">
-                  <span v-if="opt.kind" class="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300">
-                    {{ opt.kind }}
-                  </span>
                   <span class="truncate font-medium text-xs">{{ opt.label }}</span>
                 </div>
                 <div v-if="opt.project || opt.description" class="text-[10px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5 pl-0.5">
                   <span v-if="opt.project">📁 {{ opt.project }}</span>
-                  <span v-if="opt.description">· {{ opt.description }}</span>
+                  <span v-if="opt.description">{{ opt.project ? '· ' + opt.description : opt.description }}</span>
                 </div>
               </div>
 
@@ -7134,19 +7402,46 @@
         setTimeout(() => { toast.value.show = false; }, 3500);
       };
 
-            // 6. Define Task Modal
+            // 6. Plan Focus Block Modal
       const showNewTaskModal = ref(false);
       const newTaskForm = ref({
         notes: '',
-        assignee: 'hardiksharma80912@gmail.com',
+        assignee: 'nomeshwer@ommnomi.in',
         project: '',
+        task: '',
         nature: 'Planned Work',
         date: getLocalTodayISO(),
-        duration: 4.0
+        startTime: '10:00',
+        endTime: '11:00',
+        duration: 1.0
       });
 
-      const openNewTaskModal = () => {
-        let defaultAssignee = 'hardiksharma80912@gmail.com';
+      const onNewTaskTimeChange = () => {
+        if (newTaskForm.value.startTime && newTaskForm.value.endTime) {
+          const [sh, sm] = newTaskForm.value.startTime.split(':').map(Number);
+          const [eh, em] = newTaskForm.value.endTime.split(':').map(Number);
+          let sMins = sh * 60 + sm;
+          let eMins = eh * 60 + em;
+          if (eMins < sMins) eMins += 24 * 60;
+          const dur = Math.max(0.25, Math.round(((eMins - sMins) / 60) * 10) / 10);
+          newTaskForm.value.duration = dur;
+        }
+      };
+
+      const setNewTaskDurationPreset = (hrs) => {
+        newTaskForm.value.duration = hrs;
+        if (newTaskForm.value.startTime) {
+          const [sh, sm] = newTaskForm.value.startTime.split(':').map(Number);
+          let eMins = sh * 60 + sm + Math.round(hrs * 60);
+          eMins = eMins % (24 * 60);
+          const eh = String(Math.floor(eMins / 60)).padStart(2, '0');
+          const em = String(eMins % 60).padStart(2, '0');
+          newTaskForm.value.endTime = `${eh}:${em}`;
+        }
+      };
+
+      const openNewTaskModal = (initialDate = null) => {
+        let defaultAssignee = currentUser.value || 'nomeshwer@ommnomi.in';
         if (selectedEmployee.value && selectedEmployee.value !== 'All') {
           const match = teamMembers.value.find(m => 
             m.name.toLowerCase() === selectedEmployee.value.toLowerCase() || 
@@ -7155,13 +7450,31 @@
           if (match) defaultAssignee = match.name;
         }
 
+        const now = new Date();
+        const mins = now.getMinutes();
+        const nextQuarter = Math.ceil(mins / 15) * 15;
+        now.setMinutes(nextQuarter, 0, 0);
+        const sh = String(now.getHours()).padStart(2, '0');
+        const sm = String(now.getMinutes()).padStart(2, '0');
+        const defaultStartTime = `${sh}:${sm}`;
+
+        const endDt = new Date(now.getTime() + 60 * 60 * 1000);
+        const eh = String(endDt.getHours()).padStart(2, '0');
+        const em = String(endDt.getMinutes()).padStart(2, '0');
+        const defaultEndTime = `${eh}:${em}`;
+
+        const targetDate = initialDate || selectedDashboardDate.value || todayDate.value || getLocalTodayISO();
+
         newTaskForm.value = {
           notes: '',
           assignee: defaultAssignee,
           project: selectedProject.value || '',
+          task: '',
           nature: 'Planned Work',
-          date: todayDate.value || getLocalTodayISO(),
-          duration: 4.0
+          date: targetDate,
+          startTime: defaultStartTime,
+          endTime: defaultEndTime,
+          duration: 1.0
         };
         showNewTaskModal.value = true;
       };
@@ -7941,20 +8254,22 @@
 
       const inactivityMinutes = computed(() => {
         const _ = trackerSeconds.value;
-        const ms = Date.now() - (lastActivityTime.value || Date.now());
+        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
+        const ms = Date.now() - act;
         return Math.max(1, Math.floor(ms / 60000));
       });
 
       const lastActivityTimeHHMM = computed(() => {
         const _ = trackerSeconds.value;
-        const t = lastActivityTime.value ? new Date(lastActivityTime.value) : new Date();
+        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
+        const t = new Date(act);
         const pad = (n) => String(n).padStart(2, '0');
         return pad(t.getHours()) + ':' + pad(t.getMinutes());
       });
 
       const suggestedStopHHMM = computed(() => {
         const _ = trackerSeconds.value;
-        const base = lastActivityTime.value || Date.now();
+        const base = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
         const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
         const t = new Date(targetMs);
         const pad = (n) => String(n).padStart(2, '0');
@@ -7964,7 +8279,7 @@
       const checkInactivity = () => {
         if (!isTracking.value) return;
         const now = Date.now();
-        const act = lastActivityTime.value || now;
+        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || now;
         const idleMs = now - act;
         const INACTIVITY_MS = 30 * 60 * 1000;
         const REPEAT_MS = 30 * 60 * 1000;
@@ -8014,46 +8329,41 @@
       };
 
       const syncActiveSession = (immediate = false) => {
-        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
-        _lastLocalUpdate = Date.now();
-        if (isTracking.value) {
-          const saved = localStorage.getItem('omnitrack_active_session');
-          let startTime = Date.now() - (trackerSeconds.value * 1000);
-          if (saved) {
-            try {
-              const parsed = JSON.parse(saved);
-              if (parsed && parsed.startTime) startTime = parsed.startTime;
-            } catch (e) {}
-          }
-          const payload = {
-            startTime,
-            selectedNature: selectedNature.value,
-            selectedProject: selectedProject.value,
-            trackerNotes: trackerNotes.value,
-            trackerBlockName: trackerBlockName.value,
-            sessionNotesList: sessionNotesList.value,
-            lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
-            lastUpdated: _lastLocalUpdate,
-            status: 'active'
-          };
-          localStorage.setItem('omnitrack_active_session', JSON.stringify(payload));
-
-          const sendToServer = () => {
-            postJSON('sync_active_session', { session_data: payload }).catch(() => {});
-          };
-
-          if (immediate) {
-            if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-            sendToServer();
-          } else {
-            if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-            _syncDebounceTimer = setTimeout(sendToServer, 500);
-          }
-        } else {
+        if (!isTracking.value) {
           markSessionEnded();
           localStorage.removeItem('omnitrack_active_session');
           if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
+          return;
+        }
+
+        if (_isStoppingSession) return;
+        _lastLocalUpdate = Date.now();
+
+        const curStart = Number(startTime.value) || (Date.now() - (trackerSeconds.value * 1000));
+        const payload = {
+          startTime: curStart,
+          selectedNature: selectedNature.value,
+          selectedProject: selectedProject.value,
+          trackerNotes: trackerNotes.value,
+          trackerBlockName: trackerBlockName.value,
+          sessionNotesList: sessionNotesList.value,
+          lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
+          lastUpdated: _lastLocalUpdate,
+          status: 'active'
+        };
+        localStorage.setItem('omnitrack_active_session', JSON.stringify(payload));
+
+        const sendToServer = () => {
+          postJSON('sync_active_session', { session_data: payload }).catch(() => {});
+        };
+
+        if (immediate) {
+          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+          sendToServer();
+        } else {
+          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+          _syncDebounceTimer = setTimeout(sendToServer, 500);
         }
       };
 
@@ -8069,9 +8379,24 @@
         // server row that had not been cleared yet — so Stop looked like it did
         // nothing at all. Any path that restores must clear this bar.
         if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return false;
-        if (wasEndedHere(sessionData.startTime)) return false;
+
+        // If local device previously recorded this session as ended, verify if server has a newer active update
+        if (wasEndedHere(sessionData.startTime)) {
+          const remoteHeartbeat = Number(sessionData.lastUpdated || sessionData.startTime || 0);
+          if (sessionData.status === 'active' && remoteHeartbeat > _lastLocalStop) {
+            unmarkSessionEnded(sessionData.startTime);
+          } else {
+            return false;
+          }
+        }
+
         const startMs = Number(sessionData.startTime);
-        const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        // Clock skew resilience: calculate elapsed using the most authoritative timestamp
+        const serverHeartbeat = Number(sessionData.lastUpdated || sessionData.lastActivityTime || 0);
+        const serverElapsed = (serverHeartbeat > startMs) ? Math.floor((serverHeartbeat - startMs) / 1000) : 0;
+        const localElapsed = Math.floor((Date.now() - startMs) / 1000);
+        // If local clock is behind or startMs is slightly ahead due to clock skew, anchor to at least serverElapsed
+        const elapsed = Math.max(0, Math.max(serverElapsed, localElapsed));
         if (elapsed >= 86400) return false; // expired past 24h
 
         // Zombie timer eviction: if running for > 10 hours, evict immediately
@@ -8092,15 +8417,18 @@
           return false;
         }
 
-        // Do not resurrect a session bound to a block that is already Logged, Completed, Missed or Cancelled
+        // If bound to a work block, handle status reconciliation gracefully
         if (sessionData.trackerBlockName) {
           const matched = (workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName) ||
                           (workFocusBlocks.value || []).find(b => b.name === sessionData.trackerBlockName);
-          if (matched && (matched.status === 'Logged (Full)' || matched.status === 'Logged (Over)' || matched.status === 'Logged (Partial)' || matched.status === 'Completed' || matched.status === 'Cancelled' || matched.status === 'Missed')) {
-            markSessionEnded();
-            localStorage.removeItem('omnitrack_active_session');
-            postJSON('sync_active_session', { session_data: null }).catch(() => {});
-            return false;
+          if (matched) {
+            if (sessionData.status === 'active') {
+              matched.status = 'In Progress';
+            } else if (matched.status === 'Logged (Full)' || matched.status === 'Logged (Over)' || matched.status === 'Logged (Partial)' || matched.status === 'Completed' || matched.status === 'Cancelled' || matched.status === 'Missed') {
+              markSessionEnded();
+              localStorage.removeItem('omnitrack_active_session');
+              return false;
+            }
           }
         }
 
@@ -8123,11 +8451,15 @@
             sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
           }
           trackerBlockName.value = sessionData.trackerBlockName || null;
-          lastActivityTime.value = Number(sessionData.lastActivityTime) || Number(sessionData.lastUpdated) || Number(sessionData.startTime) || Date.now();
+          const sLastAct = Number(sessionData.lastActivityTime) || 0;
+          const sLastUpd = Number(sessionData.lastUpdated) || 0;
+          lastActivityTime.value = Math.max(sLastAct, sLastUpd) || Date.now();
 
+          const clockSkewMs = (startMs > Date.now()) ? (startMs - Date.now()) : 0;
           if (trackerTimer.value) clearInterval(trackerTimer.value);
           trackerTimer.value = setInterval(() => {
-            trackerSeconds.value = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            const curLocalElapsed = Math.floor((Date.now() + clockSkewMs - startMs) / 1000);
+            trackerSeconds.value = Math.max(0, curLocalElapsed);
             checkInactivity();
             checkBlockOverrun();
           }, 1000);
@@ -8190,6 +8522,17 @@
         for (const ended of _endedSessions) if (Math.abs(ended - t) < 5000) return true;
         return _readEndedStore().some(e => Math.abs(Number(e.start) - t) < 5000);
       };
+      const unmarkSessionEnded = (sTime) => {
+        if (!sTime) return;
+        const t = Math.round(Number(sTime));
+        for (const ended of Array.from(_endedSessions)) {
+          if (Math.abs(ended - t) < 5000) _endedSessions.delete(ended);
+        }
+        try {
+          const store = _readEndedStore().filter(e => Math.abs(Number(e.start) - t) >= 5000);
+          localStorage.setItem(_ENDED_KEY, JSON.stringify(store));
+        } catch (e) {}
+      };
 
       const reconcileActiveSession = (remote) => {
         // Never resurrect a session if this device just stopped or discarded within the last 10s
@@ -8197,13 +8540,20 @@
           handleRemoteSessionCleared({ silent: true });
           return;
         }
-        // Never resurrect a session this device has already ended.
-        if (remote && remote.startTime && wasEndedHere(remote.startTime)) {
-          handleRemoteSessionCleared({ silent: true });
-          return;
+        // If this device previously recorded this session as ended, verify if server has a newer active update
+        if (remote && remote.startTime && wasEndedHere(remote.startTime) && !isTracking.value) {
+          const remoteHeartbeat = Number(remote.lastUpdated || remote.startTime || 0);
+          if (remote.status === 'active' && remoteHeartbeat > _lastLocalStop) {
+            unmarkSessionEnded(remote.startTime);
+          } else {
+            handleRemoteSessionCleared({ silent: true });
+            return;
+          }
         }
         if (!remote || remote.status !== 'active') {
-          handleRemoteSessionCleared();
+          if (!isTracking.value || Date.now() - _lastLocalUpdate >= 15000) {
+            handleRemoteSessionCleared();
+          }
           return;
         }
 
@@ -8272,7 +8622,8 @@
       let _lastClearedToast = 0;
       const handleRemoteSessionCleared = (opts) => {
         if (!isTracking.value) return;
-        if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 3000)) return;
+        // Never clear an active session if this device updated or started within the last 15s
+        if (Date.now() - _lastLocalUpdate < 15000) return;
 
         isTracking.value = false;
         startTime.value = null;
@@ -8314,7 +8665,11 @@
             if (active && active.status === 'active') {
               reconcileActiveSession(active);
             } else if (!active && isTracking.value) {
-              handleRemoteSessionCleared({ authoritative: true });
+              if (Date.now() - _lastLocalUpdate < 15000) {
+                syncActiveSession(true);
+              } else {
+                handleRemoteSessionCleared({ silent: true });
+              }
             }
           }
         } catch (e) {
@@ -8790,6 +9145,22 @@
         startFocusBlock(b);
       };
 
+      const showStartTimeChoiceModal = ref(false);
+      const pendingStartBlock = ref(null);
+      const pendingStartTimeOptions = ref([]);
+
+      const parseBlockStartEpoch = (b) => {
+        if (!b || !b.start_time) return null;
+        const todayStr = getLocalTodayISO() || todayDate.value || new Date().toISOString().split('T')[0];
+        const blockDate = b.work_date || todayStr;
+        if (blockDate !== todayStr) return null;
+        const timeParts = String(b.start_time).split(':');
+        if (timeParts.length < 2) return null;
+        const d = new Date();
+        d.setHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), parseInt(timeParts[2] || '0', 10), 0);
+        return d.getTime();
+      };
+
       const startFocusBlock = (b) => {
         if (!b) return;
         if (isTracking.value && trackerBlockName.value === b.name) {
@@ -8811,7 +9182,50 @@
           });
           return;
         }
+
+        // Check if block scheduled start is in the past today
+        const startEpoch = parseBlockStartEpoch(b);
+        const now = Date.now();
+        if (startEpoch && startEpoch < now) {
+          const elapsedMinutes = Math.floor((now - startEpoch) / 60000);
+          if (elapsedMinutes <= 2) {
+            // Auto-anchor on time without prompting if <= 2 mins
+            trackBlock(b, startEpoch);
+            return;
+          } else if (elapsedMinutes <= 120) {
+            // Prompt user with 1-click suggested start times
+            pendingStartBlock.value = b;
+            const schedTimeStr = b.start_time ? String(b.start_time).substring(0, 5) : '';
+            const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            pendingStartTimeOptions.value = [
+              {
+                label: `Start on time at ${schedTimeStr}`,
+                sublabel: `${elapsedMinutes}m elapsed · Plan adherence protected`,
+                epoch: startEpoch,
+                isOntime: true
+              },
+              {
+                label: `Start from now at ${nowTimeStr}`,
+                sublabel: `Fresh start at 00:00:00`,
+                epoch: now,
+                isOntime: false
+              }
+            ];
+            showStartTimeChoiceModal.value = true;
+            return;
+          }
+        }
+
         trackBlock(b);
+      };
+
+      const selectStartTimeChoice = (epoch) => {
+        showStartTimeChoiceModal.value = false;
+        if (pendingStartBlock.value) {
+          const blk = pendingStartBlock.value;
+          pendingStartBlock.value = null;
+          trackBlock(blk, epoch);
+        }
       };
 
       // Dynamic PAI (Plan Adherence Culture Index) Calculation
@@ -8965,11 +9379,15 @@
             if (m.kpis) updateDashboardKPIs(m.kpis);
 
             // Evict zombie local session if the bound block is already logged/completed
-            if (isTracking.value && trackerBlockName.value) {
+            // (Only for stale sessions older than 15s to avoid racing newly started local tracking)
+            if (isTracking.value && trackerBlockName.value && (Date.now() - _lastLocalUpdate >= 15000)) {
               const curBlock = (workBlocks.value || []).find(b => b.name === trackerBlockName.value);
               if (curBlock && (curBlock.status === 'Logged (Full)' || curBlock.status === 'Logged (Over)' || curBlock.status === 'Logged (Partial)' || curBlock.status === 'Completed' || curBlock.status === 'Cancelled' || curBlock.status === 'Missed')) {
-                if (m.active_session && m.active_session.status === 'active' && m.active_session.trackerBlockName !== trackerBlockName.value) {
-                  restoreActiveSession(m.active_session);
+                if (m.active_session && m.active_session.status === 'active') {
+                  curBlock.status = 'In Progress';
+                  if (m.active_session.trackerBlockName !== trackerBlockName.value) {
+                    restoreActiveSession(m.active_session);
+                  }
                 } else {
                   isTracking.value = false;
                   if (trackerTimer.value) clearInterval(trackerTimer.value);
@@ -8987,17 +9405,24 @@
 
             // Multi-device active session sync (computer <-> mobile phone)
             if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime
-                && !_isStoppingSession && (Date.now() - _lastLocalStop >= 10000)
-                && !wasEndedHere(m.active_session.startTime)) {
-              const serverLines = Array.isArray(m.active_session.sessionNotesList) ? m.active_session.sessionNotesList : [];
-              const localLines = sessionNotesList.value || [];
-              const serverTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
-              if (!isTracking.value || serverLines.length >= localLines.length || serverTime > _lastLocalUpdate) {
-                restoreActiveSession(m.active_session);
+                && !_isStoppingSession && (Date.now() - _lastLocalStop >= 10000)) {
+              if (wasEndedHere(m.active_session.startTime)) {
+                const srvTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
+                if (srvTime > _lastLocalStop) {
+                  unmarkSessionEnded(m.active_session.startTime);
+                }
+              }
+              if (!wasEndedHere(m.active_session.startTime)) {
+                const serverLines = Array.isArray(m.active_session.sessionNotesList) ? m.active_session.sessionNotesList : [];
+                const localLines = sessionNotesList.value || [];
+                const serverTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
+                if (!isTracking.value || serverLines.length >= localLines.length || serverTime > _lastLocalUpdate) {
+                  restoreActiveSession(m.active_session);
+                }
               }
             } else if (m.active_session === null && isTracking.value) {
               const localAge = Date.now() - _lastLocalUpdate;
-              if (localAge > 2000) {
+              if (localAge >= 15000) {
                 isTracking.value = false;
                 if (trackerTimer.value) clearInterval(trackerTimer.value);
                 trackerSeconds.value = 0;
@@ -9005,8 +9430,10 @@
                 trackerNotes.value = '';
                 trackerBlockName.value = null;
                 markSessionEnded();
-          localStorage.removeItem('omnitrack_active_session');
+                localStorage.removeItem('omnitrack_active_session');
                 showToast('Session was completed on another device', 'info');
+              } else {
+                syncActiveSession(true);
               }
             }
           }
@@ -9118,16 +9545,20 @@
         setTimeout(() => { _isStoppingSession = false; }, 8000);
       };
 
-      const toggleTrack = async (customEndMs = null) => {
+      const toggleTrack = async (customEndMs = null, customStartMs = null) => {
         triggerHaptic([40]);
         if (!isTracking.value) {
+          _isStoppingSession = false;
+          _lastLocalStop = 0;
           isTracking.value = true;
-          trackerSeconds.value = 0;
-          const sTime = Date.now();
+          const sTime = customStartMs ? Number(customStartMs) : Date.now();
+          unmarkSessionEnded(sTime);
           startTime.value = sTime;
-          lastActivityTime.value = sTime;
+          trackerSeconds.value = Math.max(0, Math.floor((Date.now() - sTime) / 1000));
+          lastActivityTime.value = Date.now();
           lastInactivityAlertTime.value = 0;
-          syncActiveSession();
+          _lastLocalUpdate = Date.now();
+          syncActiveSession(true);
           // Request browser notification permission on user gesture (clicking Start)
           try {
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
@@ -9135,7 +9566,7 @@
             }
           } catch (e) {}
           trackerTimer.value = setInterval(() => {
-            trackerSeconds.value = Math.floor((Date.now() - sTime) / 1000);
+            trackerSeconds.value = Math.max(0, Math.floor((Date.now() - sTime) / 1000));
             checkInactivity();
             checkBlockOverrun();
           }, 1000);
@@ -9625,7 +10056,7 @@
         }
       };
 
-      const trackBlock = (block) => {
+      const trackBlock = (block, customStartMs = null) => {
         if (!block) return;
         if (isTracking.value && trackerBlockName.value !== block.name) {
           promptSwitchSession({
@@ -9644,6 +10075,9 @@
         }
         _explicitBoundBlock.value = block;
         trackerBlockName.value = block.name;
+        if (block.status === 'Completed' || block.status === 'Logged (Full)') {
+          block.status = 'In Progress';
+        }
         let rawN = block.task_subject || block.work_item_label || (block.task ? (block.task_subject || block.task) : '') || block.deliverable_notes || '';
         if (rawN.includes('•')) {
           const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
@@ -9659,7 +10093,7 @@
         const nat = getNatureBadge(block.task_nature).label;
         selectedNature.value = nat;
         trackerNature.value = nat;
-        toggleTrack();
+        toggleTrack(null, customStartMs);
       };
 
       // 2c. 1-Click Atomic Switch Task Action (WCAG 2.2 AA)
@@ -9793,30 +10227,39 @@
 
       const saveNewPlannedTask = async () => {
         if (!newTaskForm.value.notes) {
-          showToast('Please enter deliverable notes', 'danger');
+          showToast('Please enter what you will focus on', 'danger');
           return;
         }
         try {
+          const sTime = newTaskForm.value.startTime ? (newTaskForm.value.startTime.length === 5 ? newTaskForm.value.startTime + ':00' : newTaskForm.value.startTime) : '10:00:00';
+          const eTime = newTaskForm.value.endTime ? (newTaskForm.value.endTime.length === 5 ? newTaskForm.value.endTime + ':00' : newTaskForm.value.endTime) : '11:00:00';
+          const durHours = parseFloat(newTaskForm.value.duration) || 1.0;
+
           const res = await fetch('/api/method/omnitrack.api.create_planned_work_block', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               deliverable_notes: newTaskForm.value.notes,
               employee: newTaskForm.value.assignee,
-              project: newTaskForm.value.project,
-              task_nature: newTaskForm.value.nature,
+              project: newTaskForm.value.project || null,
+              task: newTaskForm.value.task || null,
+              task_nature: newTaskForm.value.nature || '🎯 Planned',
               work_date: newTaskForm.value.date,
-              duration_hours: parseFloat(newTaskForm.value.duration) || 4.0
+              start_time: sTime,
+              end_time: eTime,
+              duration_hours: durHours,
+              status: 'Planned'
             })
           });
           const assignedMember = teamMembers.value.find(m => m.name === newTaskForm.value.assignee || m.full_name === newTaskForm.value.assignee);
           const memberName = assignedMember ? assignedMember.full_name : newTaskForm.value.assignee;
-          showToast(`Task assigned to ${memberName} successfully!`, 'success');
+          showToast(`Focus block scheduled for ${memberName}!`, 'success');
           showNewTaskModal.value = false;
           fetchWorkstationData(selectedEmployee.value);
         } catch (e) {
-          showToast('Task created and assigned.', 'success');
+          showToast('Focus block scheduled.', 'success');
           showNewTaskModal.value = false;
+          fetchWorkstationData(selectedEmployee.value);
         }
       };
 
@@ -9905,7 +10348,18 @@
         totals: { planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, block_count: 0 }
       });
       const showBookModal = ref(false);
-      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '' });
+      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '', pairing_partner: '' });
+      const comboboxPairingPartnerOptions = computed(() => {
+        const curr = currentUser.value || '';
+        return (teamMembers.value || [])
+          .filter(m => m.name !== curr && m.email !== curr)
+          .map(m => ({
+            value: m.name || m.email,
+            label: m.full_name || m.name,
+            kind: 'User',
+            description: m.role || 'Collaborator'
+          }));
+      });
       const showBlockDrawer = ref(false);
       const activeBlock = ref(null);
       const showBlockReschedule = ref(false);
@@ -10820,7 +11274,8 @@
           work_date: iso,
           start_time: _minToHHMM(startMin),
           end_time: _minToHHMM(endMin),
-          deliverable_notes: ''
+          deliverable_notes: '',
+          pairing_partner: ''
         };
         showBookModal.value = true;
       };
@@ -10835,7 +11290,8 @@
           work_date: iso,
           start_time: hh + ':00',
           end_time: String(Math.min(23, hour + 1)).padStart(2, '0') + ':00',
-          deliverable_notes: ''
+          deliverable_notes: '',
+          pairing_partner: ''
         };
         showBookModal.value = true;
       };
@@ -10858,13 +11314,15 @@
             project: picked ? picked.project : null,
             work_item_label: picked ? picked.subject : (isAway ? bookForm.value.mode : null),
             task_nature: isAway ? bookForm.value.mode : '🎯 Planned',
-            deliverable_notes: bookForm.value.deliverable_notes || (isAway ? bookForm.value.mode : null)
+            deliverable_notes: bookForm.value.deliverable_notes || (isAway ? bookForm.value.mode : null),
+            pairing_partner: isAway ? null : (bookForm.value.pairing_partner || null)
           });
           showBookModal.value = false;
           pickedTask.value = null;
-          showToast(isAway ? 'Time away marked' : 'Work block booked', 'success');
+          showToast(isAway ? 'Time away marked' : (bookForm.value.pairing_partner ? 'Collaborative work block paired & booked' : 'Work block booked'), 'success');
           await fetchPlannerData();
-        } catch (e) { showToast('Could not book block', 'danger'); }
+          await fetchWorkstationData(selectedEmployee.value);
+        } catch (e) { showToast('Could not book block: ' + (e && e.message || e), 'danger'); }
         finally { plannerBusy.value = false; }
       };
 
@@ -11137,7 +11595,6 @@
         return (teamMembers.value || []).map(m => ({
           value: m.name || m.full_name,
           label: m.full_name,
-          kind: 'User',
           description: m.role || 'Team Member'
         }));
       });
@@ -11145,8 +11602,7 @@
       const comboboxProjectOptions = computed(() => {
         const list = (projects.value || []).map(p => ({
           value: p.name,
-          label: p.project_name || p.name,
-          kind: 'Project'
+          label: p.project_name || p.name
         }));
         return [{ value: '', label: 'General Work' }, ...list];
       });
@@ -11455,7 +11911,8 @@
           work_date: todayISO(),
           start_time: '10:00',
           end_time: String(10 + Math.min(4, defaultHours)).padStart(2, '0') + ':00',
-          deliverable_notes: t.subject || ''
+          deliverable_notes: t.subject || '',
+          pairing_partner: ''
         };
         activeTab.value = 'planner';
         showBookModal.value = true;
@@ -11581,9 +12038,66 @@
         }
       };
 
+      // ----------------------------------------------------
+      // Team Work Block & Timesheet Approvals (Manager Governance)
+      // ----------------------------------------------------
+      const pendingApprovals = ref([]);
+      const loadingApprovals = ref(false);
+
+      const fetchPendingApprovals = async () => {
+        if (!isManager.value) return;
+        loadingApprovals.value = true;
+        try {
+          const res = await postJSON('get_pending_team_approvals', {
+            employee: selectedEmployee.value || 'All'
+          });
+          pendingApprovals.value = (res && res.message) || res || [];
+        } catch (e) {
+          pendingApprovals.value = [];
+        } finally {
+          loadingApprovals.value = false;
+        }
+      };
+
+      const approveWorkBlockSingle = async (b) => {
+        if (!b || !b.name) return;
+        loadingApprovals.value = true;
+        try {
+          await postJSON('approve_work_blocks', {
+            block_names: [b.name]
+          });
+          showToast(`Approved work block for ${b.associate_name || b.employee}`, 'success');
+          await fetchPendingApprovals();
+          await fetchWorkstationData(selectedEmployee.value);
+        } catch (e) {
+          showToast('Failed to approve work block: ' + (e && e.message || e), 'danger');
+        } finally {
+          loadingApprovals.value = false;
+        }
+      };
+
+      const approveAllPending = async () => {
+        if (!pendingApprovals.value.length) return;
+        loadingApprovals.value = true;
+        try {
+          const names = pendingApprovals.value.map(b => b.name);
+          await postJSON('approve_work_blocks', {
+            block_names: names
+          });
+          showToast(`Approved ${names.length} team work block(s)`, 'success');
+          await fetchPendingApprovals();
+          await fetchWorkstationData(selectedEmployee.value);
+        } catch (e) {
+          showToast('Failed to approve blocks: ' + (e && e.message || e), 'danger');
+        } finally {
+          loadingApprovals.value = false;
+        }
+      };
+
       const onPlannerKeydown = (e) => {
         if (e.key !== 'Escape') return;
         if (showInactivityModal.value) showInactivityModal.value = false;
+        else if (showStartTimeChoiceModal.value) showStartTimeChoiceModal.value = false;
         else if (showTaskRavenDrawer.value) showTaskRavenDrawer.value = false;
         else if (showBookModal.value) showBookModal.value = false;
         else if (showAdjustModal.value) showAdjustModal.value = false;
@@ -11599,7 +12113,7 @@
         else if (showTrackerPopup.value) showTrackerPopup.value = false;
         else if (showNatureFilter.value) showNatureFilter.value = false;
       };
-      watch([showInactivityModal, showBookModal, showAdjustModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
+      watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showAdjustModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
         const anyOpen = vals.some(Boolean);
         if (anyOpen) {
           document.addEventListener('keydown', onPlannerKeydown);
@@ -11620,6 +12134,8 @@
           scrollPlannerToMorning();
         } else if (t === 'dashboard') {
           fetchWorkstationData(selectedEmployee.value);
+        } else if (t === 'attendance') {
+          fetchPendingApprovals();
         }
       });
 
@@ -11730,7 +12246,8 @@
         if (typeof io !== 'undefined') {
           try {
             const host = window.location.hostname;
-            const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')
+              || /^192\.168\./.test(host) || /^10\./.test(host) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
             const siteName = "{{ frappe.local.site }}";
             let socketHost;
             if (isLocal) {
@@ -11816,6 +12333,9 @@
         showNewTaskModal,
         newTaskForm,
         openNewTaskModal,
+        onNewTaskTimeChange,
+        setNewTaskDurationPreset,
+        saveNewPlannedTask,
         formattedTime,
         bottomBarTimer,
         paciRatio,
@@ -12093,6 +12613,16 @@
         comboboxBookTaskOptions,
         comboboxAssigneeOptions,
         comboboxProjectOptions,
+        comboboxPairingPartnerOptions,
+        showStartTimeChoiceModal,
+        pendingStartBlock,
+        pendingStartTimeOptions,
+        selectStartTimeChoice,
+        pendingApprovals,
+        loadingApprovals,
+        fetchPendingApprovals,
+        approveWorkBlockSingle,
+        approveAllPending,
         formatTaskTime,
         toggleTaskDone,
         submitAttachTasks,

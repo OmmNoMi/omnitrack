@@ -836,7 +836,18 @@ def sync_active_session(session_data=None, user=None):
 		return {"status": "cleared"}
 
 	# Normalize session fields
-	start_time = int(flt(session_data.get("startTime") or (datetime.now().timestamp() * 1000)))
+	now_ms = int(datetime.now().timestamp() * 1000)
+	start_time = int(flt(session_data.get("startTime") or now_ms))
+	raw_last_act = int(flt(session_data.get("lastActivityTime") or 0))
+	raw_last_updated = int(flt(session_data.get("lastUpdated") or 0))
+
+	# Invariant: If a session started early or was backdated, lastActivityTime must
+	# reflect the most recent user action/edit, never older than lastUpdated or artificially
+	# stuck at a backdated start_time.
+	resolved_last_act = max(raw_last_act, raw_last_updated)
+	if resolved_last_act <= 0 or (start_time < (now_ms - 60000) and resolved_last_act == start_time):
+		resolved_last_act = now_ms
+
 	clean_data = {
 		"startTime": start_time,
 		"selectedNature": session_data.get("selectedNature") or "🎯 Planned",
@@ -844,8 +855,8 @@ def sync_active_session(session_data=None, user=None):
 		"trackerNotes": (session_data.get("trackerNotes") or "").strip(),
 		"trackerBlockName": session_data.get("trackerBlockName") or None,
 		"sessionNotesList": session_data.get("sessionNotesList") if isinstance(session_data.get("sessionNotesList"), list) else [],
-		"lastActivityTime": int(flt(session_data.get("lastActivityTime") or session_data.get("lastUpdated") or start_time)),
-		"lastUpdated": int(datetime.now().timestamp() * 1000),
+		"lastActivityTime": resolved_last_act,
+		"lastUpdated": now_ms,
 		"status": "active"
 	}
 
@@ -1090,7 +1101,7 @@ def get_active_session(user=None):
 	if start_time > 0:
 		now_ms = datetime.now().timestamp() * 1000
 		diff_seconds = (now_ms - start_time) / 1000.0
-		if diff_seconds > 86400 or diff_seconds < -300:
+		if diff_seconds > 86400 or diff_seconds < -43200:
 			frappe.cache.hdel("omnitrack:active_session", target_user)
 			frappe.defaults.clear_default("omnitrack_active_session", parent=target_user)
 			frappe.db.set_default("omnitrack_active_session", None, parent=target_user)
@@ -1157,7 +1168,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			       work_item, work_item_label, status, task_nature, 
 			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
-			       cancel_reason, rescheduled_to, rescheduled_from
+			       cancel_reason, rescheduled_to, rescheduled_from,
+			       pairing_partner, paired_block, approval_status
 			FROM `tabPlanned Work Block`
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
@@ -1185,7 +1197,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			       work_item, work_item_label, status, task_nature, 
 			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
-			       cancel_reason, rescheduled_to, rescheduled_from
+			       cancel_reason, rescheduled_to, rescheduled_from,
+			       pairing_partner, paired_block, approval_status
 			FROM `tabPlanned Work Block`
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
@@ -1200,13 +1213,14 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 				"work_item", "work_item_label", "status", "task_nature", 
 				"unplanned_reason", "deliverable_notes", "connected_tasks", "cryptographic_hash", 
 				"billing_status", "associate_name", "appsheet_id",
-				"cancel_reason", "rescheduled_to", "rescheduled_from"
+				"cancel_reason", "rescheduled_to", "rescheduled_from",
+				"pairing_partner", "paired_block", "approval_status"
 			],
 			order_by="work_date desc, start_time desc",
 			limit=150
 		) if frappe.db.exists("DocType", "Planned Work Block") else []
 
-	# 1b. Bulk query child sessions for all loaded blocks
+	# 1b. Bulk query child sessions and deliverable output metrics for all loaded blocks
 	block_names = [b.name for b in work_blocks]
 	sessions_by_block = {}
 	if block_names and frappe.db.exists("DocType", "OmniTrack Work Session"):
@@ -1223,15 +1237,33 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			s["hours"] = flt(s.hours)
 			sessions_by_block.setdefault(s.parent, []).append(s)
 
-	# Enrich blocks with Project Name, Task Subject, and Sessions
+	metrics_by_block = {}
+	if block_names and frappe.db.exists("DocType", "OmniTrack Output Metric"):
+		all_metrics = frappe.db.sql("""
+			SELECT parent, metric_type, quantity, unit, reference_id, notes
+			FROM `tabOmniTrack Output Metric`
+			WHERE parent IN %(block_names)s AND parenttype = 'Planned Work Block'
+		""", {"block_names": block_names}, as_dict=True)
+		for m in all_metrics:
+			m["quantity"] = flt(m.get("quantity") or 0.0)
+			metrics_by_block.setdefault(m.parent, []).append(m)
+
+	# Enrich blocks with Project Name, Task Subject, Sessions, Pairing Info, and Output Metrics
 	for b in work_blocks:
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
 		b["work_date"] = str(b.get("work_date") or "")
 		b["connected_tasks"] = _parse_block_tasks(b.get("connected_tasks"))
 
-		# Attach real child sessions
+		# Attach real child sessions and metrics
 		b["sessions"] = sessions_by_block.get(b.name, [])
+		b["output_metrics"] = metrics_by_block.get(b.name, [])
+
+		# Attach pairing partner name if present
+		if b.get("pairing_partner"):
+			b["pairing_partner_name"] = frappe.db.get_value("User", b["pairing_partner"], "full_name") or b["pairing_partner"]
+		else:
+			b["pairing_partner_name"] = None
 
 		# Fallback: if a Completed block has actual_hours or duration_hours but no child session rows,
 		# synthesize a session so the timeline displays it!
@@ -1365,7 +1397,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		"heatmap": heatmap,
 		"synthesizer_logs": syn_logs,
 		"today_date": today,
-		"active_session": get_active_session(user=current_user)
+		"active_session": get_active_session(user=current_user),
+		"is_manager": is_manager
 	}
 
 @frappe.whitelist()
@@ -1380,7 +1413,7 @@ def toggle_work_block_status(block_name):
 	return {"name": doc.name, "status": doc.status}
 
 @frappe.whitelist()
-def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="13:00:00", duration_hours=4.0, project=None, task=None, deliverable_notes=None, task_nature="🎯 Planned", employee=None):
+def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="10:00:00", duration_hours=1.0, project=None, task=None, deliverable_notes=None, task_nature="🎯 Planned", employee=None, status="Planned"):
 	"""Creates a new Planned Work Block in Frappe DB."""
 	doc = frappe.new_doc("Planned Work Block")
 	assigned_emp = employee or frappe.session.user
@@ -1394,15 +1427,15 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 
 	doc.work_date = work_date or nowdate()
 	doc.start_time = start_time or "09:00:00"
-	doc.end_time = end_time or "13:00:00"
-	doc.duration_hours = flt(duration_hours) or 4.0
+	doc.end_time = end_time or "10:00:00"
+	doc.duration_hours = flt(duration_hours) or 1.0
 	if project:
 		doc.project = project
 	if task:
 		doc.task = task
 	doc.deliverable_notes = deliverable_notes or "Planned Task Entry"
-	doc.task_nature = task_nature
-	doc.status = "In Progress"
+	doc.task_nature = task_nature or "🎯 Planned"
+	doc.status = status or "Planned"
 
 	# Cryptographic Hash
 	raw_hash = f"{doc.employee}|{doc.work_date}|{doc.start_time}|{doc.end_time}|{doc.duration_hours}|{doc.deliverable_notes}"
@@ -1654,10 +1687,17 @@ def get_assigned_tasks(employee=None):
 		):
 			names.add(t.name)
 		if names:
+			task_fields = ["name", "subject", "project", "status", "priority", "exp_end_date", "expected_time", "progress"]
+			task_meta = frappe.get_meta("Task")
+			if task_meta.has_field("custom_kpi_name"):
+				task_fields.extend([
+					"custom_kpi_name", "custom_kpi_target_quantity", "custom_kpi_unit",
+					"custom_kpi_completed_quantity", "custom_kpi_progress_percent"
+				])
 			for r in frappe.get_all(
 				"Task",
 				filters={"name": ["in", list(names)]},
-				fields=["name", "subject", "project", "status", "priority", "exp_end_date", "expected_time", "progress"],
+				fields=task_fields,
 				limit=200,
 			):
 				items[r.name] = {
@@ -1673,6 +1713,11 @@ def get_assigned_tasks(employee=None):
 					"priority": r.priority,
 					"due_date": str(r.exp_end_date or ""),
 					"estimate_hours": round(flt(r.expected_time), 2),
+					"kpi_name": r.get("custom_kpi_name") or "",
+					"kpi_target": flt(r.get("custom_kpi_target_quantity") or 0.0),
+					"kpi_unit": r.get("custom_kpi_unit") or "",
+					"kpi_completed": flt(r.get("custom_kpi_completed_quantity") or 0.0),
+					"kpi_progress": flt(r.get("custom_kpi_progress_percent") or 0.0),
 				}
 
 	# Standalone ToDos (the Frappe-native "Assign To" primitive; no ERPNext needed)
@@ -2127,11 +2172,13 @@ def _duration_hours(start_time, end_time):
 @frappe.whitelist()
 def book_work_block(work_date, start_time, end_time, work_item=None, work_item_label=None,
 					task=None, project=None, deliverable_notes=None,
-					task_nature="\U0001f3af Planned", employee=None):
+					task_nature="\U0001f3af Planned", employee=None, pairing_partner=None):
 	"""Create a planned block: 'from 12 to 2pm I will work on <work item>'. This is the PLAN.
 
 	``work_item`` is the generic assigned-work id from get_assigned_tasks (an ERPNext Task
 	name, or ``todo:<name>``). A real ERPNext Task link is also set when available.
+	If ``pairing_partner`` is specified, automatically mirrors a reciprocal work block for
+	the collaborator with synchronized status and bidirectional links.
 	"""
 	target = _resolve_planner_user(employee)
 	if not frappe.db.exists("DocType", "Planned Work Block"):
@@ -2169,13 +2216,47 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	doc.task_nature = task_nature or "🎯 Planned"
 	doc.deliverable_notes = deliverable_notes or work_item_label
 	doc.status = "Planned"
+	if pairing_partner and pairing_partner != target and frappe.db.exists("User", pairing_partner):
+		doc.pairing_partner = pairing_partner
 	if frappe.db.exists("User", target):
 		doc.associate_name = frappe.db.get_value("User", target, "full_name") or target
 	doc.flags.ignore_permissions = True
 	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
 		doc.flags.ignore_links = True
 	doc.insert()
-	return {"status": "success", "name": doc.name, "duration_hours": doc.duration_hours}
+
+	# Reciprocal collaborative pairing block creation
+	if pairing_partner and pairing_partner != target and frappe.db.exists("User", pairing_partner):
+		partner_doc = frappe.new_doc("Planned Work Block")
+		partner_doc.employee = pairing_partner
+		partner_doc.work_date = doc.work_date
+		partner_doc.start_time = doc.start_time
+		partner_doc.end_time = doc.end_time
+		partner_doc.duration_hours = doc.duration_hours
+		partner_doc.task = doc.task
+		partner_doc.work_item = doc.work_item
+		partner_doc.work_item_label = doc.work_item_label
+		partner_doc.project = doc.project
+		partner_doc.task_nature = doc.task_nature
+		partner_doc.deliverable_notes = doc.deliverable_notes
+		partner_doc.status = "Planned"
+		partner_doc.pairing_partner = target
+		partner_doc.paired_block = doc.name
+		partner_doc.associate_name = frappe.db.get_value("User", pairing_partner, "full_name") or pairing_partner
+		partner_doc.flags.ignore_permissions = True
+		if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+			partner_doc.flags.ignore_links = True
+		partner_doc.insert()
+
+		doc.paired_block = partner_doc.name
+		doc.db_set("paired_block", partner_doc.name, update_modified=False)
+
+	return {
+		"status": "success",
+		"name": doc.name,
+		"duration_hours": doc.duration_hours,
+		"paired_block": getattr(doc, "paired_block", None)
+	}
 
 
 @frappe.whitelist()
@@ -2218,6 +2299,40 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 	doc.flags.ignore_permissions = True
 	doc.flags.ignore_links = True
 	doc.save()
+
+	# Synchronize reciprocal partner block if paired
+	if getattr(doc, "paired_block", None) and frappe.db.exists("Planned Work Block", doc.paired_block):
+		try:
+			partner_doc = frappe.get_doc("Planned Work Block", doc.paired_block)
+			synced = False
+			if work_date and partner_doc.work_date != doc.work_date:
+				partner_doc.work_date = doc.work_date
+				synced = True
+			if start_time and partner_doc.start_time != doc.start_time:
+				partner_doc.start_time = doc.start_time
+				synced = True
+			if end_time and partner_doc.end_time != doc.end_time:
+				partner_doc.end_time = doc.end_time
+				synced = True
+			if status and partner_doc.status != doc.status:
+				partner_doc.status = doc.status
+				synced = True
+			if cancel_reason and getattr(partner_doc, "cancel_reason", None) != doc.cancel_reason:
+				partner_doc.cancel_reason = doc.cancel_reason
+				synced = True
+			if synced:
+				partner_doc.flags.ignore_permissions = True
+				partner_doc.flags.ignore_links = True
+				partner_doc.save()
+		except Exception:
+			pass
+
+	if doc.task:
+		try:
+			update_task_kpi_progress(doc.task)
+		except Exception:
+			pass
+
 	return {
 		"status": "success",
 		"name": doc.name,
@@ -2396,6 +2511,67 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		doc.flags.ignore_links = True
 	doc.save()
 
+	# Reciprocal pairing sync: mirror session row to paired partner block
+	if getattr(doc, "paired_block", None) and frappe.db.exists("Planned Work Block", doc.paired_block):
+		try:
+			partner_doc = frappe.get_doc("Planned Work Block", doc.paired_block)
+			already_logged = any(
+				str(s.session_date) == str(base_date) and str(s.from_time) == str(from_time) and str(s.to_time) == str(to_time)
+				for s in (partner_doc.sessions or [])
+			)
+			if not already_logged:
+				if is_overnight:
+					partner_doc.append("sessions", {
+						"session_date": base_date,
+						"from_time": from_time,
+						"to_time": "23:59:59",
+						"hours": h1,
+						"notes": f"{notes} (pt 1)" if notes else "Overnight session (pt 1)",
+						"logged_via": logged_via or "Manual",
+						"task_nature": partner_doc.task_nature,
+					})
+					partner_doc.append("sessions", {
+						"session_date": next_date,
+						"from_time": "00:00:00",
+						"to_time": to_time,
+						"hours": h2,
+						"notes": f"{notes} (pt 2)" if notes else "Overnight session (pt 2)",
+						"logged_via": logged_via or "Manual",
+						"task_nature": partner_doc.task_nature,
+					})
+				else:
+					partner_doc.append("sessions", {
+						"session_date": base_date,
+						"from_time": from_time,
+						"to_time": to_time,
+						"hours": hours,
+						"notes": notes,
+						"logged_via": logged_via or "Manual",
+						"task_nature": partner_doc.task_nature,
+					})
+				if output_metrics and isinstance(output_metrics, list):
+					for m in output_metrics:
+						if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
+							partner_doc.append("output_metrics", {
+								"metric_type": m.get("metric_type") or "Records Processed",
+								"quantity": flt(m.get("quantity", 1.0)),
+								"unit": m.get("unit") or "",
+								"reference_id": m.get("reference_id") or "",
+								"notes": m.get("notes") or ""
+							})
+				partner_doc.flags.ignore_permissions = True
+				partner_doc.flags.ignore_links = True
+				partner_doc.save()
+		except Exception as e:
+			frappe.log_error(f"Error mirroring session to paired block {doc.paired_block}: {e}", "OmniTrack Pairing")
+
+	# Update Task KPI progress if linked to a Task
+	if doc.task:
+		try:
+			update_task_kpi_progress(doc.task)
+		except Exception:
+			pass
+
 	# Auto-create / update Timesheet connected to Project and Task if sync_mode is Immediate
 	if frappe.db.exists("DocType", "Timesheet") and get_timesheet_sync_mode() == "Immediate":
 		try:
@@ -2494,6 +2670,13 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 	except Exception:
 		pass
 
+	# Update Task KPI progress if linked to a Task
+	if doc.task:
+		try:
+			update_task_kpi_progress(doc.task)
+		except Exception:
+			pass
+
 	frappe.db.commit()
 	return {
 		"status": "success",
@@ -2546,6 +2729,13 @@ def delete_work_session(session_name, block_name=None):
 		sync_work_block_timesheet(doc)
 	except Exception:
 		pass
+
+	# Update Task KPI progress if linked to a Task
+	if doc.task:
+		try:
+			update_task_kpi_progress(doc.task)
+		except Exception:
+			pass
 
 	frappe.db.commit()
 	return {
@@ -3122,6 +3312,101 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		"total_approved_hours": round(total_hours, 2),
 		"approved_blocks": approved_list
 	}
+
+
+@frappe.whitelist()
+def get_pending_team_approvals(work_date=None, employee=None):
+	"""
+	Returns Planned Work Blocks requiring manager approval.
+	Blocks that have actual work logged (actual_hours > 0) and approval_status != 'Approved'.
+	Enforces Manager / HR / Admin role permissions.
+	"""
+	approver = frappe.session.user
+	if not approver or approver == "Guest":
+		frappe.throw(_("Authentication required to view pending approvals."), frappe.PermissionError)
+
+	from omnitrack.permissions import is_omnitrack_manager
+	is_mgr = is_omnitrack_manager(approver) or any(
+		r in frappe.get_roles(approver) for r in ("HR Manager", "HR User", "System Manager", "Administrator")
+	)
+	if not is_mgr:
+		frappe.throw(_("Only HR or OmniTrack Managers can view team approvals."), frappe.PermissionError)
+
+	filters = {
+		"approval_status": ["!=", "Approved"],
+		"actual_hours": [">", 0]
+	}
+	if work_date:
+		filters["work_date"] = work_date
+	if employee and employee != "All":
+		filters["employee"] = employee
+
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters=filters,
+		fields=[
+			"name", "employee", "associate_name", "work_date",
+			"start_time", "end_time", "duration_hours", "actual_hours",
+			"variance_hours", "work_item_label", "project", "task",
+			"task_nature", "status", "approval_status", "pairing_partner", "paired_block"
+		],
+		order_by="work_date desc, start_time desc",
+		limit=100
+	)
+
+	for b in blocks:
+		b["start_time"] = _time_str(b.get("start_time"))
+		b["end_time"] = _time_str(b.get("end_time"))
+		b["work_date"] = str(b.get("work_date") or "")
+		if b.get("pairing_partner"):
+			b["pairing_partner_name"] = frappe.db.get_value("User", b["pairing_partner"], "full_name") or b["pairing_partner"]
+
+	return blocks
+
+
+@frappe.whitelist()
+def update_task_kpi_progress(task_name):
+	"""
+	Rolls up completed KPI output metrics across all Planned Work Blocks linked to this Task
+	and updates Task.custom_kpi_completed_quantity and Task.custom_kpi_progress_percent.
+	"""
+	if not task_name or not frappe.db.exists("DocType", "Task") or not frappe.db.exists("Task", task_name):
+		return None
+
+	meta = frappe.get_meta("Task")
+	if not meta.has_field("custom_kpi_completed_quantity"):
+		return None
+
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters={"task": task_name, "status": ["!=", "Cancelled"]},
+		pluck="name"
+	)
+	if not blocks or not frappe.db.exists("DocType", "OmniTrack Output Metric"):
+		total_completed = 0.0
+	else:
+		res = frappe.db.sql("""
+			SELECT SUM(quantity) as total_qty
+			FROM `tabOmniTrack Output Metric`
+			WHERE parent IN %(blocks)s AND parenttype = 'Planned Work Block'
+		""", {"blocks": tuple(blocks)}, as_dict=True)
+		total_completed = flt(res[0].total_qty) if res and res[0].total_qty else 0.0
+
+	target_qty = flt(frappe.db.get_value("Task", task_name, "custom_kpi_target_quantity") or 0.0)
+	progress_pct = round((total_completed / target_qty * 100.0), 2) if target_qty > 0 else 0.0
+
+	frappe.db.set_value("Task", task_name, {
+		"custom_kpi_completed_quantity": total_completed,
+		"custom_kpi_progress_percent": progress_pct
+	}, update_modified=False)
+
+	return {
+		"task": task_name,
+		"target_quantity": target_qty,
+		"completed_quantity": total_completed,
+		"progress_percent": progress_pct
+	}
+
 
 
 

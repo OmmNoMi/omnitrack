@@ -88,31 +88,38 @@
 /* Sidebar hover reveal (inherits native Frappe sidebar interaction) */
 .body-sidebar:hover #omnitrack-nav-timer.omni-pos-sidebar,
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-running,
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover {
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:focus-within,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open {
 	opacity: 1;
 	visibility: visible;
 }
 
-/* While resting as a 24px circular button in sidebar dock */
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) {
+/* While resting as a 24px circular button in sidebar dock.
+   NOT `:not(:hover)` any more. Hovering used to expand the pill outward over
+   the page — a green "Punch" chip sticking into the canvas, which reads as a
+   different kind of thing from every other control on that rail. OmniDesk
+   draws a label card for anything docked in the sidebar rail (the same card
+   the Assistant Help button gets), so hover is now ITS job, and the pill opens
+   only when the user asks for it by clicking. */
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) {
 	width: 24px !important;
 	border-radius: 50% !important;
 }
 
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) .omni-timer-pill-inner {
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) .omni-timer-pill-inner {
 	padding: 0;
 	justify-content: center;
 	width: 100%;
 }
 
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) #omni-timer-text,
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) #omni-timer-btn,
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(:hover):not(.omni-dock-open) .omnitrack-timer-opts {
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) #omni-timer-text,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) #omni-timer-btn,
+.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) .omnitrack-timer-opts {
 	display: none;
 }
 
-/* On hover over the sidebar dock button: expands outward into the content canvas */
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover,
+/* Opened by a click: expands outward into the content canvas */
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open {
 	width: auto;
 	border-radius: 16px;
@@ -123,16 +130,12 @@
 	transform: translateX(10px);
 }
 
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover .omni-timer-pill-inner,
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open .omni-timer-pill-inner {
 	padding: 0 6px;
 }
 
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover #omni-timer-text,
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open #omni-timer-text,
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover #omni-timer-btn,
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open #omni-timer-btn,
-.body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:hover .omnitrack-timer-opts,
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar.omni-dock-open .omnitrack-timer-opts {
 	display: inline-flex;
 }

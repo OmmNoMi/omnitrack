@@ -93,6 +93,47 @@ CUSTOM_FIELDS = {
 			"default": "Not Synced",
 			"read_only": 1,
 			"insert_after": "custom_remote_task_id"
+		},
+		{
+			"fieldname": "custom_kpi_section",
+			"label": "Deliverable KPI & Quantitative Tracking",
+			"fieldtype": "Section Break",
+			"insert_after": "custom_sync_status"
+		},
+		{
+			"fieldname": "custom_kpi_name",
+			"label": "Deliverable KPI Name",
+			"fieldtype": "Data",
+			"insert_after": "custom_kpi_section"
+		},
+		{
+			"fieldname": "custom_kpi_target_quantity",
+			"label": "Target Quantity",
+			"fieldtype": "Float",
+			"default": 0.0,
+			"insert_after": "custom_kpi_name"
+		},
+		{
+			"fieldname": "custom_kpi_unit",
+			"label": "Unit of Measure",
+			"fieldtype": "Data",
+			"insert_after": "custom_kpi_target_quantity"
+		},
+		{
+			"fieldname": "custom_kpi_completed_quantity",
+			"label": "Completed Quantity (Cumulative)",
+			"fieldtype": "Float",
+			"default": 0.0,
+			"read_only": 1,
+			"insert_after": "custom_kpi_unit"
+		},
+		{
+			"fieldname": "custom_kpi_progress_percent",
+			"label": "KPI Progress (%)",
+			"fieldtype": "Percent",
+			"default": 0.0,
+			"read_only": 1,
+			"insert_after": "custom_kpi_completed_quantity"
 		}
 	],
 	"ToDo": [

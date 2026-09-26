@@ -16,6 +16,20 @@
       "in_standard_filter": 1
     },
     {
+      "fieldname": "pairing_partner",
+      "fieldtype": "Link",
+      "options": "User",
+      "label": "Pairing Partner / Collaborator",
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "paired_block",
+      "fieldtype": "Link",
+      "options": "Planned Work Block",
+      "label": "Paired Work Block",
+      "read_only": 1
+    },
+    {
       "fieldname": "work_date",
       "fieldtype": "Date",
       "label": "Work Date",

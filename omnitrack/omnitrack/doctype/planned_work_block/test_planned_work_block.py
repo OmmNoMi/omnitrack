@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils import flt
 from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
@@ -1385,6 +1386,273 @@ console.log('SUCCESS');
 
 		cancelled_amended_ts = frappe.get_doc("Timesheet", new_ts_name)
 		self.assertEqual(cancelled_amended_ts.docstatus, 2, "Amended timesheet must be cancelled when all sessions are deleted")
+
+	def test_reciprocal_collaborative_pairing_block_booking(self):
+		from omnitrack.api import book_work_block
+
+		test_partner = "test_partner@ommnomi.local"
+		if not frappe.db.exists("User", test_partner):
+			u = frappe.new_doc("User")
+			u.email = test_partner
+			u.first_name = "Test Partner"
+			u.save(ignore_permissions=True)
+
+		res = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="14:00:00",
+			end_time="16:00:00",
+			work_item_label="Pairing Integration Session",
+			pairing_partner=test_partner,
+			employee="Administrator"
+		)
+		self.assertEqual(res["status"], "success")
+		primary_block_name = res["name"]
+		partner_block_name = res.get("paired_block")
+
+		self.assertIsNotNone(partner_block_name, "Primary block must have a paired_block reference")
+		primary_doc = frappe.get_doc("Planned Work Block", primary_block_name)
+		self.assertEqual(primary_doc.pairing_partner, test_partner)
+		self.assertEqual(primary_doc.paired_block, partner_block_name)
+
+		partner_doc = frappe.get_doc("Planned Work Block", partner_block_name)
+		self.assertEqual(partner_doc.employee, test_partner)
+		self.assertEqual(partner_doc.pairing_partner, "Administrator")
+		self.assertEqual(partner_doc.paired_block, primary_block_name)
+		self.assertEqual(str(partner_doc.start_time), "14:00:00")
+		self.assertEqual(str(partner_doc.end_time), "16:00:00")
+		self.assertEqual(partner_doc.duration_hours, 2.0)
+
+	def test_collaborative_pairing_session_mirroring(self):
+		from omnitrack.api import book_work_block, log_work_session
+
+		test_partner = "test_partner@ommnomi.local"
+		if not frappe.db.exists("User", test_partner):
+			u = frappe.new_doc("User")
+			u.email = test_partner
+			u.first_name = "Test Partner"
+			u.save(ignore_permissions=True)
+
+		res = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="10:00:00",
+			end_time="11:30:00",
+			work_item_label="Collaborative Sprint",
+			pairing_partner=test_partner,
+			employee="Administrator"
+		)
+		primary_block_name = res["name"]
+		partner_block_name = res["paired_block"]
+
+		# Log session on primary block
+		log_res = log_work_session(
+			block_name=primary_block_name,
+			from_time="10:00:00",
+			to_time="11:30:00",
+			hours=1.5,
+			notes="Executed joint data mapping and migration",
+			session_date=frappe.utils.nowdate()
+		)
+		self.assertEqual(log_res["status"], "success")
+
+		# Check that session mirrored to partner block
+		partner_doc = frappe.get_doc("Planned Work Block", partner_block_name)
+		self.assertEqual(len(partner_doc.sessions), 1, "Session must be mirrored to partner block")
+		mirrored = partner_doc.sessions[0]
+		self.assertEqual(str(mirrored.from_time), "10:00:00")
+		self.assertEqual(str(mirrored.to_time), "11:30:00")
+		self.assertEqual(flt(mirrored.hours), 1.5)
+		self.assertEqual(mirrored.notes, "Executed joint data mapping and migration")
+		self.assertEqual(partner_doc.actual_hours, 1.5)
+
+	def test_task_kpi_target_and_cumulative_rollup(self):
+		from omnitrack.api import book_work_block, log_work_session, update_task_kpi_progress
+
+		if not frappe.db.exists("DocType", "Task"):
+			return
+
+		# Create a task with KPI target
+		task = frappe.new_doc("Task")
+		task.subject = "Test Student Enrollment KPI Task"
+		task.status = "Open"
+		if frappe.get_meta("Task").has_field("custom_kpi_target_quantity"):
+			task.custom_kpi_name = "Enrollments"
+			task.custom_kpi_target_quantity = 100.0
+			task.custom_kpi_unit = "Students"
+		task.flags.ignore_permissions = True
+		task.flags.ignore_mandatory = True
+		task.insert()
+
+		# Book block linked to task
+		res = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="09:00:00",
+			end_time="10:00:00",
+			task=task.name,
+			work_item=task.name,
+			employee="Administrator"
+		)
+		block_name = res["name"]
+
+		# Log session with output metrics
+		log_work_session(
+			block_name=block_name,
+			from_time="09:00:00",
+			to_time="10:00:00",
+			hours=1.0,
+			notes="Enrolled 25 students",
+			session_date=frappe.utils.nowdate(),
+			output_metrics=[{"metric_type": "Enrollments", "quantity": 25.0, "unit": "Students"}]
+		)
+
+		task.reload()
+		if frappe.get_meta("Task").has_field("custom_kpi_completed_quantity"):
+			self.assertEqual(flt(task.custom_kpi_completed_quantity), 25.0)
+			self.assertEqual(flt(task.custom_kpi_progress_percent), 25.0)
+
+		# Log second block and metrics
+		res2 = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="11:00:00",
+			end_time="12:00:00",
+			task=task.name,
+			work_item=task.name,
+			employee="Administrator"
+		)
+		log_work_session(
+			block_name=res2["name"],
+			from_time="11:00:00",
+			to_time="12:00:00",
+			hours=1.0,
+			notes="Enrolled 50 students",
+			session_date=frappe.utils.nowdate(),
+			output_metrics=[{"metric_type": "Enrollments", "quantity": 50.0, "unit": "Students"}]
+		)
+
+		task.reload()
+		if frappe.get_meta("Task").has_field("custom_kpi_completed_quantity"):
+			self.assertEqual(flt(task.custom_kpi_completed_quantity), 75.0)
+			self.assertEqual(flt(task.custom_kpi_progress_percent), 75.0)
+
+	def test_get_pending_team_approvals_and_bulk_approval(self):
+		from omnitrack.api import book_work_block, log_work_session, get_pending_team_approvals, approve_work_blocks
+
+		res = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="13:00:00",
+			end_time="14:00:00",
+			work_item_label="Pending Approval Test Block",
+			employee="Administrator"
+		)
+		b_name = res["name"]
+
+		log_work_session(
+			block_name=b_name,
+			from_time="13:00:00",
+			to_time="14:00:00",
+			hours=1.0,
+			notes="Finished session awaiting approval",
+			session_date=frappe.utils.nowdate()
+		)
+
+		# Query pending approvals
+		pending = get_pending_team_approvals(work_date=frappe.utils.nowdate())
+		pending_names = [b["name"] for b in pending]
+		self.assertIn(b_name, pending_names, "Unapproved logged block must be in pending approvals")
+
+		# Approve via approve_work_blocks
+		app_res = approve_work_blocks(block_names=[b_name])
+		self.assertEqual(app_res["status"], "success")
+
+		# Ensure no longer in pending approvals
+		pending_after = get_pending_team_approvals(work_date=frappe.utils.nowdate())
+		pending_after_names = [b["name"] for b in pending_after]
+		self.assertNotIn(b_name, pending_after_names, "Approved block must not appear in pending approvals")
+
+		b_doc = frappe.get_doc("Planned Work Block", b_name)
+		self.assertEqual(b_doc.approval_status, "Approved")
+		self.assertEqual(b_doc.approved_by, "Administrator")
+
+	def test_multi_device_clock_skew_and_future_tolerance(self):
+		"""Ensures get_active_session does not prematurely evict sessions with near-future/skewed start times."""
+		from datetime import datetime
+		from omnitrack.api import sync_active_session, get_active_session
+		now_ms = datetime.now().timestamp() * 1000
+		future_start = now_ms + (300 * 1000) # 5 minutes in future due to device clock skew or on-time start
+		session_data = {
+			"startTime": future_start,
+			"selectedNature": "🎯 Planned",
+			"selectedProject": "PROJ-TEST",
+			"trackerNotes": "Clock skew resilience test",
+			"trackerBlockName": None,
+			"status": "active"
+		}
+		res = sync_active_session(session_data=session_data, user="Administrator")
+		self.assertEqual(res.get("status"), "success")
+
+		active = get_active_session(user="Administrator")
+		self.assertIsNotNone(active, "Active session with 5m clock skew must not be evicted")
+		self.assertEqual(active.get("trackerNotes"), "Clock skew resilience test")
+
+		# Clearing active session removes it from Redis and defaults
+		clear_res = sync_active_session(session_data=None, user="Administrator")
+		self.assertEqual(clear_res.get("status"), "cleared")
+		self.assertIsNone(get_active_session(user="Administrator"), "Active session must be cleared")
+
+	def test_timesheet_booking_continuous_improvement_and_reconciliation(self):
+		"""Ensures work block booking and full timesheet logging accurately derive hours and status."""
+		from omnitrack.api import book_work_block, log_work_session
+		res = book_work_block(
+			work_date=frappe.utils.nowdate(),
+			start_time="10:08:00",
+			end_time="18:30:00",
+			work_item_label="OmniTrack Application Continuous Improvement",
+			deliverable_notes="Continuous improvement and multi-device session hardening",
+			task_nature="🎯 Planned",
+			employee="Administrator"
+		)
+		b_name = res["name"]
+		self.assertEqual(res["duration_hours"], 8.37)
+
+		log_work_session(
+			block_name=b_name,
+			from_time="10:08:00",
+			to_time="18:30:00",
+			hours=8.37,
+			session_date=frappe.utils.nowdate(),
+			notes="Continuous improvement and multi-device session hardening",
+			logged_via="Stopwatch"
+		)
+
+		b_doc = frappe.get_doc("Planned Work Block", b_name)
+		self.assertEqual(b_doc.status, "Completed")
+		self.assertEqual(b_doc.duration_hours, 8.37)
+		self.assertEqual(b_doc.actual_hours, 8.37)
+		self.assertEqual(len(b_doc.sessions), 1)
+		self.assertEqual(str(b_doc.sessions[0].from_time), "10:08:00")
+		self.assertEqual(str(b_doc.sessions[0].to_time), "18:30:00")
+
+	def test_html_multi_device_resilience_invariants(self):
+		"""Ensures omnitrack.html contains clock skew absorption, non-destructive sync, and LAN IP detection."""
+		import os
+		html_path = frappe.get_app_path("omnitrack", "www", "omnitrack.html")
+		self.assertTrue(os.path.exists(html_path))
+		with open(html_path, "r", encoding="utf-8") as f:
+			html = f.read()
+
+		# 1. Clock skew resilience in restoreActiveSession
+		self.assertIn("serverHeartbeat", html)
+		self.assertIn("serverElapsed", html)
+		self.assertIn("clockSkewMs", html)
+		self.assertIn("Math.max(0, Math.max(serverElapsed, localElapsed))", html)
+
+		# 2. Block status reconciliation does NOT kill server active session
+		self.assertNotIn("matched.status === 'Completed')) {\n            markSessionEnded();\n            localStorage.removeItem('omnitrack_active_session');\n            postJSON('sync_active_session', { session_data: null })", html)
+		self.assertIn("matched.status = 'In Progress';", html)
+
+		# 3. Socket.IO LAN IP detection for mobile devices on Wi-Fi
+		self.assertIn("/^192\\.168\\./", html)
+		self.assertIn("/^10\\./", html)
+		self.assertIn("/^172\\.(1[6-9]|2[0-9]|3[0-1])\\./", html)
 
 	def tearDown(self):
 		frappe.db.rollback()

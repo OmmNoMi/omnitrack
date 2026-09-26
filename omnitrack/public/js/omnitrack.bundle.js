@@ -171,10 +171,16 @@ omnitrack.mount_navbar_timer = function() {
 		return;
 	}
 
+	// The shortcut is bound to `altKey`, which IS the Option key on a Mac — the
+	// binding was always right, the LABEL was not. "Alt+Shift+T" sends a Mac
+	// user hunting for a key their keyboard does not have, so the label is
+	// written the way the platform writes it.
+	const shortcut_label = frappe.utils.is_mac() ? '\u2325\u21e7T' : __('Alt+Shift+T');
+
 	const timerHtml = `
-		<div id="omnitrack-nav-timer" class="omni-pos-sidebar" title="${__('OmniTrack Live Stopwatch (Alt+Shift+T)')}">
+		<div id="omnitrack-nav-timer" class="omni-pos-sidebar" title="${__('OmniTrack Live Stopwatch')} (${shortcut_label})">
 			<div class="omni-timer-pill-inner">
-				<span class="omnitrack-timer-dot" id="omni-timer-dot" title="${__('Status Indicator')}"></span>
+				<span class="omnitrack-timer-dot" id="omni-timer-dot" aria-hidden="true"></span>
 				<span id="omni-timer-text">00:00:00</span>
 				<button type="button" class="omnitrack-timer-action" id="omni-timer-btn">Punch</button>
 				<button type="button" class="omnitrack-timer-opts" id="omni-timer-opts-btn" title="${__('Stopwatch Settings')}" aria-haspopup="true">▾</button>
@@ -208,6 +214,38 @@ omnitrack.mount_navbar_timer = function() {
 	}
 
 	omnitrack.sync_timer_ui();
+
+	// Open the pill by clicking the dock circle.
+	//
+	// The pill used to open on hover. In the sidebar rail that put a green
+	// "Punch" chip out over the page canvas whenever the pointer crossed the
+	// circle, which is nothing like the other controls docked on that rail —
+	// they show a small label card and stay where they are. Hover is now the
+	// label card's, so the pill needs a deliberate way in, or Punch would be
+	// unreachable with the mouse. Clicking the circle is that way; clicking
+	// anything inside the open pill (Punch, the settings caret) is left to
+	// those controls' own handlers.
+	$('#omnitrack-nav-timer').off('click.omni_dock').on('click.omni_dock', function(e) {
+		const $t = $(this);
+		if (!$t.hasClass('omni-pos-sidebar')) return;
+		if ($(e.target).closest('button, a, .omni-opt-item').length) return;
+		if ($t.hasClass('omni-dock-open')) {
+			$t.removeClass('omni-dock-open');
+			$('#omni-timer-dropdown').removeClass('show');
+		} else {
+			$t.addClass('omni-dock-open');
+		}
+	});
+
+	// Enter/Space on the docked circle does the same thing. OmniDesk gives the
+	// circle a tab stop in the rail's roving group, so it is reachable by
+	// keyboard, and a focus stop that cannot be activated is not a control.
+	$('#omnitrack-nav-timer').off('keydown.omni_dock').on('keydown.omni_dock', function(e) {
+		if (e.target !== this) return;
+		if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+		e.preventDefault();
+		$(this).trigger('click.omni_dock');
+	});
 
 	// Options dropdown trigger
 	$('#omni-timer-opts-btn').off('click').on('click', function(e) {
@@ -272,7 +310,7 @@ omnitrack.mount_navbar_timer = function() {
 		$('#omni-timer-dropdown').removeClass('show');
 		$('#omnitrack-nav-timer').removeClass('omni-dock-open');
 
-		let label = targetMode === 'zen' ? __('Zen Dot (Hover to see time)') : (targetMode === 'hidden' ? __('Hidden (Press Alt+Shift+T to summon)') : __('Always Visible'));
+		let label = targetMode === 'zen' ? __('Zen Dot (Hover to see time)') : (targetMode === 'hidden' ? __('Hidden (Press {0} to summon)', [shortcut_label]) : __('Always Visible'));
 		frappe.show_alert({
 			message: __('Timer style set to: ') + '<strong>' + label + '</strong>',
 			indicator: 'blue'
