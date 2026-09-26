@@ -44,3 +44,28 @@ def pad_time(time_str):
 	m = parts[1].zfill(2) if len(parts) > 1 else "00"
 	s = parts[2].zfill(2) if len(parts) > 2 else "00"
 	return f"{h}:{m}:{s}"
+
+
+def week_bounds(week_start=None):
+	"""Returns (monday, sunday) dates for the week containing week_start or today."""
+	from datetime import timedelta
+	from frappe.utils import getdate, nowdate
+	base = getdate(week_start) if week_start else getdate(nowdate())
+	monday = base - timedelta(days=base.weekday())
+	return monday, monday + timedelta(days=6)
+
+
+def time_str(val):
+	"""Serialize a Frappe Time field as zero-padded HH:MM:SS."""
+	from datetime import timedelta
+	if val in (None, ""):
+		return ""
+	if isinstance(val, timedelta):
+		total = int(val.total_seconds())
+		h, rem = divmod(total, 3600)
+		m, sec = divmod(rem, 60)
+		return f"{h:02d}:{m:02d}:{sec:02d}"
+	if isinstance(val, str):
+		return pad_time(val)
+	return str(val)
+

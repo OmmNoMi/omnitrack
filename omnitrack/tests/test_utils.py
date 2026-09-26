@@ -68,3 +68,32 @@ class TestOmniTrackUtils(FrappeTestCase):
 	def test_resolve_planner_user_self(self):
 		user = resolve_planner_user(None)
 		self.assertEqual(user, frappe.session.user)
+
+	def test_week_bounds(self):
+		from omnitrack.utils.time_math import week_bounds
+		# 2026-09-26 is Saturday, so week bounds are Monday 2026-09-21 to Sunday 2026-09-27
+		mon, sun = week_bounds("2026-09-26")
+		self.assertEqual(str(mon), "2026-09-21")
+		self.assertEqual(str(sun), "2026-09-27")
+
+	def test_time_str(self):
+		from omnitrack.utils.time_math import time_str
+		from datetime import timedelta
+		self.assertEqual(time_str("9:00"), "09:00:00")
+		self.assertEqual(time_str(timedelta(seconds=3665)), "01:01:05")
+		self.assertEqual(time_str(None), "")
+
+	def test_parse_block_tasks(self):
+		from omnitrack.utils.validators import parse_block_tasks
+		self.assertEqual(parse_block_tasks(None), [])
+		self.assertEqual(parse_block_tasks(""), [])
+		self.assertEqual(parse_block_tasks('[{"id": "1", "subject": "Test"}]'), [{"id": "1", "subject": "Test"}])
+		lines_parsed = parse_block_tasks("• First task\n• Second task")
+		self.assertEqual(len(lines_parsed), 2)
+		self.assertEqual(lines_parsed[0]["subject"], "First task")
+
+	def test_is_planner_manager(self):
+		from omnitrack.utils.user_resolver import is_planner_manager
+		# Administrator is always manager
+		self.assertTrue(is_planner_manager("Administrator"))
+

@@ -74,3 +74,10 @@ def resolve_planner_user(employee=None):
 		)
 
 	return target_user
+
+
+def is_planner_manager(user=None):
+	"""Returns True if user has OmniTrack Manager or System Manager role."""
+	from omnitrack.permissions import is_omnitrack_manager
+	return is_omnitrack_manager(user)
+

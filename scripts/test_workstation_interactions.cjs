@@ -1141,11 +1141,15 @@ console.log('✓ Test 27: Mobile dropdown viewport clamping & reflow verified.')
 // ---------------------------------------------------------------------------
 // TEST 28: 1-Click Atomic Switch Task Action (Issue #7)
 // ---------------------------------------------------------------------------
-// 1. switch_active_session API defined in omnitrack/api.py
-const apiContent = fs.readFileSync(path.join(__dirname, '../omnitrack/api.py'), 'utf8');
+// 1. switch_active_session API defined in omnitrack/api
+const apiPath = path.join(__dirname, '../omnitrack/api.py');
+const apiDir = path.join(__dirname, '../omnitrack/api');
+const apiContent = fs.existsSync(apiPath)
+  ? fs.readFileSync(apiPath, 'utf8')
+  : fs.readdirSync(apiDir).filter(f => f.endsWith('.py')).map(f => fs.readFileSync(path.join(apiDir, f), 'utf8')).join('\n');
 assert.ok(
   apiContent.includes('def switch_active_session('),
-  'FAIL: switch_active_session must be defined in omnitrack/api.py'
+  'FAIL: switch_active_session must be defined in omnitrack/api'
 );
 
 // 2. UI trigger button in session card toolbar
