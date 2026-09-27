@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-blue: #4285F4;
+    --brand-green: #34A853;
+    --brand-red: #EA4335;
+    --brand-yellow: #FBBC05;
+    --brand-purple: #673AB7;
+  }
+
+  [v-cloak] { display: none !important; }
+
+  html, body {
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    font-family: 'Google Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html.dark, html.dark body, body.dark {
+    background-color: #121212 !important;
+    color: #F3F4F6 !important;
+  }
+
+  html:not(.dark), html:not(.dark) body, body:not(.dark) {
+    background-color: #F8F9FA !important;
+    color: #111827 !important;
+  }
+}
+
+.pulse-record {
+  animation: record-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes record-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.15); }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.6); }

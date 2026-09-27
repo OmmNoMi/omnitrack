@@ -17,33 +17,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Frappe UI Timesheet Session Box CSS Bundle -->
-  <link rel="stylesheet" href="/assets/omnitrack/dist/timesheet_session_box.bundle.css?v={{ asset_bust }}">
+  <!-- Pre-compiled Static Tailwind CSS & Frappe UI Styles (Zero Runtime CDN) -->
+  <link rel="stylesheet" href="/assets/omnitrack/dist/omnitrack.bundle.css?v={{ asset_bust }}">
 
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Google Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          gridTemplateColumns: {
-            '24': 'repeat(24, minmax(0, 1fr))',
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Vue.js 3 Global Production CDN -->
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-
-  <!-- Socket.io Client for Instant Live Cross-Device Sync -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Pre-compiled Static Vue 3 Runtime, Frappe UI & Socket.io Bundle (Zero Runtime CDN) -->
+  <script src="/assets/omnitrack/dist/omnitrack.bundle.js?v={{ asset_bust }}"></script>
 
   <style>
     [v-cloak] { display: none !important; }

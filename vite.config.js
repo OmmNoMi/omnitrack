@@ -21,15 +21,15 @@ export default defineConfig({
 		cssCodeSplit: false,
 		assetsInlineLimit: 0,
 		lib: {
-			entry: resolve(__dirname, "src/timesheet_session/main.js"),
-			name: "OmniTrackSessionBox",
+			entry: resolve(__dirname, "src/main.js"),
+			name: "OmniTrack",
 			formats: ["iife"],
-			fileName: () => "timesheet_session_box.bundle.js",
+			fileName: () => "omnitrack.bundle.js",
 		},
 		rollupOptions: {
 			output: {
 				assetFileNames: (info) => {
-					if ((info.name || "").endsWith(".css")) return "timesheet_session_box.bundle.css";
+					if ((info.name || "").endsWith(".css")) return "omnitrack.bundle.css";
 					return "[name][extname]";
 				},
 				inlineDynamicImports: true,

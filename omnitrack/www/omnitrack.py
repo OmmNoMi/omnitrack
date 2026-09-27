@@ -27,7 +27,7 @@ def get_context(context):
 	# changes bust the cache, unchanged builds keep it.
 	try:
 		import os
-		_dist = frappe.get_app_path("omnitrack", "public", "dist", "timesheet_session_box.bundle.js")
+		_dist = frappe.get_app_path("omnitrack", "public", "dist", "omnitrack.bundle.js")
 		ctx.asset_bust = str(int(os.path.getmtime(_dist)))
 	except Exception:
 		ctx.asset_bust = "1030"

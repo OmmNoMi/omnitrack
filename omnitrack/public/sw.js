@@ -1,10 +1,50 @@
 // OmniTrack Service Worker & Web Push Handler
+const STATIC_CACHE = 'omnitrack-static-v1.3';
+const PRECACHE_ASSETS = [
+	'/assets/omnitrack/dist/omnitrack.bundle.css',
+	'/assets/omnitrack/dist/omnitrack.bundle.js',
+	'/assets/omnitrack/manifest.json',
+	'/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg'
+];
+
 self.addEventListener('install', function(event) {
 	self.skipWaiting();
+	event.waitUntil(
+		caches.open(STATIC_CACHE).then(function(cache) {
+			return cache.addAll(PRECACHE_ASSETS).catch(function(e) { console.warn('PWA precache warning:', e); });
+		})
+	);
 });
 
 self.addEventListener('activate', function(event) {
-	event.waitUntil(self.clients.claim());
+	event.waitUntil(
+		caches.keys().then(function(keys) {
+			return Promise.all(
+				keys.filter(function(k) { return k !== STATIC_CACHE; }).map(function(k) { return caches.delete(k); })
+			);
+		}).then(function() {
+			return self.clients.claim();
+		})
+	);
+});
+
+self.addEventListener('fetch', function(event) {
+	if (event.request.method === 'GET' && event.request.url.includes('/assets/omnitrack/dist/')) {
+		event.respondWith(
+			caches.match(event.request).then(function(cached) {
+				const networkFetch = fetch(event.request).then(function(response) {
+					if (response && response.status === 200) {
+						const clone = response.clone();
+						caches.open(STATIC_CACHE).then(function(cache) {
+							cache.put(event.request, clone);
+						});
+					}
+					return response;
+				}).catch(function() { return cached; });
+				return cached || networkFetch;
+			})
+		);
+	}
 });
 
 self.addEventListener('push', function(event) {
