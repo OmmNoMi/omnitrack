@@ -1162,7 +1162,11 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_log_work_session"
-		self.description = "Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. Notes are mandatory (>= 3 chars). Users can only log for today & yesterday."
+		self.description = (
+			"Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. "
+			"Notes are mandatory (>= 3 chars). Users can only log for today & yesterday. "
+			"Format notes professionally: deliverable context, bulleted accomplishments (PRs, issues, tests), and deliverables."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1171,7 +1175,7 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 			"properties": {
 				"notes": {
 					"type": "string",
-					"description": "Mandatory detailed description of what was completed."
+					"description": "Mandatory structured description of work completed (deliverable context, bulleted accomplishments, PRs/issues)."
 				},
 				"hours": {
 					"type": "number",
@@ -1358,7 +1362,10 @@ class OmniTrackStopTimerTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_stop_timer"
-		self.description = "Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00. Session notes describing what was accomplished are strictly required (>= 3 chars)."
+		self.description = (
+			"Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00. "
+			"Session notes describing what was accomplished are strictly required (>= 3 chars) and must follow the professional timesheet standard (context, bulleted accomplishments, PRs/issues, results)."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1367,7 +1374,7 @@ class OmniTrackStopTimerTool(BaseTool):
 			"properties": {
 				"notes": {
 					"type": "string",
-					"description": "Mandatory session notes describing what was accomplished (>= 3 characters)."
+					"description": "Mandatory structured session notes describing what was accomplished (>= 3 characters). Format with clear bullet points."
 				},
 				"block_name": {
 					"type": "string",
@@ -1718,7 +1725,10 @@ class OmniTrackSessionTool(BaseTool):
 			"'status' (checks live running timer), 'discard' (throws away live timer without creating timesheet), "
 			"'add_note' (appends bullet note to live session), 'switch' (atomically switches active timer to another task/block), "
 			"'log' (manually records completed work session), 'adjust' (updates time or notes on today/yesterday's session), "
-			"'delete' (removes erroneous session)."
+			"'delete' (removes erroneous session). "
+			"Timesheet Quality Standard: 'notes' MUST be audit-ready and well-structured with clear client context, "
+			"deliverable headers, concise accomplishment bullets (PRs, issues filed/closed, tests run, reviews conducted), "
+			"and next steps or blockers. Avoid vague one-liners."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -1731,7 +1741,14 @@ class OmniTrackSessionTool(BaseTool):
 					"enum": ["start", "stop", "status", "discard", "add_note", "switch", "log", "adjust", "delete"],
 					"description": "Session or stopwatch operation to execute."
 				},
-				"notes": {"type": "string", "description": "Session accomplishment notes (required for 'stop', 'add_note', 'log')."},
+				"notes": {
+					"type": "string",
+					"description": (
+						"Audit-ready accomplishment notes (required for 'stop', 'add_note', 'log'). "
+						"Format professionally: include topic/client context, concise bulleted accomplishments "
+						"(PRs, issues filed/closed, test results, deliverables), and outcomes."
+					)
+				},
 				"block_name": {"type": "string", "description": "Target Planned Work Block ID (e.g. PWB-2026-12440)."},
 				"project": {"type": "string", "description": "ERPNext Project ID."},
 				"task": {"type": "string", "description": "ERPNext Task ID."},
