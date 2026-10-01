@@ -704,7 +704,10 @@ def adjust_work_session(session_name, block_name=None, from_time=None, to_time=N
 def delete_work_session(session_name, block_name, employee=None):
 	"""Deletes an erroneously logged work session from a Planned Work Block.
 	Automatically recalculates block actuals and cancels/amends the linked ERPNext Timesheet.
+	Controlled by OmniTrack Settings > allow_session_deletion; always allowed for managers.
 	"""
+	from omnitrack.permissions import check_session_deletion_permission
+	check_session_deletion_permission(frappe.session.user)
 	from omnitrack.api import delete_work_session as api_delete_work_session
 	return api_delete_work_session(session_name=session_name, block_name=block_name)
 
@@ -1164,8 +1167,9 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 		self.name = "omnitrack_log_work_session"
 		self.description = (
 			"Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. "
-			"Notes are mandatory (>= 3 chars). Users can only log for today & yesterday. "
-			"Format notes professionally: deliverable context, bulleted accomplishments (PRs, issues, tests), and deliverables."
+			"Notes are mandatory (at least 15 words by default; configured via OmniTrack Settings). "
+			"Modification dates are governed by the configured modification horizon in OmniTrack Settings (managers can back-fill anytime). "
+			"Format notes with deliverable context, bulleted accomplishments, and meaningful progress suitable for billing, audit, and operational tracking across any organization."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -1175,11 +1179,11 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 			"properties": {
 				"notes": {
 					"type": "string",
-					"description": "Mandatory structured description of work completed (deliverable context, bulleted accomplishments, PRs/issues)."
+					"description": "Mandatory structured description of work completed (minimum words configured in OmniTrack Settings, default: 15 words; include workstream context and key deliverables)."
 				},
 				"hours": {
 					"type": "number",
-					"description": "Duration in hours (e.g. 1.5)."
+					"description": "Duration in hours (decimal or integer, e.g. 1.25, 2.5, 4.0)."
 				},
 				"from_time": {
 					"type": "string",
@@ -1364,7 +1368,7 @@ class OmniTrackStopTimerTool(BaseTool):
 		self.name = "omnitrack_stop_timer"
 		self.description = (
 			"Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00. "
-			"Session notes describing what was accomplished are strictly required (>= 3 chars) and must follow the professional timesheet standard (context, bulleted accomplishments, PRs/issues, results)."
+			"Session notes describing what was accomplished are strictly required (minimum words configured in OmniTrack Settings, default: 15 words) and must follow clear timesheet quality standards (deliverable context, specific accomplishments, and progress)."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -1374,7 +1378,7 @@ class OmniTrackStopTimerTool(BaseTool):
 			"properties": {
 				"notes": {
 					"type": "string",
-					"description": "Mandatory structured session notes describing what was accomplished (>= 3 characters). Format with clear bullet points."
+					"description": "Mandatory structured session notes describing what was accomplished (minimum words configured in OmniTrack Settings, default: 15 words). Include deliverable context and specific work performed."
 				},
 				"block_name": {
 					"type": "string",
@@ -1561,7 +1565,11 @@ class OmniTrackDeleteWorkSessionTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_delete_work_session"
-		self.description = "Deletes an erroneously logged work session from a Planned Work Block. Automatically recalculates block actuals and cancels/amends the linked ERPNext Timesheet."
+		self.description = (
+			"Deletes an erroneously logged work session from a Planned Work Block, automatically recalculating block actuals and linked ERPNext Timesheet. "
+			"Governance Protection: Work sessions directly impact billing, payroll, and financial records. Deletion is governed by OmniTrack Settings "
+			"('allow_session_deletion' policy) — standard users are restricted from deleting logged hours unless explicitly permitted, while managers can delete when authorized."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1720,15 +1728,14 @@ class OmniTrackSessionTool(BaseTool):
 		super().__init__()
 		self.name = "omnitrack_session"
 		self.description = (
-			"Unified tracker for live stopwatch sessions and logged timesheets. "
+			"Unified tracker for live stopwatch sessions and logged timesheets across any industry or organization. "
 			"Actions: 'start' (starts ticking stopwatch), 'stop' (stops stopwatch and logs actual time), "
 			"'status' (checks live running timer), 'discard' (throws away live timer without creating timesheet), "
 			"'add_note' (appends bullet note to live session), 'switch' (atomically switches active timer to another task/block), "
-			"'log' (manually records completed work session), 'adjust' (updates time or notes on today/yesterday's session), "
-			"'delete' (removes erroneous session). "
-			"Timesheet Quality Standard: 'notes' MUST be audit-ready and well-structured with clear client context, "
-			"deliverable headers, concise accomplishment bullets (PRs, issues filed/closed, tests run, reviews conducted), "
-			"and next steps or blockers. Avoid vague one-liners."
+			"'log' (manually records completed work session), 'adjust' (updates time or notes within configured horizon), "
+			"'delete' (removes erroneous session subject to OmniTrack Settings deletion governance). "
+			"Timesheet Quality Standard: 'notes' MUST be audit-ready, meaningful, and meet minimum word thresholds (default: 15 words) "
+			"with clear workstream context, delivered results, and operational progress."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -1745,14 +1752,14 @@ class OmniTrackSessionTool(BaseTool):
 					"type": "string",
 					"description": (
 						"Audit-ready accomplishment notes (required for 'stop', 'add_note', 'log'). "
-						"Format professionally: include topic/client context, concise bulleted accomplishments "
-						"(PRs, issues filed/closed, test results, deliverables), and outcomes."
+						"Format professionally for any industry: include workstream/client context, concise bulleted deliverables "
+						"or milestones accomplished, and outcomes (minimum 15 words by default; configured in OmniTrack Settings)."
 					)
 				},
 				"block_name": {"type": "string", "description": "Target Planned Work Block ID (e.g. PWB-2026-12440)."},
 				"project": {"type": "string", "description": "ERPNext Project ID."},
 				"task": {"type": "string", "description": "ERPNext Task ID."},
-				"hours": {"type": "number", "description": "Duration in hours (for manual log or adjustment)."},
+				"hours": {"type": "number", "description": "Duration in decimal hours (e.g. 1.25, 2.5, 4.0; for manual log or adjustment)."},
 				"from_time": {"type": "string", "description": "Start time (HH:MM:SS)."},
 				"to_time": {"type": "string", "description": "End time (HH:MM:SS)."},
 				"session_date": {"type": "string", "description": "Date of work (YYYY-MM-DD)."},

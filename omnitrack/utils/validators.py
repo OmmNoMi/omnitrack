@@ -6,18 +6,40 @@ from frappe import _
 from frappe.utils import getdate, nowdate
 
 
+def get_min_session_words():
+	"""Returns the configured minimum word count for work session notes (default: 15)."""
+	min_words = 15
+	try:
+		if frappe.db.exists("DocType", "OmniTrack Settings"):
+			meta = frappe.get_meta("OmniTrack Settings")
+			if meta.has_field("min_session_words"):
+				val = frappe.db.get_single_value("OmniTrack Settings", "min_session_words")
+				if val is not None and str(val).strip() != "":
+					val_int = int(val)
+					if val_int >= 1:
+						min_words = val_int
+	except Exception:
+		pass
+	return min_words
+
+
 def require_session_notes(notes):
 	"""A timesheet with no description is not a record of anything — it is an hour
 	with nothing attached to it. Refuse the write rather than inventing a
-	placeholder, so the number in the report always has work behind it."""
+	placeholder, so the record has authentic, verifiable work behind it."""
 	text = str(notes or "")
-	for ch in ("\u2022", "-", "*"):
+	for ch in ("\u2022", "-", "*", "\n", "\r", "\t", ",", ";", ":", "."):
 		text = text.replace(ch, " ")
-	if len(text.strip()) < 3:
+	words = [w for w in text.split() if len(w) > 0]
+	min_words = get_min_session_words()
+
+	if len(words) < min_words:
 		frappe.throw(
-			_("Add at least one line describing what you did before saving this timesheet. "
-			  "A manager — and often the client being billed — reads this text, and an hour "
-			  "with nothing written against it looks like an hour that was not worked.")
+			_("Session notes must contain at least {0} words describing what was accomplished (found {1} word{2}). "
+			  "A manager, auditor, or client reviews these records. Concise, meaningful details ensure accurate billing, "
+			  "payroll compliance, and operational traceability across all industries.").format(
+				min_words, len(words), "" if len(words) == 1 else "s"
+			)
 		)
 	return str(notes).strip()
 

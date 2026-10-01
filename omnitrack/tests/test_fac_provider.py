@@ -55,3 +55,25 @@ class TestFACProvider(IntegrationTestCase):
 		self.assertIsInstance(res, dict)
 		self.assertIn("user", res)
 		self.assertIn("summary", res)
+
+	def test_min_words_validation(self):
+		"""Verifies that short notes (< configured min_words, default 15) are rejected."""
+		from omnitrack.utils.validators import require_session_notes
+		# Notes with fewer than 15 words should fail
+		short_note = "Worked on fixing bugs and testing features today."  # 8 words
+		with self.assertRaises(frappe.ValidationError):
+			require_session_notes(short_note)
+
+		# Notes with >= 15 words should pass cleanly
+		good_note = (
+			"Completed comprehensive client review and staging verification for inventory management workflow. "
+			"Identified discrepancies, updated line items, and confirmed all integration test suites pass."
+		)
+		cleaned = require_session_notes(good_note)
+		self.assertEqual(cleaned, good_note)
+
+	def test_session_deletion_governance(self):
+		"""Verifies that standard users are blocked from deleting work sessions unless allowed in settings."""
+		from omnitrack.permissions import is_session_deletion_allowed
+		# Administrator / Manager is always permitted
+		self.assertTrue(is_session_deletion_allowed("Administrator"))

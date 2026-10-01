@@ -527,8 +527,10 @@ def delete_work_session(session_name, block_name=None):
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to delete sessions on this work block."), frappe.PermissionError)
 
+	from omnitrack.permissions import check_session_deletion_permission, check_timesheet_date_permission
+	check_session_deletion_permission(frappe.session.user)
+
 	base_date = doc.work_date or nowdate()
-	from omnitrack.permissions import check_timesheet_date_permission
 	check_timesheet_date_permission(base_date, frappe.session.user)
 
 	doc.sessions = [s for s in doc.sessions if s.name != session_name]

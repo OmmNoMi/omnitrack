@@ -119,6 +119,44 @@ def is_submitted_timesheet_amendment_allowed():
 	return True
 
 
+def is_session_deletion_allowed(user=None):
+	"""Returns True if session deletion is permitted for the given user.
+	Controlled by OmniTrack Settings > allow_session_deletion.
+	Managers and Administrators are ALWAYS permitted to delete erroneous sessions.
+	Standard users are blocked unless allow_session_deletion is explicitly checked.
+	"""
+	if not user:
+		user = frappe.session.user
+	if is_omnitrack_manager(user):
+		return True
+	try:
+		if frappe.db.exists("DocType", "OmniTrack Settings"):
+			meta = frappe.get_meta("OmniTrack Settings")
+			if meta.has_field("allow_session_deletion"):
+				val = frappe.db.get_single_value("OmniTrack Settings", "allow_session_deletion")
+				if val is not None and str(val).strip() != "":
+					return int(val) == 1
+	except Exception:
+		pass
+	return False
+
+
+def check_session_deletion_permission(user=None):
+	"""Enforces that the user has permission to delete timesheet sessions.
+	Because hours and billing data represent financial records, deletion is restricted
+	to managers unless specifically enabled in OmniTrack Settings.
+	"""
+	if not user:
+		user = frappe.session.user
+	if not is_session_deletion_allowed(user):
+		frappe.throw(
+			_("Work session deletion is disabled for standard users to protect billing and payroll audit integrity. "
+			  "Only an OmniTrack Manager or Administrator can delete logged work sessions, or enable deletion in OmniTrack Settings."),
+			frappe.PermissionError
+		)
+	return True
+
+
 def check_timesheet_date_permission(session_date, user=None):
 	"""
 	Rule: An OmniTrack User can only log or modify timesheets within the configured
