@@ -835,24 +835,224 @@ def get_eod_reconciliation(work_date=None, employee=None):
 
 
 # ==============================================================================
-# 7. MANAGER / HR APPROVAL & TIMESHEET GOVERNANCE
+# 8. CONSOLIDATED POLYMORPHIC DISPATCHERS (SESSION, SCHEDULE, WORKSPACE)
 # ==============================================================================
 
 @frappe.whitelist()
-def approve_work_blocks(block_names=None, employee=None, work_date=None, comments=None):
-	"""Approves Planned Work Blocks for an employee or specific block list.
-	Enforces manager/HR permissions and triggers ERPNext Timesheet generation when sync mode is 'On Approval'.
+def omnitrack_session(
+	action,
+	block_name=None,
+	notes=None,
+	project=None,
+	task=None,
+	hours=None,
+	from_time=None,
+	to_time=None,
+	session_date=None,
+	session_name=None,
+	target_block=None,
+	nature="🎯 Planned",
+	employee=None
+):
+	"""Unified controller for live stopwatch timers and completed timesheet sessions.
+
+	Actions:
+	  - 'start': Starts a live running stopwatch session on block/task.
+	  - 'stop': Stops live session, computes elapsed time, and logs actual session (notes required).
+	  - 'status': Checks live stopwatch state, elapsed seconds, and active block.
+	  - 'discard': Cancels active running session without creating any timesheet entry.
+	  - 'add_note': Appends an accomplishment bullet to active running session in real time.
+	  - 'switch': Atomically stops active session and starts a new session on target block.
+	  - 'log': Directly records a completed work session (with optional hours or time range).
+	  - 'adjust': Modifies time, duration, or notes on an existing session (today/yesterday).
+	  - 'delete': Deletes an erroneously logged session row from a Planned Work Block.
 	"""
-	from omnitrack.api import approve_work_blocks as api_approve_work_blocks
-	return api_approve_work_blocks(
-		block_names=block_names,
-		employee=employee,
-		work_date=work_date,
-		comments=comments
-	)
+	act = str(action or "").lower().strip()
+	if act in ("start", "stop", "discard", "status", "add_line", "add_note"):
+		return quick_timer_action(
+			action=act,
+			task=task,
+			project=project,
+			notes=notes,
+			block_name=block_name,
+			nature=nature,
+			employee=employee
+		)
+	elif act == "switch":
+		return switch_timer(
+			target_block=target_block or block_name,
+			target_task=task,
+			target_project=project,
+			target_nature=nature,
+			current_session_notes=notes,
+			employee=employee
+		)
+	elif act == "log":
+		return log_work_session(
+			hours=hours,
+			from_time=from_time,
+			to_time=to_time,
+			task=task,
+			project=project,
+			block_name=block_name,
+			notes=notes,
+			session_date=session_date,
+			task_nature=nature,
+			employee=employee
+		)
+	elif act == "adjust":
+		return adjust_work_session(
+			session_name=session_name,
+			block_name=block_name,
+			from_time=from_time,
+			to_time=to_time,
+			hours=hours,
+			session_date=session_date,
+			notes=notes,
+			employee=employee
+		)
+	elif act == "delete":
+		return delete_work_session(
+			session_name=session_name,
+			block_name=block_name,
+			employee=employee
+		)
+	else:
+		frappe.throw(_("Invalid omnitrack_session action '{0}'. Choose 'start', 'stop', 'status', 'discard', 'add_note', 'switch', 'log', 'adjust', or 'delete'.").format(action))
 
 
-# ==============================================================================
+@frappe.whitelist()
+def omnitrack_schedule(
+	action,
+	blocks=None,
+	block_name=None,
+	new_date=None,
+	new_start_time=None,
+	new_end_time=None,
+	extend_minutes=30,
+	work_date=None,
+	employee=None,
+	block_names=None,
+	comments=None
+):
+	"""Unified controller for pre-scheduled commitments and block governance.
+
+	Actions:
+	  - 'plan': Batch schedules planned work blocks for a day (immutable in the past).
+	  - 'reschedule': Moves an unworked/unfinished block to a new date and time slot.
+	  - 'extend': Extends the scheduled duration of the user's active block by N minutes.
+	  - 'approve': Manager or HR approval for employee work blocks.
+	"""
+	act = str(action or "").lower().strip()
+	if act == "plan":
+		return plan_work_blocks(blocks=blocks, work_date=work_date, employee=employee)
+	elif act == "reschedule":
+		return reschedule_block(
+			block_name=block_name,
+			new_date=new_date,
+			new_start_time=new_start_time,
+			new_end_time=new_end_time,
+			employee=employee
+		)
+	elif act == "extend":
+		return extend_active_block(extend_minutes=extend_minutes, employee=employee)
+	elif act == "approve":
+		return approve_work_blocks(
+			block_names=block_names or ([block_name] if block_name else None),
+			employee=employee,
+			work_date=work_date,
+			comments=comments
+		)
+	else:
+		frappe.throw(_("Invalid omnitrack_schedule action '{0}'. Choose 'plan', 'reschedule', 'extend', or 'approve'.").format(action))
+
+
+@frappe.whitelist()
+def omnitrack_workspace(
+	action,
+	employee=None,
+	work_date=None,
+	status=None,
+	subject=None,
+	project=None,
+	priority="Medium",
+	expected_time=0.0,
+	description=None,
+	book_block=False,
+	block_start="10:00:00",
+	doctype=None,
+	docname=None,
+	workflow_action=None,
+	comment=None,
+	block_name=None,
+	task_refs=None,
+	new_task_subjects=None,
+	task_ref=None,
+	completed=True,
+	from_date=None,
+	to_date=None
+):
+	"""Unified controller for workstation state, tasks, checklists, and analytics.
+
+	Actions:
+	  - 'get_workspace': Retrieves live workstation data (timer HUD, today's schedule, summary).
+	  - 'get_tasks': Retrieves assigned tasks and ToDos categorized by attention level.
+	  - 'quick_create_task': Creates an ERPNext Task (or ToDo) and assigns to employee.
+	  - 'task_workflow': Executes task status transition ('Start Work', 'Close Task', etc.).
+	  - 'attach_tasks': Attaches task references or new checklist items to a block.
+	  - 'complete_task': Marks a block checklist item completed or pending.
+	  - 'analytics': Computes Plan Adherence Index (PAI) and Plan vs Actual hours.
+	  - 'eod_reconcile': Audits the day against the 8.0-hour target and checks missing notes.
+	"""
+	act = str(action or "").lower().strip()
+	if act in ("get_workspace", "workspace"):
+		return get_my_workspace(employee=employee, work_date=work_date)
+	elif act in ("get_tasks", "tasks"):
+		return get_assigned_tasks_data(employee=employee, status=status)
+	elif act in ("quick_create_task", "create_task"):
+		return quick_create_task(
+			subject=subject,
+			project=project,
+			priority=priority,
+			expected_time=expected_time,
+			description=description,
+			book_block=book_block,
+			block_start=block_start,
+			work_date=work_date,
+			employee=employee
+		)
+	elif act in ("task_workflow", "workflow"):
+		return execute_task_workflow(
+			doctype=doctype or "Task",
+			docname=docname,
+			action=workflow_action,
+			comment=comment
+		)
+	elif act == "attach_tasks":
+		return attach_tasks_to_block_action(
+			block_name=block_name,
+			task_refs=task_refs,
+			new_task_subjects=new_task_subjects
+		)
+	elif act == "complete_task":
+		return complete_block_task_action(
+			block_name=block_name,
+			task_ref=task_ref,
+			completed=completed
+		)
+	elif act in ("analytics", "plan_vs_actual"):
+		return get_plan_vs_actual_analytics(
+			employee=employee,
+			from_date=from_date,
+			to_date=to_date
+		)
+	elif act in ("eod_reconcile", "reconciliation"):
+		return get_eod_reconciliation(
+			work_date=work_date,
+			employee=employee
+		)
+	else:
+		frappe.throw(_("Invalid omnitrack_workspace action '{0}'. Choose 'get_workspace', 'get_tasks', 'quick_create_task', 'task_workflow', 'attach_tasks', 'complete_task', 'analytics', or 'eod_reconcile'.").format(action))
 # 8. MCP TOOL DEFINITIONS & BASETOOL SUBCLASSES FOR FRAPPE ASSISTANT CORE
 # ==============================================================================
 
@@ -1508,10 +1708,162 @@ class OmniTrackApproveWorkBlocksTool(BaseTool):
 		return approve_work_blocks(**arguments)
 
 
-def get_fac_tools():
+class OmniTrackSessionTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_session"
+		self.description = (
+			"Unified tracker for live stopwatch sessions and logged timesheets. "
+			"Actions: 'start' (starts ticking stopwatch), 'stop' (stops stopwatch and logs actual time), "
+			"'status' (checks live running timer), 'discard' (throws away live timer without creating timesheet), "
+			"'add_note' (appends bullet note to live session), 'switch' (atomically switches active timer to another task/block), "
+			"'log' (manually records completed work session), 'adjust' (updates time or notes on today/yesterday's session), "
+			"'delete' (removes erroneous session)."
+		)
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["action"],
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["start", "stop", "status", "discard", "add_note", "switch", "log", "adjust", "delete"],
+					"description": "Session or stopwatch operation to execute."
+				},
+				"notes": {"type": "string", "description": "Session accomplishment notes (required for 'stop', 'add_note', 'log')."},
+				"block_name": {"type": "string", "description": "Target Planned Work Block ID (e.g. PWB-2026-12440)."},
+				"project": {"type": "string", "description": "ERPNext Project ID."},
+				"task": {"type": "string", "description": "ERPNext Task ID."},
+				"hours": {"type": "number", "description": "Duration in hours (for manual log or adjustment)."},
+				"from_time": {"type": "string", "description": "Start time (HH:MM:SS)."},
+				"to_time": {"type": "string", "description": "End time (HH:MM:SS)."},
+				"session_date": {"type": "string", "description": "Date of work (YYYY-MM-DD)."},
+				"session_name": {"type": "string", "description": "Child session row ID (for 'adjust' or 'delete')."},
+				"target_block": {"type": "string", "description": "New target block ID (for 'switch' action)."},
+				"nature": {"type": "string", "description": "'🎯 Planned' or '⚠️ Unplanned' (default '🎯 Planned')."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return omnitrack_session(**arguments)
+
+
+class OmniTrackScheduleTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_schedule"
+		self.description = (
+			"Manages Planned Work Blocks and commitments. "
+			"Actions: 'plan' (batch schedules work blocks for a day), 'reschedule' (moves unworked block to a new date/time), "
+			"'extend' (extends scheduled end of active block by minutes), 'approve' (manager approval for employee blocks)."
+		)
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["action"],
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["plan", "reschedule", "extend", "approve"],
+					"description": "Scheduling operation to execute."
+				},
+				"blocks": {"type": "array", "description": "List of block objects with start_time, end_time, project, task, deliverable_notes."},
+				"block_name": {"type": "string", "description": "Target block ID to reschedule or extend."},
+				"new_date": {"type": "string", "description": "Target date for reschedule (YYYY-MM-DD)."},
+				"new_start_time": {"type": "string", "description": "New start time (HH:MM:SS)."},
+				"new_end_time": {"type": "string", "description": "New end time (HH:MM:SS)."},
+				"extend_minutes": {"type": "integer", "description": "Minutes to extend (default 30)."},
+				"work_date": {"type": "string", "description": "Work date (YYYY-MM-DD)."},
+				"block_names": {"type": "array", "items": {"type": "string"}, "description": "List of block IDs for approval."},
+				"comments": {"type": "string", "description": "Manager review comments."},
+				"employee": {"type": "string", "description": "Target employee email."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return omnitrack_schedule(**arguments)
+
+
+class OmniTrackWorkspaceTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_workspace"
+		self.description = (
+			"Reads workstation context, manages tasks, and inspects adherence. "
+			"Actions: 'get_workspace' (fetches live workstation summary, active timer, today's schedule), "
+			"'get_tasks' (retrieves assigned tasks & ToDos), 'quick_create_task' (creates and assigns a task/ToDo), "
+			"'task_workflow' (transitions task state: 'Start Work', 'Close Task', etc.), "
+			"'attach_tasks' (attaches task references or new checklist items to a block), "
+			"'complete_task' (marks a checklist item completed or pending), "
+			"'analytics' (computes Plan Adherence Index PAI and Plan vs Actual hours), "
+			"'eod_reconcile' (end-of-day audit against 8h target)."
+		)
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["action"],
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["get_workspace", "get_tasks", "quick_create_task", "task_workflow", "attach_tasks", "complete_task", "analytics", "eod_reconcile"],
+					"description": "Workspace operation to execute."
+				},
+				"subject": {"type": "string", "description": "Task title/summary (for quick_create_task)."},
+				"project": {"type": "string", "description": "Project ID."},
+				"priority": {"type": "string", "description": "Priority ('Low', 'Medium', 'High', 'Urgent')."},
+				"expected_time": {"type": "number", "description": "Estimated hours."},
+				"description": {"type": "string", "description": "Task description."},
+				"book_block": {"type": "boolean", "description": "True to immediately book a block for task."},
+				"block_start": {"type": "string", "description": "Start time for booked block."},
+				"doctype": {"type": "string", "description": "DocType ('Task' or 'ToDo')."},
+				"docname": {"type": "string", "description": "Document ID for workflow transition."},
+				"workflow_action": {"type": "string", "description": "State transition to apply (e.g. 'Start Work', 'Close Task')."},
+				"block_name": {"type": "string", "description": "Planned Work Block ID for checklist attachment."},
+				"task_refs": {"type": "array", "items": {"type": "string"}, "description": "List of task references to attach."},
+				"new_task_subjects": {"type": "array", "items": {"type": "string"}, "description": "Checklist items to create."},
+				"task_ref": {"type": "string", "description": "Checklist item reference to complete."},
+				"completed": {"type": "boolean", "description": "True for completed, False for pending."},
+				"from_date": {"type": "string", "description": "Analytics start date (YYYY-MM-DD)."},
+				"to_date": {"type": "string", "description": "Analytics end date (YYYY-MM-DD)."},
+				"work_date": {"type": "string", "description": "Target date (YYYY-MM-DD)."},
+				"employee": {"type": "string", "description": "Target employee email."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return omnitrack_workspace(**arguments)
+
+
+def get_consolidated_fac_tools():
+	"""Returns the 3 high-signal, token-efficient polymorphic tools."""
+	classes = [
+		OmniTrackSessionTool,
+		OmniTrackScheduleTool,
+		OmniTrackWorkspaceTool,
+	]
+	tools = []
+	for cls in classes:
+		inst = cls()
+		tools.append({
+			"name": inst.name,
+			"description": inst.description,
+			"inputSchema": inst.inputSchema,
+			"handler": inst.execute,
+		})
+	return tools
+
+
+def get_fac_tools(consolidated=True):
 	"""Returns MCP tool definitions so Frappe Assistant Core and any MCP client
 	can expose OmniTrack domain capabilities natively.
 	"""
+	if consolidated:
+		return get_consolidated_fac_tools()
+
 	tool_classes = [
 		OmniTrackGetMyWorkspaceTool,
 		OmniTrackPlanWorkBlocksTool,
