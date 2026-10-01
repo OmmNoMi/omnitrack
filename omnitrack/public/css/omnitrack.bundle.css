@@ -60,7 +60,7 @@
 /* ── SIDEBAR DOCK HOVER WIDGET ──────────────────────────────────────────
    Docked along the .body-sidebar vertical border line.
    Sits at bottom: 116px (right above the native collapse button at bottom: 80px
-   and the Assistant Help ? button at bottom: 44px).
+   and the OmniAssist ? button at bottom: 44px).
    - Resting state: clean 24px circular button matching .sidebar-toggle-btn.
    - When sidebar is unhovered: hidden unless active/running.
    - On hover: expands horizontally outward to the right into the main canvas.
@@ -100,7 +100,7 @@
    the page — a green "Punch" chip sticking into the canvas, which reads as a
    different kind of thing from every other control on that rail. OmniDesk
    draws a label card for anything docked in the sidebar rail (the same card
-   the Assistant Help button gets), so hover is now ITS job, and the pill opens
+   the OmniAssist button gets), so hover is now ITS job, and the pill opens
    only when the user asks for it by clicking. */
 .body-sidebar #omnitrack-nav-timer.omni-pos-sidebar:not(.omni-dock-open) {
 	width: 24px !important;

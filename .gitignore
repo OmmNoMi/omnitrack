@@ -8,6 +8,8 @@ __pycache__/
 .DS_Store
 *.egg-info/
 dist/
+!omnitrack/public/dist/
+!omnitrack/public/dist/**
 build/
 node_modules/
 omnitrack/public/node_modules

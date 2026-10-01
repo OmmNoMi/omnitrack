@@ -6,8 +6,13 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "test:bundle": "node scripts/test_bundle_and_components.cjs",
+    "test:interactions": "node scripts/test_workstation_interactions.cjs",
     "test:fixtures": "python3 -m unittest omnitrack.tests.test_workspace_fixtures -v",
-    "test:fast": "npm run test:fixtures && node scripts/check_www_js.cjs"
+    "test:mutation": "node scripts/run_mutation_tests.cjs",
+    "test:js": "node scripts/check_www_js.cjs",
+    "test:fast": "npm run test:bundle && npm run test:js && npm run test:fixtures",
+    "test": "npm run test:bundle && npm run test:interactions && npm run test:js && npm run test:fixtures"
   },
   "dependencies": {
     "frappe-ui": "^0.1.278",

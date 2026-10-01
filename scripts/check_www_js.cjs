@@ -40,6 +40,7 @@ for (const file of htmlFiles) {
         removeEventListener: () => {},
         querySelector: () => null,
         querySelectorAll: () => [],
+        getElementById: () => null,
         documentElement: { style: {} },
         body: { style: {} },
         title: '',

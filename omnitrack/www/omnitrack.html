@@ -80,10 +80,58 @@
       active_session: {{ (active_session | tojson) if active_session else 'null' }}
     };
   </script>
+  <script>
+    window.__omnitrack_mount_success__ = false;
+    window.__showOmniTrackFallbackError = function(err) {
+      const fb = document.getElementById('omnitrack-fallback-error');
+      if (!fb) return;
+      fb.style.display = 'flex';
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.style.display = 'none';
+      if (err) {
+        const det = document.getElementById('omnitrack-fallback-details');
+        if (det) {
+          det.textContent = (err && (err.stack || err.message || String(err)));
+          det.style.display = 'block';
+        }
+      }
+    };
+    setTimeout(function() {
+      if (!window.__omnitrack_mount_success__) {
+        const appEl = document.getElementById('app');
+        if (appEl && appEl.hasAttribute('v-cloak')) {
+          console.warn('[OmniTrack Watchdog]: App took too long to mount or encountered silent failure.');
+          window.__showOmniTrackFallbackError(new Error('OmniTrack Mount Error: Workstation initialization timed out or halted.'));
+        }
+      }
+    }, 4500);
+  </script>
 </head>
 
 {% raw %}
 <body class="min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
+
+  <!-- Production-Grade Error Boundary & Loading Fallback (Prevents Blank White Screen) -->
+  <div id="omnitrack-fallback-error" style="display: none; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; text-align: center; font-family: 'Google Sans', Inter, system-ui, sans-serif; background-color: #121212; color: #f3f4f6;">
+    <div style="max-width: 480px; width: 100%; padding: 2rem; border-radius: 1.5rem; background: #1e1f22; border: 1px solid #374151; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 3.5rem; height: 3.5rem; border-radius: 1rem; background: rgba(234, 67, 53, 0.15); border: 1px solid rgba(234, 67, 53, 0.3); margin-bottom: 1.25rem;">
+        <span style="font-size: 1.75rem;">⚠️</span>
+      </div>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0 0 0.5rem 0; color: #ffffff;">Unable to Initialize OmniTrack</h2>
+      <p style="font-size: 0.875rem; color: #9ca3af; line-height: 1.5; margin: 0 0 1.5rem 0;">
+        The workstation client encountered a loading anomaly. If this persists, please try a hard refresh to update your cached static bundle.
+      </p>
+      <div style="display: flex; gap: 0.75rem; justify-content: center;">
+        <button onclick="window.location.reload(true)" style="padding: 0.625rem 1.25rem; font-size: 0.8125rem; font-weight: 600; border-radius: 0.75rem; background: #1a73e8; color: #ffffff; border: none; cursor: pointer; transition: background 0.2s;">
+          Reload Workstation
+        </button>
+        <button onclick="window.location.href='/app'" style="padding: 0.625rem 1.25rem; font-size: 0.8125rem; font-weight: 600; border-radius: 0.75rem; background: #374151; color: #e5e7eb; border: 1px solid #4b5563; cursor: pointer;">
+          Return to Desk
+        </button>
+      </div>
+      <div id="omnitrack-fallback-details" style="display: none; margin-top: 1.25rem; text-align: left; padding: 0.75rem; border-radius: 0.75rem; background: #121212; border: 1px solid #2d3035; font-family: monospace; font-size: 0.6875rem; color: #f87171; overflow-x: auto;"></div>
+    </div>
+  </div>
 
 <div id="app" v-cloak class="min-h-screen flex flex-col flex-1 transition-colors duration-200" :class="[isDarkMode ? 'dark bg-[#121212] text-gray-100' : 'bg-[#F8F9FA] text-gray-900', activeTab === 'planner' ? 'lg:h-screen lg:max-h-screen lg:overflow-hidden' : '']">
 
@@ -5306,7 +5354,6 @@
 
 </div>
 
-{% endraw %}<script src="/assets/omnitrack/dist/timesheet_session_box.bundle.js?v={{ asset_bust }}"></script>{% raw %}
 <script>
   const { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -13011,8 +13058,12 @@
 
   try {
     app.mount('#app');
+    window.__omnitrack_mount_success__ = true;
+    const fallback = document.getElementById('omnitrack-fallback-error');
+    if (fallback) fallback.remove();
   } catch (err) {
     console.error('[OmniTrack Fatal Mount Error]:', err);
+    window.__showOmniTrackFallbackError && window.__showOmniTrackFallbackError(err);
   }
 </script>
 

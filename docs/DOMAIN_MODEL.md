@@ -163,7 +163,7 @@ Of the 157 blocks: **0** populate `project`, **0** populate `task`, **0** popula
 ```
 todo:1490i091br   Draft Q4 logistics SOP
 todo:14b8bs1u9j   Review cold-chain telemetry API
-todo:hl7hmckrdp   Manage icons and add missing home/dashboard file to FAH workspace
+todo:hl7hmckrdp   Manage icons and add missing home/dashboard file to OmniAssist workspace
 ```
 
 **On this site, the Task layer is `ToDo` and the Project layer is absent.** Every optional-doctype reference must stay guarded with `frappe.db.exists("DocType", "<name>")` — the page 500s on this site otherwise while working fine on an ERPNext bench.

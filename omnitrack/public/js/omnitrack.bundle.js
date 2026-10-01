@@ -6,7 +6,7 @@ omnitrack.MODE_KEY = 'omnitrack_hud_mode_v1';
 omnitrack.POS_KEY = 'omnitrack_hud_pos_v1';
 
 // Available HUD Positions:
-// 'sidebar' : Dock on sidebar border alongside collapse button & assistant help (strictly isolated from topbar action buttons)
+// 'sidebar' : Dock on sidebar border alongside collapse button & OmniAssist (strictly isolated from topbar action buttons)
 omnitrack.get_hud_position = function() {
 	return 'sidebar';
 };
@@ -577,13 +577,23 @@ omnitrack.setup_keyboard_shortcuts = function() {
 		}
 	});
 };
-
 omnitrack.setup_pwa_navigation = function() {
-	// Robust navigation handler for PWA Workstation shortcuts and sidebar items (capture phase bypasses popup blockers)
-	document.addEventListener('click', function(e) {
-		const pwaTarget = e.target.closest && e.target.closest(
-			'.shortcut-widget-box[aria-label*="PWA"], .shortcut-widget-box[data-label*="PWA"], [data-id*="PWA"], [item-name*="PWA"], a[href="/omnitrack"]'
+	function isOmnitrackPwaTarget(target) {
+		if (!target || !target.closest) return null;
+		const el = target.closest(
+			'[data-id="PWA Workstation"], [item-name="PWA Workstation"], a[href="/omnitrack"], .shortcut-widget-box[aria-label*="OmniTrack"]'
 		);
+		if (!el) return null;
+		const anchor = el.tagName === 'A' ? el : el.querySelector('a[href]');
+		if (anchor && anchor.getAttribute('href') && !anchor.getAttribute('href').startsWith('/omnitrack')) {
+			return null;
+		}
+		return el;
+	}
+
+	// Robust navigation handler for OmniTrack PWA Workstation shortcuts and sidebar items (capture phase bypasses popup blockers)
+	document.addEventListener('click', function(e) {
+		const pwaTarget = isOmnitrackPwaTarget(e.target);
 		if (!pwaTarget) return;
 
 		// If user deliberately held metaKey or ctrlKey, open in new tab
@@ -603,19 +613,14 @@ omnitrack.setup_pwa_navigation = function() {
 	// Keyboard accessibility (Enter / Space on shortcut box)
 	document.addEventListener('keydown', function(e) {
 		if (e.key === 'Enter' || e.key === ' ') {
-			const el = document.activeElement;
-			if (el && el.closest) {
-				const pwaTarget = el.closest(
-					'.shortcut-widget-box[aria-label*="PWA"], .shortcut-widget-box[data-label*="PWA"], [data-id*="PWA"], [item-name*="PWA"], a[href="/omnitrack"]'
-				);
-				if (pwaTarget) {
-					e.preventDefault();
-					e.stopPropagation();
-					if (e.metaKey || e.ctrlKey) {
-						window.open('/omnitrack', '_blank');
-					} else {
-						window.location.href = '/omnitrack';
-					}
+			const pwaTarget = isOmnitrackPwaTarget(document.activeElement);
+			if (pwaTarget) {
+				e.preventDefault();
+				e.stopPropagation();
+				if (e.metaKey || e.ctrlKey) {
+					window.open('/omnitrack', '_blank');
+				} else {
+					window.location.href = '/omnitrack';
 				}
 			}
 		}

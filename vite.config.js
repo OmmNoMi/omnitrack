@@ -8,6 +8,11 @@ export default defineConfig({
 		frappeui(),
 		vue(),
 	],
+	resolve: {
+		alias: {
+			vue: "vue/dist/vue.esm-bundler.js",
+		},
+	},
 	css: {
 		postcss: resolve(__dirname, "postcss.config.cjs"),
 	},
