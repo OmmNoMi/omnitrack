@@ -18,6 +18,9 @@ module.exports = {
 				'24': 'repeat(24, minmax(0, 1fr))',
 			},
 			colors: {
+				rose: require("tailwindcss/colors").rose,
+				emerald: require("tailwindcss/colors").emerald,
+				slate: require("tailwindcss/colors").slate,
 				brand: {
 					blue: '#4285F4',
 					green: '#34A853',

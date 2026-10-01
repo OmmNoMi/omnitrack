@@ -10,6 +10,7 @@ console.log('===========================================================\n');
 const omnitrackDir = path.resolve(__dirname, '..');
 const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html');
 const viteConfigPath = path.resolve(omnitrackDir, 'vite.config.js');
+const tailwindConfigPath = path.resolve(omnitrackDir, 'tailwind.config.cjs');
 
 let totalMutants = 0;
 let killedMutants = 0;
@@ -111,6 +112,15 @@ runMutationTest(
   (code) => code.replace('<span class="hidden sm:inline">Raven Chat</span>', '<span>Raven Chat</span>'),
   'node scripts/test_mobile_navbar.cjs',
   'FAIL: Raven Chat text must be hidden on mobile'
+);
+
+// Mutant 7: Rose color palette removed from tailwind.config.cjs (Contrast regression)
+runMutationTest(
+  'Rose color palette stripped from tailwind.config.cjs (Contrast regression)',
+  tailwindConfigPath,
+  (code) => code.replace('rose: require("tailwindcss/colors").rose,', ''),
+  'node scripts/test_attention_filter_contrast.cjs',
+  'FAIL: tailwind.config.cjs does not include rose color palette'
 );
 
 // Summary Report

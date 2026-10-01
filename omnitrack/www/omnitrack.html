@@ -2667,15 +2667,45 @@
       <div class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
         
         <div class="p-4 border-b flex items-center justify-between gap-3 flex-wrap transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-800' : 'bg-gray-50/60 border-gray-200'">
-          <div>
-            <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">Invoice-Verifiable Timesheet Summary</h3>
-            <p class="text-xs mt-0.5" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-              Filtered for <strong class="text-blue-500">{{ selectedEmployee === 'All' ? 'All Team Members' : selectedEmployee }}</strong>
-            </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div>
+              <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">Invoice-Verifiable Timesheet Summary</h3>
+              <p class="text-xs mt-0.5" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+                Filtered for <strong class="text-blue-500">{{ selectedEmployee === 'All' ? 'All Team Members' : selectedEmployee }}</strong>
+              </p>
+            </div>
           </div>
-          <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300">
-            Total Hours: {{ totalFilteredHours }} hrs
-          </span>
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <!-- Member Filter Dropdown -->
+            <f-dropdown-menu
+              v-if="isManager"
+              :items="employeeMenuItems"
+              align="right"
+              aria-label="Filter timesheets by team member"
+            >
+              <template #trigger="{ isOpen }">
+                <f-button
+                  variant="outline"
+                  theme="gray"
+                  size="sm"
+                  class="!text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                  :aria-expanded="isOpen ? 'true' : 'false'"
+                >
+                  <template #prefix>
+                    <span>👤</span>
+                  </template>
+                  <span>{{ selectedEmployee === 'All' ? 'All Members' : selectedEmployee }}</span>
+                  <template #suffix>
+                    <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </template>
+                </f-button>
+              </template>
+            </f-dropdown-menu>
+
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300">
+              Total Hours: {{ totalFilteredHours }} hrs
+            </span>
+          </div>
         </div>
 
         <!-- Mobile Card List View -->
@@ -2759,7 +2789,32 @@
               <p class="text-[11px] text-gray-500 dark:text-gray-400">Review logged team actuals, deliverables, and grant official timesheet approval.</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Member Filter Dropdown in Team Tab -->
+            <f-dropdown-menu
+              :items="employeeMenuItems"
+              align="right"
+              aria-label="Filter approvals by team member"
+            >
+              <template #trigger="{ isOpen }">
+                <f-button
+                  variant="outline"
+                  theme="gray"
+                  size="sm"
+                  class="!text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                  :aria-expanded="isOpen ? 'true' : 'false'"
+                >
+                  <template #prefix>
+                    <span>👤</span>
+                  </template>
+                  <span>{{ selectedEmployee === 'All' ? 'All Members' : selectedEmployee }}</span>
+                  <template #suffix>
+                    <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </template>
+                </f-button>
+              </template>
+            </f-dropdown-menu>
+
             <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold" :class="isDarkMode ? 'bg-blue-950 text-blue-300' : 'bg-blue-50 text-blue-700'">
               {{ pendingApprovals.length }} Pending
             </span>
@@ -3076,8 +3131,33 @@
 
             </div>
 
-            <!-- Right: Nature Filter & View Switcher (Day / 4 Days / Week) -->
+            <!-- Right: Member Filter (Managers), Nature Filter & View Switcher (Day / 4 Days / Week) -->
             <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+              <!-- Team Member filter (Frappe UI FDropdownMenu, visible to managers/all) -->
+              <f-dropdown-menu
+                :items="employeeMenuItems"
+                align="right"
+                aria-label="Filter planner calendar by team member"
+              >
+                <template #trigger="{ isOpen }">
+                  <f-button
+                    variant="outline"
+                    theme="gray"
+                    size="sm"
+                    class="!text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                    :aria-expanded="isOpen ? 'true' : 'false'"
+                  >
+                    <template #prefix>
+                      <span>👤</span>
+                    </template>
+                    <span>{{ selectedEmployee === 'All' ? 'All Members' : selectedEmployee }}</span>
+                    <template #suffix>
+                      <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </template>
+                  </f-button>
+                </template>
+              </f-dropdown-menu>
+
               <!-- Nature filter (Frappe UI FDropdownMenu) -->
               <f-dropdown-menu :items="plannerNatureMenuItems" align="right" :aria-label="'Filter calendar events by nature: ' + natureFilterLabel">
                 <template #trigger="{ toggle, isOpen }">
@@ -3314,53 +3394,53 @@
         <div class="order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full min-h-0 lg:h-full lg:max-h-full overflow-hidden">
           <div class="flex items-center justify-between px-1 shrink-0">
             <h3 class="font-bold text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">Week Performance</h3>
-            <span class="text-[10px] font-mono text-gray-400 font-semibold">{{ plannerRangeLabel }}</span>
+            <span class="text-[10px] font-mono text-gray-400 font-semibold" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">Overview</span>
           </div>
 
-          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-2.5 sm:gap-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-2 sm:gap-2.5 flex-1 min-h-0 overflow-y-auto pr-0.5">
             <!-- Card 1: Planned this week -->
-            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+            <f-card :padded="true" class="!p-2.5 xl:!p-3 transition-all">
               <div class="flex items-center justify-between">
                 <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Planned this week</div>
                 <f-badge v-if="plannerData.totals && plannerData.totals.away_count" theme="amber" variant="subtle" size="xs">
                   🌴 {{ plannerData.totals.away_count }} away
                 </f-badge>
               </div>
-              <div class="text-xl xl:text-2xl font-extrabold mt-1" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
-                {{ fmtHrs(plannerData.totals.planned_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              <div class="text-lg xl:text-xl font-extrabold mt-0.5" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                {{ fmtHrs(plannerData.totals.planned_hours) }}<span class="text-xs font-normal text-gray-400">h</span>
               </div>
-              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">
+              <div class="text-[10px] text-gray-400 mt-0.5">
                 {{ plannerData.totals.block_count }} work block{{ plannerData.totals.block_count === 1 ? '' : 's' }}
               </div>
             </f-card>
 
             <!-- Card 2: Actually logged -->
-            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+            <f-card :padded="true" class="!p-2.5 xl:!p-3 transition-all">
               <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Actually logged</div>
-              <div class="text-xl xl:text-2xl font-extrabold text-emerald-500 mt-1">
-                {{ fmtHrs(plannerData.totals.actual_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              <div class="text-lg xl:text-xl font-extrabold text-emerald-500 mt-0.5">
+                {{ fmtHrs(plannerData.totals.actual_hours) }}<span class="text-xs font-normal text-gray-400">h</span>
               </div>
-              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">across real sessions</div>
+              <div class="text-[10px] text-gray-400 mt-0.5">across real sessions</div>
             </f-card>
 
             <!-- Card 3: Plan vs actual -->
-            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+            <f-card :padded="true" class="!p-2.5 xl:!p-3 transition-all">
               <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Plan vs actual</div>
-              <div class="text-xl xl:text-2xl font-extrabold mt-1" :class="plannerData.totals.variance_hours < 0 ? 'text-amber-500' : (plannerData.totals.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
-                {{ plannerData.totals.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(plannerData.totals.variance_hours) }}<span class="text-sm font-normal text-gray-400">h</span>
+              <div class="text-lg xl:text-xl font-extrabold mt-0.5" :class="plannerData.totals.variance_hours < 0 ? 'text-amber-500' : (plannerData.totals.variance_hours > 0 ? 'text-rose-500' : 'text-gray-400')">
+                {{ plannerData.totals.variance_hours > 0 ? '+' : '' }}{{ fmtHrs(plannerData.totals.variance_hours) }}<span class="text-xs font-normal text-gray-400">h</span>
               </div>
-              <div class="text-[10px] xl:text-[11px] text-gray-400 mt-0.5">
+              <div class="text-[10px] text-gray-400 mt-0.5">
                 {{ plannerData.totals.variance_hours < 0 ? 'under-logged vs plan' : (plannerData.totals.variance_hours > 0 ? 'overran the plan' : 'on plan') }}
               </div>
             </f-card>
 
             <!-- Card 4: Adherence -->
-            <f-card :padded="true" class="!p-3 lg:!p-2.5 xl:!p-3.5 transition-all">
+            <f-card :padded="true" class="!p-2.5 xl:!p-3 transition-all">
               <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500">Adherence</div>
-              <div class="text-xl xl:text-2xl font-extrabold text-blue-500 mt-1">
-                {{ plannerData.totals.adherence_pct }}<span class="text-sm font-normal text-gray-400">%</span>
+              <div class="text-lg xl:text-xl font-extrabold text-blue-500 mt-0.5">
+                {{ plannerData.totals.adherence_pct }}<span class="text-xs font-normal text-gray-400">%</span>
               </div>
-              <div class="mt-1.5 h-1.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
+              <div class="mt-1 h-1.5 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'">
                 <div class="h-full bg-blue-500 rounded-full transition-all duration-300" :style="{ width: Math.min(100, plannerData.totals.adherence_pct) + '%' }"></div>
               </div>
             </f-card>
@@ -8948,7 +9028,7 @@
         return list;
       });
       const headerMenuItems = computed(() => {
-        const items = [
+        return [
           {
             label: '➕ New Task',
             action: 'new_task',
@@ -8970,27 +9050,20 @@
             onClick: () => enableNotificationsUserGesture()
           }
         ];
-        const emps = employeeItems.value;
-        if (emps && emps.length > 0) {
-          items.push({
-            label: '── Viewing Member ──',
-            disabled: true
-          });
-          emps.forEach((emp) => {
-            items.push({
-              label: emp.label,
-              badge: emp.value === selectedEmployee.value ? '✓' : '',
-              action: 'emp_' + emp.value,
-              onClick: () => {
-                if (selectedEmployee.value !== emp.value) {
-                  selectedEmployee.value = emp.value;
-                  onEmployeeChange();
-                }
-              }
-            });
-          });
-        }
-        return items;
+      });
+      const employeeMenuItems = computed(() => {
+        const emps = employeeItems.value || [];
+        return emps.map((emp) => ({
+          label: emp.label,
+          badge: emp.value === selectedEmployee.value ? '✓' : '',
+          action: 'emp_' + emp.value,
+          onClick: () => {
+            if (selectedEmployee.value !== emp.value) {
+              selectedEmployee.value = emp.value;
+              onEmployeeChange();
+            }
+          }
+        }));
       });
       const natureItems = computed(() =>
         (natureOptions || []).map((o) => ({ value: o.label, label: o.label, nonWorking: !o.is_working }))
@@ -9694,6 +9767,9 @@
 
       const onEmployeeChange = () => {
         fetchWorkstationData(selectedEmployee.value);
+        if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') {
+          fetchPlannerData();
+        }
         showToast(`Viewing ${selectedEmployee.value === 'All' ? 'All Team Members' : selectedEmployee.value}`, 'info');
       };
 
@@ -11294,7 +11370,8 @@
           const sDate = days[0] || plannerAnchor.value;
           const eDate = days[days.length - 1] || plannerAnchor.value;
           const ws = days[0] || plannerAnchor.value;
-          const url = `/api/method/omnitrack.api.get_planner_data?week_start=${ws}&start_date=${sDate}&end_date=${eDate}`;
+          const empParam = selectedEmployee.value ? `&employee=${encodeURIComponent(selectedEmployee.value)}` : '';
+          const url = `/api/method/omnitrack.api.get_planner_data?week_start=${ws}&start_date=${sDate}&end_date=${eDate}${empParam}`;
           const res = await fetch(url);
           const data = await res.json();
           if (data && data.message) {
@@ -12744,6 +12821,7 @@
         startUnplannedEscalation,
         showAppMenu,
         headerMenuItems,
+        employeeMenuItems,
         openDropdown,
         dropdownIdx,
         dropdownItems,

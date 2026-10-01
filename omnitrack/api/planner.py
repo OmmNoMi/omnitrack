@@ -120,18 +120,22 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 	"""Everything the Planner calendar needs: the range's Planned Work Blocks (plan + logged
 	sessions) plus the target user's assigned tasks and a plan-vs-actual rollup."""
 	from omnitrack.api.tasks import get_assigned_tasks
-	from omnitrack.api.timesheet import get_timesheet_sync_mode
-	target = _resolve_planner_user(employee)
+	session_roles = frappe.get_roles(frappe.session.user)
+	from omnitrack.permissions import is_omnitrack_manager
+	is_manager = is_omnitrack_manager(frappe.session.user)
+	is_client = "OmniTrack Client" in session_roles and not is_manager
+
+	is_all_requested = (employee in ("All", "*") or not employee) and is_manager and not is_client
+	if is_all_requested:
+		target = "All"
+	else:
+		target = _resolve_planner_user(employee)
+
 	if start_date and end_date:
 		monday = getdate(start_date)
 		sunday = getdate(end_date)
 	else:
 		monday, sunday = _week_bounds(week_start)
-
-	session_roles = frappe.get_roles(frappe.session.user)
-	from omnitrack.permissions import is_omnitrack_manager
-	is_manager = is_omnitrack_manager(frappe.session.user)
-	is_client = "OmniTrack Client" in session_roles and not is_manager
 
 	planner_filters = {
 		"work_date": ["between", [str(monday - timedelta(days=1)), str(sunday)]]
@@ -155,7 +159,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			planner_filters["project"] = ["in", allowed_projects]
 		else:
 			planner_filters["project"] = ["is", "set"]
-	else:
+	elif not is_all_requested:
 		planner_filters["employee"] = target
 
 	blocks = []
@@ -164,7 +168,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			"Planned Work Block",
 			filters=planner_filters,
 			fields=[
-				"name", "work_date", "start_time", "end_time", "duration_hours",
+				"name", "employee", "associate_name", "work_date", "start_time", "end_time", "duration_hours",
 				"actual_hours", "variance_hours", "status", "task", "project",
 				"work_item", "work_item_label", "task_nature", "deliverable_notes", "location",
 				"cancel_reason", "rescheduled_to", "rescheduled_from",
@@ -240,7 +244,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 	num_days = (sunday - monday).days + 1
 	days = [str(monday + timedelta(days=i)) for i in range(max(1, num_days))]
 
-	assigned_info = get_assigned_tasks(employee)
+	assigned_info = get_assigned_tasks(None if target == "All" else target)
 	return {
 		"user": target,
 		"is_manager": _is_planner_manager(),
