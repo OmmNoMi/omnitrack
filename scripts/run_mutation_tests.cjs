@@ -95,6 +95,24 @@ runMutationTest(
   'FAIL: Escape must restore DOM focus to trigger'
 );
 
+// Mutant 5: Redundant isProductionEnv badge re-introduced into header (Issue #12)
+runMutationTest(
+  'Redundant isProductionEnv badge re-introduced into header (Issue #12 regression)',
+  htmlPath,
+  (code) => code.replace('<span class="font-bold text-sm sm:text-base tracking-tight truncate"', '<span>{{ isProductionEnv ? \'Production\' : \'Local Dev\' }}</span><span class="font-bold text-sm sm:text-base tracking-tight truncate"'),
+  'node scripts/test_mobile_navbar.cjs',
+  'FAIL: Header must NOT contain the redundant isProductionEnv badge'
+);
+
+// Mutant 6: Raven Chat text not collapsed on mobile screens (Issue #12)
+runMutationTest(
+  'Raven Chat button text fails to collapse on mobile (hidden sm:inline removed)',
+  htmlPath,
+  (code) => code.replace('<span class="hidden sm:inline">Raven Chat</span>', '<span>Raven Chat</span>'),
+  'node scripts/test_mobile_navbar.cjs',
+  'FAIL: Raven Chat text must be hidden on mobile'
+);
+
 // Summary Report
 console.log('\n===========================================================');
 console.log(` Mutation Testing Summary:`);
