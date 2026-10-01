@@ -188,6 +188,20 @@
       "default": 1
     },
     {
+      "fieldname": "min_session_words",
+      "fieldtype": "Int",
+      "label": "Minimum Session Description Words",
+      "default": 15,
+      "description": "Minimum word count required for work session accomplishments and deliverable notes across all industries (default: 15 words)."
+    },
+    {
+      "fieldname": "allow_session_deletion",
+      "fieldtype": "Check",
+      "label": "Allow Standard Users to Delete Work Sessions",
+      "default": 0,
+      "description": "If disabled (default), only OmniTrack Managers and Administrators can delete logged work sessions to protect billing and payroll accuracy."
+    },
+    {
       "fieldname": "project_timesheet_policies",
       "fieldtype": "Table",
       "label": "Per-Project Timesheet Overrides",
