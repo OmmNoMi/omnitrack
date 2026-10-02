@@ -30,6 +30,11 @@ from omnitrack.utils import (
 	resolve_planner_user as _resolve_planner_user,
 	is_planner_manager as _is_planner_manager,
 )
+from omnitrack.api.timesheet import (
+	get_timesheet_sync_mode,
+	create_timesheet_from_work_block,
+	log_work_session,
+)
 
 
 @frappe.whitelist()

@@ -1,4 +1,4 @@
-name: OmniTrack CI & Cloud Alignment
+name: OmniTrack CI Quality Gate (Security, Accessibility, Testing)
 
 on:
   push:
@@ -7,7 +7,9 @@ on:
     branches: [ develop, version-16, main ]
 
 jobs:
-  test:
+  # Pillar 1: 🛡️ SECURITY (ASVS / CWE / OWASP Top 10)
+  security-gate:
+    name: 🛡️ Security Scan (Gitleaks & Bandit AST)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -15,38 +17,107 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      # 1a. Hardcoded Secret Leak Prevention (Free / Open Source)
+      - name: Scan for Hardcoded Secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1b. Python AST Static Security Analysis (Bandit)
+      - name: Set up Python for Bandit
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.11'
+
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit
+
+      - name: Run Bandit AST Security Scan
+        run: |
+          bandit -r omnitrack/ -ll
+
+  # Pillar 2: ♿ ACCESSIBILITY (WCAG 2.2 AA & HTML5 Spec)
+  accessibility-gate:
+    name: ♿ Accessibility Gate (WCAG 2.2 AA & HTML5)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Python dependencies
-        run: |
-          pip install html5lib
+      - name: Install HTML5 Parser
+        run: pip install html5lib
 
       - name: Validate HTML5 Spec Compliance
+        run: python scripts/check_www_html.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Run Tier 3 Workstation Interactions & Keyboard Navigation Tests
+        run: node scripts/test_workstation_interactions.cjs
+
+      - name: Run Axe-Core WCAG 2.2 AA Accessibility Audit
+        run: npm run test:axe
+
+  # Pillar 3: 🧪 QUALITY & TDD++ (Frappe AST Lint, Unit Tests, Mutation 100%)
+  quality-gate:
+    name: 🧪 Quality Gate & TDD++ (Ruff, Tests, Mutation 100%)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
         run: |
-          python scripts/check_www_html.py omnitrack/www/omnitrack.html
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Lint Python Syntax & Fatal Errors (Frappe-Safe Ruff)
+        run: ruff check --select E9,F63,F7,F82 omnitrack/
 
       - name: Run Standalone Python Architecture & Fixture Tests
-        run: |
-          python -m unittest omnitrack/tests/test_workspace_fixtures.py
+        run: python -m unittest omnitrack/tests/test_workspace_fixtures.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node Dependencies
+        run: npm ci
 
       - name: Verify JavaScript Compilation & VM Evaluation
-        run: |
-          node scripts/check_www_js.cjs
+        run: node scripts/check_www_js.cjs
 
-      - name: Run Tier 3 Workstation Interaction & A11y Tests
-        run: |
-          node scripts/test_workstation_interactions.cjs
+      - name: Verify Frontend Bundle & Vue Runtime Compiler
+        run: npm run test:bundle
 
+      - name: Run Automated Mutation Testing (100% Mutation Score Invariant)
+        run: npm run test:mutation
+
+  # Pillar 4: 🚀 CLOUD ALIGNMENT & MAIN AUTO-SYNC
   sync-main:
-    needs: test
+    name: 🚀 Cloud Alignment & Main Sync
+    needs: [security-gate, accessibility-gate, quality-gate]
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

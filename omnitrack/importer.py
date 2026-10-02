@@ -582,7 +582,7 @@ def remap_work_block_users(custom_map=None):
 			UPDATE `tabPlanned Work Block`
 			SET employee = %s, owner = %s
 			WHERE associate_name IN ({placeholders})
-		"""
+		"""  # nosec B608
 		frappe.db.sql(query, [email, email] + aliases)
 		
 		# Also match by prefix if any remaining

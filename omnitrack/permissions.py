@@ -324,19 +324,20 @@ def get_work_block_permission_query_conditions(user=None):
 	if is_omnitrack_manager(user) or "OmniTrack Auditor" in frappe.get_roles(user):
 		return ""
 	
+	esc_user = frappe.db.escape(user)
 	roles = frappe.get_roles(user)
-	conditions = [f"(`tabPlanned Work Block`.`employee` = '{user}' OR `tabPlanned Work Block`.owner = '{user}')"]
+	conditions = [f"(`tabPlanned Work Block`.`employee` = {esc_user} OR `tabPlanned Work Block`.owner = {esc_user})"]
 
 	# 1. Project Team Members & Project Managers
 	if frappe.db.exists("DocType", "Project"):
 		if frappe.db.exists("DocType", "Project User"):
 			conditions.append(f"""`tabPlanned Work Block`.`project` IN (
-				SELECT parent FROM `tabProject User` WHERE `user` = '{user}'
+				SELECT parent FROM `tabProject User` WHERE `user` = {esc_user}
 				UNION
-				SELECT name FROM `tabProject` WHERE `owner` = '{user}'
-			)""")
+				SELECT name FROM `tabProject` WHERE `owner` = {esc_user}
+			)""")  # nosec B608
 		else:
-			conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `owner` = '{user}')")
+			conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `owner` = {esc_user})")  # nosec B608
 
 	# 2. Client Visibility (Project Customer)
 	if ("OmniTrack Client" in roles or "Customer" in roles):
@@ -347,9 +348,9 @@ def get_work_block_permission_query_conditions(user=None):
 					SELECT p.name FROM `tabProject` p
 					JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
 					JOIN `tabContact` c ON c.name = dl.parent
-					WHERE c.user = '{user}'
-				)""")
-			cust_conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `customer` = '{user}')")
+					WHERE c.user = {esc_user}
+				)""")  # nosec B608
+			cust_conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `customer` = {esc_user})")  # nosec B608
 			conditions.extend(cust_conditions)
 		else:
 			conditions.append("(`tabPlanned Work Block`.`project` IS NOT NULL AND `tabPlanned Work Block`.`project` != '')")

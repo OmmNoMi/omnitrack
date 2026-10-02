@@ -31,6 +31,7 @@ from omnitrack.utils import (
 	is_planner_manager as _is_planner_manager,
 	parse_block_tasks as _parse_block_tasks,
 )
+from omnitrack.api.tasks import update_task_kpi_progress
 
 
 def _require_session_notes(notes):

@@ -20,6 +20,7 @@ from omnitrack.api import (
 	_duration_hours,
 	_require_session_notes,
 	_resolve_planner_user,
+	approve_work_blocks,
 	book_work_block,
 	create_timesheet_from_work_block,
 	get_active_session,

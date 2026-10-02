@@ -10,9 +10,10 @@
     "test:interactions": "node scripts/test_workstation_interactions.cjs",
     "test:fixtures": "python3 -m unittest omnitrack.tests.test_workspace_fixtures -v",
     "test:mutation": "node scripts/run_mutation_tests.cjs",
+    "test:axe": "node scripts/test_axe_wcag.cjs",
     "test:js": "node scripts/check_www_js.cjs",
     "test:fast": "npm run test:bundle && npm run test:js && npm run test:fixtures",
-    "test": "npm run test:bundle && npm run test:interactions && npm run test:js && npm run test:fixtures"
+    "test": "npm run test:bundle && npm run test:interactions && npm run test:axe && npm run test:js && npm run test:fixtures"
   },
   "dependencies": {
     "frappe-ui": "^0.1.278",
@@ -23,6 +24,8 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
     "autoprefixer": "^10.4.20",
+    "axe-core": "^4.13.0",
+    "jsdom": "^26.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "vite": "^6.0.5"

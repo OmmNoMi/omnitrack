@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import frappe
 from frappe import _
 from frappe.utils import (
+	cint,
 	flt,
 	getdate,
 	nowdate,

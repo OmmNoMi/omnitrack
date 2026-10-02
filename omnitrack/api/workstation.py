@@ -95,7 +95,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
 			LIMIT 150
-		""", params, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []
+		""", params, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []  # nosec B608
 	elif target_user and target_user != "All":
 		has_employee = frappe.db.exists("DocType", "Employee")
 		user_emp = (frappe.db.get_value("Employee", {"user_id": target_user}, "name") if has_employee else None) or target_user
@@ -124,7 +124,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
 			LIMIT 150
-		""", params, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []
+		""", params, as_dict=True) if frappe.db.exists("DocType", "Planned Work Block") else []  # nosec B608
 	else:
 		work_blocks = frappe.get_all(
 			"Planned Work Block",

@@ -29,6 +29,7 @@ from omnitrack.utils import (
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
 )
+from omnitrack.api.tasks import update_task_kpi_progress
 
 
 @frappe.whitelist()
