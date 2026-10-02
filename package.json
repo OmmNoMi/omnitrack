@@ -13,7 +13,8 @@
     "test:axe": "node scripts/test_axe_wcag.cjs",
     "test:js": "node scripts/check_www_js.cjs",
     "test:fast": "npm run test:bundle && npm run test:js && npm run test:fixtures",
-    "test": "npm run test:bundle && npm run test:interactions && npm run test:axe && npm run test:js && npm run test:fixtures"
+    "test": "npm run test:bundle && npm run test:interactions && npm run test:axe && npm run test:js && npm run test:fixtures",
+    "gate": "node scripts/run_quality_gate.cjs"
   },
   "dependencies": {
     "frappe-ui": "^0.1.278",
