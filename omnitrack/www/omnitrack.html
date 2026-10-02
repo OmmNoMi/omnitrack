@@ -54,6 +54,14 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.6); }
+    @media (min-width: 1024px) {
+      html:has(#app.lg\:overflow-hidden),
+      body:has(#app.lg\:overflow-hidden) {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+      }
+    }
   </style>
 
   <!-- Immediate script to prevent any white flash in dark mode -->
@@ -3397,7 +3405,7 @@
             <span class="text-[10px] font-mono text-gray-400 font-semibold" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">Overview</span>
           </div>
 
-          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 gap-2 sm:gap-2.5 flex-1 min-h-0 overflow-y-auto pr-0.5">
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-1 content-start items-start gap-2 sm:gap-2.5 flex-1 min-h-0 overflow-y-auto pr-0.5">
             <!-- Card 1: Planned this week -->
             <f-card :padded="true" class="!p-2.5 xl:!p-3 transition-all">
               <div class="flex items-center justify-between">
