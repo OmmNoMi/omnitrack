@@ -57,17 +57,21 @@ console.log('✓ Test 2: omnitrack.bundle.css contains compiled rose background 
 // Test 3: Attention tab buttons in omnitrack.html have accessible contrast definitions
 const overdueIdx = htmlContent.indexOf("setAttentionFilter('overdue')");
 assert.ok(overdueIdx !== -1, 'FAIL: Overdue attention filter button not found in omnitrack.html');
-const startBtn = htmlContent.lastIndexOf('<button', overdueIdx);
-const endBtn = htmlContent.indexOf('</button>', overdueIdx) + 9;
+const startBtn = Math.max(
+  htmlContent.lastIndexOf('<f-button', overdueIdx),
+  htmlContent.lastIndexOf('<button', overdueIdx)
+);
+const endBtn = htmlContent.indexOf('>', overdueIdx) + 1;
 const overdueBtnHtml = htmlContent.slice(startBtn, endBtn);
 
+const isFrappeUIOverdue = overdueBtnHtml.includes('<f-button') &&
+  overdueBtnHtml.includes('theme="red"');
+const isCustomOverdue = (overdueBtnHtml.includes('bg-rose-600') || overdueBtnHtml.includes('bg-rose-700')) &&
+  overdueBtnHtml.includes('text-white');
+
 assert.ok(
-  overdueBtnHtml.includes('bg-rose-600') || overdueBtnHtml.includes('bg-rose-700'),
-  'FAIL: Active overdue button must use a solid high-contrast rose background'
-);
-assert.ok(
-  overdueBtnHtml.includes('text-white'),
-  'FAIL: Active overdue button must specify white text'
+  isFrappeUIOverdue || isCustomOverdue,
+  'FAIL: Active overdue button must use genuine Frappe UI <f-button theme="red"> or solid high-contrast background'
 );
 console.log('✓ Test 3: Active and inactive overdue button classes are properly configured for contrast.');
 

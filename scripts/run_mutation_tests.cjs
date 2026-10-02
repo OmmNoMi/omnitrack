@@ -123,6 +123,15 @@ runMutationTest(
   'FAIL: tailwind.config.cjs does not include rose color palette'
 );
 
+// Mutant 8: Planner overdue filter tab stripped of Frappe UI theme="red"
+runMutationTest(
+  'Planner overdue filter tab stripped of Frappe UI theme="red"',
+  htmlPath,
+  (code) => code.replaceAll('theme="red"', 'theme="invalid_theme"'),
+  'node scripts/test_frappe_ui_planner_tabs.cjs',
+  'FAIL: "Overdue" <f-button> must use theme="red"'
+);
+
 // Summary Report
 console.log('\n===========================================================');
 console.log(` Mutation Testing Summary:`);

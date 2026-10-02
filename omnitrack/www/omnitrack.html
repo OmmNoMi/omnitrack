@@ -1433,60 +1433,93 @@
         <!-- Real-world Quick Filter Bar & Search -->
         <div class="flex items-center justify-between gap-2.5 flex-wrap pt-2.5 pb-1 mb-2 border-t border-amber-200/60 dark:border-amber-900/40">
           <div class="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Filter action required tasks" @keydown="onAttentionTabKeydown">
-            <button type="button" @click="setAttentionFilter('all')"
-              role="tab" :aria-selected="attentionFilter === 'all'"
+            <f-button
+              type="button"
+              role="tab"
+              size="xs"
+              :variant="attentionFilter === 'all' ? 'solid' : 'subtle'"
+              theme="gray"
+              :aria-selected="attentionFilter === 'all'"
               :tabindex="attentionFilter === 'all' ? 0 : -1"
               data-attention-tab="all"
-              class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              :class="attentionFilter === 'all' 
-                ? (isDarkMode ? 'bg-amber-500 text-black shadow-xs font-extrabold ring-1 ring-amber-400' : 'bg-amber-600 text-white shadow-xs font-extrabold ring-1 ring-amber-700') 
-                : (isDarkMode ? 'bg-[#2B2D30] text-gray-300 hover:bg-gray-700' : 'bg-white text-gray-700 border border-amber-200 hover:bg-amber-100/50')">
+              @click="setAttentionFilter('all')"
+            >
               <span>All</span>
-              <span class="text-[10px] font-mono opacity-80">({{ attentionTasks.length }})</span>
-            </button>
-            <button v-if="overdueTasksCount > 0" type="button" @click="setAttentionFilter('overdue')"
-              role="tab" :aria-selected="attentionFilter === 'overdue'"
+              <template #suffix>
+                <span class="text-[10px] font-mono opacity-80">({{ attentionTasks.length }})</span>
+              </template>
+            </f-button>
+            <f-button
+              v-if="overdueTasksCount > 0"
+              type="button"
+              role="tab"
+              size="xs"
+              :variant="attentionFilter === 'overdue' ? 'solid' : 'subtle'"
+              theme="red"
+              :aria-selected="attentionFilter === 'overdue'"
               :tabindex="attentionFilter === 'overdue' ? 0 : -1"
               data-attention-tab="overdue"
-              class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-              :class="attentionFilter === 'overdue' 
-                ? 'bg-rose-600 text-white shadow-xs font-extrabold ring-1 ring-rose-400' 
-                : (isDarkMode ? 'bg-rose-950/40 text-rose-300 border border-rose-900/50 hover:bg-rose-900/40' : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100')">
-              <span>⚠️ Overdue</span>
-              <span class="text-[10px] font-mono">({{ overdueTasksCount }})</span>
-            </button>
-            <button v-if="underplannedTasksCount > 0" type="button" @click="setAttentionFilter('underplanned')"
-              role="tab" :aria-selected="attentionFilter === 'underplanned'"
+              @click="setAttentionFilter('overdue')"
+            >
+              <template #prefix><span aria-hidden="true">⚠️</span></template>
+              <span>Overdue</span>
+              <template #suffix>
+                <span class="text-[10px] font-mono opacity-80">({{ overdueTasksCount }})</span>
+              </template>
+            </f-button>
+            <f-button
+              v-if="underplannedTasksCount > 0"
+              type="button"
+              role="tab"
+              size="xs"
+              :variant="attentionFilter === 'underplanned' ? 'solid' : 'subtle'"
+              theme="amber"
+              :aria-selected="attentionFilter === 'underplanned'"
               :tabindex="attentionFilter === 'underplanned' ? 0 : -1"
               data-attention-tab="underplanned"
-              class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              :class="attentionFilter === 'underplanned' 
-                ? 'bg-amber-600 text-white shadow-xs font-extrabold ring-1 ring-amber-400' 
-                : (isDarkMode ? 'bg-amber-950/40 text-amber-300 border border-amber-900/50 hover:bg-amber-900/40' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100')">
-              <span>⏱️ Underplanned</span>
-              <span class="text-[10px] font-mono">({{ underplannedTasksCount }})</span>
-            </button>
-            <button v-if="dueSoonTasksCount > 0" type="button" @click="setAttentionFilter('due_soon')"
-              role="tab" :aria-selected="attentionFilter === 'due_soon'"
+              @click="setAttentionFilter('underplanned')"
+            >
+              <template #prefix><span aria-hidden="true">⏱️</span></template>
+              <span>Underplanned</span>
+              <template #suffix>
+                <span class="text-[10px] font-mono opacity-80">({{ underplannedTasksCount }})</span>
+              </template>
+            </f-button>
+            <f-button
+              v-if="dueSoonTasksCount > 0"
+              type="button"
+              role="tab"
+              size="xs"
+              :variant="attentionFilter === 'due_soon' ? 'solid' : 'subtle'"
+              theme="blue"
+              :aria-selected="attentionFilter === 'due_soon'"
               :tabindex="attentionFilter === 'due_soon' ? 0 : -1"
               data-attention-tab="due_soon"
-              class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              :class="attentionFilter === 'due_soon' 
-                ? 'bg-blue-600 text-white shadow-xs font-extrabold ring-1 ring-blue-400' 
-                : (isDarkMode ? 'bg-blue-950/40 text-blue-300 border border-blue-900/50 hover:bg-blue-900/40' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100')">
-              <span>📅 Due Soon</span>
-              <span class="text-[10px] font-mono">({{ dueSoonTasksCount }})</span>
-            </button>
+              @click="setAttentionFilter('due_soon')"
+            >
+              <template #prefix><span aria-hidden="true">📅</span></template>
+              <span>Due Soon</span>
+              <template #suffix>
+                <span class="text-[10px] font-mono opacity-80">({{ dueSoonTasksCount }})</span>
+              </template>
+            </f-button>
           </div>
 
           <!-- Quick Search -->
           <div class="relative w-full sm:w-48 ml-auto">
-            <input type="text" v-model="attentionSearch"
+            <f-input
+              size="sm"
+              v-model="attentionSearch"
               placeholder="Search tasks..."
-              class="w-full text-xs pl-7 pr-6 py-1 rounded-xl border outline-none transition-colors"
-              :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-white placeholder-gray-500 focus:border-amber-400' : 'bg-white border-amber-300 text-gray-900 placeholder-gray-400 focus:border-amber-500'">
-            <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <button v-if="attentionSearch" @click="attentionSearch = ''" type="button" class="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">✕</button>
+              aria-label="Search action required tasks"
+            >
+              <template #prefix>
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </template>
+              <template #suffix>
+                <button v-if="attentionSearch" @click="attentionSearch = ''" type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs cursor-pointer p-0.5" aria-label="Clear search">✕</button>
+              </template>
+            </f-input>
           </div>
         </div>
 
@@ -2989,48 +3022,76 @@
           
           <!-- Quick Search & Filter in Planner Rail -->
           <div class="space-y-1.5 shrink-0">
-            <div class="relative">
-              <input type="text" v-model="plannerTaskSearch"
-                placeholder="Search assigned tasks..."
-                class="w-full text-xs pl-7 pr-6 py-1 rounded-xl border outline-none transition-colors"
-                :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-white placeholder-gray-500 focus:border-blue-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-500'">
-              <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <button v-if="plannerTaskSearch" @click="plannerTaskSearch = ''" type="button" class="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">✕</button>
-            </div>
+            <f-input
+              size="sm"
+              v-model="plannerTaskSearch"
+              placeholder="Search assigned tasks..."
+              aria-label="Search assigned tasks"
+            >
+              <template #prefix>
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </template>
+              <template #suffix>
+                <button v-if="plannerTaskSearch" @click="plannerTaskSearch = ''" type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs cursor-pointer p-0.5" aria-label="Clear search">✕</button>
+              </template>
+            </f-input>
             
             <div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5" role="tablist" aria-label="Filter assigned work tasks" @keydown="onPlannerTaskTabKeydown">
-              <button type="button" @click="setPlannerTaskFilter('all')"
-                role="tab" :aria-selected="plannerTaskFilter === 'all'"
+              <f-button
+                type="button"
+                role="tab"
+                size="xs"
+                :variant="plannerTaskFilter === 'all' ? 'solid' : 'subtle'"
+                theme="gray"
+                :aria-selected="plannerTaskFilter === 'all'"
                 :tabindex="plannerTaskFilter === 'all' ? 0 : -1"
                 data-planner-tab="all"
-                class="px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                :class="plannerTaskFilter === 'all' ? (isDarkMode ? 'bg-white text-black ring-1 ring-white' : 'bg-gray-900 text-white ring-1 ring-gray-900') : (isDarkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-200/70 text-gray-600')">
+                @click="setPlannerTaskFilter('all')"
+              >
                 All
-              </button>
-              <button type="button" @click="setPlannerTaskFilter('underplanned')"
-                role="tab" :aria-selected="plannerTaskFilter === 'underplanned'"
+              </f-button>
+              <f-button
+                type="button"
+                role="tab"
+                size="xs"
+                :variant="plannerTaskFilter === 'underplanned' ? 'solid' : 'subtle'"
+                theme="amber"
+                :aria-selected="plannerTaskFilter === 'underplanned'"
                 :tabindex="plannerTaskFilter === 'underplanned' ? 0 : -1"
                 data-planner-tab="underplanned"
-                class="px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                :class="plannerTaskFilter === 'underplanned' ? 'bg-amber-600 text-white ring-1 ring-amber-400' : (isDarkMode ? 'bg-amber-950/50 text-amber-300' : 'bg-amber-100 text-amber-800')">
-                <span>⏱️ Underplanned</span>
-              </button>
-              <button type="button" @click="setPlannerTaskFilter('overdue')"
-                role="tab" :aria-selected="plannerTaskFilter === 'overdue'"
+                @click="setPlannerTaskFilter('underplanned')"
+              >
+                <template #prefix><span aria-hidden="true">⏱️</span></template>
+                Underplanned
+              </f-button>
+              <f-button
+                type="button"
+                role="tab"
+                size="xs"
+                :variant="plannerTaskFilter === 'overdue' ? 'solid' : 'subtle'"
+                theme="red"
+                :aria-selected="plannerTaskFilter === 'overdue'"
                 :tabindex="plannerTaskFilter === 'overdue' ? 0 : -1"
                 data-planner-tab="overdue"
-                class="px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                :class="plannerTaskFilter === 'overdue' ? 'bg-rose-600 text-white ring-1 ring-rose-400' : (isDarkMode ? 'bg-rose-950/50 text-rose-300' : 'bg-rose-100 text-rose-800')">
-                <span>⚠️ Overdue</span>
-              </button>
-              <button type="button" @click="setPlannerTaskFilter('high')"
-                role="tab" :aria-selected="plannerTaskFilter === 'high'"
+                @click="setPlannerTaskFilter('overdue')"
+              >
+                <template #prefix><span aria-hidden="true">⚠️</span></template>
+                Overdue
+              </f-button>
+              <f-button
+                type="button"
+                role="tab"
+                size="xs"
+                :variant="plannerTaskFilter === 'high' ? 'solid' : 'subtle'"
+                theme="purple"
+                :aria-selected="plannerTaskFilter === 'high'"
                 :tabindex="plannerTaskFilter === 'high' ? 0 : -1"
                 data-planner-tab="high"
-                class="px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
-                :class="plannerTaskFilter === 'high' ? 'bg-purple-600 text-white ring-1 ring-purple-400' : (isDarkMode ? 'bg-purple-950/50 text-purple-300' : 'bg-purple-100 text-purple-800')">
-                <span>⭐ High</span>
-              </button>
+                @click="setPlannerTaskFilter('high')"
+              >
+                <template #prefix><span aria-hidden="true">⭐</span></template>
+                High
+              </f-button>
             </div>
           </div>
 
@@ -5593,17 +5654,18 @@
     computed: {
       classes() {
         const base = 'w-full text-xs font-medium rounded-xl outline-none border transition-colors shadow-xs focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed';
-        const sizes = {
-          sm: 'py-2 pl-3.5 ' + (this.$slots.suffix ? 'pr-8' : 'pr-3.5'),
-          md: 'py-2.5 pl-4 ' + (this.$slots.suffix ? 'pr-9' : 'pr-4'),
-          lg: 'py-3 pl-4.5 ' + (this.$slots.suffix ? 'pr-10' : 'pr-4.5')
-        }[this.size] || 'py-2 pl-3.5 pr-3.5';
+        const pl = this.$slots.prefix ? 'pl-8' : (this.size === 'lg' ? 'pl-4.5' : (this.size === 'md' ? 'pl-4' : 'pl-3.5'));
+        const pr = this.$slots.suffix ? 'pr-8' : (this.size === 'lg' ? 'pr-4.5' : (this.size === 'md' ? 'pr-4' : 'pr-3.5'));
+        const py = this.size === 'lg' ? 'py-3' : (this.size === 'md' ? 'py-2.5' : 'py-1.5');
         const theme = 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/20 dark:bg-[#2B2D30] dark:border-gray-700 dark:text-white dark:placeholder-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/25';
-        return [base, sizes, theme].join(' ');
+        return [base, py, pl, pr, theme].join(' ');
       }
     },
     template: `
       <div class="relative w-full flex items-center">
+        <div v-if="$slots.prefix" class="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-gray-400">
+          <slot name="prefix"></slot>
+        </div>
         <input
           :type="type"
           :value="modelValue"
