@@ -27,13 +27,13 @@ from omnitrack.api import (
 	get_assigned_tasks,
 	get_workstation_data,
 	sync_active_session,
-	update_work_block,
 )
 from omnitrack.permissions import (
 	check_planned_block_past_lock,
 	check_timesheet_date_permission,
 	is_omnitrack_manager,
 )
+from omnitrack.utils.time_math import pad_time as _time_str
 
 
 # ==============================================================================
@@ -342,9 +342,20 @@ def log_work_session(
 	updated = frappe.db.get_value(
 		"Planned Work Block",
 		target_block,
-		["name", "actual_hours", "variance_hours", "status", "timesheet", "project", "task"],
+		["name", "actual_hours", "variance_hours", "status", "timesheet", "project", "task", "duration_hours"],
 		as_dict=True
 	)
+
+	# Auto-advance block status upon full delivery to preserve reporting integrity
+	if updated and updated.get("status") in ("Planned", "In Progress"):
+		act = flt(updated.get("actual_hours", 0))
+		dur = flt(updated.get("duration_hours", 0))
+		if dur > 0 and act >= dur:
+			frappe.db.set_value("Planned Work Block", target_block, "status", "Logged (Full)", update_modified=False)
+			updated["status"] = "Logged (Full)"
+		elif act > 0:
+			frappe.db.set_value("Planned Work Block", target_block, "status", "Logged (Partial)", update_modified=False)
+			updated["status"] = "Logged (Partial)"
 
 	return {
 		"status": "success",
@@ -476,6 +487,8 @@ def quick_timer_action(
 	notes=None,
 	block_name=None,
 	nature="🎯 Planned",
+	start_time=None,
+	start_time_epoch_ms=None,
 	employee=None
 ):
 	"""Controls live stopwatch session for the target user (defaults to human operator).
@@ -492,6 +505,8 @@ def quick_timer_action(
 		notes (str, optional): Session notes (required for "stop").
 		block_name (str, optional): Target Planned Work Block.
 		nature (str): Work nature (default "🎯 Planned").
+		start_time (str, optional): Scheduled/retroactive start time (e.g. "21:30:00").
+		start_time_epoch_ms (int|str, optional): Exact epoch milliseconds.
 		employee (str, optional): Target employee (defaults to current human user, e.g. Nomeshwer).
 
 	Returns:
@@ -518,8 +533,32 @@ def quick_timer_action(
 		}
 
 	elif action == "start":
+		start_ms = None
+		if start_time_epoch_ms:
+			try:
+				start_ms = int(float(start_time_epoch_ms))
+			except Exception:
+				start_ms = None
+		elif start_time:
+			try:
+				from zoneinfo import ZoneInfo
+				tz_name = frappe.db.get_single_value("System Settings", "time_zone") or "Asia/Kolkata"
+				tz = ZoneInfo(tz_name)
+				today_date = getdate(nowdate())
+				parts = str(start_time).strip().split(":")
+				h = int(parts[0]) if len(parts) > 0 else 0
+				m = int(parts[1]) if len(parts) > 1 else 0
+				s = int(float(parts[2])) if len(parts) > 2 else 0
+				dt = datetime(today_date.year, today_date.month, today_date.day, h, m, s, tzinfo=tz)
+				start_ms = int(dt.timestamp() * 1000)
+			except Exception:
+				start_ms = None
+
+		if not start_ms:
+			start_ms = int(datetime.now().timestamp() * 1000)
+
 		session_data = {
-			"startTime": int(datetime.now().timestamp() * 1000),
+			"startTime": start_ms,
 			"selectedNature": nature or "🎯 Planned",
 			"selectedProject": project or "",
 			"trackerNotes": (notes or "").strip(),
@@ -599,9 +638,10 @@ def add_timer_note(note, employee=None):
 
 
 @frappe.whitelist()
-def start_timer(block_name=None, notes=None, project=None, task=None, nature="🎯 Planned", employee=None):
+def start_timer(block_name=None, notes=None, project=None, task=None, nature="🎯 Planned", start_time=None, start_time_epoch_ms=None, employee=None):
 	"""Starts an active live stopwatch session for the target user (defaults to human operator).
 	The live stopwatch immediately begins ticking in the OmniTrack workstation UI across all devices.
+	Supports optional retroactive start_time (HH:MM:SS) or start_time_epoch_ms for on-time alignment.
 	"""
 	return quick_timer_action(
 		action="start",
@@ -610,6 +650,8 @@ def start_timer(block_name=None, notes=None, project=None, task=None, nature="�
 		project=project,
 		task=task,
 		nature=nature,
+		start_time=start_time,
+		start_time_epoch_ms=start_time_epoch_ms,
 		employee=employee
 	)
 
@@ -838,6 +880,97 @@ def get_eod_reconciliation(work_date=None, employee=None):
 	}
 
 
+@frappe.whitelist()
+def update_work_block(
+	block_name,
+	work_date=None,
+	start_time=None,
+	end_time=None,
+	task=None,
+	project=None,
+	deliverable_notes=None,
+	status=None,
+	cancel_reason=None,
+	employee=None
+):
+	"""Domain-governed update of an existing Planned Work Block."""
+	from omnitrack.api.planner import update_work_block as api_update_work_block
+	user = _resolve_planner_user(employee)
+	if block_name and frappe.db.exists("Planned Work Block", block_name):
+		block_emp = frappe.db.get_value("Planned Work Block", block_name, "employee")
+		if employee and block_emp != user and not is_omnitrack_manager():
+			frappe.throw(_("Not permitted to edit this work block."), frappe.PermissionError)
+
+	return api_update_work_block(
+		block_name=block_name,
+		work_date=work_date,
+		start_time=start_time,
+		end_time=end_time,
+		task=task,
+		project=project,
+		deliverable_notes=deliverable_notes,
+		status=status,
+		cancel_reason=cancel_reason
+	)
+
+
+@frappe.whitelist()
+def get_work_block(block_name, employee=None):
+	"""Fetches a single Planned Work Block with its child sessions, metrics, and progress."""
+	if not block_name or not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block {0} not found.").format(block_name))
+
+	doc = frappe.get_doc("Planned Work Block", block_name)
+	user = _resolve_planner_user(employee)
+	if doc.employee != user and not is_omnitrack_manager():
+		frappe.throw(_("Not permitted to view this work block."), frappe.PermissionError)
+
+	return {
+		"status": "success",
+		"block": {
+			"name": doc.name,
+			"employee": doc.employee,
+			"associate_name": doc.associate_name,
+			"work_date": str(doc.work_date or ""),
+			"start_time": _time_str(doc.start_time),
+			"end_time": _time_str(doc.end_time),
+			"duration_hours": flt(doc.duration_hours),
+			"actual_hours": flt(doc.actual_hours),
+			"variance_hours": flt(doc.variance_hours),
+			"status": doc.status,
+			"task_nature": doc.task_nature,
+			"project": doc.project,
+			"task": doc.task,
+			"work_item_label": doc.work_item_label,
+			"deliverable_notes": doc.deliverable_notes,
+			"timesheet": doc.timesheet,
+			"sessions": [
+				{
+					"name": s.name,
+					"session_date": str(s.session_date or ""),
+					"from_time": _time_str(s.from_time),
+					"to_time": _time_str(s.to_time),
+					"hours": flt(s.hours),
+					"notes": s.notes,
+					"logged_via": s.logged_via,
+					"task_nature": s.task_nature,
+				}
+				for s in (doc.sessions or [])
+			],
+			"output_metrics": [
+				{
+					"metric_type": m.metric_type,
+					"quantity": flt(m.quantity),
+					"unit": m.unit,
+					"reference_id": m.reference_id,
+					"notes": m.notes,
+				}
+				for m in (getattr(doc, "output_metrics", []) or [])
+			]
+		}
+	}
+
+
 # ==============================================================================
 # 8. CONSOLIDATED POLYMORPHIC DISPATCHERS (SESSION, SCHEDULE, WORKSPACE)
 # ==============================================================================
@@ -946,6 +1079,8 @@ def omnitrack_schedule(
 	  - 'reschedule': Moves an unworked/unfinished block to a new date and time slot.
 	  - 'extend': Extends the scheduled duration of the user's active block by N minutes.
 	  - 'approve': Manager or HR approval for employee work blocks.
+	  - 'update': Modifies an existing Planned Work Block's schedule, notes, or status.
+	  - 'get_block': Fetches single block details with sessions and adherence.
 	"""
 	act = str(action or "").lower().strip()
 	if act == "plan":
@@ -967,8 +1102,19 @@ def omnitrack_schedule(
 			work_date=work_date,
 			comments=comments
 		)
+	elif act == "update":
+		return update_work_block(
+			block_name=block_name,
+			work_date=new_date or work_date,
+			start_time=new_start_time,
+			end_time=new_end_time,
+			deliverable_notes=comments,
+			employee=employee
+		)
+	elif act in ("get_block", "get"):
+		return get_work_block(block_name=block_name, employee=employee)
 	else:
-		frappe.throw(_("Invalid omnitrack_schedule action '{0}'. Choose 'plan', 'reschedule', 'extend', or 'approve'.").format(action))
+		frappe.throw(_("Invalid omnitrack_schedule action '{0}'. Choose 'plan', 'reschedule', 'extend', 'approve', 'update', or 'get_block'.").format(action))
 
 
 @frappe.whitelist()
@@ -1724,6 +1870,54 @@ class OmniTrackApproveWorkBlocksTool(BaseTool):
 		return approve_work_blocks(**arguments)
 
 
+class OmniTrackUpdateWorkBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_update_work_block"
+		self.description = "Updates an existing Planned Work Block's schedule (start_time, end_time, work_date), deliverable notes, or status."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Planned Work Block ID to update (e.g. 'PWB-2026-12446')."},
+				"work_date": {"type": "string", "description": "Target work date (YYYY-MM-DD)."},
+				"start_time": {"type": "string", "description": "Start time (HH:MM:SS)."},
+				"end_time": {"type": "string", "description": "End time (HH:MM:SS)."},
+				"task": {"type": "string", "description": "ERPNext Task ID."},
+				"project": {"type": "string", "description": "ERPNext Project ID."},
+				"deliverable_notes": {"type": "string", "description": "Updated deliverable notes describing the block's focus."},
+				"status": {"type": "string", "description": "Block status ('Planned', 'In Progress', 'Completed', 'Logged (Full)', 'Cancelled')."},
+				"cancel_reason": {"type": "string", "description": "Reason for cancellation if status is 'Cancelled'."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return update_work_block(**arguments)
+
+
+class OmniTrackGetWorkBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_get_work_block"
+		self.description = "Retrieves full details for a single Planned Work Block, including child session rows, output metrics, variance, and status."
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Planned Work Block ID to fetch (e.g. 'PWB-2026-12446')."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return get_work_block(**arguments)
+
+
 class OmniTrackSessionTool(BaseTool):
 	def __init__(self):
 		super().__init__()
@@ -1911,6 +2105,8 @@ def get_fac_tools(consolidated=True):
 		OmniTrackCompleteBlockTaskTool,
 		OmniTrackGetPlanVsActualTool,
 		OmniTrackApproveWorkBlocksTool,
+		OmniTrackUpdateWorkBlockTool,
+		OmniTrackGetWorkBlockTool,
 	]
 	tools = []
 	for cls in tool_classes:

@@ -306,8 +306,10 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		elif work_item and work_item.startswith("todo:"):
 			td = work_item.split(":", 1)[1]
 			desc = frappe.db.get_value("ToDo", td, "description") or ""
-			work_item_label = frappe.utils.strip_html(desc).strip().split("\n")[0][:140] or None
-	work_item_label = work_item_label or deliverable_notes
+	if work_item_label:
+		work_item_label = str(work_item_label).strip()[:140]
+	elif deliverable_notes:
+		work_item_label = str(deliverable_notes).strip()[:140]
 
 	doc = frappe.new_doc("Planned Work Block")
 	doc.employee = target
