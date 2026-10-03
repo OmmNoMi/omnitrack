@@ -557,12 +557,23 @@ def quick_timer_action(
 		if not start_ms:
 			start_ms = int(datetime.now().timestamp() * 1000)
 
+		raw_notes = (notes or "").strip()
+		notes_lines = []
+		if raw_notes:
+			if "•" in raw_notes:
+				notes_lines = [p.strip() for p in raw_notes.split("•") if p.strip()]
+			elif "\n" in raw_notes:
+				notes_lines = [p.strip() for p in raw_notes.split("\n") if p.strip()]
+			else:
+				notes_lines = [raw_notes]
+
 		session_data = {
 			"startTime": start_ms,
 			"selectedNature": nature or "🎯 Planned",
 			"selectedProject": project or "",
-			"trackerNotes": (notes or "").strip(),
+			"trackerNotes": raw_notes,
 			"trackerBlockName": block_name or None,
+			"sessionNotesList": notes_lines,
 			"status": "active"
 		}
 		sync_active_session(session_data, user=user)

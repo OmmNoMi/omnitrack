@@ -97,7 +97,7 @@
               ref="notesListRef"
               role="feed"
               aria-label="Session Log Lines"
-              class="flex-1 min-h-0 space-y-1.5 overflow-y-auto pr-1"
+              class="max-h-[220px] min-h-0 space-y-1.5 overflow-y-auto px-1 py-0.5"
             >
               <div
                 v-for="(line, idx) in sessionNotesList"
@@ -107,7 +107,7 @@
                 @focus="activeRowIndex = idx"
                 @keydown="onRowKeydown($event, idx)"
                 :aria-label="'Line ' + (idx + 1) + ': ' + line + '. Press Enter or Delete to remove, Right Arrow for delete button.'"
-                class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200 focus-visible:ring-2 focus-visible:ring-blue-500/70 focus:border-blue-400 dark:focus:border-blue-500"
+                class="group flex items-start justify-between gap-2 pl-2 pr-2.5 py-2 rounded-xl border text-xs transition-all outline-none bg-white border-gray-200/90 text-gray-800 shadow-2xs dark:bg-[#2B2D30] dark:border-gray-700/80 dark:text-gray-200 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/70 focus:border-blue-400 dark:focus:border-blue-500"
               >
                 <div class="flex items-start gap-2 min-w-0">
                   <Badge theme="blue" size="sm" variant="subtle" class="!w-5 !h-5 !p-0 !gap-0 !rounded-full shrink-0 select-none justify-center text-center font-mono font-bold leading-none">
@@ -1232,6 +1232,18 @@ function handleTextareaKey(e) {
   }
 }
 
+function scrollNotesToBottom() {
+  nextTick(() => {
+    if (notesListRef.value) {
+      notesListRef.value.scrollTop = notesListRef.value.scrollHeight;
+    }
+  });
+}
+
+watch(() => (props.sessionNotesList || []).length, () => {
+  scrollNotesToBottom();
+}, { immediate: true });
+
 function submitLine() {
   const text = localLineText.value.trim();
   if (!text) return;
@@ -1240,6 +1252,7 @@ function submitLine() {
   if (lineInputRef.value) {
     lineInputRef.value.style.height = 'auto';
   }
+  scrollNotesToBottom();
 }
 
 function onToolbarKey(ev) {
