@@ -244,3 +244,51 @@ def register_push_subscription(endpoint, p256dh=None, auth=None, fcm_token=None,
 			pass
 
 	return {"status": "subscribed", "name": sub.name}
+
+
+@frappe.whitelist()
+def send_eod_timesheet_deficit_alerts():
+	"""
+	Pillar 5: End-of-Day Timesheet Deficit Notification.
+	Runs around 17:30 - 18:30 daily. Scans active employees for timesheets < 8.0h today
+	and sends gentle reminder push / notifications to complete their daily timesheet.
+	"""
+	today_str = nowdate()
+	target_hours = 8.0
+
+	# Get active users
+	users = frappe.get_all(
+		"User",
+		filters={"enabled": 1, "user_type": "System User", "name": ["not in", ["Administrator", "Guest"]]},
+		fields=["name", "full_name"]
+	)
+
+	alerts_dispatched = 0
+	deficits = []
+
+	for u in users:
+		uname = u.name
+		# Sum today's logged hours
+		blocks = frappe.get_all(
+			"Planned Work Block",
+			filters={"employee": uname, "work_date": today_str},
+			fields=["actual_hours"]
+		)
+		logged_h = sum(flt(b.get("actual_hours", 0)) for b in blocks)
+		if logged_h < target_hours:
+			deficit_h = round(target_hours - logged_h, 2)
+			title = _("OmniTrack: EOD Timesheet Reminder")
+			msg = _("You have logged {0}h of your {1}h daily goal today ({2}h remaining). Wrap up your timesheet before leaving!").format(
+				logged_h, target_hours, deficit_h
+			)
+			dispatch_push_notification(uname, title, msg, action_url="/omnitrack")
+			deficits.append({"user": uname, "logged_hours": logged_h, "deficit_hours": deficit_h})
+			alerts_dispatched += 1
+
+	return {
+		"status": "success",
+		"date": today_str,
+		"alerts_dispatched": alerts_dispatched,
+		"deficits": deficits
+	}
+

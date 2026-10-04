@@ -1846,6 +1846,10 @@
                 <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-gray-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Logged {{ dayTimeline.loggedH.toFixed(1) }}h</span></span>
                 <span class="inline-flex items-center gap-1.5" title="Time logged when nothing was planned for it"><span class="w-3 h-2 rounded-sm bg-rose-500" aria-hidden="true"></span><span class="text-gray-500 dark:text-gray-400">Off plan</span></span>
                 <span v-if="dayTimeline.gapH > 0.05" class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-amber-400" aria-hidden="true"></span><span class="text-amber-600 dark:text-amber-400">{{ dayTimeline.gapH.toFixed(1) }}h unlogged</span></span>
+                <span v-if="attendancePresence && attendancePresence.shift_presence_hours > 0" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border" :class="attendancePresence.unallocated_presence_hours > 0.5 ? (isDarkMode ? 'bg-amber-950/60 border-amber-800 text-amber-300' : 'bg-amber-50 border-amber-300 text-amber-800') : (isDarkMode ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' : 'bg-emerald-50 border-emerald-300 text-emerald-800')">
+                  <span>🏢 Office Presence: {{ attendancePresence.shift_presence_hours }}h</span>
+                  <span v-if="attendancePresence.unallocated_presence_hours > 0.5" class="ml-1 text-red-500 font-extrabold">({{ attendancePresence.unallocated_presence_hours }}h unallocated)</span>
+                </span>
                 <div class="inline-flex items-center rounded-full p-0.5 border" role="radiogroup" aria-label="Hours visible across the timeline"
                   @keydown="onTimelineZoomKey"
                   :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-100 border-gray-200'">
@@ -1942,6 +1946,18 @@
                   <span v-if="r.is_live_active" class="w-1.5 h-1.5 rounded-full bg-white animate-pulse mr-1.5 shrink-0"></span>
                   <span class="truncate">{{ r.notes || r.block.task_subject || (r.timesheet ? 'TS: ' + r.timesheet : 'Logged ' + fmtHrs(r.hours) + 'h') }}</span>
                   <span v-if="r.is_live_active" class="ml-auto text-[9px] font-mono tracking-tight text-white/90 font-black pl-1 shrink-0">REC &bull;</span>
+                </div>
+                <!-- Interactive 1-Click Gap Booking Pills -->
+                <div v-for="(g, gi) in (dayTimeline.gaps || [])" :key="'gap' + gi"
+                  class="absolute top-0 h-6 rounded-md border border-dashed text-[9px] font-bold px-1.5 leading-6 truncate cursor-pointer hover:scale-102 transition-transform flex items-center justify-center select-none z-10"
+                  :class="isDarkMode ? 'border-amber-700/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60' : 'border-amber-300 bg-amber-50/90 text-amber-800 hover:bg-amber-100'"
+                  :style="{ left: g.left, width: g.width }"
+                  tabindex="0"
+                  :title="'Click to quickly log ' + g.label + ' (' + g.from_time + '–' + g.to_time + ')'"
+                  :aria-label="'Quickly log ' + g.label"
+                  @keydown.enter.prevent="quickLogTimelineGap(g)"
+                  @click.stop="quickLogTimelineGap(g)">
+                  <span>{{ g.label }}</span>
                 </div>
                 <div v-if="!dayTimeline.logged.length"
                   class="absolute inset-0 rounded-md border border-dashed flex items-center justify-center text-[10px] font-semibold"
@@ -2295,17 +2311,33 @@
 
                   <!-- Actions Cluster (Frappe UI FButton) -->
                   <div class="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                    <!-- 1-Click Plan-to-Actuals Catch-Up Action (Pillar 1) -->
+                    <f-button
+                      v-if="blockLogState(b) === 'none' && b.status !== 'Cancelled'"
+                      theme="green"
+                      variant="solid"
+                      size="sm"
+                      @click.stop="quickConvertPlanToActual(b)"
+                      :tabindex="concludedTabindex(rIdx, 1)"
+                      :data-concluded-row="rIdx"
+                      :data-concluded-col="1"
+                      @focus="setConcludedRoving(rIdx, 1)"
+                      @keydown="onConcludedGridKey($event, rIdx, 1)"
+                      :aria-label="'Log planned duration ' + Number(b.duration_hours || 0).toFixed(1) + 'h as completed timesheet'"
+                      title="1-Click convert planned commitment to actual logged timesheet">
+                      ⚡ Convert ({{ Number(b.duration_hours || 0).toFixed(1) }}h)
+                    </f-button>
                     <!-- Column 1: View Audit & Notes -->
                     <f-button
                       theme="gray"
                       variant="outline"
                       size="sm"
                       @click.stop="openBlockDrawer(b)"
-                      :tabindex="concludedTabindex(rIdx, 1)"
+                      :tabindex="concludedTabindex(rIdx, 2)"
                       :data-concluded-row="rIdx"
-                      :data-concluded-col="1"
-                      @focus="setConcludedRoving(rIdx, 1)"
-                      @keydown="onConcludedGridKey($event, rIdx, 1)"
+                      :data-concluded-col="2"
+                      @focus="setConcludedRoving(rIdx, 2)"
+                      @keydown="onConcludedGridKey($event, rIdx, 2)"
                       :aria-label="'View audit details for ' + (b.task_subject || b.deliverable_notes || 'Block')">
                       View Audit & Notes
                     </f-button>
@@ -2316,11 +2348,11 @@
                       variant="ghost"
                       size="sm"
                       @click.stop="startFocusBlock(b)"
-                      :tabindex="concludedTabindex(rIdx, 2)"
+                      :tabindex="concludedTabindex(rIdx, 3)"
                       :data-concluded-row="rIdx"
-                      :data-concluded-col="2"
-                      @focus="setConcludedRoving(rIdx, 2)"
-                      @keydown="onConcludedGridKey($event, rIdx, 2)"
+                      :data-concluded-col="3"
+                      @focus="setConcludedRoving(rIdx, 3)"
+                      @keydown="onConcludedGridKey($event, rIdx, 3)"
                       :aria-label="'Re-open focus session for ' + (b.task_subject || b.deliverable_notes || 'Focus Work Block')"
                       title="Re-open or append time to this completed block">
                       ↺ Re-open
@@ -2507,6 +2539,49 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- Pillar 5: End-of-Day (EOD) Wrap-Up Ritual Card (visible after 16:30 or when logged < 8.0h) -->
+      <div v-if="eodSummary && (eodSummary.remaining_to_target > 0 || eodSummary.is_eod_time)" class="rounded-3xl p-4 sm:p-5 border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all"
+        :class="isDarkMode ? 'bg-[#1E1F22] border-amber-800/60' : 'bg-gradient-to-r from-amber-50/80 to-blue-50/50 border-amber-200'">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-xs"
+            :class="eodSummary.remaining_to_target === 0 ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'">
+            {{ eodSummary.remaining_to_target === 0 ? '🎉' : '🏁' }}
+          </div>
+          <div class="space-y-0.5 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">EOD Timesheet Reconciliation</span>
+              <f-badge :theme="eodSummary.remaining_to_target === 0 ? 'green' : 'amber'" variant="subtle" size="xs">
+                {{ eodSummary.remaining_to_target === 0 ? 'Goal Met: 8.0h Logged' : eodSummary.remaining_to_target + 'h remaining to 8.0h target' }}
+              </f-badge>
+            </div>
+            <p class="text-xs text-gray-600 dark:text-gray-300 font-medium">
+              Today: <strong class="font-bold">{{ eodSummary.total_actual_hours }}h</strong> logged of 8.0h target across <strong class="font-bold">{{ eodSummary.blocks_count }}</strong> session{{ eodSummary.blocks_count === 1 ? '' : 's' }}.
+              <span v-if="eodSummary.unconverted_count > 0" class="text-amber-600 dark:text-amber-400 font-bold ml-1">({{ eodSummary.unconverted_count }} unlogged planned blocks pending).</span>
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <f-button
+            v-if="eodSummary.unconverted_count > 0"
+            variant="solid"
+            theme="green"
+            size="sm"
+            @click="convertAllPendingPlannedBlocks"
+            title="Convert all unlogged planned blocks to logged actuals"
+            class="font-bold">
+            ⚡ Convert All ({{ eodSummary.unconverted_hours }}h)
+          </f-button>
+          <f-button
+            variant="outline"
+            theme="blue"
+            size="sm"
+            @click="openEODWrapUpDrawer"
+            class="font-bold">
+            <span>Review & Close Day →</span>
+          </f-button>
+        </div>
       </div>
 
       <!-- 4. Statistics last: the day's numbers, after the things you act on -->
@@ -5259,6 +5334,123 @@
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
           </template>
           <span>{{ isTracking ? 'Stop & Log ' + adjustDurationShort + ' to Timesheet' : 'Log ' + adjustDurationShort + ' to Timesheet' }}</span>
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- PILLAR 3: RUNAWAY TIMER ALERT DIALOG        -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showRunawayAlertModal"
+    title="Timer Overflow Check"
+    subtitle="Your stopwatch has been running for an unusually long duration."
+    size="md"
+    z-index="z-[85]"
+  >
+    <template #header-icon>
+      <span class="text-xl">⚠️</span>
+    </template>
+    <div class="space-y-4 py-1 text-xs">
+      <div class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+        <p class="font-bold">Elapsed: {{ runawayGuardData.elapsed_hours }} hours (Started at {{ runawayGuardData.started_at_str || 'earlier' }})</p>
+        <p class="mt-1 text-gray-600 dark:text-gray-300">{{ runawayGuardData.reason || 'Did you work continuously on this block, or did you finish earlier?' }}</p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block font-bold text-gray-700 dark:text-gray-300">Choose Resolution:</label>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <button type="button" @click="resolveRunawayOption('keep')"
+            class="p-3 rounded-xl border text-center transition-all cursor-pointer font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            :class="runawayChoice === 'keep' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-600' : 'border-gray-200 dark:border-gray-700'">
+            <div>Keep Full</div>
+            <div class="text-[10px] text-gray-500 font-normal mt-0.5">{{ runawayGuardData.elapsed_hours }}h elapsed</div>
+          </button>
+          <button type="button" @click="resolveRunawayOption('cap')"
+            class="p-3 rounded-xl border text-center transition-all cursor-pointer font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            :class="runawayChoice === 'cap' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600' : 'border-gray-200 dark:border-gray-700'">
+            <div>Cap at Schedule</div>
+            <div class="text-[10px] text-gray-500 font-normal mt-0.5">{{ runawayGuardData.suggested_cap_hours }}h planned</div>
+          </button>
+          <button type="button" @click="resolveRunawayOption('custom')"
+            class="p-3 rounded-xl border text-center transition-all cursor-pointer font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+            :class="runawayChoice === 'custom' ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/50 text-purple-600' : 'border-gray-200 dark:border-gray-700'">
+            <div>Adjust & Stop</div>
+            <div class="text-[10px] text-gray-500 font-normal mt-0.5">Open Slider</div>
+          </button>
+        </div>
+      </div>
+    </div>
+    <template #actions>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <f-button variant="solid" theme="blue" size="sm" @click="confirmRunawayResolution">
+          Apply Resolution
+        </f-button>
+      </div>
+    </template>
+  </f-dialog>
+
+  <!-- ========================================== -->
+  <!-- PILLAR 5: EOD WRAP-UP RECONCILIATION MODAL -->
+  <!-- ========================================== -->
+  <f-dialog
+    v-model="showEODModal"
+    title="End of Day Reconciliation Ritual"
+    subtitle="Review today's accomplishments, unallocated gaps, and finalize your timesheet."
+    size="lg"
+    z-index="z-[85]"
+  >
+    <template #header-icon>
+      <span class="text-xl">🏁</span>
+    </template>
+    <div class="space-y-4 py-2 text-xs">
+      <!-- Target vs Logged Bar -->
+      <div class="p-4 rounded-2xl bg-gray-50 dark:bg-[#1E1F22] border border-gray-200 dark:border-gray-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-gray-700 dark:text-gray-300">Daily Target: 8.0 Hours</span>
+          <span class="font-mono font-extrabold text-sm" :class="eodSummary && eodSummary.total_actual_hours >= 8.0 ? 'text-emerald-500' : 'text-amber-500'">
+            {{ eodSummary ? eodSummary.total_actual_hours : 0 }}h / 8.0h ({{ eodSummary ? (8.0 - eodSummary.total_actual_hours <= 0 ? 'Goal Met' : (8.0 - eodSummary.total_actual_hours).toFixed(1) + 'h remaining') : '' }})
+          </span>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
+          <div class="h-full bg-emerald-500 rounded-full transition-all duration-300"
+            :style="{ width: Math.min(100, ((eodSummary ? eodSummary.total_actual_hours : 0) / 8.0) * 100) + '%' }"></div>
+        </div>
+      </div>
+
+      <!-- Pending unlogged blocks list -->
+      <div v-if="eodPendingBlocks && eodPendingBlocks.length" class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-gray-700 dark:text-gray-300">Unlogged Planned Commitments ({{ eodPendingBlocks.length }})</span>
+          <button type="button" @click="convertAllPendingPlannedBlocks" class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer">
+            ⚡ Convert All ({{ eodSummary.unconverted_hours }}h)
+          </button>
+        </div>
+        <div class="space-y-1.5 max-h-48 overflow-y-auto">
+          <div v-for="b in eodPendingBlocks" :key="b.name"
+            class="flex items-center justify-between p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#161618]">
+            <div>
+              <div class="font-bold">{{ b.task_subject || b.deliverable_notes || 'Focus Block' }}</div>
+              <div class="text-[11px] text-gray-500">{{ b.start_time }}–{{ b.end_time }} ({{ Number(b.duration_hours || 0).toFixed(1) }}h)</div>
+            </div>
+            <f-button size="xs" variant="solid" theme="green" @click="quickConvertPlanToActual(b)">
+              Convert ({{ Number(b.duration_hours || 0).toFixed(1) }}h)
+            </f-button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+        <span>✓ All planned blocks for today have been logged or addressed.</span>
+      </div>
+    </div>
+    <template #actions>
+      <div class="flex items-center justify-between w-full">
+        <f-button variant="ghost" theme="gray" size="sm" @click="showEODModal = false">
+          Close
+        </f-button>
+        <f-button variant="solid" theme="blue" size="sm" @click="showEODModal = false; showToast('EOD review complete! Great work today.', 'success');">
+          Complete EOD Ritual ✓
         </f-button>
       </div>
     </template>
@@ -8384,10 +8576,35 @@
         for (let m = lo; m <= hi; m += step) ticks.push({ m, left: ((m - lo) / span * 100) + '%', label: hourLabel(Math.floor(m / 60) % 24) });
         const plannedH = planned.reduce((t, r) => t + (r.e - r.s) / 60, 0);
         const loggedH = logged.reduce((t, r) => t + (r.e - r.s) / 60, 0);
+
+        // Compute contiguous intervals in logged lane to identify unlogged gaps
+        const gaps = [];
+        const sortedLogged = logged.slice().sort((a, b) => a.s - b.s);
+        for (let i = 0; i < sortedLogged.length - 1; i++) {
+          const gStart = sortedLogged[i].e;
+          const gEnd = sortedLogged[i + 1].s;
+          const gDuration = gEnd - gStart;
+          if (gDuration >= 15) { // minimum 15-minute gap
+            const gHours = Math.round((gDuration / 60) * 10) / 10;
+            gaps.push({
+              s: gStart,
+              e: gEnd,
+              from_time: _minToHHMM(gStart),
+              to_time: _minToHHMM(gEnd),
+              duration_minutes: gDuration,
+              duration_hours: gHours,
+              label: `+ Log ${gHours}h`,
+              left: ((gStart - lo) / span * 100) + '%',
+              width: (Math.max(4, gEnd - gStart) / span * 100) + '%'
+            });
+          }
+        }
+
         return {
           ticks,
           planned: planned.map(r => Object.assign({}, r, place(r))),
           logged: logged.map(r => Object.assign({}, r, place(r), { onPlan: covered(r) })),
+          gaps,
           plannedH, loggedH,
           spanH: span / 60,
           firstMin,
@@ -9973,6 +10190,9 @@
                 syncActiveSession(true);
               }
             }
+
+            // Sync Pillar 2 attendance presence variance
+            fetchAttendancePresence();
           }
         } catch (e) {
           console.error("API error:", e);
@@ -10500,6 +10720,147 @@
           // user has not lost the session and can retry or fix the times.
           showToast('Not saved — the clock is still running. ' + _errText(err), 'danger');
         }
+      };
+
+      // ==========================================
+      // TIMESHEET CAPTURE PERFECTION SUITE (PILLARS 1-5)
+      // ==========================================
+
+      // Pillar 1: 1-Click Plan-to-Actuals Catch-Up
+      const quickConvertPlanToActual = async (block) => {
+        if (!block || !block.name) return;
+        try {
+          const res = await postJSON('convert_plan_to_actual', {
+            block_name: block.name,
+            session_notes: block.deliverable_notes || 'Completed as scheduled.'
+          });
+          showToast(`⚡ Plan converted to logged time (${res.actual_hours}h)!`, 'success');
+          fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') fetchPlannerData();
+        } catch (err) {
+          showToast('Failed to convert plan: ' + (err && err.message || err), 'danger');
+        }
+      };
+
+      // Pillar 2: Attendance Presence Reconciliation
+      const attendancePresence = ref(null);
+      const fetchAttendancePresence = async () => {
+        try {
+          const emp = selectedEmployee.value || session.user;
+          const dt = selectedDashboardDate.value || getLocalTodayISO();
+          const res = await postJSON('get_attendance_presence_variance', {
+            employee: emp,
+            work_date: dt
+          });
+          if (res) attendancePresence.value = res;
+        } catch (err) {}
+      };
+
+      // Pillar 3: Runaway Timer Guard
+      const showRunawayAlertModal = ref(false);
+      const runawayGuardData = ref({ elapsed_hours: 0, suggested_cap_hours: 0, reason: '', started_at_str: '' });
+      const runawayChoice = ref('keep'); // 'keep' | 'cap' | 'custom'
+
+      const checkRunawayStopwatch = async () => {
+        if (!isTracking.value || !startTime.value) return;
+        try {
+          const res = await postJSON('check_runaway_timer_guard', {
+            start_ms: startTime.value,
+            scheduled_duration_hours: trackerBoundBlock.value ? flt(trackerBoundBlock.value.duration_hours) : 0
+          });
+          if (res && res.is_runaway) {
+            runawayGuardData.value = {
+              elapsed_hours: res.elapsed_hours,
+              suggested_cap_hours: res.suggested_cap_hours,
+              reason: res.reason,
+              started_at_str: new Date(res.start_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            runawayChoice.value = 'cap';
+            showRunawayAlertModal.value = true;
+          }
+        } catch (err) {}
+      };
+
+      const resolveRunawayOption = (choice) => {
+        runawayChoice.value = choice;
+      };
+
+      const confirmRunawayResolution = () => {
+        showRunawayAlertModal.value = false;
+        if (runawayChoice.value === 'keep') {
+          showToast('Timer kept running. Remember to stop when done!', 'info');
+        } else if (runawayChoice.value === 'cap') {
+          // Open adjust modal prefilled to suggested cap hours
+          openAdjustModal();
+          const capMins = Math.round(flt(runawayGuardData.value.suggested_cap_hours || 2.0) * 60);
+          adjustDurationMinutes.value = capMins;
+          adjustMode.value = 'stop_and_log';
+          // Calculate to_time based on from_time + capMins
+          nudgeAdjustTime('to', 0);
+        } else if (runawayChoice.value === 'custom') {
+          openAdjustModal();
+        }
+      };
+
+      // Pillar 4: Interactive Timeline Gap Booking
+      const quickLogTimelineGap = (gap) => {
+        if (!gap) return;
+        adjustForm.value = {
+          work_date: selectedDashboardDate.value || getLocalTodayISO(),
+          from_time: gap.from_time.substring(0, 5),
+          to_time: gap.to_time.substring(0, 5),
+          notes: `Unplanned gap work (${gap.label})`
+        };
+        adjustMode.value = 'stop_and_log';
+        showAdjustModal.value = true;
+      };
+
+      // Pillar 5: EOD Wrap-Up Ritual & Reconciliation
+      const showEODModal = ref(false);
+      const eodSummary = computed(() => {
+        const blocks = workFocusBlocks.value || [];
+        const actualH = blocks.reduce((acc, b) => acc + flt(b.actual_hours || 0), 0);
+        const unloggedBlocks = blocks.filter(b => blockLogState(b) === 'none' && b.status !== 'Cancelled');
+        const unloggedH = unloggedBlocks.reduce((acc, b) => acc + flt(b.duration_hours || 0), 0);
+        const curH = new Date().getHours();
+        return {
+          total_actual_hours: Math.round(actualH * 10) / 10,
+          remaining_to_target: Math.max(0, Math.round((8.0 - actualH) * 10) / 10),
+          blocks_count: blocks.length,
+          unconverted_count: unloggedBlocks.length,
+          unconverted_hours: Math.round(unloggedH * 10) / 10,
+          is_eod_time: curH >= 16 // 4 PM or later
+        };
+      });
+
+      const eodPendingBlocks = computed(() => {
+        const blocks = workFocusBlocks.value || [];
+        return blocks.filter(b => blockLogState(b) === 'none' && b.status !== 'Cancelled');
+      });
+
+      const openEODWrapUpDrawer = () => {
+        showEODModal.value = true;
+      };
+
+      const convertAllPendingPlannedBlocks = async () => {
+        const pending = eodPendingBlocks.value || [];
+        if (!pending.length) {
+          showToast('No unlogged planned blocks to convert.', 'info');
+          return;
+        }
+        let converted = 0;
+        for (const b of pending) {
+          try {
+            await postJSON('convert_plan_to_actual', {
+              block_name: b.name,
+              session_notes: b.deliverable_notes || 'Completed as scheduled.'
+            });
+            converted++;
+          } catch (e) {}
+        }
+        showToast(`⚡ Converted ${converted} planned block(s) to logged timesheets!`, 'success');
+        fetchWorkstationData(selectedEmployee.value);
+        if (typeof fetchPlannerData === 'function') fetchPlannerData();
       };
 
       // 2b-2. Edit & Delete Logged Work Sessions
@@ -13383,7 +13744,23 @@
         notificationPermission,
         showNotificationBanner,
         enableNotificationsUserGesture,
-        checkBlockOverrun
+        checkBlockOverrun,
+        // Timesheet Capture Perfection Suite (Pillars 1-5)
+        quickConvertPlanToActual,
+        attendancePresence,
+        fetchAttendancePresence,
+        showRunawayAlertModal,
+        runawayGuardData,
+        runawayChoice,
+        resolveRunawayOption,
+        confirmRunawayResolution,
+        checkRunawayStopwatch,
+        quickLogTimelineGap,
+        showEODModal,
+        eodSummary,
+        eodPendingBlocks,
+        openEODWrapUpDrawer,
+        convertAllPendingPlannedBlocks
       };
     }
   });

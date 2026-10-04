@@ -773,3 +773,149 @@ def get_pending_team_approvals(work_date=None, employee=None):
 	return blocks
 
 
+@frappe.whitelist()
+def convert_plan_to_actual(block_name, actual_hours=None, session_notes=None):
+	"""
+	Pillar 1: One-Click Plan-to-Actuals Catch-Up Assistant.
+	Converts an unlogged Planned Work Block into logged actuals.
+	Synthesizes a child OmniTrack Work Session with exact from_time and to_time.
+	Enforces Temporal Governance (past lock and horizon checks).
+	"""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		frappe.throw(_("Authentication required."), frappe.PermissionError)
+
+	if not block_name or not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block not found."))
+
+	block = frappe.get_doc("Planned Work Block", block_name)
+
+	# Permission check
+	from omnitrack.permissions import is_omnitrack_manager, check_timesheet_date_permission
+	is_mgr = is_omnitrack_manager(user) or any(
+		r in frappe.get_roles(user) for r in ("HR Manager", "HR User", "System Manager", "Administrator")
+	)
+	if block.employee != user and not is_mgr:
+		frappe.throw(_("Cannot log work for another employee."), frappe.PermissionError)
+
+	# Check date horizon permission
+	check_timesheet_date_permission(block.work_date, user)
+
+	# Calculate hours and session timing
+	plan_dur = flt(block.duration_hours) or 1.0
+	act_dur = flt(actual_hours) if actual_hours is not None and flt(actual_hours) > 0 else plan_dur
+
+	start_t = _time_str(block.start_time) or "09:00:00"
+	# Compute end time based on actual hours
+	start_parts = [int(p) for p in start_t.split(":")]
+	start_mins = start_parts[0] * 60 + start_parts[1]
+	end_mins = start_mins + int(round(act_dur * 60))
+	end_mins = min(end_mins, 23 * 60 + 59)
+	end_t = f"{end_mins // 60:02d}:{end_mins % 60:02d}:00"
+
+	notes = session_notes or block.deliverable_notes or _("Completed as planned.")
+
+	# Add session row
+	block.append("sessions", {
+		"session_date": block.work_date,
+		"from_time": start_t,
+		"to_time": end_t,
+		"hours": act_dur,
+		"notes": notes,
+		"logged_via": "Manual",
+		"task_nature": block.task_nature or "🎯 Planned",
+	})
+
+	block.actual_hours = act_dur
+	block.variance_hours = round(act_dur - plan_dur, 2)
+	block.status = "Logged (Full)" if act_dur >= plan_dur else "Logged (Partial)"
+	block.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		block.flags.ignore_links = True
+	block.save()
+
+	# Handle timesheet bridge sync if configured
+	sync_mode = get_timesheet_sync_mode()
+	if sync_mode == "Immediate":
+		try:
+			create_timesheet_from_work_block(block.name, force=True)
+		except Exception as e:
+			frappe.logger("omnitrack").warning(f"Timesheet sync failed during convert_plan_to_actual: {e}")
+
+	return {
+		"status": "success",
+		"message": _("Planned block converted to actual logged time."),
+		"name": block.name,
+		"actual_hours": block.actual_hours,
+		"block_status": block.status,
+	}
+
+
+@frappe.whitelist()
+def get_timeline_gaps(work_date=None, employee=None, min_gap_minutes=15):
+	"""
+	Pillar 4: Calculates unlogged intervals/gaps between work sessions for a day.
+	Enables 1-click timeline gap booking.
+	"""
+	user = _resolve_planner_user(employee)
+	target_date = work_date or nowdate()
+	min_gap = int(min_gap_minutes or 15)
+
+	# Fetch all completed work sessions for the day
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters={"employee": user, "work_date": target_date},
+		fields=["name"],
+		order_by="start_time asc",
+		limit=100
+	)
+
+	intervals = []
+	for b in blocks:
+		b_doc = frappe.get_doc("Planned Work Block", b.name)
+		for s in b_doc.sessions:
+			if s.from_time and s.to_time:
+				f_mins = mins_of(s.from_time)
+				t_mins = mins_of(s.to_time)
+				if t_mins > f_mins:
+					intervals.append((f_mins, t_mins))
+
+	if not intervals:
+		return []
+
+	# Sort and merge intervals
+	intervals.sort(key=lambda x: x[0])
+	merged = []
+	for iv in intervals:
+		if not merged:
+			merged.append(iv)
+		else:
+			last_start, last_end = merged[-1]
+			if iv[0] <= last_end:
+				merged[-1] = (last_start, max(last_end, iv[1]))
+			else:
+				merged.append(iv)
+
+	# Calculate gaps between consecutive merged blocks
+	gaps = []
+	for i in range(len(merged) - 1):
+		gap_start = merged[i][1]
+		gap_end = merged[i + 1][0]
+		gap_dur = gap_end - gap_start
+		if gap_dur >= min_gap:
+			from_t = f"{gap_start // 60:02d}:{gap_start % 60:02d}:00"
+			to_t = f"{gap_end // 60:02d}:{gap_end % 60:02d}:00"
+			gaps.append({
+				"from_time": from_t,
+				"to_time": to_t,
+				"gap_minutes": gap_dur,
+				"gap_hours": round(gap_dur / 60.0, 2),
+				"label": f"+ Log {round(gap_dur / 60.0, 1)}h Gap",
+				"work_date": str(target_date),
+				"employee": user
+			})
+
+	return gaps
+
+
+

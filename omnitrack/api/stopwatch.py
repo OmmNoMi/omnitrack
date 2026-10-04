@@ -561,3 +561,49 @@ def get_active_session(user=None):
 	return data
 
 
+@frappe.whitelist()
+def check_runaway_timer_guard(start_ms=None, scheduled_duration_hours=None, max_threshold_hours=4.0):
+	"""
+	Pillar 3: Runaway Stopwatch Guard.
+	Detects if a currently ticking timer has exceeded normal working boundaries
+	(e.g., > 4 hours, or > scheduled duration + 30 mins grace).
+	Returns alert status and suggested capped end time options.
+	"""
+	if not start_ms:
+		user = frappe.session.user
+		active = get_active_session(user)
+		if not active:
+			return {"is_runaway": False}
+		start_ms = flt(active.get("startTime", 0))
+
+	if not start_ms or start_ms <= 0:
+		return {"is_runaway": False}
+
+	now_ms = datetime.now().timestamp() * 1000
+	elapsed_secs = max(0, (now_ms - flt(start_ms)) / 1000.0)
+	elapsed_hours = round(elapsed_secs / 3600.0, 2)
+
+	sched_h = flt(scheduled_duration_hours or 0)
+	threshold_h = flt(max_threshold_hours or 4.0)
+
+	is_runaway = False
+	reason = None
+
+	if elapsed_hours >= threshold_h:
+		is_runaway = True
+		reason = _("Timer has been running continuously for {0} hours.").format(elapsed_hours)
+	elif sched_h > 0 and elapsed_hours >= (sched_h + 0.5):
+		is_runaway = True
+		reason = _("Timer exceeded scheduled duration ({0}h) by more than 30 minutes.").format(sched_h)
+
+	return {
+		"is_runaway": is_runaway,
+		"reason": reason,
+		"elapsed_hours": elapsed_hours,
+		"scheduled_hours": sched_h,
+		"start_ms": start_ms,
+		"suggested_cap_hours": sched_h if sched_h > 0 else min(elapsed_hours, threshold_h),
+	}
+
+
+

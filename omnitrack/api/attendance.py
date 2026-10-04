@@ -79,3 +79,95 @@ def trigger_attendance_synthesis():
 		}
 
 
+@frappe.whitelist()
+def get_attendance_presence_variance(employee=None, work_date=None):
+	"""
+	Pillar 2: Attendance Check-in vs. Timesheet Gap Reconciler.
+	Computes shift presence duration from Employee Checkin / Attendance
+	against total logged timesheet hours in Planned Work Blocks.
+	Identifies unallocated office presence time.
+	"""
+	user = _resolve_planner_user(employee)
+	target_date = work_date or nowdate()
+
+	# 1. Calculate Logged Timesheet Hours from Planned Work Blocks
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters={"employee": user, "work_date": target_date},
+		fields=["name", "actual_hours", "duration_hours", "status"],
+		limit=100
+	)
+	total_logged_hours = sum(flt(b.get("actual_hours", 0)) for b in blocks)
+	total_planned_hours = sum(flt(b.get("duration_hours", 0)) for b in blocks)
+
+	# 2. Calculate Shift Presence from Employee Checkin
+	shift_presence_hours = 0.0
+	first_in = None
+	last_out = None
+
+	if frappe.db.exists("DocType", "Employee"):
+		emp_name = frappe.db.get_value("Employee", {"user_id": user}, "name")
+		if emp_name and frappe.db.exists("DocType", "Employee Checkin"):
+			start_win = f"{target_date} 00:00:00"
+			end_win = f"{target_date} 23:59:59"
+			checkins = frappe.get_all(
+				"Employee Checkin",
+				filters={"employee": emp_name, "time": ["between", [start_win, end_win]]},
+				fields=["log_type", "time"],
+				order_by="time asc"
+			)
+			if checkins:
+				for chk in checkins:
+					ltype = (chk.log_type or "IN").upper()
+					if ltype == "IN" and not first_in:
+						first_in = chk.time
+					elif ltype == "OUT":
+						last_out = chk.time
+
+				if first_in and last_out:
+					f_dt = first_in if isinstance(first_in, datetime) else get_datetime(first_in)
+					l_dt = last_out if isinstance(last_out, datetime) else get_datetime(last_out)
+					diff_sec = max(0, (l_dt - f_dt).total_seconds())
+					shift_presence_hours = round(diff_sec / 3600.0, 2)
+				elif first_in and not last_out:
+					# Still in office; calculate up to now if today
+					if str(target_date) == str(nowdate()):
+						f_dt = first_in if isinstance(first_in, datetime) else get_datetime(first_in)
+						diff_sec = max(0, (datetime.now() - f_dt).total_seconds())
+						shift_presence_hours = round(diff_sec / 3600.0, 2)
+
+	# Fallback: Check Attendance document working hours if checkins absent
+	if shift_presence_hours <= 0 and frappe.db.exists("DocType", "Attendance"):
+		emp_name = frappe.db.get_value("Employee", {"user_id": user}, "name") if frappe.db.exists("DocType", "Employee") else None
+		if emp_name:
+			att = frappe.db.get_value(
+				"Attendance",
+				{"employee": emp_name, "attendance_date": target_date, "docstatus": 1},
+				["working_hours", "status"],
+				as_dict=True
+			)
+			if att and att.get("working_hours"):
+				shift_presence_hours = flt(att.working_hours)
+
+	unallocated_presence_hours = max(0.0, round(shift_presence_hours - total_logged_hours, 2))
+
+	status_harmony = "Balanced"
+	if unallocated_presence_hours > 0.5:
+		status_harmony = "Deficit"
+	elif total_logged_hours > shift_presence_hours and shift_presence_hours > 0:
+		status_harmony = "Surplus"
+
+	return {
+		"employee": user,
+		"work_date": str(target_date),
+		"shift_presence_hours": shift_presence_hours,
+		"total_logged_hours": round(total_logged_hours, 2),
+		"total_planned_hours": round(total_planned_hours, 2),
+		"unallocated_presence_hours": unallocated_presence_hours,
+		"status_harmony": status_harmony,
+		"first_in": str(first_in) if first_in else None,
+		"last_out": str(last_out) if last_out else None,
+	}
+
+
+
