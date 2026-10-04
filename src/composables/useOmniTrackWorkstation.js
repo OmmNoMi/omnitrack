@@ -46,7 +46,7 @@ export function useOmniTrackWorkstation() {
 
       const mobileTabs = computed(() => [
         { id: 'dashboard', label: 'Dashboard', icon: '📊', badge: null },
-        { id: 'planner', label: 'Planner', icon: '📅', badge: plannerData.value && plannerData.value.totals && plannerData.value.totals.block_count ? plannerData.value.totals.block_count : null },
+        { id: 'planner', label: 'Calendar', icon: '📅', badge: plannerData.value && plannerData.value.totals && plannerData.value.totals.block_count ? plannerData.value.totals.block_count : null },
         { id: 'timesheets', label: 'Timesheets', icon: '⏱️', badge: totalFilteredHours.value ? totalFilteredHours.value + 'h' : null },
         ...(isManager.value ? [{ id: 'attendance', label: 'Team', icon: '👥', badge: null }] : [])
       ]);
