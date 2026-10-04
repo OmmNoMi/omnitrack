@@ -110,10 +110,10 @@
     />
 
     <!-- ======================================== -->
-    <!-- MODULAR SUB-VIEWS                        -->
+    <!-- MODULAR SUB-VIEWS COORDINATOR            -->
     <!-- ======================================== -->
-    <DashboardView
-      v-if="activeTab === 'dashboard'"
+    <ViewCoordinator
+      :active-tab="activeTab"
       :is-dark-mode="isDarkMode"
       :is-manager="isManager"
       :is-client="isClient"
@@ -149,59 +149,15 @@
       :hhmm="hhmm"
       :is-block-completed="isBlockCompleted"
       :is-block-locked="isBlockLocked"
-      @open-block-drawer="openBlockDrawer"
-      @open-task-raven-drawer="openTaskRavenDrawer"
-      @open-book-modal="openBookModal"
-      @open-eod-modal="openEODWrapUpDrawer"
-      @start-session="startSessionFromBlock"
-      @stop-session="toggleTrack"
-      @switch-task="promptSwitchSession"
-      @toggle-all-blocks="toggleAllBlocksExpanded"
-      @set-timeline-zoom="setTimelineZoom"
-      @navigate-timeline-day="navigateTimelineDay"
-    />
-
-    <TimesheetsView
-      v-else-if="activeTab === 'timesheets'"
-      :is-dark-mode="isDarkMode"
-      :is-manager="isManager"
-      :selected-employee="selectedEmployee"
-      :employee-menu-items="employeeMenuItems"
       :timesheet-horizon="timesheetHorizon"
       :total-filtered-hours="totalFilteredHours"
       :filtered-work-blocks="filteredWorkBlocks"
-      :fmt-hrs="fmtHrs"
-      :hhmm="hhmm"
-      @open-block-drawer="openBlockDrawer"
-      @approve-timesheet="approveTimesheetBlock"
-    />
-
-    <AttendanceView
-      v-else-if="activeTab === 'attendance'"
-      :is-dark-mode="isDarkMode"
-      :is-manager="isManager"
-      :selected-employee="selectedEmployee"
-      :employee-menu-items="employeeMenuItems"
       :pending-approvals="pendingApprovals"
       :loading-approvals="loadingApprovals"
       :attendance-presence="attendancePresence"
       :synthesizer-logs="synthesizerLogs"
       :hourly-presence="hourlyPresence"
-      :fmt-hrs="fmtHrs"
-      :hhmm="hhmm"
-      @fetch-pending-approvals="fetchPendingApprovals"
-      @approve-all-pending="approveAllPending"
-      @approve-block="approveTimesheetBlock"
-      @open-block-drawer="openBlockDrawer"
-    />
-
-    <CalendarView
-      v-else-if="activeTab === 'planner'"
-      :is-dark-mode="isDarkMode"
-      :is-manager="isManager"
-      :employee-menu-items="employeeMenuItems"
-      :selected-employee-name="selectedEmployee"
-      :assigned-tasks="filteredPlannerTasks"
+      :filtered-planner-tasks="filteredPlannerTasks"
       :planner-busy="plannerBusy"
       :planner-task-search="plannerTaskSearch"
       :planner-task-filter="plannerTaskFilter"
@@ -214,13 +170,21 @@
       :is-tracking="isTracking"
       :now-line-top="nowLineTop"
       :hover-card="hoverCard"
-      :fmt-hrs="fmtHrs"
-      :hhmm="hhmm"
-      :is-block-completed="isBlockCompleted"
-      @open-book-modal="openBookModal"
       @open-block-drawer="openBlockDrawer"
-      @open-task-details="openTaskDetails"
       @open-task-raven-drawer="openTaskRavenDrawer"
+      @open-book-modal="openBookModal"
+      @open-eod-modal="openEODWrapUpDrawer"
+      @start-session="startSessionFromBlock"
+      @stop-session="toggleTrack"
+      @switch-task="promptSwitchSession"
+      @toggle-all-blocks="toggleAllBlocksExpanded"
+      @set-timeline-zoom="setTimelineZoom"
+      @navigate-timeline-day="navigateTimelineDay"
+      @approve-timesheet="approveTimesheetBlock"
+      @fetch-pending-approvals="fetchPendingApprovals"
+      @approve-all-pending="approveAllPending"
+      @approve-block="approveTimesheetBlock"
+      @open-task-details="openTaskDetails"
       @start-task-immediately="startSessionFromTask"
       @plan-attention-task="planAttentionTask"
       @start-focus-session="startSessionFromBlock"
@@ -251,11 +215,11 @@
   />
 
   <!-- ========================================== -->
-  <!-- MODULAR DRAWERS                           -->
+  <!-- MODULAR DRAWERS COORDINATOR                -->
   <!-- ========================================== -->
-  <BlockDetailDrawer
-    :show="showBlockDrawer"
-    :block="activeBlock"
+  <DrawerCoordinator
+    :show-block-drawer="showBlockDrawer"
+    :active-block="activeBlock"
     :is-dark-mode="isDarkMode"
     :is-tracking="isTracking"
     :tracker-block-name="trackerBlockName"
@@ -270,7 +234,13 @@
     :is-block-reschedulable="isBlockReschedulable"
     :is-block-cancellable="isBlockCancellable"
     :can-log-timesheet="canLogTimesheet"
-    @close="showBlockDrawer = false"
+    :show-task-raven-drawer="showTaskRavenDrawer"
+    :raven-task="ravenTask"
+    :raven-messages="ravenMessages"
+    :task-connected-blocks="taskConnectedBlocks"
+    :raven-sprint-recaps="ravenSprintRecaps"
+    :raven-loading="ravenLoading"
+    @close-block-drawer="showBlockDrawer = false"
     @start-session="startSessionFromBlock"
     @stop-session="toggleTrack"
     @toggle-reschedule="toggleRescheduleForm"
@@ -281,21 +251,11 @@
     @delete-session="deleteSessionRow"
     @submit-reschedule="submitReschedule"
     @submit-session="submitBlockSession"
-  />
-
-  <RavenCollaborationDrawer
-    :show="showTaskRavenDrawer"
-    :task="ravenTask"
-    :is-dark-mode="isDarkMode"
-    :messages="ravenMessages"
-    :blocks="taskConnectedBlocks"
-    :recaps="ravenSprintRecaps"
-    :loading-messages="ravenLoading"
-    @close="closeTaskRavenDrawer"
+    @close-raven-drawer="closeTaskRavenDrawer"
     @start-task-immediately="startSessionFromTask"
     @plan-attention-task="planAttentionTask"
     @open-block-drawer="openBlockDrawer"
-    @send-message="sendRavenChatMessage"
+    @send-raven-message="sendRavenChatMessage"
   />
   <!-- ========================================== -->
   <!-- 5. WORKSPACE BOTTOM NAVIGATION DOCK        -->

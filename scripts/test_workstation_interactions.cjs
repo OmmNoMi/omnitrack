@@ -28,11 +28,14 @@ const headerVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout
 const bottomNavVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'WorkstationBottomNav.vue');
 const hoverCardVuePath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'BlockHoverCard.vue');
 const sessionOverlayVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'SessionOverlay.vue');
+const drawerCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'drawers', 'DrawerCoordinator.vue');
+const viewCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'views', 'ViewCoordinator.vue');
 
 const filesToInspect = [
   omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
   blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
-  headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath, ...dialogFiles
+  headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath,
+  drawerCoordinatorVuePath, viewCoordinatorVuePath, ...dialogFiles
 ];
 
 let content = '';
