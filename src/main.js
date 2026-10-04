@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import "frappe-ui/style.css";
 import "./styles/main.css";
 import App from "./App.vue";
-import SessionBox from "./timesheet_session/SessionBox.vue";
+import SessionBox from "./session/SessionBox.vue";
 import FDropdownMenu from "./components/common/FDropdownMenu.vue";
 import FCombobox from "./components/common/FCombobox.vue";
 

@@ -1572,7 +1572,7 @@ assert.ok(
 );
 
 // Verify SessionBox.vue also has correct tab name ('notes' not 'log')
-const sessionBoxContent = fs.readFileSync(path.resolve(__dirname, '../src/timesheet_session/SessionBox.vue'), 'utf8');
+const sessionBoxContent = fs.readFileSync(path.resolve(__dirname, '../src/session/SessionBox.vue'), 'utf8');
 assert.ok(
   sessionBoxContent.includes("activePaneTab.value = 'notes'") &&
   !sessionBoxContent.includes("activePaneTab.value = 'log'"),

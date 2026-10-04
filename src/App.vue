@@ -215,7 +215,7 @@
 </template>
 
 <script>
-import SessionBox from "./timesheet_session/SessionBox.vue";
+import SessionBox from "./session/SessionBox.vue";
 import FDropdownMenu from "./components/common/FDropdownMenu.vue";
 import FCombobox from "./components/common/FCombobox.vue";
 
