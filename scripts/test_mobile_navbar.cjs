@@ -17,9 +17,9 @@ console.log('--- Running Mobile Navbar Responsiveness Invariants Suite (Issue #1
 
 const omnitrackDir = path.resolve(__dirname, '..');
 const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html');
-const appVuePath = path.resolve(omnitrackDir, 'src', 'App.vue');
+const headerVuePath = path.resolve(omnitrackDir, 'src', 'components', 'layout', 'WorkstationHeader.vue');
 
-const targetPath = fs.existsSync(appVuePath) ? appVuePath : htmlPath;
+const targetPath = fs.existsSync(headerVuePath) ? headerVuePath : (fs.existsSync(appVuePath) ? appVuePath : htmlPath);
 assert.ok(fs.existsSync(targetPath), 'FAIL: Component file does not exist');
 const htmlContent = fs.readFileSync(targetPath, 'utf8');
 

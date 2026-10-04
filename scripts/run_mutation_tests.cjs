@@ -12,6 +12,9 @@ const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html'
 const viteConfigPath = path.resolve(omnitrackDir, 'vite.config.js');
 const tailwindConfigPath = path.resolve(omnitrackDir, 'tailwind.config.cjs');
 const appVuePath = path.resolve(omnitrackDir, 'src', 'App.vue');
+const headerVuePath = fs.existsSync(path.resolve(omnitrackDir, 'src', 'components', 'layout', 'WorkstationHeader.vue'))
+  ? path.resolve(omnitrackDir, 'src', 'components', 'layout', 'WorkstationHeader.vue')
+  : appVuePath;
 const fDropdownMenuPath = path.resolve(omnitrackDir, 'src', 'components', 'common', 'FDropdownMenu.vue');
 const calendarViewPath = path.resolve(omnitrackDir, 'src', 'views', 'CalendarView.vue');
 
@@ -102,7 +105,7 @@ runMutationTest(
 // Mutant 5: Redundant isProductionEnv badge re-introduced into header (Issue #12)
 runMutationTest(
   'Redundant isProductionEnv badge re-introduced into header (Issue #12 regression)',
-  appVuePath,
+  headerVuePath,
   (code) => code.replace('<span class="font-bold text-sm sm:text-base tracking-tight truncate"', '<span>{{ isProductionEnv ? \'Production\' : \'Local Dev\' }}</span><span class="font-bold text-sm sm:text-base tracking-tight truncate"'),
   'node scripts/test_mobile_navbar.cjs',
   'FAIL: Header must NOT contain the redundant isProductionEnv badge'
@@ -111,7 +114,7 @@ runMutationTest(
 // Mutant 6: Raven Chat text not collapsed on mobile screens (Issue #12)
 runMutationTest(
   'Raven Chat button text fails to collapse on mobile (hidden sm:inline removed)',
-  appVuePath,
+  headerVuePath,
   (code) => code.replace('<span class="hidden sm:inline">Raven Chat</span>', '<span>Raven Chat</span>'),
   'node scripts/test_mobile_navbar.cjs',
   'FAIL: Raven Chat text must be hidden on mobile'

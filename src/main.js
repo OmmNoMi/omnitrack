@@ -28,6 +28,10 @@ import CalendarView from "./views/CalendarView.vue";
 import TimesheetsView from "./views/TimesheetsView.vue";
 import AttendanceView from "./views/AttendanceView.vue";
 
+import WorkstationHeader from "./components/layout/WorkstationHeader.vue";
+import WorkstationBottomNav from "./components/layout/WorkstationBottomNav.vue";
+import BlockHoverCard from "./components/common/BlockHoverCard.vue";
+
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {
 	window.Vue = Vue;
@@ -35,6 +39,9 @@ if (typeof window !== "undefined") {
 	window.io = io;
 	window.OmniTrackComponents = {
 		App,
+		WorkstationHeader,
+		WorkstationBottomNav,
+		BlockHoverCard,
 		SessionBox,
 		FDropdownMenu,
 		FCombobox,
@@ -98,6 +105,9 @@ function mountApp(target = "#app") {
 	app.component("PlanFocusBlockModal", PlanFocusBlockModal);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
+	app.component("WorkstationHeader", WorkstationHeader);
+	app.component("WorkstationBottomNav", WorkstationBottomNav);
+	app.component("BlockHoverCard", BlockHoverCard);
 	app.component("DashboardView", DashboardView);
 	app.component("CalendarView", CalendarView);
 	app.component("TimesheetsView", TimesheetsView);

@@ -19,110 +19,19 @@
   <!-- ========================================== -->
   <!-- 1. TOP APP BAR                             -->
   <!-- ========================================== -->
-  <header class="sticky top-0 z-40 border-b px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 sm:gap-4 transition-colors duration-200 shrink-0" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200 shadow-xs'">
-    
-    <!-- Authentic Brand Identity -->
-    <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-      <img src="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg" alt="OmniTrack" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl shadow-xs object-contain cursor-pointer shrink-0" @click="activeTab = 'dashboard'">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="font-bold text-sm sm:text-base tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">OmniTrack</span>
-        <span v-if="isClient" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-800 flex items-center gap-1 shrink-0">
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-          Client Portal
-        </span>
-      </div>
-    </div>
-
-    <!-- Header Controls: Stopwatch & Menu (Pure Frappe UI) -->
-    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-      
-      <!-- Header stopwatch: click (or Shift+S) elevates to the session timesheet in full focus -->
-      <f-button
-        v-if="!isClient"
-        :variant="isTracking ? (isSessionElevated ? 'solid' : 'subtle') : 'subtle'"
-        :theme="isTracking ? (isSessionElevated ? 'blue' : 'red') : 'gray'"
-        size="sm"
-        class="font-mono !rounded-full !px-2.5 sm:!px-3 !py-1 text-xs font-bold transition-all cursor-pointer"
-        :aria-label="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
-        :title="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
-        @click="toggleSessionFocus"
-      >
-        <template #prefix>
-          <span class="w-2 h-2 rounded-full mr-1 inline-block" :class="isTracking ? (isSessionElevated ? 'bg-white animate-pulse' : 'bg-red-500 pulse-record') : 'bg-gray-400'"></span>
-        </template>
-        <span>{{ formattedTime }}</span>
-        <template #suffix>
-          <svg v-if="isTracking && !isSessionElevated" class="w-3 h-3 ml-1 text-red-500 dark:text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        </template>
-      </f-button>
-
-      <!-- Raven Team Collaboration Launcher -->
-      <f-button
-        variant="subtle"
-        theme="purple"
-        size="sm"
-        class="!rounded-full !px-2.5 sm:!px-3 !py-1 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors"
-        aria-label="Open Raven Collaboration"
-        title="Open Raven Team Chat"
-        @click="openRavenApp"
-      >
-        <template #prefix>
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </template>
-        <span class="hidden sm:inline">Raven Chat</span>
-      </f-button>
-
-      <!-- Notification Status / Permission Button -->
-      <f-button
-        v-if="notificationPermission !== 'granted'"
-        variant="subtle"
-        :theme="notificationPermission === 'denied' ? 'red' : 'blue'"
-        size="sm"
-        class="!rounded-full !px-2.5 !py-1 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-        :title="notificationPermission === 'denied' ? 'Notifications blocked in browser settings' : 'Enable Mobile Notifications for timesheets'"
-        :aria-label="notificationPermission === 'denied' ? 'Notifications blocked' : 'Enable Mobile Notifications'"
-        @click="enableNotificationsUserGesture"
-      >
-        <template #prefix>
-          <span>{{ notificationPermission === 'denied' ? '🔕' : '🔔' }}</span>
-        </template>
-        <span class="hidden sm:inline">{{ notificationPermission === 'denied' ? 'Alerts Blocked' : 'Enable Alerts' }}</span>
-      </f-button>
-
-      <!-- App Menu (Pure Frappe UI FDropdownMenu) -->
-      <f-dropdown-menu
-        :items="headerMenuItems"
-        aria-label="OmniTrack Menu"
-        align="right"
-      >
-        <template #trigger="{ isOpen }">
-          <f-button
-            variant="subtle"
-            theme="gray"
-            size="sm"
-            class="!rounded-full !p-2 flex items-center justify-center cursor-pointer"
-            aria-label="Menu"
-            :aria-expanded="isOpen ? 'true' : 'false'"
-          >
-            <template #prefix>
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                <line x1="4" y1="7" x2="20" y2="7"></line>
-                <line x1="4" y1="12" x2="20" y2="12"></line>
-                <line x1="4" y1="17" x2="20" y2="17"></line>
-              </svg>
-            </template>
-          </f-button>
-        </template>
-      </f-dropdown-menu>
-
-    </div>
-
-  </header>
+  <WorkstationHeader
+    :is-dark-mode="isDarkMode"
+    :is-client="isClient"
+    :is-tracking="isTracking"
+    :is-session-elevated="isSessionElevated"
+    :formatted-time="formattedTime"
+    :notification-permission="notificationPermission"
+    :header-menu-items="headerMenuItems"
+    @go-dashboard="activeTab = 'dashboard'"
+    @toggle-focus="toggleSessionFocus"
+    @open-raven="openRavenApp"
+    @enable-notifications="enableNotificationsUserGesture"
+  />
 
   <!-- ========================================== -->
   <!-- 4. MAIN WORKSPACE CONTAINER                -->
@@ -388,60 +297,16 @@
   </main>
 
   <!-- hover card: short, simple, informative preview with view details link -->
-  <div v-if="hoverCard" class="fixed z-50 w-64 rounded-xl border shadow-xl p-2.5 space-y-1.5 pointer-events-auto"
-    :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100 shadow-black/40' : 'bg-white border-gray-200 text-gray-900 shadow-gray-400/20'"
-    :style="{ left: hoverCard.left + 'px', top: hoverCard.top + 'px' }"
-    @mouseenter="cancelHideHover"
-    @mouseleave="hideBlockHover"
-    role="tooltip">
-    
-    <!-- Title & Compact Status Badge -->
-    <div class="flex items-start justify-between gap-1.5">
-      <div class="text-xs font-bold leading-tight break-words line-clamp-2">
-        <template v-if="hoverCard.source === 'logged'">
-          {{ (hoverCard.seg && hoverCard.seg.notes) || hoverCard.block.task_subject || hoverCard.block.work_item_label || 'Logged Work Session' }}
-        </template>
-        <template v-else>
-          {{ hoverCard.block.task_subject || hoverCard.block.work_item_label || hoverCard.block.deliverable_notes || 'Work block' }}
-        </template>
-      </div>
-      <span v-if="hoverCard.seg && hoverCard.seg.is_live_active" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 animate-pulse">
-        🔴 Live
-      </span>
-      <span v-else-if="hoverCard.source === 'logged'" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-        ✓ {{ fmtHrs((hoverCard.seg && hoverCard.seg.hours) || hoverCard.block.actual_hours) }}h
-      </span>
-      <span v-else-if="isBlockLocked(hoverCard.block)" class="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-        🔒 Past
-      </span>
-    </div>
-
-    <!-- Meta row: Time & Project -->
-    <div class="flex items-center justify-between gap-2 text-[10px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
-      <div class="font-mono font-medium flex items-center gap-1">
-        <span>⏱</span>
-        <span>{{ segTimeTitle(hoverCard.seg) }}</span>
-      </div>
-      <div v-if="hoverCard.block.project_name || hoverCard.block.project" class="truncate max-w-[120px]" :title="hoverCard.block.project_name || hoverCard.block.project">
-        📁 {{ hoverCard.block.project_name || hoverCard.block.project }}
-      </div>
-    </div>
-
-    <!-- Footer Action: View Details link -->
-    <div class="pt-1 border-t flex items-center justify-between text-[11px]" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-      <span v-if="hoverCard.block.timesheet || (hoverCard.seg && hoverCard.seg.timesheet)" class="text-[9px] font-mono font-semibold text-blue-600 dark:text-blue-400 truncate max-w-[120px]">
-        TS: {{ hoverCard.seg && hoverCard.seg.timesheet ? hoverCard.seg.timesheet : hoverCard.block.timesheet }}
-      </span>
-      <span v-else class="text-[9px] text-gray-400">{{ hoverCard.block.work_date }}</span>
-
-      <button type="button"
-        @click.stop="openBlockDrawer(hoverCard.block); hideBlockHoverNow()"
-        class="font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline inline-flex items-center gap-0.5 cursor-pointer ml-auto">
-        <span>View Details</span>
-        <span aria-hidden="true">&rarr;</span>
-      </button>
-    </div>
-  </div>
+  <BlockHoverCard
+    :hover-card="hoverCard"
+    :is-dark-mode="isDarkMode"
+    :fmt-hrs="fmtHrs"
+    :seg-time-title="segTimeTitle"
+    :is-block-locked="isBlockLocked"
+    @cancel-hide="cancelHideHover"
+    @hide="hideBlockHover"
+    @view-details="openBlockDrawer($event); hideBlockHoverNow()"
+  />
 
 
   <!-- ========================================== -->
@@ -553,140 +418,16 @@
   <!-- ========================================== -->
   <!-- 5. WORKSPACE BOTTOM NAVIGATION DOCK        -->
   <!-- ========================================== -->
-  <nav class="fixed bottom-0 left-0 right-0 z-40 border-t flex items-center justify-around px-3 py-2 transition-colors pb-safe backdrop-blur-md" :class="isDarkMode ? 'bg-[#1E1F22]/95 border-gray-800 shadow-2xl' : 'bg-white/95 border-gray-200 shadow-lg'" role="tablist" aria-label="Workstation navigation">
-    <div class="w-full max-w-xl mx-auto flex items-center justify-around">
-      
-      <!-- Dashboard Tab -->
-      <f-button 
-        variant="ghost"
-        :theme="activeTab === 'dashboard' ? 'blue' : 'gray'"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'dashboard' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'dashboard' ? 'true' : 'false'"
-        aria-label="Dashboard"
-        @click="activeTab = 'dashboard'"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
-        </template>
-        <span class="text-[10px] mt-0.5">Dashboard</span>
-      </f-button>
-
-      <!-- Calendar Tab -->
-      <f-button 
-        variant="ghost"
-        :theme="activeTab === 'planner' ? 'blue' : 'gray'"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'planner' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'planner' ? 'true' : 'false'"
-        aria-label="Calendar"
-        @click="activeTab = 'planner'"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="8" y1="14" x2="10" y2="14"></line><line x1="14" y1="14" x2="16" y2="14"></line></svg>
-        </template>
-        <span class="text-[10px] mt-0.5">Calendar</span>
-      </f-button>
-
-      <!-- Floating Quick Start/Stop Timer Button in Center -->
-      <f-button 
-        variant="solid"
-        :theme="isTracking ? 'red' : 'blue'"
-        size="lg"
-        class="relative shrink-0 !h-14 !flex !flex-col !items-center !justify-center shadow-xl active:scale-90 transition-all -mt-6 ring-4 cursor-pointer !p-0"
-        :class="[
-          isDarkMode ? 'ring-[#1E1F22]' : 'ring-white',
-          (isTracking && bottomBarTimer.isHours) ? '!w-auto !min-w-[4.75rem] !px-3 !rounded-full shadow-2xl' : '!w-14 !rounded-full'
-        ]"
-        aria-label="Open the current session timesheet"
-        :title="isTracking ? 'Open the session timesheet — recording ' + formattedTime : 'Open the session timesheet'"
-        @click="openSessionCard"
-      >
-        <template v-if="isTracking">
-          <!-- Under 1 hour: Show MM:SS with clear min:sec helper and live ticking -->
-          <div v-if="!bottomBarTimer.isHours" class="flex flex-col items-center justify-center leading-none select-none">
-            <span class="text-[13px] font-mono font-black tabular-nums tracking-tight text-white leading-none">
-              {{ bottomBarTimer.primary }}
-            </span>
-            <span class="text-[7px] font-mono font-bold uppercase tracking-wider text-red-100 opacity-90 mt-0.5 leading-none">
-              min:sec
-            </span>
-          </div>
-
-          <!-- 1 hour or more: Dynamically expand into a sleek stadium capsule showing hours, minutes, seconds -->
-          <div v-else class="flex flex-col items-center justify-center leading-none select-none px-0.5">
-            <div class="flex items-baseline gap-0.5 text-white leading-none">
-              <span class="text-[12px] font-mono font-black tabular-nums leading-none">{{ bottomBarTimer.hours }}h</span>
-              <span class="text-[12px] font-mono font-black tabular-nums leading-none">{{ bottomBarTimer.minutes }}m</span>
-              <span class="text-[10px] font-mono font-semibold tabular-nums text-red-200 opacity-95 ml-0.5 leading-none">{{ bottomBarTimer.seconds }}s</span>
-            </div>
-            <span class="text-[7px] font-mono font-bold uppercase tracking-wider text-red-100 opacity-90 mt-0.5 leading-none flex items-center gap-1">
-              <span class="w-1 h-1 rounded-full bg-white animate-ping"></span>
-              <span>REC</span>
-            </span>
-          </div>
-        </template>
-        <span v-else class="text-[11px] font-extrabold uppercase tracking-wide leading-none">Log</span>
-      </f-button>
-
-      <!-- Timesheets Tab -->
-      <f-button 
-        variant="ghost"
-        :theme="activeTab === 'timesheets' ? 'blue' : 'gray'"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'timesheets' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'timesheets' ? 'true' : 'false'"
-        aria-label="Timesheets"
-        @click="activeTab = 'timesheets'"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-        </template>
-        <span class="text-[10px] mt-0.5">Timesheets</span>
-      </f-button>
-
-      <!-- Team Tab (if Manager) or + Task -->
-      <f-button 
-        v-if="isManager"
-        variant="ghost"
-        :theme="activeTab === 'attendance' ? 'blue' : 'gray'"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'attendance' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'attendance' ? 'true' : 'false'"
-        aria-label="Team"
-        @click="activeTab = 'attendance'"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-        </template>
-        <span class="text-[10px] mt-0.5">Team</span>
-      </f-button>
-      <f-button 
-        v-else
-        variant="ghost"
-        theme="gray"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium'"
-        aria-label="Create a new task"
-        @click="openNewTaskModal"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        </template>
-        <span class="text-[10px] mt-0.5">+ Task</span>
-      </f-button>
-
-    </div>
-  </nav>
+  <WorkstationBottomNav
+    :is-dark-mode="isDarkMode"
+    v-model:active-tab="activeTab"
+    :is-manager="isManager"
+    :is-tracking="isTracking"
+    :bottom-bar-timer="bottomBarTimer"
+    :formatted-time="formattedTime"
+    @open-session="openSessionCard"
+    @open-new-task="openNewTaskModal"
+  />
 
   <!-- ========================================== -->
   <!-- MODULAR DIALOGS (Part 2: Planning & Lifecycles) -->

@@ -24,9 +24,14 @@ const dialogFiles = fs.existsSync(dialogsDir)
   ? fs.readdirSync(dialogsDir).filter(f => f.endsWith('.vue')).map(f => path.join(dialogsDir, f))
   : [];
 
+const headerVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'WorkstationHeader.vue');
+const bottomNavVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'WorkstationBottomNav.vue');
+const hoverCardVuePath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'BlockHoverCard.vue');
+
 const filesToInspect = [
   omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
-  blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath, ...dialogFiles
+  blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
+  headerVuePath, bottomNavVuePath, hoverCardVuePath, ...dialogFiles
 ];
 
 let content = '';
@@ -1423,8 +1428,8 @@ assert.ok(
   'FAIL: HoverCard must have pointer-events-auto so user can interact with the details link'
 );
 assert.ok(
-  content.includes('openBlockDrawer(hoverCard.block)'),
-  'FAIL: HoverCard must provide an explicit View Details action invoking openBlockDrawer(hoverCard.block)'
+  content.includes('openBlockDrawer(hoverCard.block)') || (content.includes('@view-details="openBlockDrawer($event)') && content.includes("$emit('view-details', hoverCard.block)")),
+  'FAIL: HoverCard must provide an explicit View Details action invoking openBlockDrawer'
 );
 assert.ok(
   content.includes('cancelHideHover') && content.includes('hideBlockHoverNow'),
