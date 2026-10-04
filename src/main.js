@@ -19,6 +19,12 @@ import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import EditSessionModal from "./components/dialogs/EditSessionModal.vue";
+import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
+import RavenCollaborationDrawer from "./drawers/RavenCollaborationDrawer.vue";
+import DashboardView from "./views/DashboardView.vue";
+import CalendarView from "./views/CalendarView.vue";
+import TimesheetsView from "./views/TimesheetsView.vue";
+import AttendanceView from "./views/AttendanceView.vue";
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {
@@ -40,7 +46,13 @@ if (typeof window !== "undefined") {
 		SwitchTaskModal,
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
-		EditSessionModal
+		EditSessionModal,
+		BlockDetailDrawer,
+		RavenCollaborationDrawer,
+		DashboardView,
+		CalendarView,
+		TimesheetsView,
+		AttendanceView
 	};
 }
 
@@ -78,6 +90,12 @@ function mountApp(target = "#app") {
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("EditSessionModal", EditSessionModal);
+	app.component("BlockDetailDrawer", BlockDetailDrawer);
+	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
+	app.component("DashboardView", DashboardView);
+	app.component("CalendarView", CalendarView);
+	app.component("TimesheetsView", TimesheetsView);
+	app.component("AttendanceView", AttendanceView);
 
 	app.mount(container);
 	spaAppInstance = app;
