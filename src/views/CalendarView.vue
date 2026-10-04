@@ -4,7 +4,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr_220px] xl:grid-cols-[280px_1fr_260px] gap-3.5 sm:gap-4 items-stretch lg:h-full lg:min-h-0 flex-1">
 
         <!-- Left rail: assigned tasks (Frappe UI FCard) -->
-        <f-card :padded="true" class="w-full flex flex-col space-y-2.5 !p-3.5 min-h-0 overflow-hidden max-h-[500px] lg:max-h-full lg:h-full lg:min-h-0 order-2 lg:order-1">
+        <f-card :padded="true" class="w-full flex flex-col space-y-2.5 !p-3.5 min-h-0 overflow-hidden max-h-[500px] lg:max-h-full lg:h-full lg:min-h-0 order-2 lg:order-1 h-full">
           <!-- Teammate Switcher for Managers (Dynamically updates Assigned Work, Calendar, and Stats) -->
           <div v-if="isManager" class="space-y-1 pb-2 border-b shrink-0" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'">
             <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center justify-between">
@@ -436,39 +436,26 @@
                           <span v-if="seg.is_segment && seg.segment_type === 'tail'" class="text-[9px] opacity-75 font-normal ml-1">↪</span>
                         </div>
 
-                        <!-- In-Calendar Approval & Governance Controls for Reporting Officer / Manager -->
-                        <div class="flex items-center gap-1 shrink-0 z-30" v-if="isManager && (seg.block.actual_hours > 0 || seg.block.approval_status === 'Approved' || seg.block.approval_status === 'Flagged')">
-                          <!-- Approved Lock Badge -->
+                        <!-- Single Timesheet Approval Status Indicator (Read-only on Calendar) -->
+                        <div class="flex items-center gap-1 shrink-0 z-30" v-if="seg.block.actual_hours > 0 || seg.block.approval_status === 'Approved' || seg.block.approval_status === 'Flagged'">
+                          <!-- Approved Status Icon -->
                           <span v-if="seg.block.approval_status === 'Approved'"
-                            class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-black bg-emerald-600 text-white shadow-xs"
-                            title="Approved & Locked by Reporting Officer">
+                            class="inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-600 text-white font-black text-[10px] shadow-xs"
+                            title="Timesheet Approved">
                             ✓
                           </span>
-                          <!-- Flagged Indicator Badge -->
-                          <button v-else-if="seg.block.approval_status === 'Flagged'"
-                            type="button"
-                            @click.stop="quickFlagBlock(seg.block)"
-                            class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500 text-black hover:bg-amber-400 cursor-pointer shadow-xs"
-                            title="Flagged for clarification. Click to re-flag or inspect notes.">
+                          <!-- Flagged Status Icon -->
+                          <span v-else-if="seg.block.approval_status === 'Flagged'"
+                            class="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500 text-black font-bold text-[9px] shadow-xs"
+                            title="Timesheet Flagged for clarification">
                             🚩
-                          </button>
-                          <!-- Pending Quick Actions: Approve (✓) or Flag (🚩) -->
-                          <template v-else>
-                            <button
-                              type="button"
-                              @click.stop="quickApproveBlock(seg.block)"
-                              class="inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-[10px] shadow-xs cursor-pointer transition-transform"
-                              title="One-click Approve & Lock timesheet">
-                              ✓
-                            </button>
-                            <button
-                              type="button"
-                              @click.stop="quickFlagBlock(seg.block)"
-                              class="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-[9px] shadow-xs cursor-pointer transition-transform"
-                              title="Flag for clarification">
-                              🚩
-                            </button>
-                          </template>
+                          </span>
+                          <!-- Pending Timesheet Status Icon -->
+                          <span v-else
+                            class="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500/90 text-white font-bold text-[9px] shadow-xs"
+                            title="Timesheet Logged (Pending Review)">
+                            ⏳
+                          </span>
                         </div>
                       </div>
                       <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(seg) }}</div>
