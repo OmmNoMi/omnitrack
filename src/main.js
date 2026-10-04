@@ -8,6 +8,17 @@ import App from "./App.vue";
 import SessionBox from "./session/SessionBox.vue";
 import FDropdownMenu from "./components/common/FDropdownMenu.vue";
 import FCombobox from "./components/common/FCombobox.vue";
+import BookWorkBlockModal from "./components/dialogs/BookWorkBlockModal.vue";
+import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
+import AdjustTimingModal from "./components/dialogs/AdjustTimingModal.vue";
+import EmptyStopModal from "./components/dialogs/EmptyStopModal.vue";
+import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
+import RunawayTimerModal from "./components/dialogs/RunawayTimerModal.vue";
+import EODWrapUpModal from "./components/dialogs/EODWrapUpModal.vue";
+import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
+import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
+import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
+import EditSessionModal from "./components/dialogs/EditSessionModal.vue";
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {
@@ -18,7 +29,18 @@ if (typeof window !== "undefined") {
 		App,
 		SessionBox,
 		FDropdownMenu,
-		FCombobox
+		FCombobox,
+		BookWorkBlockModal,
+		InactivityGovernorModal,
+		AdjustTimingModal,
+		EmptyStopModal,
+		StartTimeChoiceModal,
+		RunawayTimerModal,
+		EODWrapUpModal,
+		SwitchTaskModal,
+		WrapAndStartNextModal,
+		CancelWorkBlockModal,
+		EditSessionModal
 	};
 }
 
@@ -45,6 +67,17 @@ function mountApp(target = "#app") {
 	app.component("FCombobox", FCombobox);
 	app.component("f-combobox", FCombobox);
 	app.component("SessionBox", SessionBox);
+	app.component("BookWorkBlockModal", BookWorkBlockModal);
+	app.component("InactivityGovernorModal", InactivityGovernorModal);
+	app.component("AdjustTimingModal", AdjustTimingModal);
+	app.component("EmptyStopModal", EmptyStopModal);
+	app.component("StartTimeChoiceModal", StartTimeChoiceModal);
+	app.component("RunawayTimerModal", RunawayTimerModal);
+	app.component("EODWrapUpModal", EODWrapUpModal);
+	app.component("SwitchTaskModal", SwitchTaskModal);
+	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
+	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
+	app.component("EditSessionModal", EditSessionModal);
 
 	app.mount(container);
 	spaAppInstance = app;
