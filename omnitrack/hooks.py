@@ -63,7 +63,8 @@ additional_timeline_content = {
 scheduler_events = {
 	"cron": {
 		"* * * * *": [
-			"omnitrack.notifications.check_active_timesheet_reminders"
+			"omnitrack.notifications.check_active_timesheet_reminders",
+			"omnitrack.notifications.check_upcoming_planned_block_reminders"
 		]
 	},
 	"daily": [

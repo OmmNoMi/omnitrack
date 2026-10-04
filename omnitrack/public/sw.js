@@ -56,23 +56,49 @@ self.addEventListener('push', function(event) {
 			data.message = event.data.text();
 		}
 	}
+	const alertType = data.alert_type || '';
+	const isUpcoming10m = alertType === 'upcoming_10m' || (data.title && data.title.includes('Upcoming in 10m'));
+	const isStartOnTime = alertType === 'start_on_time' || (data.title && (data.title.includes('Time to Start') || data.title.includes('Start Session')));
 	const isSessionAlert = data.is_timer || (data.title && (data.title.includes('Session') || data.title.includes('Overrun') || data.title.includes('Still Working')));
-	const actions = isSessionAlert ? [
-		{ action: 'still_working', title: '⏱️ Still Working' },
-		{ action: 'add_30m', title: '➕ +30m' },
-		{ action: 'stop_session', title: '⏹️ Stop' }
-	] : [
-		{ action: 'view', title: 'View Task' },
-		{ action: 'close', title: 'Dismiss' }
-	];
+
+	let actions = [];
+	let vibratePattern = [200, 100, 200];
+
+	if (isUpcoming10m) {
+		// Gentle double tap for 10m warning
+		vibratePattern = [100, 80, 100];
+		actions = [
+			{ action: 'view_block', title: '📅 View in Calendar' },
+			{ action: 'start_now', title: '▶ Start Now Early' }
+		];
+	} else if (isStartOnTime) {
+		// Firm attention tap for exact start time
+		vibratePattern = [150, 100, 250];
+		actions = [
+			{ action: 'start_now', title: '▶ Start Session Now' },
+			{ action: 'view_block', title: '📅 View in Calendar' }
+		];
+	} else if (isSessionAlert) {
+		vibratePattern = [200, 100, 200, 100, 200];
+		actions = [
+			{ action: 'still_working', title: '⏱️ Still Working' },
+			{ action: 'add_30m', title: '➕ +30m' },
+			{ action: 'stop_session', title: '⏹️ Stop' }
+		];
+	} else {
+		actions = [
+			{ action: 'view', title: 'View Task' },
+			{ action: 'close', title: 'Dismiss' }
+		];
+	}
 
 	const options = {
 		body: data.message,
 		icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
 		badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
-		data: Object.assign({ url: data.url || '/omnitrack' }, data),
+		data: Object.assign({ url: data.action_url || data.url || '/omnitrack' }, data),
 		actions: actions,
-		vibrate: [200, 100, 200]
+		vibrate: vibratePattern
 	};
 	event.waitUntil(self.registration.showNotification(data.title, options));
 });
@@ -80,15 +106,39 @@ self.addEventListener('push', function(event) {
 self.addEventListener('message', function(event) {
 	if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
 		const title = event.data.title || 'OmniTrack Alert';
+		const alertType = event.data.alert_type || '';
+		const isUpcoming10m = alertType === 'upcoming_10m' || title.includes('Upcoming in 10m');
+		const isStartOnTime = alertType === 'start_on_time' || title.includes('Time to Start');
 		const isTimer = event.data.is_timer || title.includes('Session') || title.includes('Overrun');
-		const defaultActions = isTimer ? [
-			{ action: 'still_working', title: '⏱️ Still Working' },
-			{ action: 'add_30m', title: '➕ +30m' },
-			{ action: 'stop_session', title: '⏹️ Stop' }
-		] : [
-			{ action: 'view', title: 'View Task' },
-			{ action: 'close', title: 'Dismiss' }
-		];
+
+		let defaultActions = [];
+		let vibratePattern = [200, 100, 200];
+
+		if (isUpcoming10m) {
+			vibratePattern = [100, 80, 100];
+			defaultActions = [
+				{ action: 'view_block', title: '📅 View in Calendar' },
+				{ action: 'start_now', title: '▶ Start Now Early' }
+			];
+		} else if (isStartOnTime) {
+			vibratePattern = [150, 100, 250];
+			defaultActions = [
+				{ action: 'start_now', title: '▶ Start Session Now' },
+				{ action: 'view_block', title: '📅 View in Calendar' }
+			];
+		} else if (isTimer) {
+			vibratePattern = [200, 100, 200, 100, 200];
+			defaultActions = [
+				{ action: 'still_working', title: '⏱️ Still Working' },
+				{ action: 'add_30m', title: '➕ +30m' },
+				{ action: 'stop_session', title: '⏹️ Stop' }
+			];
+		} else {
+			defaultActions = [
+				{ action: 'view', title: 'View Task' },
+				{ action: 'close', title: 'Dismiss' }
+			];
+		}
 
 		const options = Object.assign({
 			body: 'Timesheet notification',
@@ -96,7 +146,7 @@ self.addEventListener('message', function(event) {
 			badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
 			data: { url: '/omnitrack' },
 			actions: defaultActions,
-			vibrate: [200, 100, 200, 100, 200]
+			vibrate: vibratePattern
 		}, event.data.options || {});
 		event.waitUntil(self.registration.showNotification(title, options));
 	}
@@ -106,8 +156,48 @@ self.addEventListener('notificationclick', function(event) {
 	event.notification.close();
 	const action = event.action;
 	const nData = (event.notification.data) || {};
+	const blockName = nData.block_name || '';
 
-	if (action === 'still_working') {
+	if (action === 'start_now') {
+		const targetUrl = blockName ? `/omnitrack?action=start_block&block=${encodeURIComponent(blockName)}` : '/omnitrack?action=start';
+		event.waitUntil(
+			fetch('/api/method/omnitrack.api.start_timer', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ block_name: blockName })
+			}).catch(function(e) { console.error('Start block timer error:', e); })
+			.then(function() {
+				return clients.matchAll({ type: 'window', includeUncontrolled: true });
+			}).then(function(clientList) {
+				for (let client of clientList) {
+					if (client.url.includes('/omnitrack') && 'focus' in client) {
+						client.postMessage({ type: 'BLOCK_START_FOCUS', block_name: blockName });
+						return client.focus();
+					}
+				}
+				if (clients.openWindow) {
+					return clients.openWindow(targetUrl);
+				}
+			})
+		);
+		return;
+	} else if (action === 'view_block') {
+		const targetUrl = blockName ? `/omnitrack?action=view_block&block=${encodeURIComponent(blockName)}` : '/omnitrack';
+		event.waitUntil(
+			clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+				for (let client of clientList) {
+					if (client.url.includes('/omnitrack') && 'focus' in client) {
+						client.postMessage({ type: 'VIEW_BLOCK_FOCUS', block_name: blockName });
+						return client.focus();
+					}
+				}
+				if (clients.openWindow) {
+					return clients.openWindow(targetUrl);
+				}
+			})
+		);
+		return;
+	} else if (action === 'still_working') {
 		event.waitUntil(
 			fetch('/api/method/omnitrack.api.heartbeat_active_session', {
 				method: 'POST',
@@ -154,7 +244,7 @@ self.addEventListener('notificationclick', function(event) {
 	}
 
 	if (action === 'view' || !action) {
-		const targetUrl = nData.url || '/omnitrack';
+		const targetUrl = nData.url || (blockName ? `/omnitrack?action=view_block&block=${encodeURIComponent(blockName)}` : '/omnitrack');
 		const notifTitle = (event.notification && event.notification.title) || (nData && nData.title) || '';
 		const isStillWorkingAlert = notifTitle.toLowerCase().includes('still working');
 		event.waitUntil(

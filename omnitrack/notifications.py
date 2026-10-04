@@ -102,6 +102,186 @@ def dispatch_push_notification(user, title, message, action_url="/omnitrack", is
 	return {"status": "dispatched", "user": user, "pushed_via_relay": pushed_via_relay}
 
 
+def dispatch_block_notification(user, title, message, action_url="/omnitrack", alert_type="upcoming_10m", block_name=None, actions=None, is_urgent=False):
+	"""
+	Dispatches an upcoming or on-time work block notification across:
+	1. Frappe Cloud Push Relay (APNs / FCM) with action payload & alert_type
+	2. Desk Notification Log (persistent notification bell)
+	3. Realtime WebSockets push (`omnitrack:block_alert` & `omnitrack:timesheet_reminder`)
+	"""
+	settings = frappe.get_single("OmniTrack Settings")
+
+	# Leave-Aware Silencing
+	if getattr(settings, "silence_push_on_leave", False) and not is_urgent:
+		if frappe.db.exists("DocType", "Leave Application"):
+			employee = frappe.db.get_value("Employee", {"user_id": user}, "name")
+			if employee:
+				today = nowdate()
+				on_leave = frappe.db.exists("Leave Application", {
+					"employee": employee,
+					"docstatus": 1,
+					"status": "Approved",
+					"from_date": ["<=", today],
+					"to_date": [">=", today]
+				})
+				if on_leave:
+					return {"status": "silenced_leave"}
+
+	pushed_via_relay = False
+	extra_data = {
+		"alert_type": alert_type,
+		"block_name": block_name,
+		"actions": actions or []
+	}
+
+	# 1. Native Frappe Cloud Push Relay (APNs for iOS, FCM for Android)
+	for proj in ("omnitrack", "raven"):
+		try:
+			from frappe.push_notification import PushNotification
+			relay = PushNotification(proj)
+			if relay.is_enabled():
+				success = relay.send_notification_to_user(
+					user_id=user,
+					title=title,
+					body=message,
+					link=action_url,
+					icon="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg",
+					data=extra_data
+				)
+				if success:
+					pushed_via_relay = True
+					break
+		except Exception:
+			pass
+
+	# 2. Native Frappe Notification Log
+	try:
+		notification = frappe.new_doc("Notification Log")
+		notification.for_user = user
+		notification.subject = title
+		notification.email_content = message
+		notification.document_type = "Planned Work Block"
+		notification.document_name = block_name
+		notification.flags.ignore_permissions = True
+		notification.insert()
+	except Exception:
+		pass
+
+	# 3. Realtime socket events
+	event_payload = {
+		"user": user,
+		"title": title,
+		"message": message,
+		"action_url": action_url,
+		"alert_type": alert_type,
+		"block_name": block_name,
+		"actions": actions or []
+	}
+	try:
+		frappe.publish_realtime("omnitrack:block_alert", event_payload, user=user)
+		frappe.publish_realtime("omnitrack:timesheet_reminder", event_payload, user=user)
+	except Exception:
+		pass
+
+	return {"status": "dispatched", "user": user, "pushed_via_relay": pushed_via_relay}
+
+
+def check_upcoming_planned_block_reminders(test_now=None):
+	"""
+	Scheduled cron task running every minute.
+	Scans today's planned blocks across active users and dispatches Google Calendar-style alerts:
+	1. T-10m Warning: 10 minutes prior to scheduled start time (window: 8..11 minutes)
+	2. T-0 On-Time Alert: At exact scheduled start time (window: -1..2 minutes)
+	Deduplicates using Redis/frappe cache keys with 24h TTL.
+	"""
+	now_dt = test_now or now_datetime()
+	today_str = now_dt.strftime("%Y-%m-%d") if hasattr(now_dt, "strftime") else nowdate()
+	cur_time = now_dt.time()
+	cur_mins = cur_time.hour * 60 + cur_time.minute
+
+	blocks = frappe.get_all(
+		"Planned Work Block",
+		filters={
+			"work_date": today_str,
+			"status": ["in", ["Draft", "Planned"]],
+			"start_time": ["is", "set"]
+		},
+		fields=["name", "employee", "start_time", "end_time", "work_item_label", "status"]
+	)
+
+	alerts_10m = 0
+	alerts_0m = 0
+
+	for b in blocks:
+		employee = b.get("employee")
+		if not employee or employee in ("Administrator", "Guest"):
+			# If employee is an admin/test user, still allow during testing if explicitly matched
+			pass
+
+		start_t = get_time(b.start_time)
+		if not start_t:
+			continue
+
+		block_start_mins = start_t.hour * 60 + start_t.minute
+		delta_mins = block_start_mins - cur_mins
+
+		task_label = (b.get("work_item_label") or b.name)[:50]
+		start_hhmm = start_t.strftime("%H:%M")
+
+		# 1. T-10m Warning Window (8 <= delta_mins <= 11)
+		if 8 <= delta_mins <= 11:
+			cache_key_10m = f"omnitrack:notif_10m:{b.name}"
+			if not frappe.cache.get_value(cache_key_10m):
+				title = _("⏳ Upcoming in 10m: {0}").format(task_label)
+				msg = _("Scheduled for {0}. Wrap up current work and get ready to start.").format(start_hhmm)
+				action_url = f"/omnitrack?action=view_block&block={b.name}"
+				dispatch_block_notification(
+					user=employee,
+					title=title,
+					message=msg,
+					action_url=action_url,
+					alert_type="upcoming_10m",
+					block_name=b.name,
+					actions=[
+						{"action": "view_block", "title": _("📅 View in Calendar")}
+					]
+				)
+				frappe.cache.set_value(cache_key_10m, "1", expires_in_sec=86400)
+				alerts_10m += 1
+
+		# 2. T-0 On-Time Alert Window (-1 <= delta_mins <= 2)
+		elif -1 <= delta_mins <= 2:
+			cache_key_0m = f"omnitrack:notif_0m:{b.name}"
+			if not frappe.cache.get_value(cache_key_0m):
+				end_t = get_time(b.end_time) if b.get("end_time") else None
+				time_desc = f"{start_hhmm} - {end_t.strftime('%H:%M')}" if end_t else start_hhmm
+				title = _("🚀 Time to Start: {0}").format(task_label)
+				msg = _("Scheduled for {0}. Tap to start your timesheet session now!").format(time_desc)
+				action_url = f"/omnitrack?action=start_block&block={b.name}"
+				dispatch_block_notification(
+					user=employee,
+					title=title,
+					message=msg,
+					action_url=action_url,
+					alert_type="start_on_time",
+					block_name=b.name,
+					actions=[
+						{"action": "start_now", "title": _("▶ Start Session Now")},
+						{"action": "view_block", "title": _("📅 View in Calendar")}
+					]
+				)
+				frappe.cache.set_value(cache_key_0m, "1", expires_in_sec=86400)
+				alerts_0m += 1
+
+	return {
+		"status": "success",
+		"checked_blocks": len(blocks),
+		"alerts_10m_sent": alerts_10m,
+		"alerts_0m_sent": alerts_0m
+	}
+
+
+
 def check_active_timesheet_reminders():
 	"""
 	Scheduled cron task running every minute on Frappe Cloud.
