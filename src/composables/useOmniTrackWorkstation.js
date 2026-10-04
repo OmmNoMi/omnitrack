@@ -1,4 +1,9 @@
 import * as Vue from "vue";
+import { useWorkSessionStore } from "../stores/workSessionStore.js";
+import { useWorkBlockStore } from "../stores/workBlockStore.js";
+import { useAssignmentStore } from "../stores/assignmentStore.js";
+import { useCollaborationStore } from "../stores/collaborationStore.js";
+
 const { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, nextTick } = Vue;
 
 export function useOmniTrackWorkstation() {
