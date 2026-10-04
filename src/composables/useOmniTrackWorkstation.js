@@ -3,7 +3,37 @@ const { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, nex
 
 export function useOmniTrackWorkstation() {
       // 1. Navigation & Theme
-      const activeTab = ref('dashboard');
+      const getInitialTabFromHash = () => {
+        if (typeof window !== 'undefined' && window.location.hash) {
+          const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
+          if (['dashboard', 'planner', 'timesheets', 'attendance'].includes(raw)) {
+            return raw;
+          }
+        }
+        return 'dashboard';
+      };
+      const activeTab = ref(getInitialTabFromHash());
+
+      if (typeof window !== 'undefined') {
+        const handleHashSync = () => {
+          const tab = getInitialTabFromHash();
+          if (tab && activeTab.value !== tab) {
+            activeTab.value = tab;
+          }
+        };
+        window.addEventListener('hashchange', handleHashSync);
+        window.addEventListener('popstate', handleHashSync);
+      }
+
+      watch(activeTab, (newTab) => {
+        if (typeof window !== 'undefined' && newTab) {
+          const currentHash = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
+          if (currentHash !== newTab) {
+            window.location.hash = `#/${newTab}`;
+          }
+        }
+      });
+
       const initialDark = localStorage.getItem('omnitrack_theme') === 'dark' || (!localStorage.getItem('omnitrack_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
       const isDarkMode = ref(initialDark);
       const hasFrappeUI = ref(typeof window !== 'undefined' && Boolean(window.OmniTrackSessionBox && window.OmniTrackSessionBox.mount));

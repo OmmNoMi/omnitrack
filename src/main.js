@@ -33,6 +33,7 @@ import WorkstationBottomNav from "./components/layout/WorkstationBottomNav.vue";
 import BlockHoverCard from "./components/common/BlockHoverCard.vue";
 import SessionOverlay from "./components/layout/SessionOverlay.vue";
 import DialogCoordinator from "./components/dialogs/DialogCoordinator.vue";
+import router from "./router/index.js";
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {
@@ -89,6 +90,7 @@ function mountApp(target = "#app") {
 	container.innerHTML = "";
 	const app = createApp(App);
 	app.use(FrappeUI);
+	app.use(router);
 	app.component("FDropdownMenu", FDropdownMenu);
 	app.component("f-dropdown-menu", FDropdownMenu);
 	app.component("FCombobox", FCombobox);

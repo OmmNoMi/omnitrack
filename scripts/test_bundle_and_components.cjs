@@ -58,18 +58,24 @@ const doc = {
   addEventListener: () => {},
   createElement: (tag) => makeEl(tag),
   head: makeEl('head'),
-  getElementById: () => null
+  getElementById: () => null,
+  querySelector: () => null,
+  querySelectorAll: () => []
 };
 const win = {
   document: doc,
   navigator: { userAgent: 'Mozilla/5.0' },
   localStorage: { getItem: () => null, setItem: () => {} },
+  location: { protocol: 'http:', host: 'localhost:8000', hostname: 'localhost', pathname: '/omnitrack', search: '', hash: '#/dashboard' },
+  history: { pushState: () => {}, replaceState: () => {}, state: null },
   addEventListener: () => {}
 };
 global.window = win;
 global.document = doc;
 global.navigator = win.navigator;
 global.localStorage = win.localStorage;
+global.location = win.location;
+global.history = win.history;
 
 const bundleCode = fs.readFileSync(bundlePath, 'utf8');
 vm.runInThisContext(bundleCode);
