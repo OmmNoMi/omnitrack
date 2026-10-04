@@ -31,6 +31,8 @@ import AttendanceView from "./views/AttendanceView.vue";
 import WorkstationHeader from "./components/layout/WorkstationHeader.vue";
 import WorkstationBottomNav from "./components/layout/WorkstationBottomNav.vue";
 import BlockHoverCard from "./components/common/BlockHoverCard.vue";
+import SessionOverlay from "./components/layout/SessionOverlay.vue";
+import DialogCoordinator from "./components/dialogs/DialogCoordinator.vue";
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {
@@ -42,6 +44,8 @@ if (typeof window !== "undefined") {
 		WorkstationHeader,
 		WorkstationBottomNav,
 		BlockHoverCard,
+		SessionOverlay,
+		DialogCoordinator,
 		SessionBox,
 		FDropdownMenu,
 		FCombobox,
@@ -108,6 +112,8 @@ function mountApp(target = "#app") {
 	app.component("WorkstationHeader", WorkstationHeader);
 	app.component("WorkstationBottomNav", WorkstationBottomNav);
 	app.component("BlockHoverCard", BlockHoverCard);
+	app.component("SessionOverlay", SessionOverlay);
+	app.component("DialogCoordinator", DialogCoordinator);
 	app.component("DashboardView", DashboardView);
 	app.component("CalendarView", CalendarView);
 	app.component("TimesheetsView", TimesheetsView);

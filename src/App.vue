@@ -77,95 +77,37 @@
     </div>
 
     <!-- 1. Active Timesheet Card ("Desk Remote HUD") — Elevated Focus Popup or Inline -->
-    <teleport to="body" :disabled="!isSessionElevated">
-      <div
-        v-if="isTracking && (activeTab === 'dashboard' || isSessionElevated)"
-        :class="[
-          isSessionElevated
-            ? 'fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200'
-            : 'relative mb-6'
-        ]"
-        @click.self="isSessionElevated && (isSessionElevated = false)"
-      >
-        <div
-          ref="sessionCardRef"
-          :class="[
-            isSessionElevated
-              ? 'relative w-full max-w-4xl bg-white dark:bg-[#1E1F22] rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-700/80 p-4 sm:p-6 space-y-3.5 my-auto overflow-hidden animate-in zoom-in-95 duration-200'
-              : 'relative w-full'
-          ]"
-          @click.stop
-          :role="isSessionElevated ? 'dialog' : null"
-          :aria-modal="isSessionElevated ? 'true' : null"
-          :aria-labelledby="isSessionElevated ? 'session-popup-title' : null"
-          @keydown.tab="trapSessionPopupTab"
-        >
-          <!-- Elevated Header Bar (Visible only when in full focus popup) -->
-          <div v-if="isSessionElevated" class="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
-            <div class="flex items-center gap-2.5">
-              <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-              <span id="session-popup-title" class="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white">
-                Current Session Timesheet
-              </span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                Full Focus
-              </span>
-            </div>
-            <!-- One control, not a sentence plus a bare glyph: the same
-                 label + shortcut-chip shape every other action in this app uses,
-                 so Esc reads as this button's shortcut instead of loose advice. -->
-            <button
-              type="button"
-              @click="isSessionElevated = false"
-              class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-xl font-bold text-[11px] border shadow-2xs cursor-pointer transition-colors border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400 dark:border-gray-700 dark:bg-[#2B2D30] dark:text-gray-200 dark:hover:bg-gray-800"
-              title="Minimize to page (Esc)"
-              aria-label="Minimize popup"
-              aria-keyshortcuts="Escape"
-            >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-              <span class="hidden sm:inline">Minimize</span>
-              <kbd class="hidden sm:inline-block font-mono text-[10px] font-bold leading-none px-1.5 py-0.5 rounded border border-gray-300 bg-gray-100 text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                aria-hidden="true">Esc</kbd>
-            </button>
-          </div>
-
-          <!-- Modular Frappe UI Timesheet Session Box -->
-          <SessionBox
-            v-if="isTracking"
-            :is-tracking="isTracking"
-            :tracker-seconds="trackerSeconds"
-            :tracker-notes="trackerNotes"
-            :tracker-project="trackerProject"
-            :tracker-nature="trackerNature"
-            :tracker-bound-block="trackerBoundBlock"
-            :session-notes-list="sessionNotesList"
-            :projects="projects"
-            :nature-options="natureOptions"
-            :assigned-tasks="assignedTasks"
-            :work-blocks="workBlocks"
-            :mod-key="modKey"
-            :is-dark-mode="isDarkMode"
-            :session-card-flash="sessionCardFlash"
-            :discard-confirm="discardConfirm"
-            :is-elevated="isSessionElevated"
-            @stop="toggleTrack"
-            @adjust="openAdjustModal"
-            @discard="discardSession"
-            @add-line="appendSessionLine($event)"
-            @remove-line="removeSessionPoint($event)"
-            @bind-block="bindSessionToBlock($event)"
-            @unbind-block="bindSessionToBlock(null)"
-            @toggle-elevate="isSessionElevated = !isSessionElevated"
-            @update:notes="trackerNotes = $event; syncActiveSession();"
-            @update:project="trackerProject = $event; syncActiveSession();"
-            @update:nature="trackerNature = $event; syncActiveSession();"
-          />
-        </div>
-      </div>
-    </teleport>
+    <SessionOverlay
+      :is-tracking="isTracking"
+      :active-tab="activeTab"
+      v-model:is-session-elevated="isSessionElevated"
+      :tracker-seconds="trackerSeconds"
+      :tracker-notes="trackerNotes"
+      :tracker-project="trackerProject"
+      :tracker-nature="trackerNature"
+      :tracker-bound-block="trackerBoundBlock"
+      :session-notes-list="sessionNotesList"
+      :projects="projects"
+      :nature-options="natureOptions"
+      :assigned-tasks="assignedTasks"
+      :work-blocks="workBlocks"
+      :mod-key="modKey"
+      :is-dark-mode="isDarkMode"
+      :session-card-flash="sessionCardFlash"
+      :discard-confirm="discardConfirm"
+      @trap-tab="trapSessionPopupTab"
+      @stop="toggleTrack"
+      @adjust="openAdjustModal"
+      @discard="discardSession"
+      @add-line="appendSessionLine($event)"
+      @remove-line="removeSessionPoint($event)"
+      @bind-block="bindSessionToBlock($event)"
+      @unbind-block="bindSessionToBlock(null)"
+      @toggle-elevate="isSessionElevated = !isSessionElevated"
+      @update:notes="trackerNotes = $event; syncActiveSession();"
+      @update:project="trackerProject = $event; syncActiveSession();"
+      @update:nature="trackerNature = $event; syncActiveSession();"
+    />
 
     <!-- ======================================== -->
     <!-- MODULAR SUB-VIEWS                        -->
@@ -308,66 +250,6 @@
     @view-details="openBlockDrawer($event); hideBlockHoverNow()"
   />
 
-
-  <!-- ========================================== -->
-  <!-- MODULAR DIALOGS (Part 1: Session & Workflow)-->
-  <!-- ========================================== -->
-  <BookWorkBlockModal
-    v-model="showBookModal"
-    :book-form="bookForm"
-    :book-form-task="bookFormTask"
-    :is-manager="isManager"
-    :is-dark-mode="isDarkMode"
-    :planner-busy="plannerBusy"
-    :combobox-assignee-options="comboboxAssigneeOptions"
-    :combobox-book-task-options="comboboxBookTaskOptions"
-    :combobox-pairing-partner-options="comboboxPairingPartnerOptions"
-    @submit="submitBooking"
-  />
-
-  <EmptyStopModal
-    v-model="showEmptyStopModal"
-    v-model:quick-note="emptyStopQuickNote"
-    :elapsed-hours="emptyStopElapsedHrs"
-    :is-dark-mode="isDarkMode"
-    @save="confirmEmptyStopSave"
-    @discard="confirmEmptyStopDiscard"
-  />
-
-  <StartTimeChoiceModal
-    v-model="showStartTimeChoiceModal"
-    :pending-block="pendingStartBlock"
-    :options="pendingStartTimeOptions"
-    :is-dark-mode="isDarkMode"
-    @select="selectStartTimeChoice"
-    @cancel="showStartTimeChoiceModal = false; pendingStartBlock = null"
-  />
-
-  <InactivityGovernorModal
-    v-model="showInactivityModal"
-    :inactivity-minutes="inactivityMinutes"
-    :is-dark-mode="isDarkMode"
-    :active-task-label="trackerNotes || (trackerBoundBlock ? (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label) : 'Active Work')"
-    :session-start="sessionStart"
-    :last-activity-time-h-h-m-m="lastActivityTimeHHMM"
-    :suggested-stop-h-h-m-m="suggestedStopHHMM"
-    :formatted-time="formattedTime"
-    @confirm-working="confirmStillWorking"
-    @stop-now="stopInactivitySessionNow"
-    @stop-at-last-edit="stopInactivitySessionAtLastEditPlus15"
-    @discard="discardInactivitySession"
-  />
-
-  <TaskWorkflowModal
-    v-model="showWorkflowModal"
-    :target-action="workflowTargetAction"
-    :target-task="workflowTargetTask"
-    v-model:comment="workflowComment"
-    :busy="workflowBusy"
-    :is-dark-mode="isDarkMode"
-    @confirm="submitWorkflowAction"
-  />
-
   <!-- ========================================== -->
   <!-- MODULAR DRAWERS                           -->
   <!-- ========================================== -->
@@ -430,31 +312,65 @@
   />
 
   <!-- ========================================== -->
-  <!-- MODULAR DIALOGS (Part 2: Planning & Lifecycles) -->
+  <!-- MODULAR DIALOG COORDINATOR (All 12 Modals) -->
   <!-- ========================================== -->
-  <PlanFocusBlockModal
-    v-model="showNewTaskModal"
+  <DialogCoordinator
+    :is-dark-mode="isDarkMode"
+    :is-manager="isManager"
+    :formatted-time="formattedTime"
+    :planner-busy="plannerBusy"
+
+    v-model:show-book-modal="showBookModal"
+    :book-form="bookForm"
+    :book-form-task="bookFormTask"
+    :combobox-assignee-options="comboboxAssigneeOptions"
+    :combobox-book-task-options="comboboxBookTaskOptions"
+    :combobox-pairing-partner-options="comboboxPairingPartnerOptions"
+    @submit-booking="submitBooking"
+
+    v-model:show-empty-stop-modal="showEmptyStopModal"
+    v-model:empty-stop-quick-note="emptyStopQuickNote"
+    :empty-stop-elapsed-hrs="emptyStopElapsedHrs"
+    @confirm-empty-stop-save="confirmEmptyStopSave"
+    @confirm-empty-stop-discard="confirmEmptyStopDiscard"
+
+    v-model:show-start-time-choice-modal="showStartTimeChoiceModal"
+    :pending-block="pendingStartBlock"
+    :pending-start-time-options="pendingStartTimeOptions"
+    @select-start-time-choice="selectStartTimeChoice"
+    @cancel-start-time-choice="showStartTimeChoiceModal = false; pendingStartBlock = null"
+
+    v-model:show-inactivity-modal="showInactivityModal"
+    :inactivity-minutes="inactivityMinutes"
+    :active-task-label="trackerNotes || (trackerBoundBlock ? (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label) : 'Active Work')"
+    :session-start="sessionStart"
+    :last-activity-time-h-h-m-m="lastActivityTimeHHMM"
+    :suggested-stop-h-h-m-m="suggestedStopHHMM"
+    @confirm-still-working="confirmStillWorking"
+    @stop-inactivity-now="stopInactivitySessionNow"
+    @stop-inactivity-at-last-edit="stopInactivitySessionAtLastEditPlus15"
+    @discard-inactivity="discardInactivitySession"
+
+    v-model:show-workflow-modal="showWorkflowModal"
+    :workflow-target-action="workflowTargetAction"
+    :workflow-target-task="workflowTargetTask"
+    v-model:workflow-comment="workflowComment"
+    :workflow-busy="workflowBusy"
+    @submit-workflow-action="submitWorkflowAction"
+
+    v-model:show-new-task-modal="showNewTaskModal"
     :new-task-form="newTaskForm"
     :combobox-project-options="comboboxProjectOptions"
     :combobox-task-options="comboboxTaskOptions"
-    :combobox-assignee-options="comboboxAssigneeOptions"
     :team-members="teamMembers"
     :nature-options="natureOptions"
-    :is-dark-mode="isDarkMode"
-    @submit="saveNewPlannedTask"
-    @time-change="onNewTaskTimeChange"
-    @duration-preset="setNewTaskDurationPreset"
-  />
+    @save-new-planned-task="saveNewPlannedTask"
+    @new-task-time-change="onNewTaskTimeChange"
+    @new-task-duration-preset="setNewTaskDurationPreset"
 
-  <!-- ========================================== -->
-  <!-- ADJUST TIMESHEET TIMING MODAL DIALOG       -->
-  <!-- ========================================== -->
-  <AdjustTimingModal
-    v-model="showAdjustModal"
+    v-model:show-adjust-modal="showAdjustModal"
     v-model:adjust-mode="adjustMode"
     :is-tracking="isTracking"
-    :is-manager="isManager"
-    :is-dark-mode="isDarkMode"
     :adjust-form="adjustForm"
     :keep-running-elapsed-formatted="keepRunningElapsedFormatted"
     :min-timesheet-date="minTimesheetDate"
@@ -463,90 +379,51 @@
     :adjust-duration-minutes="adjustDurationMinutes"
     :adjust-duration-formatted="adjustDurationFormatted"
     :adjust-duration-short="adjustDurationShort"
-    @nudge="nudgeAdjustTime"
-    @set-end-now="setAdjustEndNow"
-    @apply-start-time="applyAdjustedStartTime"
-    @submit-timesheet="submitAdjustedTimesheet"
-  />
+    @nudge-adjust-time="nudgeAdjustTime"
+    @set-adjust-end-now="setAdjustEndNow"
+    @apply-adjusted-start-time="applyAdjustedStartTime"
+    @submit-adjusted-timesheet="submitAdjustedTimesheet"
 
-  <!-- ========================================== -->
-  <!-- PILLAR 3: RUNAWAY TIMER ALERT DIALOG        -->
-  <!-- ========================================== -->
-  <RunawayTimerModal
-    v-model="showRunawayAlertModal"
-    :guard-data="runawayGuardData"
-    :choice="runawayChoice"
-    :is-dark-mode="isDarkMode"
-    @select-option="resolveRunawayOption"
-    @confirm="confirmRunawayResolution"
-  />
+    v-model:show-runaway-alert-modal="showRunawayAlertModal"
+    :runaway-guard-data="runawayGuardData"
+    :runaway-choice="runawayChoice"
+    @select-runaway-option="resolveRunawayOption"
+    @confirm-runaway-resolution="confirmRunawayResolution"
 
-  <!-- ========================================== -->
-  <!-- PILLAR 5: EOD WRAP-UP RECONCILIATION MODAL -->
-  <!-- ========================================== -->
-  <EODWrapUpModal
-    v-model="showEODModal"
-    :summary="eodSummary"
-    :pending-blocks="eodPendingBlocks"
-    @convert-all="convertAllPendingPlannedBlocks"
-    @convert-block="quickConvertPlanToActual"
-    @complete="showEODModal = false; showToast('EOD review complete! Great work today.', 'success');"
-  />
+    v-model:show-e-o-d-modal="showEODModal"
+    :eod-summary="eodSummary"
+    :eod-pending-blocks="eodPendingBlocks"
+    @convert-all-pending-blocks="convertAllPendingPlannedBlocks"
+    @convert-pending-block="quickConvertPlanToActual"
+    @complete-eod="showEODModal = false; showToast('EOD review complete! Great work today.', 'success');"
 
-  <!-- ========================================== -->
-  <!-- SWITCH ACTIVE TASK MODAL DIALOG            -->
-  <!-- ========================================== -->
-  <SwitchTaskModal
-    v-model="showSwitchTaskModal"
-    v-model:wrap-up-note="switchWrapUpNote"
-    v-model:search-query="switchSearchQuery"
-    :formatted-time="formattedTime"
+    v-model:show-switch-task-modal="showSwitchTaskModal"
+    v-model:switch-wrap-up-note="switchWrapUpNote"
+    v-model:switch-search-query="switchSearchQuery"
     :is-bound="!!trackerBoundBlock"
-    :candidates="switchCandidates"
-    @switch-to="executeSwitchTask"
-  />
+    :switch-candidates="switchCandidates"
+    @switch-task-to="executeSwitchTask"
 
-  <!-- ========================================== -->
-  <!-- WRAP & START NEXT SESSION CONFIRMATION     -->
-  <!-- ========================================== -->
-  <WrapAndStartNextModal
-    v-model="showSwitchConfirmModal"
-    v-model:wrap-up-note="switchWrapUpNote"
-    :formatted-time="formattedTime"
+    v-model:show-switch-confirm-modal="showSwitchConfirmModal"
     :current-session-label="(trackerBoundBlock && (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || trackerBoundBlock.deliverable_notes)) || trackerNotes || 'Active Work Session'"
     :selected-project="selectedProject"
     :selected-nature="selectedNature"
-    :target-item="switchTargetItem"
-    :is-switching="isSwitchingSession"
-    :is-dark-mode="isDarkMode"
-    @confirm="confirmSwitchAndStart"
-  />
+    :switch-target-item="switchTargetItem"
+    :is-switching-session="isSwitchingSession"
+    @confirm-switch-and-start="confirmSwitchAndStart"
 
-  <!-- ========================================== -->
-  <!-- CANCEL WORK BLOCK MODAL DIALOG             -->
-  <!-- ========================================== -->
-  <CancelWorkBlockModal
-    v-model="showCancelModal"
-    :target-block="cancelTargetBlock"
+    v-model:show-cancel-modal="showCancelModal"
+    :cancel-target-block="cancelTargetBlock"
     :cancel-form="cancelForm"
-    :reasons="cancelReasons"
+    :cancel-reasons="cancelReasons"
     :is-tracking-this-block="isTracking && trackerBlockName === (cancelTargetBlock && cancelTargetBlock.name)"
-    :formatted-time="formattedTime"
-    :busy="plannerBusy"
-    :is-dark-mode="isDarkMode"
-    @confirm="submitCancelBlock"
-  />
+    @submit-cancel-block="submitCancelBlock"
 
-  <!-- ========================================== -->
-  <!-- EDIT LOGGED WORK SESSION MODAL DIALOG       -->
-  <!-- ========================================== -->
-  <EditSessionModal
-    v-model="showEditSessionModal"
-    :edit-form="editSessionForm"
-    :duration-hours="editSessionDuration"
-    :is-saving="isSavingEditSession"
-    :is-dark-mode="isDarkMode"
-    @save="saveEditSession"
+    v-model:show-edit-session-modal="showEditSessionModal"
+    :edit-session-form="editSessionForm"
+    :edit-session-duration="editSessionDuration"
+    :is-saving-edit-session="isSavingEditSession"
+    @save-edit-session="saveEditSession"
   />
 
 </div>

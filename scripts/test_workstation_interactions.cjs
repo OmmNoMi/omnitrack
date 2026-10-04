@@ -27,11 +27,12 @@ const dialogFiles = fs.existsSync(dialogsDir)
 const headerVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'WorkstationHeader.vue');
 const bottomNavVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'WorkstationBottomNav.vue');
 const hoverCardVuePath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'BlockHoverCard.vue');
+const sessionOverlayVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'SessionOverlay.vue');
 
 const filesToInspect = [
   omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
   blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
-  headerVuePath, bottomNavVuePath, hoverCardVuePath, ...dialogFiles
+  headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath, ...dialogFiles
 ];
 
 let content = '';
@@ -901,7 +902,7 @@ console.log('✓ Test 20: Bottom navigation bar dynamic timer invariants (<1h mi
 // TEST 21: 30-Minute Inactivity Notification & 15m-Post-Last-Edit Governor
 // ---------------------------------------------------------------------------
 // 1. Template & structural invariants
-assert.ok(content.includes('v-model="showInactivityModal"'), 'FAIL: showInactivityModal dialog must be rendered in template');
+assert.ok(content.includes('v-model="showInactivityModal"') || content.includes(':model-value="showInactivityModal"') || content.includes('v-model:show-inactivity-modal="showInactivityModal"'), 'FAIL: showInactivityModal dialog must be rendered in template');
 assert.ok(content.includes('stopInactivitySessionAtLastEditPlus15'), 'FAIL: 15-minute stop button must be present');
 assert.ok(content.includes('confirmStillWorking'), 'FAIL: confirmStillWorking button must be present');
 assert.ok(content.includes('stopInactivitySessionNow'), 'FAIL: stopInactivitySessionNow button must be present');
@@ -1195,7 +1196,7 @@ assert.ok(
 
 // 3. Switch Task modal dialog defined in template
 assert.ok(
-  content.includes('v-model="showSwitchTaskModal"'),
+  content.includes('v-model="showSwitchTaskModal"') || content.includes(':model-value="showSwitchTaskModal"') || content.includes('v-model:show-switch-task-modal="showSwitchTaskModal"'),
   'FAIL: showSwitchTaskModal dialog must be defined in template'
 );
 
@@ -1371,8 +1372,8 @@ assert.ok(
   'FAIL: Logged work sessions in drawer must provide a delete button invoking confirmDeleteSession / deleteSessionRow'
 );
 assert.ok(
-  content.includes('v-model="showEditSessionModal"'),
-  'FAIL: omnitrack.html or App.vue must declare showEditSessionModal dialog'
+  content.includes('v-model="showEditSessionModal"') || content.includes(':model-value="showEditSessionModal"') || content.includes('v-model:show-edit-session-modal="showEditSessionModal"'),
+  'FAIL: omnitrack.html, App.vue or DialogCoordinator must declare showEditSessionModal dialog'
 );
 assert.ok(
   apiContent.includes('def update_work_session('),
