@@ -18,9 +18,15 @@ const ravenDrawerPath = path.resolve(__dirname, '..', 'src', 'drawers', 'RavenCo
 const fMenuPath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'FDropdownMenu.vue');
 const fComboboxPath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'FCombobox.vue');
 
+const dialogsDir = path.resolve(__dirname, '..', 'src', 'components', 'dialogs');
+const sessionBoxPath = path.resolve(__dirname, '..', 'src', 'session', 'SessionBox.vue');
+const dialogFiles = fs.existsSync(dialogsDir)
+  ? fs.readdirSync(dialogsDir).filter(f => f.endsWith('.vue')).map(f => path.join(dialogsDir, f))
+  : [];
+
 const filesToInspect = [
   omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
-  blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath
+  blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath, ...dialogFiles
 ];
 
 let content = '';
@@ -1577,21 +1583,23 @@ console.log('✓ Test 37: 1-Click Wrap & Start Next Session universal transition
 // TEST 38: Session Log Line Roving Tabindex & Delete Button Accessibility
 // ---------------------------------------------------------------------------
 assert.ok(
-  content.includes(':tabindex="activeSessionRowIndex === row.i ? 0 : -1"') &&
+  (content.includes(':tabindex="activeSessionRowIndex === row.i ? 0 : -1"') ||
+   content.includes(':tabindex="activeRowIndex === idx ? 0 : -1"')) &&
   content.includes('data-remove-line-btn') &&
-  content.includes('focusLogRowDeleteBtn'),
+  (content.includes('focusLogRowDeleteBtn') || content.includes('focusRowDeleteBtn')),
   'FAIL: Session notes rows and remove-line buttons must support roving tabindex and focusLogRowDeleteBtn'
 );
 
 assert.ok(
-  content.includes("if (ev.key === 'ArrowRight') {") &&
-  content.includes('focusLogRowDeleteBtn('),
+  (content.includes("if (ev.key === 'ArrowRight') {") || content.includes("ev.key === 'ArrowRight'")) &&
+  (content.includes('focusLogRowDeleteBtn(') || content.includes('focusRowDeleteBtn(')),
   'FAIL: ArrowRight on session log row must focus the delete button'
 );
 
 assert.ok(
-  content.includes("if (ev.key === 'ArrowLeft' || ev.key === 'Escape') {") &&
-  content.includes('focusLogRow('),
+  (content.includes("if (ev.key === 'ArrowLeft' || ev.key === 'Escape') {") ||
+   content.includes("ev.key === 'ArrowLeft' || ev.key === 'Escape'")) &&
+  (content.includes('focusLogRow(') || content.includes('focusRow(')),
   'FAIL: ArrowLeft or Escape on delete button must return focus to the session log row'
 );
 

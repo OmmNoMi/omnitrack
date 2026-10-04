@@ -19,6 +19,8 @@ import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import EditSessionModal from "./components/dialogs/EditSessionModal.vue";
+import TaskWorkflowModal from "./components/dialogs/TaskWorkflowModal.vue";
+import PlanFocusBlockModal from "./components/dialogs/PlanFocusBlockModal.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
 import RavenCollaborationDrawer from "./drawers/RavenCollaborationDrawer.vue";
 import DashboardView from "./views/DashboardView.vue";
@@ -47,6 +49,8 @@ if (typeof window !== "undefined") {
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
 		EditSessionModal,
+		TaskWorkflowModal,
+		PlanFocusBlockModal,
 		BlockDetailDrawer,
 		RavenCollaborationDrawer,
 		DashboardView,
@@ -90,6 +94,8 @@ function mountApp(target = "#app") {
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("EditSessionModal", EditSessionModal);
+	app.component("TaskWorkflowModal", TaskWorkflowModal);
+	app.component("PlanFocusBlockModal", PlanFocusBlockModal);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
 	app.component("DashboardView", DashboardView);

@@ -18,7 +18,7 @@
     <div v-if="isTracking" class="p-1 rounded-2xl bg-gray-100 dark:bg-[#161618] border border-gray-200/80 dark:border-gray-800 flex items-center gap-1">
       <button
         type="button"
-        @click="internalMode = 'keep_running'"
+        @click="internalMode = 'keep_running'; adjustMode = 'keep_running'"
         class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         :class="internalMode === 'keep_running' ? 'bg-white dark:bg-[#25272B] text-blue-600 dark:text-blue-400 shadow-xs font-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
       >
@@ -27,12 +27,12 @@
       </button>
       <button
         type="button"
-        @click="internalMode = 'stop_and_log'"
+        @click="internalMode = 'stop_and_log'; adjustMode = 'stop_and_log'"
         class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         :class="internalMode === 'stop_and_log' ? 'bg-white dark:bg-[#25272B] text-emerald-600 dark:text-emerald-400 shadow-xs font-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
-        <span>Stop &amp; Log to Timesheet</span>
+        <span>Stop & Log to Timesheet</span>
       </button>
     </div>
 
@@ -244,7 +244,7 @@
           <template #prefix>
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </template>
-          <span>Update Start Time &amp; Keep Running</span>
+          <span>Update Start Time & Keep Running</span>
         </f-button>
 
         <f-button
