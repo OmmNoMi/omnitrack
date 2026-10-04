@@ -757,16 +757,50 @@ def get_pending_team_approvals(work_date=None, employee=None):
 			"name", "employee", "associate_name", "work_date",
 			"start_time", "end_time", "duration_hours", "actual_hours",
 			"variance_hours", "work_item_label", "project", "task",
-			"task_nature", "status", "approval_status", "pairing_partner", "paired_block"
+			"task_nature", "status", "approval_status", "pairing_partner", "paired_block",
+			"deliverable_notes", "connected_tasks"
 		],
 		order_by="work_date desc, start_time desc",
 		limit=100
 	)
 
+	# Bulk query child sessions and deliverable output metrics for all pending blocks
+	block_names = [b.name for b in blocks]
+	sessions_by_block = {}
+	if block_names and frappe.db.exists("DocType", "OmniTrack Work Session"):
+		all_sessions = frappe.get_all(
+			"OmniTrack Work Session",
+			filters={"parent": ["in", block_names], "parenttype": "Planned Work Block"},
+			fields=["parent", "session_date", "from_time", "to_time", "hours", "notes", "logged_via"],
+			order_by="session_date asc, from_time asc"
+		)
+		for s in all_sessions:
+			s["session_date"] = str(s.session_date or "")
+			s["from_time"] = _time_str(s.from_time)
+			s["to_time"] = _time_str(s.to_time)
+			s["hours"] = flt(s.hours)
+			sessions_by_block.setdefault(s.parent, []).append(s)
+
+	metrics_by_block = {}
+	if block_names and frappe.db.exists("DocType", "OmniTrack Output Metric"):
+		all_metrics = frappe.get_all(
+			"OmniTrack Output Metric",
+			filters={"parent": ["in", block_names], "parenttype": "Planned Work Block"},
+			fields=["parent", "metric_type", "quantity", "unit", "reference_id", "notes"]
+		)
+		for m in all_metrics:
+			m["quantity"] = flt(m.get("quantity") or 0.0)
+			metrics_by_block.setdefault(m.parent, []).append(m)
+
+	from omnitrack.utils import parse_block_tasks as _parse_block_tasks
+
 	for b in blocks:
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
 		b["work_date"] = str(b.get("work_date") or "")
+		b["connected_tasks"] = _parse_block_tasks(b.get("connected_tasks"))
+		b["sessions"] = sessions_by_block.get(b.name, [])
+		b["output_metrics"] = metrics_by_block.get(b.name, [])
 		if b.get("pairing_partner"):
 			b["pairing_partner_name"] = frappe.db.get_value("User", b["pairing_partner"], "full_name") or b["pairing_partner"]
 

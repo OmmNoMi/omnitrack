@@ -261,14 +261,24 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	seen = set()
 	team_members = []
 	for m in standard_members:
-		seen.add(m["full_name"].lower())
-		seen.add(m["name"].lower())
+		m_full = (m.get("full_name") or m.get("name") or "").lower()
+		m_name = (m.get("name") or "").lower()
+		if m_full:
+			seen.add(m_full)
+		if m_name:
+			seen.add(m_name)
 		team_members.append(m)
 	for u in db_users:
-		if u["full_name"].lower() not in seen and u["name"].lower() not in seen:
+		u_full = (u.get("full_name") or u.get("name") or "").lower()
+		u_name = (u.get("name") or "").lower()
+		if (not u_full or u_full not in seen) and (not u_name or u_name not in seen):
+			if u_full:
+				seen.add(u_full)
+			if u_name:
+				seen.add(u_name)
 			team_members.append({
 				"name": u["name"],
-				"full_name": u["full_name"] or u["name"],
+				"full_name": u.get("full_name") or u["name"],
 				"role": "Team Member"
 			})
 

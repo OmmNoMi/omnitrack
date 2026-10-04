@@ -2794,6 +2794,11 @@
                   </span>
                 </td>
               </tr>
+              <tr v-if="filteredWorkBlocks.length === 0">
+                <td :colspan="isManager ? 9 : 8" class="p-8 text-center text-xs text-gray-400">
+                  No timesheet logs for {{ selectedEmployee }}.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -3071,9 +3076,11 @@
                 :aria-selected="plannerTaskFilter === 'all'"
                 :tabindex="plannerTaskFilter === 'all' ? 0 : -1"
                 data-planner-tab="all"
+                title="All assigned tasks"
                 @click="setPlannerTaskFilter('all')"
               >
-                All
+                <template #prefix><span aria-hidden="true">🌐</span></template>
+                <span v-if="plannerTaskFilter === 'all'">All</span>
               </f-button>
               <f-button
                 type="button"
@@ -3084,10 +3091,11 @@
                 :aria-selected="plannerTaskFilter === 'underplanned'"
                 :tabindex="plannerTaskFilter === 'underplanned' ? 0 : -1"
                 data-planner-tab="underplanned"
+                title="Underplanned tasks"
                 @click="setPlannerTaskFilter('underplanned')"
               >
                 <template #prefix><span aria-hidden="true">⏱️</span></template>
-                Underplanned
+                <span v-if="plannerTaskFilter === 'underplanned'">Underplanned</span>
               </f-button>
               <f-button
                 type="button"
@@ -3098,10 +3106,11 @@
                 :aria-selected="plannerTaskFilter === 'overdue'"
                 :tabindex="plannerTaskFilter === 'overdue' ? 0 : -1"
                 data-planner-tab="overdue"
+                title="Overdue tasks"
                 @click="setPlannerTaskFilter('overdue')"
               >
                 <template #prefix><span aria-hidden="true">⚠️</span></template>
-                Overdue
+                <span v-if="plannerTaskFilter === 'overdue'">Overdue</span>
               </f-button>
               <f-button
                 type="button"
@@ -3112,10 +3121,11 @@
                 :aria-selected="plannerTaskFilter === 'high'"
                 :tabindex="plannerTaskFilter === 'high' ? 0 : -1"
                 data-planner-tab="high"
+                title="High priority tasks"
                 @click="setPlannerTaskFilter('high')"
               >
                 <template #prefix><span aria-hidden="true">⭐</span></template>
-                High
+                <span v-if="plannerTaskFilter === 'high'">High</span>
               </f-button>
             </div>
           </div>
@@ -3614,12 +3624,39 @@
   >
     <div class="space-y-3">
       <div class="flex gap-1.5">
-        <button v-for="m in [['work','🎯 Work'],['🌴 Leave','🌴 Leave'],['🤒 Absent','🤒 Absent']]" :key="m[0]" type="button"
+        <button v-for="m in [['work','🎯 Work'],['break','☕ Break'],['🌴 Leave','🌴 Leave']]" :key="m[0]" type="button"
           @click="bookForm.mode = m[0]"
           class="flex-1 text-xs font-bold px-2 py-1.5 rounded-lg border cursor-pointer transition-colors"
           :class="bookForm.mode === m[0] ? (isDarkMode ? 'bg-blue-950/80 border-blue-600 text-blue-200' : 'bg-blue-50 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600')">
           {{ m[1] }}
         </button>
+      </div>
+      <!-- Quick Date Presets -->
+      <div class="flex items-center justify-between gap-1 pt-1">
+        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Quick Date:</span>
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            @click="setDatePreset(0)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(0) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')">
+            Today
+          </button>
+          <button
+            type="button"
+            @click="setDatePreset(1)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(1) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')">
+            Tomorrow
+          </button>
+          <button
+            type="button"
+            @click="setDatePreset(2)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(2) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')">
+            +2 Days
+          </button>
+        </div>
       </div>
       <!-- Assign To Employee (Managers / Reporting Officers) -->
       <div v-if="isManager" class="block space-y-1">
@@ -3687,8 +3724,8 @@
         </div>
         <div v-if="bookFormTask.description" class="text-[11px] leading-snug break-words max-h-24 overflow-y-auto" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">{{ bookFormTask.description }}</div>
       </div>
-      <!-- Date & Time: when work, show Start & End; when away, show Date only (All-Day) -->
-      <div v-if="bookForm.mode === 'work'" class="grid grid-cols-3 gap-2">
+      <!-- Date & Time: when work or break, show Start & End; when leave, show Date only (All-Day) -->
+      <div v-if="bookForm.mode === 'work' || bookForm.mode === 'break'" class="grid grid-cols-3 gap-2">
         <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Date</span>
           <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-2 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
         <label class="block col-span-1"><span class="text-[11px] font-bold text-gray-500">Start</span>
@@ -3699,10 +3736,10 @@
       <div v-else class="space-y-1">
         <label class="block"><span class="text-[11px] font-bold text-gray-500">Date</span>
           <input type="date" v-model="bookForm.work_date" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-        <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day away event on the calendar banner.</div>
+        <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day leave event on the calendar banner.</div>
       </div>
       <label class="block"><span class="text-[11px] font-bold text-gray-500">Notes (optional)</span>
-        <input type="text" v-model="bookForm.deliverable_notes" :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : 'Reason / coverage details'" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
+        <input type="text" v-model="bookForm.deliverable_notes" :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : (bookForm.mode === 'break' ? 'Short break details' : 'Reason / coverage details')" class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
     </div>
 
     <template #actions>
@@ -4264,7 +4301,7 @@
                 {{ showBlockReschedule ? 'Hide Reschedule' : 'Reschedule' }}
               </f-button>
               <f-button variant="subtle" size="xs" @click="showBlockManualLog = !showBlockManualLog">
-                {{ showBlockManualLog ? 'Hide Log' : '+ Add Time' }}
+                {{ showBlockManualLog ? 'Hide Log' : 'Log Time' }}
               </f-button>
               <f-button variant="ghost" theme="red" size="xs" @click="openCancelModal(activeBlock)">
                 Cancel Block
@@ -4275,9 +4312,9 @@
           <!-- 3. COMPLETED BLOCK -->
           <div v-else-if="isBlockCompleted(activeBlock)" class="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs">
             <span class="text-emerald-600 dark:text-emerald-400 font-medium">✓ Block completed</span>
-            <button v-if="canLogTimesheet(activeBlock)" type="button" @click="showBlockManualLog = !showBlockManualLog" class="text-blue-500 hover:underline cursor-pointer text-xs">
-              {{ showBlockManualLog ? 'Hide Form' : '+ Add another session' }}
-            </button>
+            <f-button v-if="canLogTimesheet(activeBlock)" variant="subtle" size="xs" @click="showBlockManualLog = !showBlockManualLog">
+              {{ showBlockManualLog ? 'Hide Log' : 'Log Time' }}
+            </f-button>
           </div>
 
           <!-- 4. PAST IMMUTABLE BLOCK -->

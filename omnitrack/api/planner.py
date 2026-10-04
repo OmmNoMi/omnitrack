@@ -278,13 +278,16 @@ def _duration_hours(start_time, end_time):
 @frappe.whitelist()
 def book_work_block(work_date, start_time, end_time, work_item=None, work_item_label=None,
 					task=None, project=None, deliverable_notes=None,
-					task_nature="\U0001f3af Planned", employee=None, pairing_partner=None):
+					task_nature="\U0001f3af Planned", employee=None, pairing_partner=None,
+					assignees=None):
 	"""Create a planned block: 'from 12 to 2pm I will work on <work item>'. This is the PLAN.
 
 	``work_item`` is the generic assigned-work id from get_assigned_tasks (an ERPNext Task
 	name, or ``todo:<name>``). A real ERPNext Task link is also set when available.
 	If ``pairing_partner`` is specified, automatically mirrors a reciprocal work block for
 	the collaborator with synchronized status and bidirectional links.
+	If ``assignees`` (JSON array or list) is provided, creates synchronized planned blocks
+	for all participants.
 	"""
 	target = _resolve_planner_user(employee)
 	if not frappe.db.exists("DocType", "Planned Work Block"):
@@ -310,6 +313,21 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		work_item_label = str(work_item_label).strip()[:140]
 	elif deliverable_notes:
 		work_item_label = str(deliverable_notes).strip()[:140]
+
+	# Parse multi-assignee list if present
+	assignee_list = []
+	if assignees:
+		if isinstance(assignees, str):
+			try:
+				parsed = json.loads(assignees)
+				if isinstance(parsed, list):
+					assignee_list = [str(x).strip() for x in parsed if str(x).strip()]
+				else:
+					assignee_list = [str(assignees).strip()]
+			except Exception:
+				assignee_list = [str(x).strip() for x in assignees.split(",") if str(x).strip()]
+		elif isinstance(assignees, list):
+			assignee_list = [str(x).strip() for x in assignees if str(x).strip()]
 
 	doc = frappe.new_doc("Planned Work Block")
 	doc.employee = target
@@ -359,11 +377,37 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		doc.paired_block = partner_doc.name
 		doc.db_set("paired_block", partner_doc.name, update_modified=False)
 
+	# Multi-assignee replication across all participants
+	created_blocks = [doc.name]
+	for colleague in assignee_list:
+		if colleague and colleague != target and colleague != pairing_partner and frappe.db.exists("User", colleague):
+			team_doc = frappe.new_doc("Planned Work Block")
+			team_doc.employee = colleague
+			team_doc.work_date = doc.work_date
+			team_doc.start_time = doc.start_time
+			team_doc.end_time = doc.end_time
+			team_doc.duration_hours = doc.duration_hours
+			team_doc.task = doc.task
+			team_doc.work_item = doc.work_item
+			team_doc.work_item_label = doc.work_item_label
+			team_doc.project = doc.project
+			team_doc.task_nature = doc.task_nature
+			team_doc.deliverable_notes = doc.deliverable_notes
+			team_doc.status = "Planned"
+			team_doc.paired_block = doc.name
+			team_doc.associate_name = frappe.db.get_value("User", colleague, "full_name") or colleague
+			team_doc.flags.ignore_permissions = True
+			if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+				team_doc.flags.ignore_links = True
+			team_doc.insert()
+			created_blocks.append(team_doc.name)
+
 	return {
 		"status": "success",
 		"name": doc.name,
 		"duration_hours": doc.duration_hours,
-		"paired_block": getattr(doc, "paired_block", None)
+		"paired_block": getattr(doc, "paired_block", None),
+		"created_blocks": created_blocks
 	}
 
 

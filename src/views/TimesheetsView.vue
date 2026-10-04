@@ -153,6 +153,11 @@
                   </span>
                 </td>
               </tr>
+              <tr v-if="filteredWorkBlocks.length === 0">
+                <td :colspan="isManager ? 9 : 8" class="p-8 text-center text-xs text-gray-400">
+                  No timesheet logs for {{ selectedEmployee }}.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

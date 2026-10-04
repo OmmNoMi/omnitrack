@@ -537,3 +537,60 @@ four-layer "for whom / what / when / did" framing is codified there.
   Deletion is irreversible — needs an explicit go-ahead.
 - **Regression tests** for the invariants in `docs/DOMAIN_MODEL.md` §10, mutation-
   verified and wired into CI alongside `scripts/check_www_html.py`.
+
+---
+
+## 🎯 Active Refactoring Backlog & Tracked GitHub Issues (October 2026)
+
+### 1. Issue #16: Calendar Vertical Scroll & Independent Rail Scrolling
+- **Problem:** Calendar grid stops scrolling past 3:00 PM on desktop displays because the container locks vertically; scrolling assigned work inappropriately shifts the calendar grid.
+- **Solution:** Apply independent `overflow-y-auto` to both the left "Assigned Work" column and the 24-hour Calendar hour grid. Remove whole-page scroll lock so evening hours (3 PM - 11:59 PM) are fully accessible.
+
+### 2. Issue #17: Simplified Work Nature Architecture (Work, Break, Leave)
+- **Problem:** Cluttered work nature options (Planned, Virtual Meeting, Unplanned Ops, Review & Sync, Break, Leave, Absent).
+- **Solution:** Consolidate into 3 canonical project planning modes:
+  1. `Work` (Active execution & delivery)
+  2. `Break` (Short breaks/pauses during the day)
+  3. `Leave` (Longer absence; external HR rules/quotas govern whether paid/unpaid/absent).
+
+### 3. Issue #18: Multi-Assignee Support for Shared Project Blocks
+- **Problem:** Scheduling a project meeting, pair-programming session, or release requires 2+ people, but the assignee field only accepts one member.
+- **Solution:** Enable multi-select assignee input that creates paired/mirrored Planned Work Blocks for all participants across identical time windows.
+
+### 4. Issue #19: UX Enhancements & Modern SPA Cleanliness
+- **Date Presets:** Add quick date pills (`Today`, `Tomorrow`, `+2d`) alongside existing duration presets (`30m`, `1h`, `1.5h`, `2h`, `3h`, `4h`) in the Plan Focus Block modal.
+- **Icon-Only Inactive Filter Pills:** Assigned work filter pills (`All`, `Underplanned`, `Overdue`, `Star`) display compact icons when inactive, and expand with text only when active.
+- **De-duplicate Task Drawer Actions:** Clean up duplicate action buttons and duplicate views in the task drawer.
+- **Instant Reactive Booking:** Ensure booking a focus block instantly re-fetches and renders the block on the day calendar without delay.
+- **Modern SPA Component Refactoring:** Retire monolithic HTML template rendering and transition runtime views entirely to the modular Vite SFC architecture under `src/views/` and `src/composables/`.
+
+---
+
+## 🏛️ Approved Strategic Architectural Tracks (October 2026)
+
+### Track A: DocType Naming & Field Governance (Approved)
+* **Reference**: [`doctype_naming_governance.md`](file:///Users/ommnomi/.gemini/antigravity/brain/32a545c2-e019-473f-b19e-e00d742041bd/doctype_naming_governance.md)
+* **Objectives**:
+  1. Standardize DocType naming convention: eliminate divergent prefixes, aligning all tables strictly under the `OmniTrack` namespace (e.g., `OmniTrack Work Session`, `OmniTrack Planned Work Block`).
+  2. Normalize user and employee field schemas across doctypes (`employee` as Frappe `User` email reference vs `employee_doc` for HRMS Employee link).
+  3. Safe database migration script with zero data loss or orphan timesheets.
+
+### Track B: OmniQuery Reporting Engine & Performance Architecture (Approved)
+* **Reference**: [`omniquery_audit_and_comparison.md`](file:///Users/ommnomi/frappe-bench/version-16/apps/omnitrack/.agents/skills/omniquery_audit_and_comparison.md)
+* **Objectives**:
+  1. Build a unified, hermetic querying service layer (`omnitrack/services/query.py`) replacing fragmented raw SQL across workstation, timesheets, and analytics.
+  2. Implement caching with TTL and invalidation hooks on block/timesheet updates.
+  3. Ensure 100% Frappe ORM compliance (`frappe.qb` / `frappe.get_all`) to preserve multi-tenant company and user permission scoping.
+
+### Track C: Modular SPA Codebase & Directory Structure Reorganization (Approved)
+* **Reference**: [`omnitrack_folder_structure.md`](file:///Users/ommnomi/.gemini/antigravity/brain/32a545c2-e019-473f-b19e-e00d742041bd/omnitrack_folder_structure.md)
+* **Objectives**:
+  1. Transition all views out of monolithic `omnitrack.html` into clean Vite Vue 3 SFCs:
+     - `src/views/CalendarView.vue` (Calendar and timeline planner)
+     - `src/views/TimesheetsView.vue` (Approvals and manager reconciliation)
+     - `src/views/DashboardView.vue` (Personal and team performance analytics)
+     - `src/views/AttendanceView.vue` (Presence and shifts)
+  2. Centralize state in Vue composables (`src/composables/useSessionTimer.js`, `src/composables/usePlanner.js`, `src/composables/useWorkstation.js`).
+  3. Maintain lightweight Jinja entry shell (<100 lines) with pure Vite bundle loading (`omnitrack.bundle.js`).
+
+

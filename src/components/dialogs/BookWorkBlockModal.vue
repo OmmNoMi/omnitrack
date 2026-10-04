@@ -9,7 +9,7 @@
     <div class="space-y-3">
       <div class="flex gap-1.5">
         <button
-          v-for="m in [['work','🎯 Work'],['🌴 Leave','🌴 Leave'],['🤒 Absent','🤒 Absent']]"
+          v-for="m in [['work','🎯 Work'],['break','☕ Break'],['🌴 Leave','🌴 Leave']]"
           :key="m[0]"
           type="button"
           @click="bookForm.mode = m[0]"
@@ -18,6 +18,37 @@
         >
           {{ m[1] }}
         </button>
+      </div>
+
+      <!-- Quick Date Presets -->
+      <div class="flex items-center justify-between gap-1 pt-1">
+        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Quick Date:</span>
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            @click="setDatePreset(0)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(0) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            @click="setDatePreset(1)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(1) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')"
+          >
+            Tomorrow
+          </button>
+          <button
+            type="button"
+            @click="setDatePreset(2)"
+            class="text-[10px] font-semibold px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+            :class="isDateActive(2) ? (isDarkMode ? 'bg-blue-900 border-blue-600 text-white' : 'bg-blue-100 border-blue-400 text-blue-800') : (isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700')"
+          >
+            +2 Days
+          </button>
+        </div>
       </div>
 
       <!-- Assign To Employee (Managers / Reporting Officers) -->
@@ -113,7 +144,7 @@
       </div>
 
       <!-- Date & Time -->
-      <div v-if="bookForm.mode === 'work'" class="grid grid-cols-3 gap-2">
+      <div v-if="bookForm.mode === 'work' || bookForm.mode === 'break'" class="grid grid-cols-3 gap-2">
         <label class="block col-span-1">
           <span class="text-[11px] font-bold text-gray-500">Date</span>
           <input
@@ -152,14 +183,14 @@
             :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"
           />
         </label>
-        <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day away event on the calendar banner.</div>
+        <div class="text-[11px] text-gray-400 pl-0.5">Recorded as an all-day leave event on the calendar banner.</div>
       </div>
       <label class="block">
         <span class="text-[11px] font-bold text-gray-500">Notes (optional)</span>
         <input
           type="text"
           v-model="bookForm.deliverable_notes"
-          :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : 'Reason / coverage details'"
+          :placeholder="bookForm.mode === 'work' ? 'What will you get done?' : (bookForm.mode === 'break' ? 'Short break details' : 'Reason / coverage details')"
           class="mt-1 w-full text-sm rounded-xl px-3 py-2 border outline-none"
           :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"
         />
@@ -196,6 +227,20 @@ export default {
     fmtHrs(val) {
       const n = Number(val) || 0;
       return n.toFixed(1);
+    },
+    getDateOffsetISO(offsetDays) {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    },
+    setDatePreset(offsetDays) {
+      this.bookForm.work_date = this.getDateOffsetISO(offsetDays);
+    },
+    isDateActive(offsetDays) {
+      return this.bookForm.work_date === this.getDateOffsetISO(offsetDays);
     },
   },
 };

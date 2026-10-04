@@ -70,9 +70,11 @@
                 :aria-selected="plannerTaskFilter === 'all'"
                 :tabindex="plannerTaskFilter === 'all' ? 0 : -1"
                 data-planner-tab="all"
+                title="All assigned tasks"
                 @click="setPlannerTaskFilter('all')"
               >
-                All
+                <template #prefix><span aria-hidden="true">🌐</span></template>
+                <span v-if="plannerTaskFilter === 'all'">All</span>
               </f-button>
               <f-button
                 type="button"
@@ -83,10 +85,11 @@
                 :aria-selected="plannerTaskFilter === 'underplanned'"
                 :tabindex="plannerTaskFilter === 'underplanned' ? 0 : -1"
                 data-planner-tab="underplanned"
+                title="Underplanned tasks"
                 @click="setPlannerTaskFilter('underplanned')"
               >
                 <template #prefix><span aria-hidden="true">⏱️</span></template>
-                Underplanned
+                <span v-if="plannerTaskFilter === 'underplanned'">Underplanned</span>
               </f-button>
               <f-button
                 type="button"
@@ -97,10 +100,11 @@
                 :aria-selected="plannerTaskFilter === 'overdue'"
                 :tabindex="plannerTaskFilter === 'overdue' ? 0 : -1"
                 data-planner-tab="overdue"
+                title="Overdue tasks"
                 @click="setPlannerTaskFilter('overdue')"
               >
                 <template #prefix><span aria-hidden="true">⚠️</span></template>
-                Overdue
+                <span v-if="plannerTaskFilter === 'overdue'">Overdue</span>
               </f-button>
               <f-button
                 type="button"
@@ -111,10 +115,11 @@
                 :aria-selected="plannerTaskFilter === 'high'"
                 :tabindex="plannerTaskFilter === 'high' ? 0 : -1"
                 data-planner-tab="high"
+                title="High priority tasks"
                 @click="setPlannerTaskFilter('high')"
               >
                 <template #prefix><span aria-hidden="true">⭐</span></template>
-                High
+                <span v-if="plannerTaskFilter === 'high'">High</span>
               </f-button>
             </div>
           </div>
