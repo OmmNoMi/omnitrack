@@ -6,7 +6,13 @@ import { resolve } from "node:path";
 export default defineConfig({
 	plugins: [
 		frappeui(),
-		vue(),
+		vue({
+			template: {
+				transformAssetUrls: {
+					img: []
+				}
+			}
+		}),
 	],
 	resolve: {
 		alias: {
