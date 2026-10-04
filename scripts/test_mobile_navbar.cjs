@@ -17,13 +17,15 @@ console.log('--- Running Mobile Navbar Responsiveness Invariants Suite (Issue #1
 
 const omnitrackDir = path.resolve(__dirname, '..');
 const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html');
+const appVuePath = path.resolve(omnitrackDir, 'src', 'App.vue');
 
-assert.ok(fs.existsSync(htmlPath), 'FAIL: omnitrack.html does not exist');
-const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+const targetPath = fs.existsSync(appVuePath) ? appVuePath : htmlPath;
+assert.ok(fs.existsSync(targetPath), 'FAIL: Component file does not exist');
+const htmlContent = fs.readFileSync(targetPath, 'utf8');
 
 // Extract <header>...</header>
 const headerMatch = htmlContent.match(/<header[\s\S]*?<\/header>/);
-assert.ok(headerMatch, 'FAIL: <header> tag not found in omnitrack.html');
+assert.ok(headerMatch, `FAIL: <header> tag not found in ${path.basename(targetPath)}`);
 const headerHtml = headerMatch[0];
 
 // Test 1: Production / Local Dev badge MUST NOT exist in <header>

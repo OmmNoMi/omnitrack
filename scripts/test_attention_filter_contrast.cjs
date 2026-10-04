@@ -54,15 +54,19 @@ assert.ok(
 );
 console.log('✓ Test 2: omnitrack.bundle.css contains compiled rose background utility classes.');
 
-// Test 3: Attention tab buttons in omnitrack.html have accessible contrast definitions
-const overdueIdx = htmlContent.indexOf("setAttentionFilter('overdue')");
-assert.ok(overdueIdx !== -1, 'FAIL: Overdue attention filter button not found in omnitrack.html');
+const dashboardViewPath = path.resolve(omnitrackDir, 'src', 'views', 'DashboardView.vue');
+const dashboardViewContent = fs.existsSync(dashboardViewPath) ? fs.readFileSync(dashboardViewPath, 'utf8') : '';
+const targetTemplateContent = dashboardViewContent || htmlContent;
+
+// Test 3: Attention tab buttons have accessible contrast definitions
+const overdueIdx = targetTemplateContent.indexOf("setAttentionFilter('overdue')");
+assert.ok(overdueIdx !== -1, 'FAIL: Overdue attention filter button not found');
 const startBtn = Math.max(
-  htmlContent.lastIndexOf('<f-button', overdueIdx),
-  htmlContent.lastIndexOf('<button', overdueIdx)
+  targetTemplateContent.lastIndexOf('<f-button', overdueIdx),
+  targetTemplateContent.lastIndexOf('<button', overdueIdx)
 );
-const endBtn = htmlContent.indexOf('>', overdueIdx) + 1;
-const overdueBtnHtml = htmlContent.slice(startBtn, endBtn);
+const endBtn = targetTemplateContent.indexOf('>', overdueIdx) + 1;
+const overdueBtnHtml = targetTemplateContent.slice(startBtn, endBtn);
 
 const isFrappeUIOverdue = overdueBtnHtml.includes('<f-button') &&
   overdueBtnHtml.includes('theme="red"');

@@ -17,16 +17,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert');
 
-console.log('--- Running Frappe UI Planner Controls Invariants Suite ---');
-
 const omnitrackDir = path.resolve(__dirname, '..');
 const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html');
-assert.ok(fs.existsSync(htmlPath), 'FAIL: omnitrack.html does not exist');
+const calendarViewPath = path.resolve(omnitrackDir, 'src', 'views', 'CalendarView.vue');
+const dashboardViewPath = path.resolve(omnitrackDir, 'src', 'views', 'DashboardView.vue');
+const fInputPath = path.resolve(omnitrackDir, 'src', 'components', 'common', 'FInput.vue');
 
-const html = fs.readFileSync(htmlPath, 'utf8');
+const calendarSrc = fs.existsSync(calendarViewPath) ? fs.readFileSync(calendarViewPath, 'utf8') : '';
+const dashboardSrc = fs.existsSync(dashboardViewPath) ? fs.readFileSync(dashboardViewPath, 'utf8') : '';
+const fInputSrc = fs.existsSync(fInputPath) ? fs.readFileSync(fInputPath, 'utf8') : '';
+const html = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
 
 // 1. Planner Left Rail: FInput component used for search
-const searchSection = html.slice(
+const searchSection = calendarSrc || html.slice(
   html.indexOf('<!-- Quick Search & Filter in Planner Rail -->'),
   html.indexOf('aria-label="Filter assigned work tasks"')
 );
@@ -42,13 +45,12 @@ assert.ok(
 console.log('✓ Test 1: Planner task search uses genuine Frappe UI <f-input> with prefix/suffix slots.');
 
 // 2. Planner Left Rail: Filter tabs use Frappe UI <f-button>
-const filterStart = html.indexOf('aria-label="Filter assigned work tasks"');
-assert.ok(filterStart !== -1, 'FAIL: Planner task filter tablist not found');
-const filterSection = html.slice(
-  filterStart,
-  html.indexOf('!filteredPlannerTasks.length', filterStart)
-);
+const filterSection = calendarSrc || (html.includes('aria-label="Filter assigned work tasks"') ? html.slice(
+  html.indexOf('aria-label="Filter assigned work tasks"'),
+  html.indexOf('!filteredPlannerTasks.length', html.indexOf('aria-label="Filter assigned work tasks"'))
+) : '');
 
+assert.ok(filterSection, 'FAIL: Planner task filter tablist not found');
 assert.ok(
   filterSection.includes('<f-button') && filterSection.includes('data-planner-tab="all"'),
   'FAIL: "All" tab must use <f-button>.'
@@ -72,13 +74,12 @@ assert.ok(
 console.log('✓ Test 2: Planner left rail filter tabs use genuine Frappe UI <f-button> components with design system themes.');
 
 // 3. Attention Section: Overdue tab also uses Frappe UI <f-button>
-const attStart = html.indexOf('aria-label="Filter action required tasks"');
-assert.ok(attStart !== -1, 'FAIL: Attention task filter tablist not found');
-const attentionFilterSection = html.slice(
-  attStart,
-  html.indexOf('visibleAttentionTasks', attStart)
-);
+const attentionFilterSection = dashboardSrc || (html.includes('aria-label="Filter action required tasks"') ? html.slice(
+  html.indexOf('aria-label="Filter action required tasks"'),
+  html.indexOf('visibleAttentionTasks', html.indexOf('aria-label="Filter action required tasks"'))
+) : '');
 
+assert.ok(attentionFilterSection, 'FAIL: Attention task filter tablist not found');
 assert.ok(
   attentionFilterSection.includes('<f-button') && attentionFilterSection.includes('data-attention-tab="overdue"'),
   'FAIL: Attention section "Overdue" tab must use <f-button>.'
@@ -90,14 +91,14 @@ assert.ok(
 console.log('✓ Test 3: Attention section filter tabs use genuine Frappe UI <f-button> with theme="red".');
 
 // 4. FInput definition supports prefix slot
-const fInputDef = html.slice(
+const fInputDef = fInputSrc || (html.includes("const FInput = {") ? html.slice(
   html.indexOf("const FInput = {"),
   html.indexOf("const FCard = {")
-);
+) : '');
 
 assert.ok(
-  fInputDef.includes('$slots.prefix'),
-  'FAIL: FInput component definition must support $slots.prefix slot.'
+  fInputDef.includes('$slots.prefix') || fInputDef.includes('slot name="prefix"') || fInputDef.includes('<slot name="prefix"'),
+  'FAIL: FInput component definition must support prefix slot.'
 );
 console.log('✓ Test 4: FInput component supports prefix slot with proper icon alignment.');
 

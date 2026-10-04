@@ -11,6 +11,9 @@ const omnitrackDir = path.resolve(__dirname, '..');
 const htmlPath = path.resolve(omnitrackDir, 'omnitrack', 'www', 'omnitrack.html');
 const viteConfigPath = path.resolve(omnitrackDir, 'vite.config.js');
 const tailwindConfigPath = path.resolve(omnitrackDir, 'tailwind.config.cjs');
+const appVuePath = path.resolve(omnitrackDir, 'src', 'App.vue');
+const fDropdownMenuPath = path.resolve(omnitrackDir, 'src', 'components', 'common', 'FDropdownMenu.vue');
+const calendarViewPath = path.resolve(omnitrackDir, 'src', 'views', 'CalendarView.vue');
 
 let totalMutants = 0;
 let killedMutants = 0;
@@ -90,7 +93,7 @@ runMutationTest(
 // Mutant 4: FDropdownMenu accessibility Escape key restoration broken
 runMutationTest(
   'FDropdownMenu close() bypasses focus restoration',
-  htmlPath,
+  fDropdownMenuPath,
   (code) => code.replace('if (restoreFocus) {', 'if (false && restoreFocus) {'),
   'node scripts/test_workstation_interactions.cjs',
   'FAIL: Escape must restore DOM focus to trigger'
@@ -99,7 +102,7 @@ runMutationTest(
 // Mutant 5: Redundant isProductionEnv badge re-introduced into header (Issue #12)
 runMutationTest(
   'Redundant isProductionEnv badge re-introduced into header (Issue #12 regression)',
-  htmlPath,
+  appVuePath,
   (code) => code.replace('<span class="font-bold text-sm sm:text-base tracking-tight truncate"', '<span>{{ isProductionEnv ? \'Production\' : \'Local Dev\' }}</span><span class="font-bold text-sm sm:text-base tracking-tight truncate"'),
   'node scripts/test_mobile_navbar.cjs',
   'FAIL: Header must NOT contain the redundant isProductionEnv badge'
@@ -108,7 +111,7 @@ runMutationTest(
 // Mutant 6: Raven Chat text not collapsed on mobile screens (Issue #12)
 runMutationTest(
   'Raven Chat button text fails to collapse on mobile (hidden sm:inline removed)',
-  htmlPath,
+  appVuePath,
   (code) => code.replace('<span class="hidden sm:inline">Raven Chat</span>', '<span>Raven Chat</span>'),
   'node scripts/test_mobile_navbar.cjs',
   'FAIL: Raven Chat text must be hidden on mobile'
@@ -126,7 +129,7 @@ runMutationTest(
 // Mutant 8: Planner overdue filter tab stripped of Frappe UI theme="red"
 runMutationTest(
   'Planner overdue filter tab stripped of Frappe UI theme="red"',
-  htmlPath,
+  calendarViewPath,
   (code) => code.replaceAll('theme="red"', 'theme="invalid_theme"'),
   'node scripts/test_frappe_ui_planner_tabs.cjs',
   'FAIL: "Overdue" <f-button> must use theme="red"'

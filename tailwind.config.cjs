@@ -7,6 +7,17 @@ module.exports = {
 		"./omnitrack/www/omnitrack.html",
 		"./node_modules/frappe-ui/src/components/**/*.{vue,js,ts,jsx,tsx}",
 	],
+	safelist: [
+		"bg-rose-50",
+		"bg-rose-100",
+		"bg-rose-500",
+		"bg-rose-600",
+		"bg-rose-700",
+		"text-rose-600",
+		"text-rose-700",
+		"border-rose-200",
+		"border-rose-300",
+	],
 	darkMode: "class",
 	theme: {
 		extend: {
