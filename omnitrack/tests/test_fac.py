@@ -12,12 +12,13 @@ class TestOmniTrackFAC(unittest.TestCase):
 		self.user = frappe.session.user
 
 	def test_get_fac_tools_schema_validity(self):
-		"""Verifies that all OmniTrack tools have compliant MCP schemas."""
+		"""Verifies that all OmniTrack tools have compliant MCP schemas across granular and consolidated modes."""
 		from omnitrack.fac import get_fac_tools
 
-		tools = get_fac_tools()
-		self.assertIsInstance(tools, list)
-		self.assertGreaterEqual(len(tools), 6)
+		# 1. Granular Mode (all domain tools)
+		granular_tools = get_fac_tools(consolidated=False)
+		self.assertIsInstance(granular_tools, list)
+		self.assertGreaterEqual(len(granular_tools), 21)
 
 		required_tool_names = {
 			"omnitrack_get_my_workspace",
@@ -27,15 +28,22 @@ class TestOmniTrackFAC(unittest.TestCase):
 			"omnitrack_quick_timer_action",
 			"omnitrack_get_eod_reconciliation",
 		}
-		found_names = {t["name"] for t in tools}
+		found_names = {t["name"] for t in granular_tools}
 		for r_name in required_tool_names:
 			self.assertIn(r_name, found_names)
-			tool_def = next(t for t in tools if t["name"] == r_name)
+			tool_def = next(t for t in granular_tools if t["name"] == r_name)
 			self.assertIn("description", tool_def)
 			self.assertIn("inputSchema", tool_def)
 			self.assertIn("handler", tool_def)
 			self.assertTrue(callable(tool_def["handler"]))
 			self.assertEqual(tool_def["inputSchema"].get("type"), "object")
+
+		# 2. Consolidated Mode (3 polymorphic tools)
+		consolidated_tools = get_fac_tools(consolidated=True)
+		self.assertIsInstance(consolidated_tools, list)
+		self.assertEqual(len(consolidated_tools), 3)
+		cons_names = {t["name"] for t in consolidated_tools}
+		self.assertEqual(cons_names, {"omnitrack_session", "omnitrack_schedule", "omnitrack_workspace"})
 
 	def test_past_plan_work_blocks_locked(self):
 		"""Invariant 1: Historical plan commitments (work_date < today) cannot be created."""
@@ -285,7 +293,7 @@ class TestOmniTrackFAC(unittest.TestCase):
 			log_work_session(
 				block_name=block_name,
 				hours=1.0,
-				notes="Completed work under Never sync mode"
+				notes="Completed work under Never sync mode. Verified that zero timesheet documents are created in ERPNext active database."
 			)
 			block_doc.reload()
 			self.assertIsNone(block_doc.timesheet)
@@ -305,7 +313,7 @@ class TestOmniTrackFAC(unittest.TestCase):
 			log_work_session(
 				block_name=b2_name,
 				hours=1.0,
-				notes="Work done pending approval"
+				notes="Work done pending approval. Comprehensive engineering deliverables and code review completed for client milestone testing."
 			)
 			b2_doc = frappe.get_doc("Planned Work Block", b2_name)
 			self.assertIsNone(b2_doc.timesheet)
@@ -336,6 +344,93 @@ class TestOmniTrackFAC(unittest.TestCase):
 				frappe.delete_doc("Planned Work Block", b2_name, force=True)
 			if "block_name" in locals() and block_name and frappe.db.exists("Planned Work Block", block_name):
 				frappe.delete_doc("Planned Work Block", block_name, force=True)
+
+	def test_manager_flag_work_block_workflow(self):
+		"""TDD Phase 1 (Red): Manager can flag a block for review with clarification notes."""
+		from omnitrack.api import book_work_block, log_work_session
+		from omnitrack.api.timesheet import flag_work_block
+
+		bk = book_work_block(
+			work_date=nowdate(),
+			start_time="10:00:00",
+			end_time="11:30:00",
+			deliverable_notes="TDD Flagging Test Deliverables for client feature",
+			employee=frappe.session.user
+		)
+		b_name = bk["name"]
+		try:
+			log_work_session(
+				block_name=b_name,
+				hours=1.5,
+				notes="Completed preliminary work session for client inspection and quality assurance audit across all active deliverables today."
+			)
+			# Manager flags the work block
+			res = flag_work_block(
+				block_name=b_name,
+				reason="Please specify the client ticket reference and commit hash."
+			)
+			self.assertEqual(res.get("status"), "success")
+			b_doc = frappe.get_doc("Planned Work Block", b_name)
+			self.assertEqual(b_doc.approval_status, "Flagged")
+			self.assertEqual(b_doc.flagged_reason, "Please specify the client ticket reference and commit hash.")
+		finally:
+			if frappe.db.exists("Planned Work Block", b_name):
+				frappe.delete_doc("Planned Work Block", b_name, force=True)
+
+	def test_approved_work_block_immutability_locking(self):
+		"""TDD Phase 1 (Red): Once a work block is approved by manager, user modifications and session deletions are locked."""
+		from omnitrack.api import book_work_block, log_work_session, approve_work_blocks
+		from omnitrack.api.timesheet import update_work_session, delete_work_session
+
+		bk = book_work_block(
+			work_date=nowdate(),
+			start_time="12:00:00",
+			end_time="13:00:00",
+			deliverable_notes="TDD Immutability Test Deliverables for compliance audit",
+			employee=frappe.session.user
+		)
+		b_name = bk["name"]
+		try:
+			log_res = log_work_session(
+				block_name=b_name,
+				hours=1.0,
+				notes="Work delivered and verified. Ready for executive manager review, comprehensive billing validation, and payroll signoff across team."
+			)
+			b_doc = frappe.get_doc("Planned Work Block", b_name)
+			sess_name = b_doc.sessions[0].name
+
+			# Manager approves the block
+			approve_work_blocks(block_names=[b_name], comments="Certified by lead")
+			b_doc.reload()
+			self.assertEqual(b_doc.approval_status, "Approved")
+
+			# Switch session user to standard non-manager user to test immutability locking
+			orig_user = frappe.session.user
+			try:
+				frappe.set_user("test_user_immutability@example.com")
+				# Mock roles for this test user
+				frappe.cache.delete_keys("roles:test_user_immutability@example.com")
+				
+				# User attempts to modify approved session; must throw PermissionError
+				with self.assertRaises(frappe.PermissionError):
+					update_work_session(
+						session_name=sess_name,
+						block_name=b_name,
+						notes="Attempting unauthorized modification of locked approved timesheet deliverable notes and session records."
+					)
+
+				# User attempts to delete approved session; must throw PermissionError
+				with self.assertRaises(frappe.PermissionError):
+					delete_work_session(
+						session_name=sess_name,
+						block_name=b_name
+					)
+			finally:
+				frappe.set_user(orig_user)
+		finally:
+			if frappe.db.exists("Planned Work Block", b_name):
+				frappe.delete_doc("Planned Work Block", b_name, force=True)
+
 
 
 

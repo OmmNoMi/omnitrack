@@ -489,13 +489,15 @@ def quick_timer_action(
 	nature="🎯 Planned",
 	start_time=None,
 	start_time_epoch_ms=None,
+	work_date=None,
+	session_date=None,
 	employee=None
 ):
 	"""Controls live stopwatch session for the target user (defaults to human operator).
 
 	Terminology invariant:
 	- Starting is strictly "Start Session" (Play ▶).
-	- Stopping requires notes.
+	- Stopping requires notes and an active running timer.
 	- Discard allows discarding without blank timesheets.
 
 	Args:
@@ -507,6 +509,8 @@ def quick_timer_action(
 		nature (str): Work nature (default "🎯 Planned").
 		start_time (str, optional): Scheduled/retroactive start time (e.g. "21:30:00").
 		start_time_epoch_ms (int|str, optional): Exact epoch milliseconds.
+		work_date (str, optional): Target work date (YYYY-MM-DD). Defaults to today.
+		session_date (str, optional): Target session date alias for work_date.
 		employee (str, optional): Target employee (defaults to current human user, e.g. Nomeshwer).
 
 	Returns:
@@ -514,6 +518,7 @@ def quick_timer_action(
 	"""
 	user = _resolve_planner_user(employee)
 	action = str(action).lower().strip()
+	target_date = work_date or session_date or nowdate()
 
 	if action == "status":
 		active = get_active_session(user)
@@ -544,7 +549,7 @@ def quick_timer_action(
 				from zoneinfo import ZoneInfo
 				tz_name = frappe.db.get_single_value("System Settings", "time_zone") or "Asia/Kolkata"
 				tz = ZoneInfo(tz_name)
-				today_date = getdate(nowdate())
+				today_date = getdate(target_date)
 				parts = str(start_time).strip().split(":")
 				h = int(parts[0]) if len(parts) > 0 else 0
 				m = int(parts[1]) if len(parts) > 1 else 0
@@ -585,24 +590,36 @@ def quick_timer_action(
 
 	elif action == "stop":
 		active = get_active_session(user)
-		start_ms = active.get("startTime", 0) if active else 0
-		elapsed_secs = max(0, int((datetime.now().timestamp() * 1000 - start_ms) / 1000)) if start_ms else 0
+		if not active or active.get("status") != "active" or not active.get("startTime"):
+			frappe.throw(_("No active stopwatch session found to stop for {0}. Use log_work_session to record completed work manually.").format(user))
+
+		start_ms = active.get("startTime", 0)
+		now_dt = datetime.now()
+		elapsed_secs = max(0, int((now_dt.timestamp() * 1000 - start_ms) / 1000)) if start_ms else 0
 		elapsed_hours = max(round(elapsed_secs / 3600.0, 2), 0.05)
+
+		start_dt = datetime.fromtimestamp(start_ms / 1000.0)
+		from_t = start_dt.strftime("%H:%M:%S")
+		to_t = now_dt.strftime("%H:%M:%S")
 
 		session_notes = notes or (active.get("trackerNotes") if active else None)
 		session_notes = _require_session_notes(session_notes)
 
 		target_block = block_name or (active.get("trackerBlockName") if active else None)
 		target_proj = project or (active.get("selectedProject") if active else None)
+		target_nature = nature or (active.get("selectedNature") if active else "🎯 Planned")
 
-		# Log the session
+		# Log the session with exact from_time and to_time so the Workstation renders the Logged bar
 		res = log_work_session(
 			hours=elapsed_hours,
+			from_time=from_t,
+			to_time=to_t,
 			block_name=target_block,
 			project=target_proj,
 			task=task,
 			notes=session_notes,
-			session_date=nowdate(),
+			session_date=target_date,
+			task_nature=target_nature,
 			logged_via="Stopwatch",
 			employee=user
 		)
@@ -1467,6 +1484,14 @@ class OmniTrackQuickTimerActionTool(BaseTool):
 				"nature": {
 					"type": "string",
 					"description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'."
+				},
+				"work_date": {
+					"type": "string",
+					"description": "Target work date (YYYY-MM-DD). Defaults to today."
+				},
+				"session_date": {
+					"type": "string",
+					"description": "Alias for work_date."
 				},
 				"employee": {
 					"type": "string",

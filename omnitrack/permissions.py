@@ -185,6 +185,25 @@ def check_timesheet_date_permission(session_date, user=None):
 	return True
 
 
+def check_approved_block_lock(doc, user=None):
+	"""
+	Rule: Once a Planned Work Block has been approved (approval_status == 'Approved'),
+	standard users cannot modify its sessions, deliverable notes, or delete it.
+	Only an OmniTrack Manager or Administrator can alter an approved block.
+	"""
+	if not user:
+		user = frappe.session.user
+	if is_omnitrack_manager(user):
+		return True
+
+	if doc and getattr(doc, "approval_status", None) == "Approved":
+		frappe.throw(
+			_("Approved work blocks are permanently locked against modifications. Contact an OmniTrack Manager for review."),
+			frappe.PermissionError
+		)
+	return True
+
+
 def check_planned_block_past_lock(doc, new_work_date=None):
 	"""
 	Rule: Work blocks older than the configured Past Lock Grace Period (Hours)

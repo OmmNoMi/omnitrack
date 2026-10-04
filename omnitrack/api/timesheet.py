@@ -106,7 +106,14 @@ def create_timesheet_from_work_block(block_name, force=False):
 					user_emp = frappe.db.get_value("Employee", {"prefered_contact_email": block.employee}, "name")
 		ts.employee = user_emp or block.employee
 		
-		company = frappe.db.get_single_value("Global Defaults", "default_company") if frappe.db.exists("DocType", "Global Defaults") else None
+		# Multi-company hierarchy: Project.company -> Employee.company -> Global Defaults.default_company
+		company = None
+		if project and frappe.db.exists("DocType", "Project"):
+			company = frappe.db.get_value("Project", project, "company")
+		if not company and user_emp and frappe.db.exists("DocType", "Employee"):
+			company = frappe.db.get_value("Employee", user_emp, "company")
+		if not company and frappe.db.exists("DocType", "Global Defaults"):
+			company = frappe.db.get_single_value("Global Defaults", "default_company")
 		if not company and frappe.db.exists("DocType", "Company"):
 			comps = frappe.get_all("Company", limit=1)
 			if comps:
@@ -447,8 +454,10 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to modify sessions on this work block."), frappe.PermissionError)
 
+	from omnitrack.permissions import check_approved_block_lock, check_timesheet_date_permission
+	check_approved_block_lock(doc, frappe.session.user)
+
 	base_date = session_date or doc.work_date or nowdate()
-	from omnitrack.permissions import check_timesheet_date_permission
 	check_timesheet_date_permission(base_date, frappe.session.user)
 
 	sess_row = None
@@ -528,7 +537,8 @@ def delete_work_session(session_name, block_name=None):
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to delete sessions on this work block."), frappe.PermissionError)
 
-	from omnitrack.permissions import check_session_deletion_permission, check_timesheet_date_permission
+	from omnitrack.permissions import check_approved_block_lock, check_session_deletion_permission, check_timesheet_date_permission
+	check_approved_block_lock(doc, frappe.session.user)
 	check_session_deletion_permission(frappe.session.user)
 
 	base_date = doc.work_date or nowdate()
@@ -670,6 +680,46 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		"sync_mode": sync_mode,
 		"total_approved_hours": round(total_hours, 2),
 		"approved_blocks": approved_list
+	}
+
+
+@frappe.whitelist()
+def flag_work_block(block_name, reason=None):
+	"""
+	Flags a Planned Work Block for review or corrections.
+	Only OmniTrack Managers, HR Managers, System Managers, or Administrators can flag a block.
+	Sets approval_status to 'Flagged' and records flagged_reason.
+	"""
+	approver = frappe.session.user
+	if not approver or approver == "Guest":
+		frappe.throw(_("Authentication required to flag work blocks."), frappe.PermissionError)
+
+	from omnitrack.permissions import is_omnitrack_manager
+	is_mgr = is_omnitrack_manager(approver) or any(
+		r in frappe.get_roles(approver) for r in ("HR Manager", "HR User", "System Manager", "Administrator")
+	)
+	if not is_mgr:
+		frappe.throw(_("Only HR or OmniTrack Managers can flag work blocks."), frappe.PermissionError)
+
+	if not block_name or not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block not found."))
+
+	b_doc = frappe.get_doc("Planned Work Block", block_name)
+	b_doc.approval_status = "Flagged"
+	b_doc.flagged_reason = reason or "Flagged by manager for clarification."
+	b_doc.approved_by = approver
+	b_doc.approval_date = now_datetime()
+	b_doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		b_doc.flags.ignore_links = True
+	b_doc.save()
+
+	return {
+		"status": "success",
+		"message": _("Work block {0} flagged for review.").format(block_name),
+		"name": b_doc.name,
+		"approval_status": b_doc.approval_status,
+		"flagged_reason": b_doc.flagged_reason,
 	}
 
 

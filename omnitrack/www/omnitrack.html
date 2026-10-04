@@ -2720,6 +2720,21 @@
             </div>
           </div>
           <div class="flex items-center gap-2.5 flex-wrap">
+            <!-- Horizon Filter Buttons (Day / Week / Month / All) -->
+            <div class="inline-flex items-center rounded-xl border p-0.5 shadow-xs" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700' : 'bg-white border-gray-300'" role="group" aria-label="Timesheet review horizon">
+              <f-button
+                v-for="hz in [['day', 'Today'], ['week', 'This Week'], ['month', 'This Month'], ['all', 'All Logs']]"
+                :key="hz[0]"
+                size="xs"
+                :variant="timesheetHorizon === hz[0] ? 'solid' : 'ghost'"
+                :theme="timesheetHorizon === hz[0] ? 'blue' : 'gray'"
+                @click="timesheetHorizon = hz[0]"
+                class="!text-xs font-semibold"
+              >
+                {{ hz[1] }}
+              </f-button>
+            </div>
+
             <!-- Member Filter Dropdown -->
             <f-dropdown-menu
               v-if="isManager"
@@ -2784,7 +2799,8 @@
                 <th class="py-3.5 px-4">Project</th>
                 <th class="py-3.5 px-4">Nature</th>
                 <th class="py-3.5 px-4">Duration</th>
-                <th class="py-3.5 px-4">Billing Status</th>
+                <th class="py-3.5 px-4">Approval Status</th>
+                <th class="py-3.5 px-4 text-right" v-if="isManager">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y" :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-200'">
@@ -2792,17 +2808,56 @@
                 <td class="py-3.5 px-4 font-mono font-semibold" :class="isDarkMode ? 'text-blue-400' : 'text-blue-600'">{{ b.name }}</td>
                 <td class="py-3.5 px-4" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">{{ b.work_date }}</td>
                 <td class="py-3.5 px-4 font-bold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ b.associate_name || b.employee }}</td>
-                <td class="py-3.5 px-4 max-w-xs truncate" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">{{ b.deliverable_notes || b.task_subject }}</td>
+                <td class="py-3.5 px-4 max-w-xs truncate" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
+                  <div>{{ b.deliverable_notes || b.task_subject }}</div>
+                  <div v-if="b.flagged_reason" class="text-[10px] text-amber-500 font-medium mt-0.5 truncate" :title="b.flagged_reason">
+                    🚩 Flag: {{ b.flagged_reason }}
+                  </div>
+                </td>
                 <td class="py-3.5 px-4 font-medium" :class="isDarkMode ? 'text-gray-300' : 'text-gray-600'">{{ b.project_name || 'General Work' }}</td>
                 <td class="py-3.5 px-4">
                   <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" :class="b.task_nature && b.task_nature.includes('Unplanned') ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'">
                     {{ b.task_nature || '🎯 Planned' }}
                   </span>
                 </td>
-                <td class="py-3.5 px-4 font-mono font-bold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ Number(b.duration_hours).toFixed(2) }} hrs</td>
+                <td class="py-3.5 px-4 font-mono font-bold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                  <div>{{ Number(b.actual_hours || b.duration_hours).toFixed(2) }} hrs</div>
+                  <div v-if="b.actual_hours && b.duration_hours" class="text-[10px] text-gray-400">plan: {{ Number(b.duration_hours).toFixed(2) }}h</div>
+                </td>
                 <td class="py-3.5 px-4">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" :class="b.billing_status === 'Fully Billed' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'">
-                    {{ b.billing_status || 'Unbilled' }}
+                  <span v-if="b.approval_status === 'Approved'" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    ✓ Approved
+                  </span>
+                  <span v-else-if="b.approval_status === 'Flagged'" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    🚩 Flagged
+                  </span>
+                  <span v-else class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    {{ b.approval_status || 'Draft' }}
+                  </span>
+                </td>
+                <td class="py-3.5 px-4 text-right" v-if="isManager">
+                  <div class="flex items-center justify-end gap-1.5" v-if="b.actual_hours > 0 && b.approval_status !== 'Approved'">
+                    <f-button
+                      variant="solid"
+                      theme="blue"
+                      size="xs"
+                      @click="quickApproveBlock(b)"
+                      title="Approve timesheet"
+                    >
+                      ✓ Approve
+                    </f-button>
+                    <f-button
+                      variant="outline"
+                      theme="gray"
+                      size="xs"
+                      @click="quickFlagBlock(b)"
+                      title="Flag for clarification"
+                    >
+                      🚩 Flag
+                    </f-button>
+                  </div>
+                  <span v-else-if="b.approval_status === 'Approved'" class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    Locked
                   </span>
                 </td>
               </tr>
@@ -3018,8 +3073,42 @@
 
         <!-- Left rail: assigned tasks (Frappe UI FCard) -->
         <f-card :padded="true" class="w-full flex flex-col space-y-2.5 !p-3.5 min-h-0 overflow-hidden max-h-[500px] lg:max-h-full lg:h-full lg:min-h-0 order-2 lg:order-1">
+          <!-- Teammate Switcher for Managers (Dynamically updates Assigned Work, Calendar, and Stats) -->
+          <div v-if="isManager" class="space-y-1 pb-2 border-b shrink-0" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'">
+            <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center justify-between">
+              <span>👤 Team Teammate</span>
+              <span class="text-blue-500 font-normal">Active Cockpit</span>
+            </label>
+            <f-dropdown-menu
+              :items="employeeMenuItems"
+              align="left"
+              class="w-full"
+              aria-label="Filter entire workspace by teammate"
+            >
+              <template #trigger="{ isOpen }">
+                <f-button
+                  variant="outline"
+                  theme="gray"
+                  size="sm"
+                  class="w-full !justify-between !text-xs font-semibold cursor-pointer"
+                  :aria-expanded="isOpen ? 'true' : 'false'"
+                >
+                  <span class="truncate flex items-center gap-1.5">
+                    <span>👤</span>
+                    <span>{{ selectedEmployee === 'All' ? 'All Team Members' : selectedEmployee }}</span>
+                  </span>
+                  <template #suffix>
+                    <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </template>
+                </f-button>
+              </template>
+            </f-dropdown-menu>
+          </div>
+
           <div class="flex items-center justify-between shrink-0">
-            <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">My Assigned Work</h3>
+            <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+              {{ isManager && selectedEmployee !== 'All' ? 'Assigned to ' + (selectedEmployee.split('@')[0]) : 'My Assigned Work' }}
+            </h3>
             <f-badge theme="gray" variant="subtle" size="xs">{{ filteredPlannerTasks.length }}</f-badge>
           </div>
           
@@ -3203,32 +3292,8 @@
 
             </div>
 
-            <!-- Right: Member Filter (Managers), Nature Filter & View Switcher (Day / 4 Days / Week) -->
+            <!-- Right: Nature Filter & View Switcher (Day / 4 Days / Week) -->
             <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
-              <!-- Team Member filter (Frappe UI FDropdownMenu, visible to managers/all) -->
-              <f-dropdown-menu
-                :items="employeeMenuItems"
-                align="right"
-                aria-label="Filter planner calendar by team member"
-              >
-                <template #trigger="{ isOpen }">
-                  <f-button
-                    variant="outline"
-                    theme="gray"
-                    size="sm"
-                    class="!text-xs font-semibold cursor-pointer flex items-center gap-1.5"
-                    :aria-expanded="isOpen ? 'true' : 'false'"
-                  >
-                    <template #prefix>
-                      <span>👤</span>
-                    </template>
-                    <span>{{ selectedEmployee === 'All' ? 'All Members' : selectedEmployee }}</span>
-                    <template #suffix>
-                      <svg class="w-3.5 h-3.5 opacity-60 ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </template>
-                  </f-button>
-                </template>
-              </f-dropdown-menu>
 
               <!-- Nature filter (Frappe UI FDropdownMenu) -->
               <f-dropdown-menu :items="plannerNatureMenuItems" align="right" :aria-label="'Filter calendar events by nature: ' + natureFilterLabel">
@@ -3403,7 +3468,7 @@
                       </div>
                     </div>
                     <!-- timed blocks with smart overlapping sub-lanes and midnight continuation -->
-                    <button type="button" v-for="seg in timedSegmentsForDay(d)" :key="seg.key"
+                    <div role="button" tabindex="0" v-for="seg in timedSegmentsForDay(d)" :key="seg.key"
                       @pointerdown="startBlockDrag($event, seg.block, 'move')"
                       @click.stop="onBlockClick(seg.block)"
                       @keydown.enter.prevent="openBlockDrawer(seg.block)"
@@ -3427,15 +3492,52 @@
                         class="absolute left-0 right-0 bottom-0 pointer-events-none rounded-b-lg bg-red-500/25 border-t-2 border-red-500"
                         :style="{ height: Math.min(100, Math.max(8, ((trackerSeconds / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
                         :title="'Live Recording: ' + formattedTime + ' elapsed'"></div>
-                      <div class="relative text-[10px] font-bold leading-tight truncate flex items-center gap-1">
-                        <span v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)" class="inline-flex items-center gap-1 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-red-600 text-white shrink-0 shadow-xs animate-pulse">
-                          <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                          <span>REC {{ formattedTime }}</span>
-                        </span>
-                        <span v-if="seg.is_segment && seg.segment_type === 'head'" class="text-[9px] opacity-75 font-normal mr-1">↩ (cont.)</span>
-                        <span class="truncate">{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}</span>
-                        <span v-if="seg.block.pairing_partner" class="text-[9px] px-1 py-0.2 rounded bg-purple-500/30 text-purple-100 border border-purple-400/40 shrink-0 font-normal" :title="'Paired with ' + (seg.block.pairing_partner_name || seg.block.pairing_partner)">👥</span>
-                        <span v-if="seg.is_segment && seg.segment_type === 'tail'" class="text-[9px] opacity-75 font-normal ml-1">↪</span>
+                      <div class="relative text-[10px] font-bold leading-tight flex items-center justify-between gap-1">
+                        <div class="truncate flex items-center gap-1 min-w-0">
+                          <span v-if="isTracking && (trackerBlockName === seg.block.name || seg.block.is_live_active)" class="inline-flex items-center gap-1 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-red-600 text-white shrink-0 shadow-xs animate-pulse">
+                            <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                            <span>REC {{ formattedTime }}</span>
+                          </span>
+                          <span v-if="seg.is_segment && seg.segment_type === 'head'" class="text-[9px] opacity-75 font-normal mr-1">↩ (cont.)</span>
+                          <span class="truncate">{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}</span>
+                          <span v-if="seg.block.pairing_partner" class="text-[9px] px-1 py-0.2 rounded bg-purple-500/30 text-purple-100 border border-purple-400/40 shrink-0 font-normal" :title="'Paired with ' + (seg.block.pairing_partner_name || seg.block.pairing_partner)">👥</span>
+                          <span v-if="seg.is_segment && seg.segment_type === 'tail'" class="text-[9px] opacity-75 font-normal ml-1">↪</span>
+                        </div>
+
+                        <!-- In-Calendar Approval & Governance Controls for Reporting Officer / Manager -->
+                        <div class="flex items-center gap-1 shrink-0 z-30" v-if="isManager && (seg.block.actual_hours > 0 || seg.block.approval_status === 'Approved' || seg.block.approval_status === 'Flagged')">
+                          <!-- Approved Lock Badge -->
+                          <span v-if="seg.block.approval_status === 'Approved'"
+                            class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-black bg-emerald-600 text-white shadow-xs"
+                            title="Approved & Locked by Reporting Officer">
+                            ✓
+                          </span>
+                          <!-- Flagged Indicator Badge -->
+                          <button v-else-if="seg.block.approval_status === 'Flagged'"
+                            type="button"
+                            @click.stop="quickFlagBlock(seg.block)"
+                            class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500 text-black hover:bg-amber-400 cursor-pointer shadow-xs"
+                            title="Flagged for clarification. Click to re-flag or inspect notes.">
+                            🚩
+                          </button>
+                          <!-- Pending Quick Actions: Approve (✓) or Flag (🚩) -->
+                          <template v-else>
+                            <button
+                              type="button"
+                              @click.stop="quickApproveBlock(seg.block)"
+                              class="inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-[10px] shadow-xs cursor-pointer transition-transform"
+                              title="One-click Approve & Lock timesheet">
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              @click.stop="quickFlagBlock(seg.block)"
+                              class="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-[9px] shadow-xs cursor-pointer transition-transform"
+                              title="Flag for clarification">
+                              🚩
+                            </button>
+                          </template>
+                        </div>
                       </div>
                       <div class="relative text-[9px] opacity-80">{{ dragTimeLabel(seg) }}</div>
                       <div class="relative text-[9px] opacity-80" v-if="segHeight(seg) > 44">
@@ -3453,7 +3555,7 @@
                       <div v-if="!isBlockLocked(seg.block)" @pointerdown.stop="startBlockDrag($event, seg.block, 'resize')"
                         class="absolute left-0 right-0 bottom-0 h-2 cursor-ns-resize" aria-hidden="true"
                         title="Drag to change the end time"></div>
-                    </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3599,6 +3701,21 @@
           {{ m[1] }}
         </button>
       </div>
+      <!-- Assign To Employee (Managers / Reporting Officers) -->
+      <div v-if="isManager" class="block space-y-1">
+        <label class="text-[11px] font-bold text-gray-500 flex items-center justify-between">
+          <span>👤 Assign To Employee</span>
+          <span class="text-[10px] font-normal text-blue-500">Direct Manager Scheduling</span>
+        </label>
+        <f-combobox
+          v-model="bookForm.assigned_employee"
+          :options="comboboxAssigneeOptions"
+          placeholder="— Assign to Myself —"
+          search-placeholder="Search teammate..."
+          aria-label="Assign to Employee"
+        ></f-combobox>
+      </div>
+
       <div v-if="bookForm.mode === 'work'" class="block space-y-1">
         <label class="text-[11px] font-bold text-gray-500">Task / work item</label>
         <f-combobox
@@ -7223,6 +7340,7 @@
       const filterNature = ref('');
       const filterEmployee = ref('');
       const filterStatus = ref('');
+      const timesheetHorizon = ref('week'); // 'day', 'week', 'month', 'all'
       const todayDate = ref(getLocalTodayISO());
 
       // 4. Data Stores
@@ -7812,6 +7930,29 @@
 
           if (filterStatus.value && b.status !== filterStatus.value) {
             return false;
+          }
+
+          // Timesheet Horizon Review Filter (Day / Week / Month / All)
+          if (timesheetHorizon.value && timesheetHorizon.value !== 'all' && b.work_date) {
+            const todayStr = getLocalTodayISO();
+            if (timesheetHorizon.value === 'day') {
+              if (b.work_date !== todayStr) return false;
+            } else if (timesheetHorizon.value === 'week') {
+              // Current week (Monday to Sunday)
+              const nowD = new Date();
+              const dayOfWeek = (nowD.getDay() + 6) % 7; // Monday = 0
+              const mondayD = new Date(nowD);
+              mondayD.setDate(nowD.getDate() - dayOfWeek);
+              const sundayD = new Date(mondayD);
+              sundayD.setDate(mondayD.getDate() + 6);
+              const mStr = mondayD.toISOString().split('T')[0];
+              const sStr = sundayD.toISOString().split('T')[0];
+              if (b.work_date < mStr || b.work_date > sStr) return false;
+            } else if (timesheetHorizon.value === 'month') {
+              // Current calendar month YYYY-MM
+              const ym = todayStr.substring(0, 7);
+              if (!b.work_date.startsWith(ym)) return false;
+            }
           }
 
           return true;
@@ -10757,7 +10898,7 @@
         totals: { planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, block_count: 0 }
       });
       const showBookModal = ref(false);
-      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '', pairing_partner: '' });
+      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '', pairing_partner: '', assigned_employee: '' });
       const comboboxPairingPartnerOptions = computed(() => {
         const curr = currentUser.value || '';
         return (teamMembers.value || [])
@@ -11679,6 +11820,7 @@
 
       const openBookModalRange = (iso, startMin, endMin) => {
         if (_rejectPast(iso, endMin)) return;
+        const defaultAssignee = (isManager.value && selectedEmployee.value && selectedEmployee.value !== 'All') ? selectedEmployee.value : '';
         bookForm.value = {
           mode: 'work',
           work_item: pickedTask.value ? pickedTask.value.ref : '',
@@ -11686,7 +11828,8 @@
           start_time: _minToHHMM(startMin),
           end_time: _minToHHMM(endMin),
           deliverable_notes: '',
-          pairing_partner: ''
+          pairing_partner: '',
+          assigned_employee: defaultAssignee
         };
         showBookModal.value = true;
       };
@@ -11695,6 +11838,7 @@
         if (Date.now() - _slotSelEndedAt < 300) return; // a range drag just ended
         if (_rejectPast(iso, (hour + 1) * 60)) return;
         const hh = String(hour).padStart(2, '0');
+        const defaultAssignee = (isManager.value && selectedEmployee.value && selectedEmployee.value !== 'All') ? selectedEmployee.value : '';
         bookForm.value = {
           mode: 'work',
           work_item: pickedTask.value ? pickedTask.value.ref : '',
@@ -11702,7 +11846,8 @@
           start_time: hh + ':00',
           end_time: String(Math.min(23, hour + 1)).padStart(2, '0') + ':00',
           deliverable_notes: '',
-          pairing_partner: ''
+          pairing_partner: '',
+          assigned_employee: defaultAssignee
         };
         showBookModal.value = true;
       };
@@ -11716,6 +11861,7 @@
         plannerBusy.value = true;
         try {
           const picked = isAway ? null : (plannerData.value.assigned_tasks || []).find(t => t.ref === bookForm.value.work_item);
+          const targetEmp = (isManager.value && bookForm.value.assigned_employee) ? bookForm.value.assigned_employee : (selectedEmployee.value !== 'All' ? selectedEmployee.value : null);
           await postJSON('book_work_block', {
             work_date: bookForm.value.work_date,
             start_time: isAway ? '09:00' : bookForm.value.start_time,
@@ -11726,7 +11872,8 @@
             work_item_label: picked ? picked.subject : (isAway ? bookForm.value.mode : null),
             task_nature: isAway ? bookForm.value.mode : '🎯 Planned',
             deliverable_notes: bookForm.value.deliverable_notes || (isAway ? bookForm.value.mode : null),
-            pairing_partner: isAway ? null : (bookForm.value.pairing_partner || null)
+            pairing_partner: isAway ? null : (bookForm.value.pairing_partner || null),
+            employee: targetEmp
           });
           showBookModal.value = false;
           pickedTask.value = null;
@@ -12480,8 +12627,49 @@
           showToast(`Approved work block for ${b.associate_name || b.employee}`, 'success');
           await fetchPendingApprovals();
           await fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') await fetchPlannerData();
         } catch (e) {
           showToast('Failed to approve work block: ' + (e && e.message || e), 'danger');
+        } finally {
+          loadingApprovals.value = false;
+        }
+      };
+
+      const quickApproveBlock = async (b) => {
+        if (!b || !b.name) return;
+        loadingApprovals.value = true;
+        try {
+          await postJSON('approve_work_blocks', {
+            block_names: [b.name]
+          });
+          showToast(`✓ Approved & locked block ${b.name}`, 'success');
+          await fetchPendingApprovals();
+          await fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+        } catch (e) {
+          showToast('Failed to approve block: ' + (e && e.message || e), 'danger');
+        } finally {
+          loadingApprovals.value = false;
+        }
+      };
+
+      const quickFlagBlock = async (b) => {
+        if (!b || !b.name) return;
+        const currentReason = b.flagged_reason || '';
+        const reason = window.prompt('Specify clarification reason or action required for this work block:', currentReason || 'Please provide client ticket reference and commit deliverables.');
+        if (reason === null) return; // user cancelled prompt
+        loadingApprovals.value = true;
+        try {
+          await postJSON('flag_work_block', {
+            block_name: b.name,
+            reason: reason.trim()
+          });
+          showToast(`🚩 Flagged block ${b.name} for clarification`, 'warning');
+          await fetchPendingApprovals();
+          await fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+        } catch (e) {
+          showToast('Failed to flag block: ' + (e && e.message || e), 'danger');
         } finally {
           loadingApprovals.value = false;
         }
@@ -12498,6 +12686,7 @@
           showToast(`Approved ${names.length} team work block(s)`, 'success');
           await fetchPendingApprovals();
           await fetchWorkstationData(selectedEmployee.value);
+          if (typeof fetchPlannerData === 'function') await fetchPlannerData();
         } catch (e) {
           showToast('Failed to approve blocks: ' + (e && e.message || e), 'danger');
         } finally {
@@ -13068,6 +13257,9 @@
         fetchPendingApprovals,
         approveWorkBlockSingle,
         approveAllPending,
+        quickApproveBlock,
+        quickFlagBlock,
+        timesheetHorizon,
         formatTaskTime,
         toggleTaskDone,
         submitAttachTasks,

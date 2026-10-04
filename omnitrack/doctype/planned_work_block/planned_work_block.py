@@ -5,8 +5,25 @@ from frappe.utils import time_diff_in_hours
 
 class PlannedWorkBlock(Document):
 	def validate(self):
+		self.check_approved_lock()
 		self.calculate_duration()
 		self.generate_cryptographic_hash()
+
+	def on_trash(self):
+		self.check_approved_lock()
+
+	def check_approved_lock(self):
+		if getattr(self.flags, "ignore_permissions", False):
+			return
+		if not self.is_new():
+			old_doc = self.get_doc_before_save()
+			if old_doc and old_doc.approval_status == "Approved":
+				from omnitrack.permissions import is_omnitrack_manager
+				if not is_omnitrack_manager(frappe.session.user):
+					frappe.throw(
+						frappe._("Approved work blocks are permanently locked against modifications. Contact an OmniTrack Manager for review."),
+						frappe.PermissionError
+					)
 
 	def calculate_duration(self):
 		if self.start_time and self.end_time:
