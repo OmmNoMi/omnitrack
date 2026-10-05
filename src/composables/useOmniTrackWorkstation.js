@@ -8,6 +8,8 @@ import { useWorkstationTimeline } from "./useWorkstationTimeline.js";
 import { useWorkstationAudioSync } from "./useWorkstationAudioSync.js";
 import { useWorkstationSessionSync } from "./useWorkstationSessionSync.js";
 import { useWorkstationSessionModals } from "./useWorkstationSessionModals.js";
+import { useWorkstationPlannerLayout } from "./useWorkstationPlannerLayout.js";
+import { useWorkstationCardStyles } from "./useWorkstationCardStyles.js";
 
 const { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -2540,80 +2542,6 @@ export function useOmniTrackWorkstation() {
       // ============================================
       // PLANNER — Calendar work-block self-booking
       // ============================================
-      const PLANNER_HOUR_PX = 44;
-      const plannerGridScroll = ref(null);
-      const scrollPlannerToMorning = () => {
-        nextTick(() => {
-          if (!plannerGridScroll.value) return;
-          const isToday = plannerAnchor.value === todayISO();
-          if (isToday && nowMinute.value !== undefined) {
-            const boxH = plannerGridScroll.value.clientHeight || (6 * PLANNER_HOUR_PX);
-            const nowY = (nowMinute.value / 60) * PLANNER_HOUR_PX;
-            plannerGridScroll.value.scrollTop = Math.max(0, nowY - (boxH / 2));
-          } else {
-            plannerGridScroll.value.scrollTop = 7 * PLANNER_HOUR_PX;
-          }
-        });
-      };
-      // Responsive Density: Mobile (<640px) -> Day, Mid-size (640-1024px) -> 4 Days, Desktop (>=1024px) -> Week
-      const userCustomizedPlannerView = ref(false);
-      const getDeviceDefaultPlannerView = () => {
-        if (typeof window === 'undefined') return 'week';
-        const w = window.innerWidth;
-        if (w < 640) return 'day';
-        if (w < 1024) return '4days';
-        return 'week';
-      };
-      const plannerView = ref(getDeviceDefaultPlannerView());
-      const setUserPlannerView = (v) => {
-        userCustomizedPlannerView.value = true;
-        plannerView.value = v;
-      };
-      const handleResize = () => {
-        if (!userCustomizedPlannerView.value) {
-          const defaultView = getDeviceDefaultPlannerView();
-          if (plannerView.value !== defaultView) {
-            plannerView.value = defaultView;
-          }
-        }
-      };
-      const plannerNatureOptions = ['🎯 Planned', '⚠️ Unplanned', '🔄 Review & Sync', '☕ Break', '🚫 Out-of-Office', '🌴 Leave', '🤒 Absent'];
-      const showNatureFilter = ref(false);
-      const natureFilter = ref([]); // empty = show all
-      const natureFilterLabel = computed(() =>
-        natureFilter.value.length === 0 ? 'All types'
-          : natureFilter.value.length === 1 ? natureFilter.value[0]
-          : natureFilter.value.length + ' types');
-      const plannerNatureMenuItems = computed(() => {
-        const items = [
-          {
-            label: 'All types',
-            badge: natureFilter.value.length === 0 ? '✓' : '',
-            action: 'all',
-            onClick: () => setNatureFilter('all')
-          },
-          {
-            label: '── Filter by Nature ──',
-            disabled: true
-          }
-        ];
-        plannerNatureOptions.forEach((n) => {
-          items.push({
-            label: n,
-            badge: natureFilter.value.includes(n) ? '✓' : '',
-            action: n,
-            keepOpen: true,
-            onClick: () => toggleNatureFilter(n)
-          });
-        });
-        return items;
-      });
-      const setNatureFilter = (v) => { if (v === 'all') natureFilter.value = []; showNatureFilter.value = false; };
-      const toggleNatureFilter = (n) => {
-        const i = natureFilter.value.indexOf(n);
-        if (i >= 0) natureFilter.value.splice(i, 1); else natureFilter.value.push(n);
-      };
-      const _blockNature = (b) => (b.task_nature && b.task_nature.trim()) ? b.task_nature.trim() : '🎯 Planned';
       const plannerAnchor = ref('');
       const plannerBusy = ref(false);
       const pickedTask = ref(null);
@@ -2621,6 +2549,126 @@ export function useOmniTrackWorkstation() {
         week_start: '', week_end: '', days: [], blocks: [], assigned_tasks: [],
         totals: { planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, block_count: 0 }
       });
+      const plannerDrag = ref(null);
+      const slotSel = ref(null);
+
+      const fmtHrs = (n) => {
+        const v = Math.round((parseFloat(n) || 0) * 100) / 100;
+        return (Math.abs(v % 1) < 0.005) ? String(Math.round(v)) : v.toFixed(2).replace(/0$/, '');
+      };
+      const _mins = (t) => {
+        if (!t) return 0;
+        const p = String(t).split(':');
+        return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+      };
+      const hhmm = (t) => {
+        if (!t) return '';
+        const p = String(t).split(':');
+        const h = parseInt(p[0], 10);
+        if (Number.isNaN(h)) return '';
+        const m = parseInt(p[1], 10) || 0;
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+      };
+      const _utc = (iso) => _utcDate(iso);
+      const _iso = (dt) => getLocalTodayISO(dt);
+      plannerAnchor.value = todayISO();
+
+      const cardStylesStore = useWorkstationCardStyles({
+        isDarkMode,
+        isTracking,
+        trackerBlockName,
+        todayDate,
+        todayISO,
+        nowMinute,
+        _mins,
+        hhmm,
+        isNonWorkingNature
+      });
+      const {
+        PROJECT_HUES,
+        projectHue,
+        blockVisualState,
+        blockClass,
+        timelinePlannedStyle,
+        timelineLoggedStyle,
+        blockStyle,
+        segTimeTitle
+      } = cardStylesStore;
+
+      const plannerLayoutStore = useWorkstationPlannerLayout({
+        plannerData,
+        plannerAnchor,
+        todayDate,
+        todayISO,
+        getLocalTodayISO,
+        addDays,
+        _utcDate,
+        _mins,
+        _minToHHMM,
+        nowMinute,
+        isTracking,
+        startTime,
+        trackerBlockName,
+        trackerNotes,
+        trackerSeconds,
+        selectedNature,
+        selectedProject,
+        plannerDrag,
+        slotSel,
+        plannerShift: (dir) => plannerShift(dir),
+        blockStyle
+      });
+      const {
+        PLANNER_HOUR_PX,
+        plannerGridScroll,
+        scrollPlannerToMorning,
+        userCustomizedPlannerView,
+        getDeviceDefaultPlannerView,
+        plannerView,
+        setUserPlannerView,
+        handleResize,
+        plannerNatureOptions,
+        showNatureFilter,
+        natureFilter,
+        natureFilterLabel,
+        plannerNatureMenuItems,
+        setNatureFilter,
+        toggleNatureFilter,
+        _blockNature,
+        plannerRange,
+        plannerHours,
+        plannerDays,
+        plannerRangeLabel,
+        dowLabel,
+        domLabel,
+        hourLabel,
+        mondayOf,
+        awayBlocksForDay,
+        hasAwayBlocksInView,
+        timedSegmentsForDay,
+        blocksForDay,
+        _gridBottomPx,
+        blockTop,
+        blockHeight,
+        segTop,
+        segHeight,
+        segStyle,
+        startNowClock,
+        nowLineTop,
+        nowLineLabel,
+        isTodayCol,
+        plannerViewOrder,
+        onPlannerViewKey,
+        officeStart,
+        officeEnd,
+        officeBandStyle,
+        onPlannerTouchStart,
+        onPlannerTouchEnd,
+        officeMarks,
+        isPastCol,
+        pastShadeStyle
+      } = plannerLayoutStore;
+
       const getDateOffsetISO = (offsetDays) => {
         const d = new Date();
         d.setDate(d.getDate() + offsetDays);
@@ -2652,389 +2700,8 @@ export function useOmniTrackWorkstation() {
       const showBlockManualLog = ref(false);
       const sessionForm = ref({ session_date: '', from_time: '', to_time: '', hours: '', notes: '' });
 
-      const fmtHrs = (n) => {
-        const v = Math.round((parseFloat(n) || 0) * 100) / 100;
-        return (Math.abs(v % 1) < 0.005) ? String(Math.round(v)) : v.toFixed(2).replace(/0$/, '');
-      };
-      const _mins = (t) => {
-        if (!t) return 0;
-        const p = String(t).split(':');
-        return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
-      };
-      // Times can arrive unpadded from the stopwatch path (e.g. "7:30:55"), so parse
-      // the parts rather than slicing the first 5 chars (which left a dangling colon).
-      const hhmm = (t) => {
-        if (!t) return '';
-        const p = String(t).split(':');
-        const h = parseInt(p[0], 10);
-        if (Number.isNaN(h)) return '';
-        const m = parseInt(p[1], 10) || 0;
-        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-      };
-      const _utc = (iso) => _utcDate(iso);
-      const _iso = (dt) => getLocalTodayISO(dt);
-      const mondayOf = (iso) => { const dow = (_utc(iso).getUTCDay() + 6) % 7; return addDays(iso, -dow); };
-      plannerAnchor.value = todayISO();
 
-      // Visible hour window: always the full day, 12a–11p.
-      const plannerRange = computed(() => ({ lo: 0, hi: 24 }));
-      const plannerHours = computed(() => {
-        const arr = [];
-        for (let h = plannerRange.value.lo; h < plannerRange.value.hi; h++) arr.push(h);
-        return arr;
-      });
-      const plannerDays = computed(() => {
-        if (plannerView.value === 'day') return [plannerAnchor.value];
-        // 4 Days view: Today is on the 2nd day (index 1), with Yesterday (index 0), Tomorrow (index 2), and Day-After-Tomorrow (index 3)
-        if (plannerView.value === '4days') return Array.from({ length: 4 }, (_, i) => addDays(plannerAnchor.value, i - 1));
-        // Rolling 7-Day Week view: Today is on the 3rd day (index 2), with 2 days of past context (indices 0-1) and 4 days ahead (indices 3-6)
-        return Array.from({ length: 7 }, (_, i) => addDays(plannerAnchor.value, i - 2));
-      });
-      const plannerRangeLabel = computed(() => {
-        const opts = { month: 'short', day: 'numeric', timeZone: 'UTC' };
-        if (plannerView.value === 'day') return _utc(plannerAnchor.value).toLocaleDateString(undefined, { weekday: 'long', ...opts });
-        const d = plannerDays.value;
-        if (plannerView.value === '4days') {
-          return _utc(d[0]).toLocaleDateString(undefined, opts) + ' – ' + _utc(d[3] || d[d.length - 1]).toLocaleDateString(undefined, opts);
-        }
-        return _utc(d[0]).toLocaleDateString(undefined, opts) + ' – ' + _utc(d[6] || d[d.length - 1]).toLocaleDateString(undefined, opts);
-      });
-      const dowLabel = (iso) => _utc(iso).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
-      const domLabel = (iso) => _utc(iso).getUTCDate();
-      const hourLabel = (h) => (h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p');
 
-      // Away blocks for all-day row
-      const awayBlocksForDay = (iso) => (plannerData.value.blocks || []).filter(b =>
-        b.work_date === iso && b.is_away &&
-        (natureFilter.value.length === 0 || natureFilter.value.includes(_blockNature(b))));
-
-      const hasAwayBlocksInView = computed(() =>
-        plannerDays.value.some(d => awayBlocksForDay(d).length > 0)
-      );
-
-      // Timed segments for day with midnight split and overlapping sub-lane packing
-      const timedSegmentsForDay = (iso) => {
-        const blocks = plannerData.value.blocks || [];
-        const segments = [];
-
-        for (const b of blocks) {
-          if (b.is_away) continue;
-          if (natureFilter.value.length > 0 && !natureFilter.value.includes(_blockNature(b))) continue;
-
-          const sMins = _mins(b.start_time);
-          const eMins = _mins(b.end_time);
-          const crossesMidnight = eMins < sMins;
-
-          if (b.work_date === iso) {
-            if (crossesMidnight) {
-              segments.push({
-                key: b.name + '_tail',
-                name: b.name,
-                is_segment: true,
-                segment_type: 'tail',
-                start_mins: sMins,
-                end_mins: 1440,
-                block: b
-              });
-            } else {
-              let end = eMins;
-              if (end <= sMins) end = sMins + (parseFloat(b.duration_hours) || 1) * 60;
-              segments.push({
-                key: b.name,
-                name: b.name,
-                is_segment: false,
-                segment_type: 'full',
-                start_mins: sMins,
-                end_mins: Math.max(sMins + 15, end),
-                block: b
-              });
-            }
-          } else if (addDays(b.work_date, 1) === iso && crossesMidnight) {
-            segments.push({
-              key: b.name + '_head',
-              name: b.name,
-              is_segment: true,
-              segment_type: 'head',
-              start_mins: 0,
-              end_mins: Math.max(15, eMins),
-              block: b
-            });
-          }
-        }
-
-        if (iso === (todayDate.value || todayISO()) && isTracking.value && startTime.value) {
-          const isBoundToExistingSeg = trackerBlockName.value && segments.some(s => s.block && s.block.name === trackerBlockName.value);
-          if (!isBoundToExistingSeg) {
-            const d = new Date(startTime.value);
-            const startISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            if (startISO === iso) {
-              const sMins = d.getHours() * 60 + d.getMinutes();
-              const curNow = new Date();
-              const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
-              const eMins = Math.max(sMins + 15, curNowMins);
-              const liveBlock = {
-              name: trackerBlockName.value || 'live_active_session',
-              is_live_active: true,
-              task_subject: trackerNotes.value || 'Active Work Session',
-              work_item_label: trackerNotes.value || 'Active Work Session',
-              deliverable_notes: trackerNotes.value || 'Active Running Session',
-              start_time: _minToHHMM(sMins),
-              end_time: _minToHHMM(eMins),
-              duration_hours: ((eMins - sMins) / 60).toFixed(2),
-              actual_hours: (trackerSeconds.value / 3600).toFixed(2),
-              task_nature: selectedNature.value || '🎯 Planned',
-              project: selectedProject.value || '',
-              status: 'In Progress'
-            };
-            segments.push({
-              key: 'live_active_session_seg',
-              name: liveBlock.name,
-              is_segment: false,
-              segment_type: 'full',
-              start_mins: sMins,
-              end_mins: eMins,
-              block: liveBlock
-            });
-            }
-          }
-        }
-
-        if (!segments.length) return [];
-
-        segments.sort((a, b) => a.start_mins - b.start_mins || (b.end_mins - b.start_mins) - (a.end_mins - a.start_mins));
-
-        const clusters = [];
-        let curCluster = [segments[0]];
-        let clusterEnd = segments[0].end_mins;
-
-        for (let i = 1; i < segments.length; i++) {
-          const seg = segments[i];
-          if (seg.start_mins < clusterEnd) {
-            curCluster.push(seg);
-            clusterEnd = Math.max(clusterEnd, seg.end_mins);
-          } else {
-            clusters.push(curCluster);
-            curCluster = [seg];
-            clusterEnd = seg.end_mins;
-          }
-        }
-        if (curCluster.length) clusters.push(curCluster);
-
-        for (const cluster of clusters) {
-          const laneEnds = [];
-          for (const seg of cluster) {
-            let placed = false;
-            for (let l = 0; l < laneEnds.length; l++) {
-              if (laneEnds[l] <= seg.start_mins) {
-                seg.laneIdx = l;
-                laneEnds[l] = seg.end_mins;
-                placed = true;
-                break;
-              }
-            }
-            if (!placed) {
-              seg.laneIdx = laneEnds.length;
-              laneEnds.push(seg.end_mins);
-            }
-          }
-          const totalLanes = Math.max(1, laneEnds.length);
-          for (const seg of cluster) {
-            seg.totalLanes = totalLanes;
-          }
-        }
-
-        return segments;
-      };
-
-      const blocksForDay = (iso) => (plannerData.value.blocks || []).filter(b =>
-        b.work_date === iso &&
-        (natureFilter.value.length === 0 || natureFilter.value.includes(_blockNature(b))));
-      const _gridBottomPx = () => plannerHours.value.length * PLANNER_HOUR_PX;
-      const blockTop = (b) => {
-        const px = (_mins(b.start_time) - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
-        return Math.min(Math.max(0, px), Math.max(0, _gridBottomPx() - 22));
-      };
-      const blockHeight = (b) => {
-        let dur = _mins(b.end_time) - _mins(b.start_time);
-        if (dur <= 0) dur = (parseFloat(b.duration_hours) || 1) * 60; // crosses midnight / no end
-        const px = Math.max(22, dur / 60 * PLANNER_HOUR_PX);
-        return Math.min(px, Math.max(22, _gridBottomPx() - blockTop(b))); // never overflow the grid
-      };
-
-      const segTop = (seg) => {
-        const px = (seg.start_mins - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
-        return Math.min(Math.max(0, px), Math.max(0, _gridBottomPx() - 22));
-      };
-      const segHeight = (seg) => {
-        const dur = Math.max(15, seg.end_mins - seg.start_mins);
-        const px = Math.max(22, dur / 60 * PLANNER_HOUR_PX);
-        return Math.min(px, Math.max(22, _gridBottomPx() - segTop(seg)));
-      };
-      const segStyle = (seg) => {
-        const d = plannerDrag.value;
-        const b = seg.block;
-        const totalLanes = seg.totalLanes || 1;
-        const laneIdx = seg.laneIdx || 0;
-        const baseLeft = (laneIdx * 100 / totalLanes);
-        const baseWidth = (100 / totalLanes);
-
-        if (d && d.name === b.name && d.moved) {
-          const top = (d.curStart - plannerRange.value.lo * 60) / 60 * PLANNER_HOUR_PX;
-          const h = Math.max(22, (d.curEnd - d.curStart) / 60 * PLANNER_HOUR_PX);
-          return Object.assign(blockStyle(b), {
-            top: top + 'px',
-            height: h + 'px',
-            left: '2px',
-            width: 'calc(100% - 4px)',
-            zIndex: 40,
-            opacity: '0.92',
-            boxShadow: '0 8px 24px rgba(0,0,0,.3)'
-          });
-        }
-        return Object.assign(blockStyle(b), {
-          top: segTop(seg) + 'px',
-          height: segHeight(seg) + 'px',
-          left: 'calc(' + baseLeft + '% + 2px)',
-          width: 'calc(' + baseWidth + '% - 4px)'
-        });
-      };
-      const segTimeTitle = (seg) => {
-        if (!seg) return '';
-        if (seg.from_time && seg.to_time) return hhmm(seg.from_time) + '–' + hhmm(seg.to_time);
-        const b = seg.block || seg;
-        if (seg.is_segment) {
-          if (seg.segment_type === 'tail') return hhmm(b.start_time) + '–24:00 (spans midnight)';
-          if (seg.segment_type === 'head') return '00:00–' + hhmm(b.end_time) + ' (cont. from yesterday)';
-        }
-        return hhmm(b.start_time) + '–' + hhmm(b.end_time);
-      };
-
-      // ---- Block visual language ------------------------------------------------
-      // Non-working  → dotted border, very light fill (never project-coloured).
-      // Planned      → light project tint + solid project border.
-      // Logged/done  → solid dark project colour.
-      // Past, never logged → project-tinted diagonal hatch (the plan was not followed).
-      const PROJECT_HUES = [217, 262, 155, 24, 340, 187, 47, 291, 0, 120];
-      const projectHue = (b) => {
-        const key = String((b && (b.project || b.project_name)) || 'ad-hoc');
-        let hash = 0;
-        for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-        return PROJECT_HUES[Math.abs(hash) % PROJECT_HUES.length];
-      };
-      const blockVisualState = (b) => {
-        if (!b) return 'planned';
-        if (b.status === 'Cancelled') return 'cancelled';
-        if (b.status === 'Rescheduled') return 'rescheduled';
-        if (b.is_away || isNonWorkingNature(b.task_nature)) return 'away';
-        if (b.is_live_active || (isTracking.value && trackerBlockName.value === b.name)) return 'recording';
-        if (b.status === 'Logged (Partial)') return 'partial';
-        if (b.status === 'Logged (Over)') return 'over';
-        const logged = parseFloat(b.actual_hours) || 0;
-        if (b.status === 'Completed' || b.status === 'Logged (Full)' || logged > 0) return 'logged';
-        const today = todayDate.value || todayISO();
-        const date = b.work_date || '';
-        if (b.status === 'Missed' || (date && date < today)) return 'missed';
-        if (date === today) {
-          const endMin = _mins(b.end_time);
-          if (endMin > 0 && nowMinute.value >= endMin) return 'missed';
-        }
-        return 'planned';
-      };
-      // Structural classes only — the colour itself comes from blockStyle() so an
-      // arbitrary project hue never depends on a Tailwind class existing.
-      const blockClass = (b) => {
-        const st = blockVisualState(b);
-        if (st === 'cancelled') return 'border-dotted line-through ' + (isDarkMode.value ? 'text-gray-500' : 'text-gray-400');
-        if (st === 'rescheduled') return 'border-dashed ' + (isDarkMode.value ? 'text-gray-400 opacity-75' : 'text-gray-600 opacity-80');
-        if (st === 'away') return 'border-dotted border-2';
-        if (st === 'recording') return 'border-solid text-white ring-2 ring-red-500 ring-offset-1 z-20 shadow-md';
-        if (st === 'logged' || st === 'over' || st === 'partial') return 'border-solid text-white';
-        if (st === 'missed') return 'border-solid border-dashed';
-        return 'border-solid';
-      };
-      // Day at a glance borrows the planner grid's colour language: the hue says
-      // which project, the treatment says which lane. A hollow tinted bar is what
-      // was planned; the solid bar beneath it is what was actually logged against
-      // that same project, so a short or missing session is visible as bare outline.
-      const timelinePlannedStyle = (b) => {
-        const h = projectHue(b);
-        return isDarkMode.value
-          ? { background: `hsl(${h} 45% 18% / .75)`, borderColor: `hsl(${h} 45% 42%)`, color: `hsl(${h} 70% 82%)` }
-          : { background: `hsl(${h} 85% 96%)`, borderColor: `hsl(${h} 60% 68%)`, color: `hsl(${h} 55% 30%)` };
-      };
-      const timelineLoggedStyle = (r) => {
-        if (r && r.is_live_active) {
-          return {
-            background: isDarkMode.value ? '#dc2626' : '#e11d48',
-            borderColor: '#ef4444',
-            color: '#fff',
-            boxShadow: '0 0 10px rgba(225, 29, 72, 0.65)'
-          };
-        }
-        // Time logged where nothing was planned stays rose: that is the one thing
-        // the project hue must not be allowed to blend into the rest of the day.
-        if (!r.onPlan) return { background: isDarkMode.value ? '#9f1239' : '#e11d48' };
-        const h = projectHue(r.block);
-        return { background: isDarkMode.value ? `hsl(${h} 55% 40%)` : `hsl(${h} 62% 42%)` };
-      };
-
-      const blockStyle = (b) => {
-        const st = blockVisualState(b);
-        const dark = isDarkMode.value;
-        const h = projectHue(b);
-        if (st === 'cancelled') {
-          return dark
-            ? { background: '#1f2937', borderColor: '#374151' }
-            : { background: '#f3f4f6', borderColor: '#d1d5db' };
-        }
-        if (st === 'rescheduled') {
-          return dark
-            ? { background: 'rgba(51, 65, 85, 0.35)', borderColor: '#64748b', color: '#94a3b8' }
-            : { background: 'rgba(241, 245, 249, 0.85)', borderColor: '#94a3b8', color: '#475569' };
-        }
-        if (st === 'recording') {
-          return dark
-            ? { background: `hsl(${h} 50% 20% / .9)`, borderColor: '#ef4444', color: '#fff', boxShadow: '0 0 12px rgba(239, 68, 68, 0.4)' }
-            : { background: `hsl(${h} 80% 95%)`, borderColor: '#dc2626', color: `hsl(${h} 65% 25%)`, boxShadow: '0 0 10px rgba(220, 38, 38, 0.25)' };
-        }
-        if (st === 'partial') {
-          return dark
-            ? { background: `hsl(${h} 50% 28%)`, borderColor: '#f59e0b', color: '#fff' }
-            : { background: `hsl(${h} 55% 35%)`, borderColor: '#d97706', color: '#fff' };
-        }
-        if (st === 'over') {
-          return dark
-            ? { background: `hsl(270 50% 32%)`, borderColor: '#a855f7', color: '#fff' }
-            : { background: `hsl(270 55% 38%)`, borderColor: '#9333ea', color: '#fff' };
-        }
-        if (st === 'away') {
-          // Non-working is deliberately colour-neutral (amber/rose), not project-tinted.
-          const hue = String(b.task_nature || '').includes('Absent') ? 0 : 38;
-          return dark
-            ? { background: `hsl(${hue} 60% 14% / .55)`, borderColor: `hsl(${hue} 50% 40%)`, color: `hsl(${hue} 80% 80%)` }
-            : { background: `hsl(${hue} 90% 96%)`, borderColor: `hsl(${hue} 70% 70%)`, color: `hsl(${hue} 60% 30%)` };
-        }
-        if (st === 'logged') {
-          return dark
-            ? { background: `hsl(${h} 55% 34%)`, borderColor: `hsl(${h} 60% 46%)`, color: '#fff' }
-            : { background: `hsl(${h} 62% 40%)`, borderColor: `hsl(${h} 65% 30%)`, color: '#fff' };
-        }
-        if (st === 'missed') {
-          // The hatch must read as texture behind the text, never compete with it:
-          // thin, low-contrast stripes on a light base.
-          const stripe = dark ? `hsl(${h} 35% 55% / .18)` : `hsl(${h} 45% 45% / .14)`;
-          const base = dark ? `hsl(${h} 30% 15%)` : `hsl(${h} 70% 98%)`;
-          return {
-            backgroundColor: base,
-            backgroundImage: `repeating-linear-gradient(45deg, ${stripe} 0 2px, transparent 2px 10px)`,
-            borderColor: dark ? `hsl(${h} 40% 45%)` : `hsl(${h} 45% 65%)`,
-            color: dark ? `hsl(${h} 55% 82%)` : `hsl(${h} 60% 28%)`
-          };
-        }
-        return dark
-          ? { background: `hsl(${h} 50% 18%)`, borderColor: `hsl(${h} 55% 45%)`, color: `hsl(${h} 70% 85%)` }
-          : { background: `hsl(${h} 90% 95%)`, borderColor: `hsl(${h} 60% 55%)`, color: `hsl(${h} 60% 30%)` };
-      };
 
       // ---- Past is read-only ----------------------------------------------------
       // History should not be rewritten by a stray drag: anything that already
@@ -3161,7 +2828,6 @@ export function useOmniTrackWorkstation() {
 
       // ---- Drag to reschedule / resize a block ---------------------------------
       const SNAP_MIN = 15;
-      const plannerDrag = ref(null);
       const _blockDragEndedAt = ref(0);
       const _snap = (m) => Math.round(m / SNAP_MIN) * SNAP_MIN;
       const _minsToHHMM = (m) => {
@@ -3367,7 +3033,6 @@ export function useOmniTrackWorkstation() {
       // --- drag across the grid to select a multi-hour range -------------------
       // A plain click still books a single hour; dragging sets the whole span.
       const SLOT_SNAP_MIN = 15;
-      const slotSel = ref(null);
       let _slotSelEndedAt = 0;
 
       const _snapMin = (m) => Math.round(m / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
@@ -3437,107 +3102,6 @@ export function useOmniTrackWorkstation() {
         });
       };
 
-      // --- Google-Calendar style "now" line ------------------------------------
-      let _nowTimer = null;
-      const startNowClock = () => {
-        if (_nowTimer) return;
-        _nowTimer = setInterval(() => {
-          const n = new Date();
-          nowMinute.value = n.getHours() * 60 + n.getMinutes();
-        }, 30000);
-      };
-      const nowLineTop = computed(() => {
-        const lo = plannerRange.value.lo * 60;
-        return ((nowMinute.value - lo) / 60) * 44;
-      });
-      const nowLineLabel = computed(() => _minToHHMM(nowMinute.value));
-      const isTodayCol = (iso) => iso === (todayDate.value || todayISO());
-      // Away days are all-day records, but drawing them over the full 24h buries the
-      // grid; office hours is what a viewer actually needs blocked out.
-      const _loadOffice = (key, fallback) => {
-        try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
-      };
-      const plannerViewOrder = ['day', '4days', 'week'];
-      // Segmented control = one tab stop; ←/→ move the selection (WAI-ARIA radiogroup).
-      const onPlannerViewKey = (ev) => {
-        const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
-        if (keys.indexOf(ev.key) === -1) return;
-        ev.preventDefault();
-        const cur = Math.max(0, plannerViewOrder.indexOf(plannerView.value));
-        let next = cur;
-        if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % plannerViewOrder.length;
-        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + plannerViewOrder.length) % plannerViewOrder.length;
-        else if (ev.key === 'Home') next = 0;
-        else next = plannerViewOrder.length - 1;
-        setUserPlannerView(plannerViewOrder[next]);
-        nextTick(() => {
-          const group = ev.currentTarget;
-          const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-planner-view]') : [];
-          if (btns[next]) btns[next].focus();
-        });
-      };
-      const officeStart = ref(_loadOffice('omnitrack_office_start', '10:00'));
-      const officeEnd = ref(_loadOffice('omnitrack_office_end', '18:00'));
-      watch([officeStart, officeEnd], () => {
-        try {
-          localStorage.setItem('omnitrack_office_start', officeStart.value);
-          localStorage.setItem('omnitrack_office_end', officeEnd.value);
-        } catch (e) { /* private mode: keep the session value only */ }
-      });
-      const officeBandStyle = computed(() => {
-        const lo = plannerRange.value.lo * 60;
-        let a = _mins(officeStart.value);
-        let b = _mins(officeEnd.value);
-        if (!(b > a)) { a = 10 * 60; b = 18 * 60; }
-        return {
-          top: (((a - lo) / 60) * 44) + 'px',
-          height: (((b - a) / 60) * 44) + 'px'
-        };
-      });
-      // Touch: a horizontal swipe across the grid moves a period, the way a phone
-      // calendar behaves. Vertical pans stay with the scroller (cells are touch-pan-y).
-      const _swipe = { x: 0, y: 0, t: 0, ok: false };
-      const onPlannerTouchStart = (ev) => {
-        const t = ev.touches && ev.touches.length === 1 ? ev.touches[0] : null;
-        _swipe.ok = !!t;
-        if (!t) return;
-        _swipe.x = t.clientX; _swipe.y = t.clientY; _swipe.t = Date.now();
-      };
-      const onPlannerTouchEnd = (ev) => {
-        if (!_swipe.ok) return;
-        _swipe.ok = false;
-        const t = ev.changedTouches && ev.changedTouches[0];
-        if (!t) return;
-        const dx = t.clientX - _swipe.x;
-        const dy = t.clientY - _swipe.y;
-        if (Date.now() - _swipe.t > 700) return;
-        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
-        if (slotSel.value || plannerDrag.value) return;
-        plannerShift(dx < 0 ? 1 : -1);
-      };
-
-      // Office bounds as two hairlines on the grid; the old banner ate a whole row.
-      const officeMarks = computed(() => {
-        const lo = plannerRange.value.lo * 60;
-        let a = _mins(officeStart.value);
-        let b = _mins(officeEnd.value);
-        if (!(b > a)) { a = 10 * 60; b = 18 * 60; }
-        return [
-          { kind: 'start', top: (((a - lo) / 60) * 44) + 'px', title: 'Office starts ' + _minToHHMM(a) },
-          { kind: 'end', top: (((b - lo) / 60) * 44) + 'px', title: 'Office ends ' + _minToHHMM(b) }
-        ];
-      });
-      const isPastCol = (iso) => iso < (todayDate.value || todayISO());
-      // How much of a column is in the past: whole column for past days, up to the
-      // now-line for today, nothing for the future. Shaded so booking in the past
-      // looks wrong before the user clicks.
-      const pastShadeStyle = (iso) => {
-        const today = todayDate.value || todayISO();
-        const full = plannerHours.value.length * 44;
-        if (iso < today) return { top: '0px', height: full + 'px' };
-        if (iso === today) return { top: '0px', height: Math.max(0, Math.min(full, nowLineTop.value)) + 'px' };
-        return { display: 'none' };
-      };
 
       const bookFormTask = computed(() => {
         const ref = bookForm.value && bookForm.value.work_item;
