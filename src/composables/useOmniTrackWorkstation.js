@@ -6,6 +6,7 @@ import { useCollaborationStore } from "../stores/collaborationStore.js";
 import { useWorkstationDashboard } from "./useWorkstationDashboard.js";
 import { useWorkstationTimeline } from "./useWorkstationTimeline.js";
 import { useWorkstationAudioSync } from "./useWorkstationAudioSync.js";
+import { useWorkstationSessionSync } from "./useWorkstationSessionSync.js";
 
 const { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, nextTick } = Vue;
 
@@ -966,36 +967,9 @@ export function useOmniTrackWorkstation() {
         blockLogPct
       } = timelineStore;
 
-      // Multi-Device Active Session Synchronization & Remote HUD Actions
-      let _syncDebounceTimer = null;
-      let _lastLocalUpdate = Date.now();
       const lastActivityTime = ref(Date.now());
       const lastInactivityAlertTime = ref(0);
       const showInactivityModal = ref(false);
-
-      // Phase 4: Instant Cross-Tab Broadcast Channel Sync
-      let _omnitrackChannel = null;
-      if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
-        try {
-          _omnitrackChannel = new BroadcastChannel('omnitrack_workstation_channel');
-          _omnitrackChannel.onmessage = (event) => {
-            const data = event.data;
-            if (!data || !data.type) return;
-            if (data.type === 'session_sync' && data.payload) {
-              if (!_isStoppingSession) {
-                restoreActiveSession(data.payload);
-              }
-            } else if (data.type === 'session_cleared') {
-              if (isTracking.value) {
-                isTracking.value = false;
-                if (trackerTimer.value) clearInterval(trackerTimer.value);
-                trackerTimer.value = null;
-                trackerSeconds.value = 0;
-              }
-            }
-          };
-        } catch (e) {}
-      }
 
       const recordUserActivity = () => {
         lastActivityTime.value = Date.now();
@@ -1096,14 +1070,14 @@ export function useOmniTrackWorkstation() {
 
       const inactivityMinutes = computed(() => {
         const _ = trackerSeconds.value;
-        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
+        const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
         const ms = Date.now() - act;
         return Math.max(1, Math.floor(ms / 60000));
       });
 
       const lastActivityTimeHHMM = computed(() => {
         const _ = trackerSeconds.value;
-        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
+        const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
         const t = new Date(act);
         const pad = (n) => String(n).padStart(2, '0');
         return pad(t.getHours()) + ':' + pad(t.getMinutes());
@@ -1111,7 +1085,7 @@ export function useOmniTrackWorkstation() {
 
       const suggestedStopHHMM = computed(() => {
         const _ = trackerSeconds.value;
-        const base = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || Date.now();
+        const base = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
         const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
         const t = new Date(targetMs);
         const pad = (n) => String(n).padStart(2, '0');
@@ -1121,7 +1095,7 @@ export function useOmniTrackWorkstation() {
       const checkInactivity = () => {
         if (!isTracking.value) return;
         const now = Date.now();
-        const act = Math.max(lastActivityTime.value || 0, _lastLocalUpdate || 0) || now;
+        const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || now;
         const idleMs = now - act;
         const INACTIVITY_MS = 30 * 60 * 1000;
         const REPEAT_MS = 30 * 60 * 1000;
@@ -1174,360 +1148,53 @@ export function useOmniTrackWorkstation() {
         showToast('Abandoned timer discarded — no timesheet logged', 'info');
       };
 
-      const syncActiveSession = (immediate = false) => {
-        if (!isTracking.value) {
-          markSessionEnded();
-          localStorage.removeItem('omnitrack_active_session');
-          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-          postJSON('sync_active_session', { session_data: null }).catch(() => {});
-          return;
-        }
+      // Multi-Device Cross-Tab Session Synchronization
+      const sessionSyncStore = useWorkstationSessionSync({
+        postJSON,
+        showToast,
+        isTracking,
+        startTime,
+        trackerSeconds,
+        trackerTimer,
+        trackerNotes,
+        selectedNature,
+        trackerNature,
+        selectedProject,
+        trackerProject,
+        trackerBlockName,
+        sessionNotesList,
+        sessionNotesScroll,
+        workBlocks,
+        workFocusBlocks,
+        lastActivityTime,
+        lastInactivityAlertTime,
+        selectedEmployee,
+        activeTab,
+        fetchWorkstationData: (emp) => { if (typeof fetchWorkstationData === 'function') fetchWorkstationData(emp); },
+        fetchPlannerData: async () => { if (typeof fetchPlannerData === 'function') await fetchPlannerData(); },
+        checkInactivity: () => { if (typeof checkInactivity === 'function') checkInactivity(); },
+        checkBlockOverrun: () => { if (typeof checkBlockOverrun === 'function') checkBlockOverrun(); },
+        getLocalTodayISO
+      });
 
-        if (_isStoppingSession) return;
-        _lastLocalUpdate = Date.now();
-
-        const curStart = Number(startTime.value) || (Date.now() - (trackerSeconds.value * 1000));
-        const payload = {
-          startTime: curStart,
-          selectedNature: selectedNature.value,
-          selectedProject: selectedProject.value,
-          trackerNotes: trackerNotes.value,
-          trackerBlockName: trackerBlockName.value,
-          sessionNotesList: sessionNotesList.value,
-          lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
-          lastUpdated: _lastLocalUpdate,
-          status: 'active'
-        };
-        localStorage.setItem('omnitrack_active_session', JSON.stringify(payload));
-        try {
-          if (_omnitrackChannel) {
-            _omnitrackChannel.postMessage({ type: 'session_sync', payload });
-          }
-        } catch (e) {}
-
-        const sendToServer = () => {
-          postJSON('sync_active_session', { session_data: payload }).catch(() => {});
-        };
-
-        if (immediate) {
-          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-          sendToServer();
-        } else {
-          if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
-          _syncDebounceTimer = setTimeout(sendToServer, 500);
-        }
-      };
-
-      let _isRestoring = false;
-      const restoreActiveSession = (sessionData) => {
-        // A payload written by an older build of this page carries no `status`. It is
-        // still a live session — only an explicit non-active status means "don't restore",
-        // otherwise a reload strands a clock that is genuinely still running.
-        if (!sessionData || !sessionData.startTime) return false;
-        if (sessionData.status && sessionData.status !== 'active') return false;
-        // The stop guard belongs HERE, not in each caller. The dashboard refresh that
-        // runs right after a stop used to restore the session straight back from a
-        // server row that had not been cleared yet — so Stop looked like it did
-        // nothing at all. Any path that restores must clear this bar.
-        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return false;
-
-        // If local device previously recorded this session as ended, verify if server has a newer active update
-        if (wasEndedHere(sessionData.startTime)) {
-          const remoteHeartbeat = Number(sessionData.lastUpdated || sessionData.startTime || 0);
-          if (sessionData.status === 'active' && remoteHeartbeat > _lastLocalStop) {
-            unmarkSessionEnded(sessionData.startTime);
-          } else {
-            return false;
-          }
-        }
-
-        const startMs = Number(sessionData.startTime);
-        // Clock skew resilience: calculate elapsed using the most authoritative timestamp
-        const serverHeartbeat = Number(sessionData.lastUpdated || sessionData.lastActivityTime || 0);
-        const serverElapsed = (serverHeartbeat > startMs) ? Math.floor((serverHeartbeat - startMs) / 1000) : 0;
-        const localElapsed = Math.floor((Date.now() - startMs) / 1000);
-        // If local clock is behind or startMs is slightly ahead due to clock skew, anchor to at least serverElapsed
-        const elapsed = Math.max(0, Math.max(serverElapsed, localElapsed));
-        if (elapsed >= 86400) return false; // expired past 24h
-
-        // Zombie timer eviction: if running for > 10 hours, evict immediately
-        if (elapsed >= 10 * 3600) {
-          markSessionEnded();
-          localStorage.removeItem('omnitrack_active_session');
-          postJSON('sync_active_session', { session_data: null }).catch(() => {});
-          return false;
-        }
-
-        // Zombie timer eviction: if session started on a prior calendar day and has run >= 6 hours
-        const sessionStartDate = new Date(startMs).toISOString().split('T')[0];
-        const todayStr = getLocalTodayISO();
-        if (sessionStartDate !== todayStr && elapsed >= 6 * 3600) {
-          markSessionEnded();
-          localStorage.removeItem('omnitrack_active_session');
-          postJSON('sync_active_session', { session_data: null }).catch(() => {});
-          return false;
-        }
-
-        // If bound to a work block, handle status reconciliation gracefully
-        if (sessionData.trackerBlockName) {
-          const matched = (workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName) ||
-                          (workFocusBlocks.value || []).find(b => b.name === sessionData.trackerBlockName);
-          if (matched) {
-            if (sessionData.status === 'active') {
-              matched.status = 'In Progress';
-            } else if (matched.status === 'Logged (Full)' || matched.status === 'Logged (Over)' || matched.status === 'Logged (Partial)' || matched.status === 'Completed' || matched.status === 'Cancelled' || matched.status === 'Missed') {
-              markSessionEnded();
-              localStorage.removeItem('omnitrack_active_session');
-              return false;
-            }
-          }
-        }
-
-        _isRestoring = true;
-        try {
-          isTracking.value = true;
-          startTime.value = startMs;
-          trackerSeconds.value = elapsed;
-          selectedNature.value = sessionData.selectedNature || '🎯 Planned';
-          trackerNature.value = sessionData.selectedNature || '🎯 Planned';
-          selectedProject.value = sessionData.selectedProject || '';
-          trackerProject.value = sessionData.selectedProject || '';
-          let rawN = sessionData.trackerNotes || '';
-          if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
-            const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
-            trackerNotes.value = parts[0] || '';
-            sessionNotesList.value = parts.slice(1);
-          } else {
-            trackerNotes.value = rawN;
-            sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
-          }
-          trackerBlockName.value = sessionData.trackerBlockName || null;
-          const sLastAct = Number(sessionData.lastActivityTime) || 0;
-          const sLastUpd = Number(sessionData.lastUpdated) || 0;
-          lastActivityTime.value = Math.max(sLastAct, sLastUpd) || Date.now();
-
-          const clockSkewMs = (startMs > Date.now()) ? (startMs - Date.now()) : 0;
-          if (trackerTimer.value) clearInterval(trackerTimer.value);
-          trackerTimer.value = setInterval(() => {
-            const curLocalElapsed = Math.floor((Date.now() + clockSkewMs - startMs) / 1000);
-            trackerSeconds.value = Math.max(0, curLocalElapsed);
-            checkInactivity();
-            checkBlockOverrun();
-          }, 1000);
-
-          localStorage.setItem('omnitrack_active_session',
-            JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
-          return true;
-        } finally {
-          nextTick(() => { _isRestoring = false; });
-        }
-      };
-
-      watch([trackerNotes, sessionNotesList], () => {
-        if (isTracking.value && !_isRestoring) {
-          recordUserActivity();
-        }
-      }, { deep: true });
-
-      // Cross-device live session synchronization
-      let _livePollTimer = null;
-      let _isCheckingActiveSession = false;
-      let _lastLocalStop = 0;
-      let _isStoppingSession = false;
-
-      // A stop is not instantaneous: the local HUD tears down immediately, but the
-      // server write that clears the active session lands a moment later. Any poll
-      // or socket push in that window still reports the old session as active, and
-      // the sync faithfully puts it back on screen — again and again, with no way
-      // to close it or start a new one. Remember which sessions this device just
-      // ended and refuse to resurrect exactly those. A genuinely new session
-      // started elsewhere carries a different startTime and still syncs.
-      // Kept in localStorage as well as memory: a session stopped in this tab must
-      // stay stopped in every other tab of this browser, and across a reload. Memory
-      // alone only protects the tab that pressed the button.
-      const _ENDED_KEY = 'omnitrack_ended_sessions';
-      const _endedSessions = new Set();
-      const _readEndedStore = () => {
-        try {
-          const raw = JSON.parse(localStorage.getItem(_ENDED_KEY) || '[]');
-          return Array.isArray(raw) ? raw.filter(e => e && Date.now() - Number(e.at || 0) < 21600000) : [];
-        } catch (e) { return []; }
-      };
-      const markSessionEnded = (sTime) => {
-        const add = [];
-        try {
-          if (sTime) add.push(Math.round(Number(sTime)));
-          const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
-          if (p && p.startTime) add.push(Math.round(Number(p.startTime)));
-        } catch (e) {}
-        add.forEach(t => _endedSessions.add(t));
-        try {
-          const store = _readEndedStore();
-          add.forEach(t => { if (!store.some(e => Math.abs(Number(e.start) - t) < 5000)) store.push({ start: t, at: Date.now() }); });
-          localStorage.setItem(_ENDED_KEY, JSON.stringify(store.slice(-40)));
-        } catch (e) {}
-      };
-      const wasEndedHere = (startTime) => {
-        const t = Math.round(Number(startTime));
-        if (!t) return false;
-        for (const ended of _endedSessions) if (Math.abs(ended - t) < 5000) return true;
-        return _readEndedStore().some(e => Math.abs(Number(e.start) - t) < 5000);
-      };
-      const unmarkSessionEnded = (sTime) => {
-        if (!sTime) return;
-        const t = Math.round(Number(sTime));
-        for (const ended of Array.from(_endedSessions)) {
-          if (Math.abs(ended - t) < 5000) _endedSessions.delete(ended);
-        }
-        try {
-          const store = _readEndedStore().filter(e => Math.abs(Number(e.start) - t) >= 5000);
-          localStorage.setItem(_ENDED_KEY, JSON.stringify(store));
-        } catch (e) {}
-      };
-
-      const reconcileActiveSession = (remote) => {
-        // Never resurrect a session if this device just stopped or discarded within the last 10s
-        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) {
-          handleRemoteSessionCleared({ silent: true });
-          return;
-        }
-        // If this device previously recorded this session as ended, verify if server has a newer active update
-        if (remote && remote.startTime && wasEndedHere(remote.startTime) && !isTracking.value) {
-          const remoteHeartbeat = Number(remote.lastUpdated || remote.startTime || 0);
-          if (remote.status === 'active' && remoteHeartbeat > _lastLocalStop) {
-            unmarkSessionEnded(remote.startTime);
-          } else {
-            handleRemoteSessionCleared({ silent: true });
-            return;
-          }
-        }
-        if (!remote || remote.status !== 'active') {
-          if (!isTracking.value || Date.now() - _lastLocalUpdate >= 15000) {
-            handleRemoteSessionCleared();
-          }
-          return;
-        }
-
-        // If this device wasn't tracking, start tracking and restore
-        if (!isTracking.value) {
-          restoreActiveSession(remote);
-          showToast('Live session synced from mobile', 'info');
-          return;
-        }
-
-        // If remote has a different block or new session start time, switch to remote session!
-        if (remote.startTime && (remote.trackerBlockName !== trackerBlockName.value || Math.abs(Number(remote.startTime) - (Number(startTime.value) || 0)) > 60000)) {
-          restoreActiveSession(remote);
-          showToast('Switched to active session from cloud', 'info');
-          return;
-        }
-
-        // If local had an edit within the last 1200ms, let local write settle
-        if (Date.now() - _lastLocalUpdate < 1200) return;
-
-        // 1. Reconcile session lines logged from phone
-        const remoteLines = Array.isArray(remote.sessionNotesList) ? remote.sessionNotesList : [];
-        const localLines = sessionNotesList.value || [];
-        if (JSON.stringify(remoteLines) !== JSON.stringify(localLines)) {
-          sessionNotesList.value = [...remoteLines];
-          nextTick(() => {
-            if (sessionNotesScroll.value) {
-              sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight;
-            }
-          });
-        }
-
-        // 2. Reconcile deliverable title (avoid clobbering if actively typing)
-        if (remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
-          const activeEl = document.activeElement;
-          const isNotesFocused = activeEl && (
-            activeEl.getAttribute('aria-label') === 'Deliverable or task title' ||
-            (activeEl.tagName === 'INPUT' && activeEl.placeholder && activeEl.placeholder.includes('Deliverable'))
-          );
-          if (!isNotesFocused) {
-            trackerNotes.value = remote.trackerNotes || '';
-          }
-        }
-
-        // 3. Reconcile project and nature
-        if (remote.selectedProject !== undefined && remote.selectedProject !== selectedProject.value) {
-          selectedProject.value = remote.selectedProject || '';
-          trackerProject.value = remote.selectedProject || '';
-        }
-        if (remote.selectedNature !== undefined && remote.selectedNature !== selectedNature.value) {
-          selectedNature.value = remote.selectedNature || '🎯 Planned';
-          trackerNature.value = remote.selectedNature || '🎯 Planned';
-        }
-
-        // 4. Reconcile bound work block
-        if (remote.trackerBlockName !== undefined && remote.trackerBlockName !== trackerBlockName.value) {
-          trackerBlockName.value = remote.trackerBlockName || null;
-        }
-
-        localStorage.setItem('omnitrack_active_session', JSON.stringify(Object.assign({}, remote, { status: 'active' })));
-      };
-
-      // The "ended elsewhere" toast is news the first time and noise on every
-      // poll after it. A guard-triggered teardown (this device just stopped, or
-      // already ended this session) is not news at all, so it passes silent.
-      let _lastClearedToast = 0;
-      const handleRemoteSessionCleared = (opts) => {
-        if (!isTracking.value) return;
-        // Never clear an active session if this device updated or started within the last 15s
-        if (Date.now() - _lastLocalUpdate < 15000) return;
-
-        isTracking.value = false;
-        startTime.value = null;
-        if (trackerTimer.value) {
-          clearInterval(trackerTimer.value);
-          trackerTimer.value = null;
-        }
-        trackerSeconds.value = 0;
-        sessionNotesList.value = [];
-        trackerNotes.value = '';
-        trackerBlockName.value = null;
-        markSessionEnded();
-        localStorage.removeItem('omnitrack_active_session');
-        if (!(opts && opts.silent)) {
-          fetchWorkstationData(selectedEmployee.value);
-        }
-        if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') {
-          fetchPlannerData();
-        }
-        if (!(opts && opts.silent) && Date.now() - _lastClearedToast > 30000) {
-          _lastClearedToast = Date.now();
-          showToast('Timesheet session saved on other device', 'info');
-        }
-      };
-
-      const checkRemoteActiveSession = async () => {
-        if (document.visibilityState === 'hidden') return;
-        if (_isCheckingActiveSession) return;
-        if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return;
-        _isCheckingActiveSession = true;
-        try {
-          const res = await fetch(`/api/method/omnitrack.api.get_active_session?_=${Date.now()}`, {
-            headers: { 'Accept': 'application/json' },
-            cache: 'no-store'
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const active = data.message;
-            if (active && active.status === 'active') {
-              reconcileActiveSession(active);
-            } else if (!active && isTracking.value) {
-              if (Date.now() - _lastLocalUpdate < 15000) {
-                syncActiveSession(true);
-              } else {
-                handleRemoteSessionCleared({ silent: true });
-              }
-            }
-          }
-        } catch (e) {
-        } finally {
-          _isCheckingActiveSession = false;
-        }
-      };
+      const {
+        syncActiveSession,
+        restoreActiveSession,
+        reconcileActiveSession,
+        handleRemoteSessionCleared,
+        checkRemoteActiveSession,
+        markSessionEnded,
+        unmarkSessionEnded,
+        wasEndedHere,
+        broadcastSessionCleared,
+        setStoppingSession,
+        getIsStoppingSession,
+        setLastLocalStop,
+        getLastLocalStop,
+        setLastLocalUpdate,
+        getLastLocalUpdate,
+        cancelSyncDebounce
+      } = sessionSyncStore;
 
       // A timesheet line is often a paragraph, not a phrase: the field grows with the
       // text, Shift+Enter breaks a line, and plain Enter still files the entry.
@@ -2225,7 +1892,7 @@ export function useOmniTrackWorkstation() {
 
             // Evict zombie local session if the bound block is already logged/completed
             // (Only for stale sessions older than 15s to avoid racing newly started local tracking)
-            if (isTracking.value && trackerBlockName.value && (Date.now() - _lastLocalUpdate >= 15000)) {
+            if (isTracking.value && trackerBlockName.value && (Date.now() - (getLastLocalUpdate() || 0) >= 15000)) {
               const curBlock = (workBlocks.value || []).find(b => b.name === trackerBlockName.value);
               if (curBlock && (curBlock.status === 'Logged (Full)' || curBlock.status === 'Logged (Over)' || curBlock.status === 'Logged (Partial)' || curBlock.status === 'Completed' || curBlock.status === 'Cancelled' || curBlock.status === 'Missed')) {
                 if (m.active_session && m.active_session.status === 'active') {
@@ -2250,10 +1917,10 @@ export function useOmniTrackWorkstation() {
 
             // Multi-device active session sync (computer <-> mobile phone)
             if (m.active_session && m.active_session.status === 'active' && m.active_session.startTime
-                && !_isStoppingSession && (Date.now() - _lastLocalStop >= 10000)) {
+                && !getIsStoppingSession() && (Date.now() - (getLastLocalStop() || 0) >= 10000)) {
               if (wasEndedHere(m.active_session.startTime)) {
                 const srvTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
-                if (srvTime > _lastLocalStop) {
+                if (srvTime > (getLastLocalStop() || 0)) {
                   unmarkSessionEnded(m.active_session.startTime);
                 }
               }
@@ -2261,12 +1928,12 @@ export function useOmniTrackWorkstation() {
                 const serverLines = Array.isArray(m.active_session.sessionNotesList) ? m.active_session.sessionNotesList : [];
                 const localLines = sessionNotesList.value || [];
                 const serverTime = Number(m.active_session.lastUpdated || m.active_session.startTime || 0);
-                if (!isTracking.value || serverLines.length >= localLines.length || serverTime > _lastLocalUpdate) {
+                if (!isTracking.value || serverLines.length >= localLines.length || serverTime > (getLastLocalUpdate() || 0)) {
                   restoreActiveSession(m.active_session);
                 }
               }
             } else if (m.active_session === null && isTracking.value) {
-              const localAge = Date.now() - _lastLocalUpdate;
+              const localAge = Date.now() - (getLastLocalUpdate() || 0);
               if (localAge >= 15000) {
                 isTracking.value = false;
                 if (trackerTimer.value) clearInterval(trackerTimer.value);
@@ -2373,8 +2040,8 @@ export function useOmniTrackWorkstation() {
           const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
           if (p && p.startTime) sTime = Number(p.startTime);
         } catch (e) {}
-        _lastLocalStop = Date.now();
-        _isStoppingSession = true;
+        setLastLocalStop(Date.now());
+        setStoppingSession(true, 8000);
         isTracking.value = false;
         startTime.value = null;
         isSessionElevated.value = false;
@@ -2382,15 +2049,11 @@ export function useOmniTrackWorkstation() {
         trackerTimer.value = null;
         markSessionEnded(sTime);
         localStorage.removeItem('omnitrack_active_session');
-        // A sync debounced 500ms ago still holds the live payload; let it fire
-        // after the clear and the server is active again one beat later.
-        if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
+        // A sync debounced 500ms ago still holds the live payload; cancel it
+        // so it cannot overwrite the server clear.
+        cancelSyncDebounce();
         postJSON('sync_active_session', { session_data: null }).catch(() => {});
-        try {
-          if (_omnitrackChannel) {
-            _omnitrackChannel.postMessage({ type: 'session_cleared' });
-          }
-        } catch (e) {}
+        broadcastSessionCleared();
         trackerSeconds.value = 0;
         trackerBlockName.value = null;
         trackerNotes.value = '';
@@ -2398,14 +2061,13 @@ export function useOmniTrackWorkstation() {
         newSessionPoint.value = '';
         stopConfirmName.value = '';
         showToast('Session discarded — no timesheet was created', 'info');
-        setTimeout(() => { _isStoppingSession = false; }, 8000);
       };
 
       const toggleTrack = async (customEndMs = null, customStartMs = null) => {
         triggerHaptic([40]);
         if (!isTracking.value) {
-          _isStoppingSession = false;
-          _lastLocalStop = 0;
+          setStoppingSession(false);
+          setLastLocalStop(0);
           isTracking.value = true;
           const sTime = customStartMs ? Number(customStartMs) : Date.now();
           unmarkSessionEnded(sTime);
@@ -2413,7 +2075,7 @@ export function useOmniTrackWorkstation() {
           trackerSeconds.value = Math.max(0, Math.floor((Date.now() - sTime) / 1000));
           lastActivityTime.value = Date.now();
           lastInactivityAlertTime.value = 0;
-          _lastLocalUpdate = Date.now();
+          setLastLocalUpdate(Date.now());
           syncActiveSession(true);
           // Request browser notification permission on user gesture (clicking Start)
           try {
@@ -2437,23 +2099,19 @@ export function useOmniTrackWorkstation() {
             const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
             if (p && p.startTime) sTime = Number(p.startTime);
           } catch (e) {}
-          _lastLocalStop = Date.now();
-          _isStoppingSession = true;
+          setLastLocalStop(Date.now());
+          setStoppingSession(true, 8000);
           isTracking.value = false;
           isSessionElevated.value = false;
           if (trackerTimer.value) clearInterval(trackerTimer.value);
           trackerTimer.value = null;
           markSessionEnded(sTime);
           localStorage.removeItem('omnitrack_active_session');
-          // A sync debounced 500ms ago still holds the live payload; let it fire
-          // after the clear and the server is active again one beat later.
-          if (_syncDebounceTimer) { clearTimeout(_syncDebounceTimer); _syncDebounceTimer = null; }
+          // A sync debounced 500ms ago still holds the live payload; cancel it
+          // so it cannot overwrite the server clear.
+          cancelSyncDebounce();
           postJSON('sync_active_session', { session_data: null }).catch(() => {});
-          try {
-            if (_omnitrackChannel) {
-              _omnitrackChannel.postMessage({ type: 'session_cleared' });
-            }
-          } catch (e) {}
+          broadcastSessionCleared();
           // snapshot, then zero the clock: a standby HUD showing the last
           // session's elapsed time reads like a session that is still open
           let elapsedSecs = trackerSeconds.value;
@@ -2502,7 +2160,7 @@ export function useOmniTrackWorkstation() {
             } catch (err) {
               showToast('Could not log session: ' + (err && err.message || err), 'danger');
             } finally {
-              setTimeout(() => { _isStoppingSession = false; }, 8000);
+              setStoppingSession(false);
             }
             return;
           }
@@ -2528,7 +2186,7 @@ export function useOmniTrackWorkstation() {
           } catch (err) {
             showToast('Timer punch recorded locally.', 'success');
           } finally {
-            setTimeout(() => { _isStoppingSession = false; }, 8000);
+            setStoppingSession(false);
           }
         }
       };
