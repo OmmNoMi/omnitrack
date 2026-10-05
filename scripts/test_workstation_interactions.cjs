@@ -35,8 +35,13 @@ const storeFiles = fs.existsSync(storesDir)
   ? fs.readdirSync(storesDir).filter(f => f.endsWith('.js')).map(f => path.join(storesDir, f))
   : [];
 
+const composablesDir = path.resolve(__dirname, '..', 'src', 'composables');
+const composableFiles = fs.existsSync(composablesDir)
+  ? fs.readdirSync(composablesDir).filter(f => f.endsWith('.js')).map(f => path.join(composablesDir, f))
+  : [composablePath];
+
 const filesToInspect = [
-  omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
+  omnitrackHtmlPath, ...composableFiles, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
   blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
   headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath,
   drawerCoordinatorVuePath, viewCoordinatorVuePath, ...storeFiles, ...dialogFiles
