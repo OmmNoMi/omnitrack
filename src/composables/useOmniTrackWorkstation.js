@@ -577,69 +577,12 @@ export function useOmniTrackWorkstation() {
       const tasks = ref([]);
       const assignedTasks = ref([]);
       const attentionTasks = ref([]);
-      const showAllAttentionTasks = ref(false);
-      const ATTENTION_TASKS_COLLAPSED_LIMIT = 3;
-
-      // ---- Action Required & Underplanned Filter & Search ----
-      const attentionFilter = ref('all'); // 'all', 'overdue', 'underplanned', 'due_soon'
-      const attentionSearch = ref('');
-
-      const overdueTasksCount = computed(() => {
-        return (attentionTasks.value || []).filter(t => t.days_overdue > 0 || (t.due_date && t.due_date < todayDate.value)).length;
-      });
-
-      const underplannedTasksCount = computed(() => {
-        return (attentionTasks.value || []).filter(t => t.deficit_hours > 0 || t.is_underplanned || t.is_unplanned || (t.estimate_hours > 0 && t.booked_hours < t.estimate_hours) || (!t.booked_hours)).length;
-      });
-
-      const dueSoonTasksCount = computed(() => {
-        return (attentionTasks.value || []).filter(t => t.is_due_today || t.is_due_tomorrow).length;
-      });
-
-      const filteredAttentionTasks = computed(() => {
-        let list = attentionTasks.value || [];
-        if (attentionFilter.value === 'overdue') {
-          list = list.filter(t => t.days_overdue > 0 || (t.due_date && t.due_date < todayDate.value));
-        } else if (attentionFilter.value === 'underplanned') {
-          list = list.filter(t => t.deficit_hours > 0 || t.is_underplanned || t.is_unplanned || (t.estimate_hours > 0 && t.booked_hours < t.estimate_hours) || (!t.booked_hours));
-        } else if (attentionFilter.value === 'due_soon') {
-          list = list.filter(t => t.is_due_today || t.is_due_tomorrow);
-        }
-
-        if (attentionSearch.value.trim()) {
-          const q = attentionSearch.value.trim().toLowerCase();
-          list = list.filter(t =>
-            (t.subject && t.subject.toLowerCase().includes(q)) ||
-            (t.project_name && t.project_name.toLowerCase().includes(q)) ||
-            (t.project && t.project.toLowerCase().includes(q)) ||
-            (t.ref && t.ref.toLowerCase().includes(q))
-          );
-        }
-        return list;
-      });
-
-      const visibleAttentionTasks = computed(() => {
-        const list = filteredAttentionTasks.value || [];
-        if (showAllAttentionTasks.value || list.length <= ATTENTION_TASKS_COLLAPSED_LIMIT) {
-          return list;
-        }
-        return list.slice(0, ATTENTION_TASKS_COLLAPSED_LIMIT);
-      });
-
-      const remainingAttentionTasksCount = computed(() => {
-        const total = (filteredAttentionTasks.value || []).length;
-        return Math.max(0, total - ATTENTION_TASKS_COLLAPSED_LIMIT);
-      });
-
+      // Attention & Planner Task filter state and computeds delegated to assignmentStore
       const openPlannerWithFilter = (filterType) => {
         if (filterType && filterType !== 'all') {
           plannerTaskFilter.value = filterType;
         }
         activeTab.value = 'planner';
-      };
-
-      const setAttentionFilter = (key) => {
-        attentionFilter.value = key;
       };
 
       const onAttentionTabKeydown = (e) => {
@@ -668,12 +611,6 @@ export function useOmniTrackWorkstation() {
         }
       };
 
-      // ---- Planner Left Rail Task Search & Filter ----
-      const plannerTaskFilter = ref('all'); // 'all', 'underplanned', 'overdue', 'high'
-      const setPlannerTaskFilter = (key) => {
-        plannerTaskFilter.value = key;
-      };
-
       const onPlannerTaskTabKeydown = (e) => {
         const k = e.key;
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(k)) return;
@@ -699,28 +636,6 @@ export function useOmniTrackWorkstation() {
           if (key) plannerTaskFilter.value = key;
         }
       };
-      const plannerTaskSearch = ref('');
-
-      const filteredPlannerTasks = computed(() => {
-        let list = (plannerData.value && plannerData.value.assigned_tasks) || [];
-        if (plannerTaskFilter.value === 'underplanned') {
-          list = list.filter(t => t.is_underplanned || t.deficit_hours > 0 || (t.estimate_hours > 0 && t.booked_hours < t.estimate_hours) || (!t.booked_hours));
-        } else if (plannerTaskFilter.value === 'overdue') {
-          list = list.filter(t => t.days_overdue > 0 || (t.due_date && t.due_date < todayDate.value));
-        } else if (plannerTaskFilter.value === 'high') {
-          list = list.filter(t => t.priority === 'High' || t.priority === 'Urgent');
-        }
-
-        if (plannerTaskSearch.value.trim()) {
-          const q = plannerTaskSearch.value.trim().toLowerCase();
-          list = list.filter(t =>
-            (t.subject && t.subject.toLowerCase().includes(q)) ||
-            (t.project_name && t.project_name.toLowerCase().includes(q)) ||
-            (t.ref && t.ref.toLowerCase().includes(q))
-          );
-        }
-        return list;
-      });
 
       // Roving Tabindex Grid Navigation for Attention Tasks (WCAG 2.2 AA)
       const attentionRovingRow = ref(0);
@@ -829,13 +744,6 @@ export function useOmniTrackWorkstation() {
       const workflowTargetAction = ref(null);
       const workflowComment = ref('');
       const workflowBusy = ref(false);
-      const openTodos = computed(() => {
-        return (assignedTasks.value || []).filter(t => {
-          const st = (t.status || '').toLowerCase();
-          return st !== 'closed' && st !== 'cancelled' && st !== 'completed';
-        });
-      });
-
       const todayPlannedBlocks = computed(() => {
         return (workBlocks.value || []).filter(b => {
           const st = (b.status || '').toLowerCase();
@@ -843,84 +751,11 @@ export function useOmniTrackWorkstation() {
         });
       });
 
-      const todoDropdownOpen = ref(false);
-      const todoSearchQuery = ref('');
-      const todoSearchInput = ref(null);
-
-      const toggleTodoPicker = () => {
-        todoDropdownOpen.value = !todoDropdownOpen.value;
-        if (todoDropdownOpen.value) {
-          todoSearchQuery.value = '';
-          nextTick(() => {
-            if (todoSearchInput.value && todoSearchInput.value.focus) {
-              todoSearchInput.value.focus();
-            }
-          });
-        }
-      };
-
-      const filteredOpenTodos = computed(() => {
-        const q = (todoSearchQuery.value || '').trim().toLowerCase();
-        if (!q) return openTodos.value;
-        return openTodos.value.filter(t => {
-          const subj = (t.subject || t.title || t.name || '').toLowerCase();
-          const proj = (t.project_name || t.project || '').toLowerCase();
-          const prio = (t.priority || '').toLowerCase();
-          return subj.includes(q) || proj.includes(q) || prio.includes(q);
-        });
-      });
-
-      const filteredPlannedBlocks = computed(() => {
-        const q = (todoSearchQuery.value || '').trim().toLowerCase();
-        if (!q) return todayPlannedBlocks.value;
-        return todayPlannedBlocks.value.filter(b => {
-          const title = (b.task_subject || b.work_item_label || b.task || b.deliverable_notes || b.name || '').toLowerCase();
-          const proj = (b.project_name || b.project || '').toLowerCase();
-          return title.includes(q) || proj.includes(q);
-        });
-      });
-
-      const showCustomOption = computed(() => {
-        const q = (todoSearchQuery.value || '').trim();
-        if (!q) return false;
-        const qLower = q.toLowerCase();
-        const matchesTodo = openTodos.value.some(t => (t.subject || t.title || t.name || '').toLowerCase() === qLower);
-        const matchesBlock = todayPlannedBlocks.value.some(b => (b.task_subject || b.work_item_label || b.task || '').toLowerCase() === qLower);
-        return !matchesTodo && !matchesBlock;
-      });
-
-      const selectTodoToAutofill = (t) => {
-        if (!t) return;
-        trackerBlockName.value = null;
-        trackerNotes.value = t.subject || t.title || t.name || '';
-        if (t.project) {
-          selectedProject.value = t.project;
-          trackerProject.value = t.project;
-        }
-        selectedNature.value = 'Planned Work';
-        trackerNature.value = 'Planned Work';
-        syncActiveSession();
-        todoDropdownOpen.value = false;
-        todoSearchQuery.value = '';
-        triggerHaptic([20]);
-        showToast('Selected ToDo & auto-filled details', 'info');
-      };
-
+      // ToDo Picker & Search actions delegated to assignmentStore
       const selectPlannedBlock = (b) => {
         bindSessionToBlock(b);
         todoDropdownOpen.value = false;
         todoSearchQuery.value = '';
-      };
-
-      const selectCustomTitle = () => {
-        const q = (todoSearchQuery.value || '').trim();
-        if (!q) return;
-        trackerBlockName.value = null;
-        trackerNotes.value = q;
-        syncActiveSession();
-        todoDropdownOpen.value = false;
-        todoSearchQuery.value = '';
-        triggerHaptic([20]);
       };
 
       const onTodoSearchEnter = () => {
@@ -1022,6 +857,51 @@ export function useOmniTrackWorkstation() {
         fetchDrawerChat,
         sendDrawerChatMessage
       } = collaborationStore;
+
+      // Assignment Domain Store Integration
+      const assignmentStore = useAssignmentStore({
+        assignedTasks,
+        attentionTasks,
+        todayDate,
+        openBookModal: (t) => { if (typeof openBookModal === 'function') openBookModal(t); },
+        postJSON,
+        showToast,
+        fetchWorkstationData,
+        selectedEmployee,
+        todayPlannedBlocks,
+        syncActiveSession: (force) => { if (typeof syncActiveSession === 'function') syncActiveSession(force); },
+        triggerHaptic: (pattern) => { if (typeof triggerHaptic === 'function') triggerHaptic(pattern); },
+        sessionStore: null
+      });
+
+      const {
+        showAllAttentionTasks,
+        ATTENTION_TASKS_COLLAPSED_LIMIT,
+        attentionFilter,
+        attentionSearch,
+        plannerTaskFilter,
+        plannerTaskSearch,
+        overdueTasksCount,
+        underplannedTasksCount,
+        dueSoonTasksCount,
+        filteredAttentionTasks,
+        visibleAttentionTasks,
+        remainingAttentionTasksCount,
+        filteredPlannerTasks,
+                setAttentionFilter,
+        setPlannerTaskFilter,
+        openTodos,
+        todoDropdownOpen,
+        todoSearchQuery,
+        todoSearchInput,
+        toggleTodoPicker,
+        filteredOpenTodos,
+        filteredPlannedBlocks,
+        showCustomOption,
+        selectTodoToAutofill,
+        selectCustomTitle
+      } = assignmentStore;
+
 
 
             // 6. Plan Focus Block Modal
