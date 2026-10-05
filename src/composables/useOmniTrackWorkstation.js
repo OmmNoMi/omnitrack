@@ -902,6 +902,40 @@ export function useOmniTrackWorkstation() {
         selectCustomTitle
       } = assignmentStore;
 
+      // Work Block Domain Store Integration
+      const workBlockStore = useWorkBlockStore({
+        postJSON,
+        showToast,
+        fetchWorkstationData,
+        fetchPlannerData: async () => { if (typeof fetchPlannerData === 'function') await fetchPlannerData(); },
+        selectedEmployee,
+        todayDate,
+        yesterdayDate,
+        isManager,
+        sessionStore: null,
+        isBlockLocked: (b) => { return typeof isBlockLocked === 'function' ? isBlockLocked(b) : false; },
+        isPastBlock: (b) => { return typeof isPastBlock === 'function' ? isPastBlock(b) : false; },
+        isTracking,
+        trackerBlockName,
+        currentElapsedSeconds: trackerSeconds,
+        sessionNotesList,
+        stopSessionRemote: async (prompt) => { if (typeof stopSessionRemote === 'function') await stopSessionRemote(prompt); },
+        discardSession: () => { if (typeof discardSession === 'function') discardSession(); }
+      });
+
+      const {
+        calendarViewMode,
+        plannerDate,
+        plannerDateDisplay,
+        calendarDays,
+        showBookModal,
+        bookForm,
+        showCancelModal,
+        cancelTargetBlock,
+        cancelForm,
+        cancelReasons
+      } = workBlockStore;
+
 
 
             // 6. Plan Focus Block Modal
@@ -4282,8 +4316,6 @@ export function useOmniTrackWorkstation() {
         week_start: '', week_end: '', days: [], blocks: [], assigned_tasks: [],
         totals: { planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, block_count: 0 }
       });
-      const showBookModal = ref(false);
-      const bookForm = ref({ mode: 'work', work_item: '', work_date: '', start_time: '', end_time: '', deliverable_notes: '', pairing_partner: '', assigned_employee: '' });
       const getDateOffsetISO = (offsetDays) => {
         const d = new Date();
         d.setDate(d.getDate() + offsetDays);
@@ -5252,38 +5284,10 @@ export function useOmniTrackWorkstation() {
       };
 
       const submitBooking = async () => {
-        const mode = bookForm.value.mode || 'work';
-        const isAway = mode === '🌴 Leave';
-        const isBreak = mode === 'break';
-        if (!isAway && (!bookForm.value.start_time || !bookForm.value.end_time)) {
-          showToast('Set a start and end time', 'danger');
-          return;
-        }
-        plannerBusy.value = true;
-        try {
-          const picked = isAway ? null : (plannerData.value.assigned_tasks || []).find(t => t.ref === bookForm.value.work_item);
-          const targetEmp = (isManager.value && bookForm.value.assigned_employee) ? bookForm.value.assigned_employee : (selectedEmployee.value !== 'All' ? selectedEmployee.value : null);
-          const natureLabel = isAway ? '🌴 Leave' : (isBreak ? '☕ Break' : '🎯 Work');
-          await postJSON('book_work_block', {
-            work_date: bookForm.value.work_date,
-            start_time: isAway ? '09:00' : bookForm.value.start_time,
-            end_time: isAway ? '18:00' : bookForm.value.end_time,
-            work_item: isAway ? null : (bookForm.value.work_item || null),
-            task: picked && (picked.kind === 'Task' || !picked.ref.startsWith('todo:')) ? picked.ref : null,
-            project: picked ? picked.project : null,
-            work_item_label: picked ? picked.subject : (isAway ? '🌴 Leave' : (isBreak ? '☕ Break' : '🎯 Work')),
-            task_nature: natureLabel,
-            deliverable_notes: bookForm.value.deliverable_notes || natureLabel,
-            pairing_partner: isAway ? null : (bookForm.value.pairing_partner || null),
-            employee: targetEmp
-          });
-          showBookModal.value = false;
+        await workBlockStore.submitBooking();
+        if (!showBookModal.value) {
           pickedTask.value = null;
-          showToast(isAway ? 'Leave marked' : (isBreak ? 'Break scheduled' : (bookForm.value.pairing_partner ? 'Collaborative work block paired & booked' : 'Work block booked')), 'success');
-          await fetchPlannerData();
-          await fetchWorkstationData(selectedEmployee.value);
-        } catch (e) { showToast('Could not book block: ' + (e && e.message || e), 'danger'); }
-        finally { plannerBusy.value = false; }
+        }
       };
 
       const generateTimesheet = async (block) => {
@@ -5559,24 +5563,7 @@ export function useOmniTrackWorkstation() {
       // Same endpoint the planner drag uses — typed instead of dragged, for the
       // dashboard row where there is no grid to drag on.
       const submitReschedule = async () => {
-        if (!activeBlock.value) return;
-        if (isBlockLocked(activeBlock.value)) { showToast('Planned work blocks in the past cannot be rescheduled', 'warning'); return; }
-        const f = rescheduleForm.value;
-        if (!f.work_date || !f.start_time || !f.end_time) { showToast('Pick a date, a start and an end time', 'danger'); return; }
-        if (f.end_time <= f.start_time) { showToast('End time must be after the start time', 'danger'); return; }
-        plannerBusy.value = true;
-        try {
-          await postJSON('reschedule_work_block', {
-            block_name: activeBlock.value.name,
-            new_date: f.work_date,
-            new_start_time: f.start_time,
-            new_end_time: f.end_time,
-          });
-          showToast('Block rescheduled', 'success');
-          await fetchPlannerData();
-          showBlockDrawer.value = false;
-        } catch (e) { showToast('Could not reschedule block: ' + (e && e.message || e), 'danger'); }
-        finally { plannerBusy.value = false; }
+        await workBlockStore.submitReschedule();
       };
 
       const submitSession = async () => {
@@ -5608,35 +5595,9 @@ export function useOmniTrackWorkstation() {
         finally { plannerBusy.value = false; }
       };
 
-      // Structured Block Cancellation & No-Show
-      const showCancelModal = ref(false);
-      const cancelTargetBlock = ref(null);
-      const cancelForm = ref({
-        reason: 'Client No-Show',
-        notes: '',
-        log_elapsed: true
-      });
-      const cancelReasons = [
-        'Client No-Show',
-        'Client Cancelled / Requested Reschedule',
-        'Internal Priority Shift',
-        'Blocked by Dependency',
-        'Other'
-      ];
-
+      // Structured Block Cancellation & No-Show delegated to workBlockStore
       const openCancelModal = (block) => {
-        if (!block) return;
-        if (isPastBlock(block)) {
-          showToast('Planned work blocks in the past cannot be changed or cancelled', 'warning');
-          return;
-        }
-        cancelTargetBlock.value = block;
-        cancelForm.value = {
-          reason: 'Client No-Show',
-          notes: '',
-          log_elapsed: isTracking.value && trackerBlockName.value === block.name
-        };
-        showCancelModal.value = true;
+        workBlockStore.openCancelModal(block);
       };
 
       const openCancelModalForActive = () => {
@@ -5649,48 +5610,15 @@ export function useOmniTrackWorkstation() {
       };
 
       const submitCancelBlock = async () => {
-        if (!cancelTargetBlock.value) return;
-        plannerBusy.value = true;
-        try {
-          const blk = cancelTargetBlock.value;
-          const reason = cancelForm.value.reason;
-          const notes = cancelForm.value.notes ? `Cancelled (${reason}): ${cancelForm.value.notes}` : `Cancelled (${reason})`;
-
-          if (isTracking.value && trackerBlockName.value === blk.name) {
-            if (cancelForm.value.log_elapsed && currentElapsedSeconds.value >= 30) {
-              if (sessionNotesList.value.length === 0) {
-                sessionNotesList.value.push(notes);
-              }
-              await stopSessionRemote(false);
-            } else {
-              discardSession();
-            }
-          }
-
-          await postJSON('update_work_block', {
-            block_name: blk.name,
-            status: 'Cancelled',
-            cancel_reason: reason
-          });
-
-          if (trackerBlockName.value === blk.name) {
-            trackerBlockName.value = '';
-            trackerBoundBlock.value = null;
-          }
-
-          showCancelModal.value = false;
-          showBlockDrawer.value = false;
-          showToast(`Block cancelled (${reason})`, 'info');
-          await fetchPlannerData();
-        } catch (e) {
-          showToast('Could not cancel block: ' + (e && e.message || e), 'danger');
-        } finally {
-          plannerBusy.value = false;
+        await workBlockStore.submitCancelBlock();
+        if (trackerBlockName.value && cancelTargetBlock.value && trackerBlockName.value === cancelTargetBlock.value.name) {
+          trackerBlockName.value = '';
+          trackerBoundBlock.value = null;
         }
       };
 
       const cancelActiveBlock = async () => {
-        openCancelModal(activeBlock.value);
+        workBlockStore.cancelActiveBlock();
       };
 
       // Executive Client Portal Computed Metrics
@@ -6497,6 +6425,10 @@ export function useOmniTrackWorkstation() {
         plannerGridScroll,
         plannerDays,
         plannerRangeLabel,
+        calendarViewMode,
+        plannerDate,
+        plannerDateDisplay,
+        calendarDays,
         showBookModal,
         bookForm,
         showBlockDrawer,
