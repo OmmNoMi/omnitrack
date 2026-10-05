@@ -996,6 +996,34 @@ export function useOmniTrackWorkstation() {
         setTimeout(() => { toast.value.show = false; }, 3500);
       };
 
+      // Collaboration Domain Store Integration
+      const collaborationStore = useCollaborationStore({ postJSON, showToast });
+      const {
+        showTaskRavenDrawer,
+        ravenTask,
+        ravenChannel,
+        ravenMessages,
+        ravenLoading,
+        ravenChatSending,
+        ravenChatInput,
+        ravenActiveTab,
+        ravenTaskSpec,
+        ravenSavingSpec,
+        ravenSprintRecaps,
+        drawerChatMessages,
+        drawerChatLoading,
+        drawerChatInput,
+        drawerChatSending,
+        openTaskRavenDrawer,
+        closeTaskRavenDrawer,
+        openRavenApp,
+        fetchTaskRavenDetails,
+        sendRavenChatMessage,
+        fetchDrawerChat,
+        sendDrawerChatMessage
+      } = collaborationStore;
+
+
             // 6. Plan Focus Block Modal
       const showNewTaskModal = ref(false);
       const newTaskForm = ref({
@@ -5397,80 +5425,9 @@ export function useOmniTrackWorkstation() {
 
       const rescheduleForm = ref({ work_date: '', start_time: '', end_time: '' });
 
-      // ---- Raven Living Discussion in Block Drawer -----------------------------
-      const drawerChatMessages = ref([]);
-      const drawerChatLoading = ref(false);
-      const drawerChatInput = ref('');
-      const drawerChatSending = ref(false);
-
-      const fetchDrawerChat = async (taskId) => {
-        if (!taskId) { drawerChatMessages.value = []; return; }
-        drawerChatLoading.value = true;
-        try {
-          const res = await postJSON('get_task_chat', { task_id: taskId, limit: 30 });
-          drawerChatMessages.value = (res && res.messages) || [];
-        } catch (e) {
-          console.warn('Could not load drawer chat', e);
-        } finally {
-          drawerChatLoading.value = false;
-        }
-      };
-
-      const sendDrawerChatMessage = async () => {
-        const text = drawerChatInput.value.trim();
-        const taskId = activeBlock.value && (activeBlock.value.task || activeBlock.value.name);
-        if (!text || !taskId || drawerChatSending.value) return;
-        drawerChatSending.value = true;
-        try {
-          const res = await postJSON('post_task_chat_message', { task_id: taskId, content: text });
-          if (res && res.success) {
-            drawerChatInput.value = '';
-            await fetchDrawerChat(taskId);
-          }
-        } catch (e) {
-          showToast('Failed to send message: ' + (e && e.message || e), 'danger');
-        } finally {
-          drawerChatSending.value = false;
-        }
-      };
-
-      // ---- Raven Dedicated Task Collaboration & Living Specs Drawer ----
-      const showTaskRavenDrawer = ref(false);
-      const ravenTask = ref(null);
-      const ravenChannel = ref(null);
-      const ravenMessages = ref([]);
-      const ravenLoading = ref(false);
-      const ravenChatSending = ref(false);
-      const ravenChatInput = ref('');
-      const ravenActiveTab = ref('chat');
-      const ravenTaskSpec = ref('');
-      const ravenSavingSpec = ref(false);
-
-      const ravenSprintRecaps = computed(() => {
-        return (ravenMessages.value || []).filter(m => {
-          const txt = m.content || m.text || '';
-          return txt.includes('🏁 Focus Session Accomplished') || txt.includes('🏁') || m.is_bot_message || m.message_type === 'System';
-        });
-      });
-
+      // Collaboration Drawer actions delegated to collaborationStore
       const openTaskDetails = (task) => {
         openTaskRavenDrawer(task, 'details');
-      };
-
-      const openTaskRavenDrawer = (task, initialTab = 'chat') => {
-        if (!task) return;
-        ravenTask.value = { ...task };
-        showTaskRavenDrawer.value = true;
-        ravenActiveTab.value = initialTab;
-        ravenMessages.value = [];
-        ravenTaskSpec.value = task.description || '';
-        ravenChatInput.value = '';
-        fetchTaskRavenDetails(task.name || task.ref || task.id, task.doctype || 'Task');
-      };
-
-      const closeTaskRavenDrawer = () => {
-        showTaskRavenDrawer.value = false;
-        ravenTask.value = null;
       };
 
       const taskConnectedBlocks = (task) => {
@@ -5484,53 +5441,6 @@ export function useOmniTrackWorkstation() {
           });
         }
         return found;
-      };
-
-      const fetchTaskRavenDetails = async (taskId, doctype = 'Task') => {
-        if (!taskId) return;
-        ravenLoading.value = true;
-        try {
-          const res = await postJSON('get_task_chat', { task_id: taskId, limit: 50 });
-          if (res) {
-            ravenChannel.value = res.channel;
-            ravenMessages.value = res.messages || [];
-          }
-          // Fetch complete task details, description and connected blocks
-          try {
-            const detailRes = await postJSON('get_task_details', { task_id: taskId, doctype: doctype || 'Task' });
-            if (detailRes && detailRes.task && ravenTask.value) {
-              Object.assign(ravenTask.value, detailRes.task);
-              if (!ravenTaskSpec.value && detailRes.task.description) {
-                ravenTaskSpec.value = detailRes.task.description;
-              }
-            }
-          } catch (e2) {
-            console.warn('Could not fetch rich task details', e2);
-          }
-        } catch (e) {
-          console.warn('Could not load Raven chat details', e);
-        } finally {
-          ravenLoading.value = false;
-        }
-      };
-
-      const sendRavenChatMessage = async () => {
-        const text = (ravenChatInput.value || '').trim();
-        const taskId = ravenTask.value && (ravenTask.value.name || ravenTask.value.ref || ravenTask.value.id);
-        if (!text || !taskId || ravenChatSending.value) return;
-
-        ravenChatSending.value = true;
-        try {
-          const res = await postJSON('post_task_chat_message', { task_id: taskId, content: text });
-          if (res && res.success) {
-            ravenChatInput.value = '';
-            await fetchTaskRavenDetails(taskId);
-          }
-        } catch (e) {
-          showToast('Failed to post message: ' + (e && e.message || e), 'danger');
-        } finally {
-          ravenChatSending.value = false;
-        }
       };
 
       const pinRavenMessage = async (m) => {
@@ -5580,10 +5490,6 @@ export function useOmniTrackWorkstation() {
         } finally {
           ravenSavingSpec.value = false;
         }
-      };
-
-      const openRavenApp = () => {
-        window.open('/raven', '_blank');
       };
 
       // ---- Focus Tasks & Connected Deliverables ----
