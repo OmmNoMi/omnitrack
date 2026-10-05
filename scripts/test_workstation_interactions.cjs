@@ -30,12 +30,16 @@ const hoverCardVuePath = path.resolve(__dirname, '..', 'src', 'components', 'com
 const sessionOverlayVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'SessionOverlay.vue');
 const drawerCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'drawers', 'DrawerCoordinator.vue');
 const viewCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'views', 'ViewCoordinator.vue');
+const storesDir = path.resolve(__dirname, '..', 'src', 'stores');
+const storeFiles = fs.existsSync(storesDir)
+  ? fs.readdirSync(storesDir).filter(f => f.endsWith('.js')).map(f => path.join(storesDir, f))
+  : [];
 
 const filesToInspect = [
   omnitrackHtmlPath, composablePath, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
   blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
   headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath,
-  drawerCoordinatorVuePath, viewCoordinatorVuePath, ...dialogFiles
+  drawerCoordinatorVuePath, viewCoordinatorVuePath, ...storeFiles, ...dialogFiles
 ];
 
 let content = '';
