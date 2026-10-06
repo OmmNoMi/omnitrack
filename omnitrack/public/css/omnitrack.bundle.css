@@ -355,6 +355,13 @@
 	opacity: 1;
 }
 
+/* Frappe sprite icons inherit the text colour of the menu tick and the caret. */
+.omnitrack-opts-dropdown .omni-opt-item .check .icon,
+.omnitrack-timer-opts .icon {
+	--icon-stroke: currentColor;
+	stroke: currentColor;
+}
+
 /* Save Modal Discard Action Styling Fix (crisp white label on red) */
 .modal-footer button.btn-danger,
 .modal-footer .btn-danger {

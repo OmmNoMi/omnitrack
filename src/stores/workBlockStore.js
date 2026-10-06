@@ -182,7 +182,8 @@ export function useWorkBlockStore({
         work_items: refs,
         task: picked && !String(picked.ref).startsWith('todo:') ? picked.ref : null,
         project: picked ? (picked.project || null) : (f.project || null),
-        work_item_label: picked ? picked.subject : (newTask || notes || null),
+        // The Title typed here names the block; a picked task names it only when no title was typed
+        work_item_label: notes || (picked ? picked.subject : newTask) || null,
         new_task_subject: newTask || null,
         task_nature: nature,
         deliverable_notes: notes || (picked && picked.subject) || newTask || nature,

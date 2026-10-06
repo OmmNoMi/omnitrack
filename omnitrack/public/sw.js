@@ -57,8 +57,8 @@ self.addEventListener('push', function(event) {
 		}
 	}
 	const alertType = data.alert_type || '';
-	const isUpcoming10m = alertType === 'upcoming_10m' || (data.title && data.title.includes('Upcoming in 10m'));
-	const isStartOnTime = alertType === 'start_on_time' || (data.title && (data.title.includes('Time to Start') || data.title.includes('Start Session')));
+	const isUpcoming10m = alertType === 'upcoming_10m' || (data.title && data.title.includes('In 10 minutes'));
+	const isStartOnTime = alertType === 'start_on_time' || (data.title && (data.title.includes('Time to start') || data.title.includes('Start Session')));
 	const isSessionAlert = data.is_timer || (data.title && (data.title.includes('Session') || data.title.includes('Overrun') || data.title.includes('Still Working')));
 
 	let actions = [];
@@ -68,22 +68,22 @@ self.addEventListener('push', function(event) {
 		// Gentle double tap for 10m warning
 		vibratePattern = [100, 80, 100];
 		actions = [
-			{ action: 'view_block', title: '📅 View in Calendar' },
-			{ action: 'start_now', title: '▶ Start Now Early' }
+			{ action: 'view_block', title: 'Open in calendar' },
+			{ action: 'start_now', title: 'Start now' }
 		];
 	} else if (isStartOnTime) {
 		// Firm attention tap for exact start time
 		vibratePattern = [150, 100, 250];
 		actions = [
-			{ action: 'start_now', title: '▶ Start Session Now' },
-			{ action: 'view_block', title: '📅 View in Calendar' }
+			{ action: 'start_now', title: 'Start session' },
+			{ action: 'view_block', title: 'Open in calendar' }
 		];
 	} else if (isSessionAlert) {
 		vibratePattern = [200, 100, 200, 100, 200];
 		actions = [
-			{ action: 'still_working', title: '⏱️ Still Working' },
-			{ action: 'add_30m', title: '➕ +30m' },
-			{ action: 'stop_session', title: '⏹️ Stop' }
+			{ action: 'still_working', title: 'Still working' },
+			{ action: 'add_30m', title: 'Add 30 min' },
+			{ action: 'stop_session', title: 'Stop' }
 		];
 	} else {
 		actions = [
@@ -107,8 +107,8 @@ self.addEventListener('message', function(event) {
 	if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
 		const title = event.data.title || 'OmniTrack Alert';
 		const alertType = event.data.alert_type || '';
-		const isUpcoming10m = alertType === 'upcoming_10m' || title.includes('Upcoming in 10m');
-		const isStartOnTime = alertType === 'start_on_time' || title.includes('Time to Start');
+		const isUpcoming10m = alertType === 'upcoming_10m' || title.includes('In 10 minutes');
+		const isStartOnTime = alertType === 'start_on_time' || title.includes('Time to start');
 		const isTimer = event.data.is_timer || title.includes('Session') || title.includes('Overrun');
 
 		let defaultActions = [];
@@ -117,21 +117,21 @@ self.addEventListener('message', function(event) {
 		if (isUpcoming10m) {
 			vibratePattern = [100, 80, 100];
 			defaultActions = [
-				{ action: 'view_block', title: '📅 View in Calendar' },
-				{ action: 'start_now', title: '▶ Start Now Early' }
+				{ action: 'view_block', title: 'Open in calendar' },
+				{ action: 'start_now', title: 'Start now' }
 			];
 		} else if (isStartOnTime) {
 			vibratePattern = [150, 100, 250];
 			defaultActions = [
-				{ action: 'start_now', title: '▶ Start Session Now' },
-				{ action: 'view_block', title: '📅 View in Calendar' }
+				{ action: 'start_now', title: 'Start session' },
+				{ action: 'view_block', title: 'Open in calendar' }
 			];
 		} else if (isTimer) {
 			vibratePattern = [200, 100, 200, 100, 200];
 			defaultActions = [
-				{ action: 'still_working', title: '⏱️ Still Working' },
-				{ action: 'add_30m', title: '➕ +30m' },
-				{ action: 'stop_session', title: '⏹️ Stop' }
+				{ action: 'still_working', title: 'Still working' },
+				{ action: 'add_30m', title: 'Add 30 min' },
+				{ action: 'stop_session', title: 'Stop' }
 			];
 		} else {
 			defaultActions = [

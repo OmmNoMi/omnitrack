@@ -4,7 +4,7 @@
   <f-dialog
     :model-value="modelValue"
     title="Add tasks"
-    :subtitle="block.task_subject || block.work_item_label || null"
+    :subtitle="blockTitle(block, '') || null"
     size="lg"
     @update:model-value="$emit('update:modelValue', $event)"
   >
@@ -32,6 +32,7 @@
 import PlanTaskStep from '../components/dialogs/PlanTaskStep.vue';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import { whenLine } from '../utils/clockTime.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 export default {
   name: 'AddBlockTasksDialog',
@@ -68,6 +69,7 @@ export default {
     },
   },
   methods: {
+    blockTitle,
     async add(refs, newSubject) {
       const list = (refs || []).filter(Boolean);
       const subject = String(newSubject || '').trim();

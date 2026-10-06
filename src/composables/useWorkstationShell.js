@@ -1,6 +1,6 @@
 import { lazy } from "./workstationBag.js";
 import { ACTIVITY_OPTIONS, activityOption, isNonWorking } from "../utils/activity.js";
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, watch, onMounted } from "vue";
 
 /**
  * Navigation, theme and static option tables.
@@ -74,12 +74,6 @@ const getInitialTabFromHash = () => {
   watch(isDarkMode, (newVal) => {
     applyTheme(newVal);
   }, { immediate: true });
-  const mobileTabs = computed(() => [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', badge: null },
-    { id: 'planner', label: 'Calendar', icon: '📅', badge: plannerData.value && plannerData.value.totals && plannerData.value.totals.block_count ? plannerData.value.totals.block_count : null },
-    { id: 'timesheets', label: 'Timesheets', icon: '⏱️', badge: totalFilteredHours.value ? totalFilteredHours.value + 'h' : null },
-    ...(isManager.value ? [{ id: 'attendance', label: 'Team', icon: '👥', badge: null }] : [])
-  ]);
   // Helper for local calendar date YYYY-MM-DD
   const getLocalTodayISO = (d = new Date()) => {
     const y = d.getFullYear();
@@ -130,7 +124,6 @@ const plannerData = ref({
     appendSessionLine,
     applyTheme,
     toggleTheme,
-    mobileTabs,
     getLocalTodayISO,
     todayISO,
     _minToHHMM,

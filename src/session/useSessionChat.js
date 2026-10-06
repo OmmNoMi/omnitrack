@@ -1,4 +1,5 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { blockTitle } from '../utils/blockTitle.js';
 
 export function useSessionChat(props) {
   // ---- Raven Real-Time Task Chat Integration ---------------------------------
@@ -82,7 +83,7 @@ export function useSessionChat(props) {
 
   const connectedTaskName = computed(() => {
     if (props.trackerBoundBlock) {
-      return props.trackerBoundBlock.task_subject || props.trackerBoundBlock.work_item_label || props.trackerBoundBlock.deliverable_notes || props.trackerBoundBlock.task || 'Client Support Session';
+      return blockTitle(props.trackerBoundBlock, props.trackerBoundBlock.task || 'Client Support Session');
     }
     return props.trackerNotes || 'General Task';
   });

@@ -65,7 +65,7 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
    - Enforce in `book_work_block`, `update_work_block`, `delete_work_block`, `PlannedWorkBlock.validate()`, and `PlannedWorkBlock.on_trash()`.
 
 3. **Workstation Session Terminology & UX Protocol**:
-   - Action terminology for starting a timesheet session against a task/block is strictly **"Start Session"** with a Play icon (`▶`). Never use meeting/video metaphors such as "Join Focus Session".
+   - Action terminology for starting a timesheet session against a task/block is strictly **"Start Session"** with a play icon (FeatherIcon `play`, never a glyph). Never use meeting/video metaphors such as "Join Focus Session".
    - A session started by mistake or abandoned can be thrown away without creating an empty timesheet using the 2-step **Discard** action.
    - Stopping a session with an empty line log must prompt for confirmation (`Stop anyway`) to prevent accidental blank timesheets.
    - On session stop, immediately snapshot elapsed time and reset the live stopwatch display to `00:00:00` so a standby HUD is never mistaken for an active running session.
@@ -113,6 +113,11 @@ later in `setup()`. Register such watches inside `onMounted()`.
 * With no default-slot text and no `icon` prop or `#icon` slot, Button renders `label` as **visible** text. An icon drawn only in `#prefix` therefore shows a truncated "P…" beside it. Icon-only Buttons use `icon="feather-name"`, which makes the label screen-reader-only. Test 1 guards this.
 * `data-*` attributes keep their values (the older note saying they were dropped is wrong for 0.1.278).
 * The `tooltip` prop is for a few words plus a shortcut. Never repeat the visible text.
+* Blue fails contrast: subtle blue is about 4.1:1 and solid blue under white text about 3.5:1. A primary Button is `variant="solid" theme="blue" class="!bg-blue-700 hover:!bg-blue-800"`.
+* frappe-ui's type scale is a step smaller than Tailwind's: `text-xs` 12px, `text-sm` 13px, `text-base` 14px. Card titles want `text-lg`.
+
+## Gotcha: no emojis or glyphs, and old ones stay readable
+`scripts/check_no_glyphs.cjs` fails on any emoji or pictograph in user-facing code (comments and docstrings are skipped). Older Raven recaps start with an emoji, so `collaborationStore` matches them through an escape (`'\u23F1'`), which the check does not see. Read legacy values that way; never write a new one.
 
 ## Gotcha: Dropdown vs Combobox
 
@@ -258,3 +263,20 @@ reka's DropdownMenu hands focus back to its trigger after the menu has closed, w
 
 ## Gotcha: frappe-ui Tabs has no visible keyboard focus (0.1.278)
 `Tabs` (reka TabsRoot/TabsList/TabsTrigger) gives roving focus and an animated indicator. Its default trigger, though, is a bare `<button>` with no focus style, and its list carries `p-1 px-5 gap-5`, which you cannot override from outside. Until that changes, the app's tab bars use the Material tab in `SessionLogPane.vue` (`TAB`, `INDICATOR`, `COUNT`). On a tab, a focus ring must be **inset** (`focus-visible:ring-inset`) on a padded target. An outer ring on a bare label is clipped by the bar's underline into a broken box.
+
+## Gotcha: there are two `planned_work_block.json` files
+The DocType Frappe syncs is `omnitrack/omnitrack/doctype/planned_work_block/`. The top-level `omnitrack/doctype/` folder is a stale copy (it has a "Flagged" option the live one lacked, which is how Flag broke without anyone noticing). Edit only the inner one, bump `modified`, then migrate. `check_block_reminders.mjs` reads the inner one.
+
+## Gotcha: an approval's undo lives in the cache
+`approve_work_blocks` stores what each approval replaced under `omnitrack:undo-review:<block>` for `UNDO_REVIEW_SECONDS` (30 s; the toast offers 5). `undo_block_approval` reads it back. Do not widen the window into a general "unapprove". That is a separate product decision (ROADMAP).
+
+## Gotcha: `data-cell` is used by more than one list
+The live session popup's task checkboxes and the entry sheet's task list both use `data-cell="r:c"`. A browser probe must scope its query to the sheet (`[aria-labelledby="session-drawer-title"] [data-cell=...]`). An unscoped one focuses a checkbox outside the modal sheet. The sheet then closes on focus-out and the probe reports a roving bug that is not there.
+
+## Gotcha: the entry sheet's task list
+- `get_work_session` sends each task with `workflow`, `state` and `actions` (`_with_workflow`), only for tasks the viewer may read. The row's own `status` is a snapshot; the document is the truth.
+- A move from the sheet calls `openTaskForm(task, { ask })`, which lands on that move's confirm step. Never call `execute_task_workflow_action` from a list.
+- Task moves shown for an entry come from Version rows inside the session window. `frappe.db.set_value` writes no Version, so a move made that way does not show.
+
+## Gotcha: bench console takes one line
+`bench --site <site> console` reads stdin line by line, so multi-line Python breaks. Write the probe to a file and run `echo "exec(open('<file>').read())" | bench --site <site> console`.

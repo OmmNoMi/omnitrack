@@ -33,7 +33,10 @@ export function useCollaborationStore({ postJSON, showToast }) {
   const ravenSprintRecaps = computed(() => {
     return (ravenMessages.value || []).filter(m => {
       const txt = m.content || m.text || '';
-      return txt.includes('🏁 Focus Session Accomplished') || txt.includes('🏁') || m.is_bot_message || m.message_type === 'System';
+      // raven_bridge.post_session_accomplishment_recap writes "finished a session". Recaps posted before
+      // 2026-10 start with a flag or stopwatch emoji instead; read them, never write them.
+      return txt.includes('finished a session') || txt.includes('\u{1F3C1}') || txt.includes('\u23F1')
+        || m.is_bot_message || m.message_type === 'System';
     });
   });
 

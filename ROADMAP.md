@@ -741,6 +741,47 @@ Phase 0 → Phase 1 (dashboard first, as proof) → Phase 2 splits → Phase 3 �
 - Fixed: the tab focus ring was an outer ring on an unpadded label, and the bar's underline clipped it into a broken box round "Log 5". The tabs are now Material primary tabs: a padded target, a hover tint, an inset focus ring, and a shared 3px indicator under the active tab. The Log count is blue only while its tab is active. Guard 18 plus a mutant.
 - Fixed: opening the session drew a blue ring round the popup's contents. That was `sessionCardFlash`, a "here it is" pulse from before the popup existed. Opening the popup already marks the moment, so the flash is removed everywhere (SessionBox, SessionOverlay, App, the pickers, the store). Guard 19 plus a mutant.
 - Open: three other hand-rolled tab bars (`WorkstationBottomNav.vue`, `CalendarAssignedTasks.vue`, `DashboardAttentionTasks.vue`) should share this one Material tab look. Move all four to frappe-ui `Tabs` once its trigger has a visible keyboard focus. In 0.1.278 its default trigger has none, and its list pads 20px from the edge (see AGENTS.md).
-- Open: `BlockHoverCard.vue` still shows emojis (🔴 ✓ 🔒 ⏱ 📁) and `text-[9px]` low-contrast text. Replace them with FeatherIcons and readable sizes.
-- Open: the demo `timelineMembers` in `useWorkstationShortcuts.js` carry emojis.
+- Done: `BlockHoverCard.vue` has no emojis left, and its footer shows only the ERPNext Timesheet reference (the day is already on screen).
+- Done: the demo `timelineMembers` emojis are gone with the rest (see the glyph sweep below).
 - Open: `src/stores/workSessionStore.js` is not imported anywhere. Either wire it in or remove it (removal needs the owner's go-ahead).
+
+
+### No glyphs, readable cards, statuses that agree (2026-10-06)
+- Done: every emoji and pictographic glyph is gone from what a person reads: the SPA, the Desk script (check mark and caret are now Frappe sprite icons), service-worker notification actions, heatmap badges, Raven recaps and API text. `scripts/check_no_glyphs.cjs` (in `test:static`) fails on any new one; two mutants. Stored recaps written before this still start with an emoji. `collaborationStore` reads them through escapes and the new marker "finished a session" and never writes one.
+- Fixed: the recap filter never matched the stopwatch recap, so session recaps showed as ordinary chat. It now matches the new marker and the legacy glyph.
+- Done: the switch dialog is "Switch to the next session": running section, a labelled frappe-ui `Textarea` "What you did" (no native textarea), next block or task, "Keep current" and "Save and start next". Test 37.
+- Done: "Up next" reads as overline, title and time line on a plain card. Its primary button is solid blue-700, because frappe-ui's subtle blue Button is about 4.1:1 and fails AA. Every start button now says "Start session" with the play icon.
+- Fixed: a past block that logged nothing said Missed, "Concluded 330m early", "Verified" and "1 completed" all at once. Variance now needs logged time, "Verified" is gone, and the header counts "done" (logged) and "missed" (nothing logged) separately. Notes that equal the card title are no longer shown a second time. "Show full details & breakdown" is "Show more".
+- Fixed: the concluded grid's arrow keys skipped columns. Navigation now reads the DOM. Verified with real keys.
+- Fixed: the Desk bundle 404'd because its hashed `dist/js/omnitrack.bundle.*.js` had been deleted while `assets.json` still pointed at it. `bench build --app omnitrack` regenerated it.
+- Done: "Day at a glance" offers 3h, 6h, 12h and 24h on every screen, and phones (under 640px) open on 3h. The rule lives in `src/utils/timelineZoom.js` and is tested by running it (`scripts/check_timeline_zoom.mjs`, two mutants). The zoom chips are 12px with 24px targets (were 10px and 19px).
+- Open: hashed `omnitrack/public/dist/js/*.bundle.*.js` files are tracked in git, so every build churns them. Untrack them and ignore `public/dist`.
+- Fixed: the day subtitle said "0.0h logged" over a timeline legend saying "Logged 5.7h". The subtitle summed planned blocks only, while the legend also counts unplanned and running sessions. The subtitle now names the day and its block count, and the legend alone states the hours. Guarded in `check_timeline_zoom.mjs` with a mutant.
+- Open: a block later today (7:30 PM, viewed at 6:20 PM) shows under "Done today" as "Logged (Full)" and "On plan" because a session was logged against it early. Decide whether time logged before a block starts counts as doing that block.
+- Open: the live timeline bar says "(Recording...)" and "REC" in the same 10px pill. Keep one.
+- Open: the EOD 8h target is hard-coded. Make it an OmniTrack Settings field.
+- Open: `raven_bridge.post_session_accomplishment_recap` puts session-log text into Markdown unescaped. Escape it.
+- Open: `CancelWorkBlockModal` still has a native textarea and 10px text.
+- Open: `getBlockTimingInfo` pills (rose-600, slate-600 on tints) need a contrast check.
+- Open: the Desk stopwatch settings menu's `menuitemradio` items have no `aria-checked`.
+- Open: the hover card shows 24h times ("02:30–08:00") while cards show 12h. Use one format.
+- Open: the CSS bundle is 4.7 MB, likely from inlined fonts.
+- Open: socket.io on port 9003 refuses connections on ommnomi.local. Check the socketio worker.
+- Open: the stop path writes session notes with "•" bullets that later code has to strip. Store plain lines.
+
+### Entry sheet, task workflow, Undo approval (2026-10-06, late)
+- Done: a logged bar opens the entry's own sheet (`SessionDetailDrawer`), never a form. It handles an entry with or without a planned block, and with or without tasks. One `get_work_session` read per open.
+- Done: the sheet's tasks show where each document stands (`_with_workflow` in `timesheet.py`, readable tasks only) and offer that task's workflow moves. A move opens the one task form (`TaskFormDialog`) at its confirm step (`openTaskForm(t, { ask })`). It never runs a move directly. Verified with real keys: roving Up/Down/Home/End/Left/Right, Enter opens the menu, and a pick lands on "Approve? It moves to Approved." Cancel leaves the task unchanged.
+- Done: task names in the sheet wrap in full. Planner block titles wrap to the lines the block has. A split lane drops its time line to the hover card.
+- Done: managers get New task in the bottom bar as well as Team. The bar is a navigation landmark with `aria-current`, not a tablist.
+- Done: Approve shows "Entry approved" with Undo for 5 seconds. The toast waits while it is hovered or focused. The server keeps what the approval replaced for 30 s (`_remember_review`). `undo_block_approval` restores it only for the approver, only while the block is still as they left it, and removes a draft Timesheet the approval made (it refuses a submitted one). Toast verified in the browser. The server undo is guarded and mutation-tested, but an actual approval was not exercised on ommnomi.local.
+- Fixed in the JSON, needs a sync: `approval_status` had no "Flagged" option in the live DocType, so every Flag was rejected on save. The option is added and `modified` is bumped. It needs `bench --site ommnomi.local migrate` (or `reload-doctype "Planned Work Block"`) by the owner.
+- Open: there is no way to take back an approval after the Undo window. Decide whether a manager can re-open an approved entry.
+- Open: approval is per block, not per entry. A block with two entries is approved as one.
+- Open: `BlockDetailDrawer` and `CalendarPlannerGrid.approvalDot` read `block.flagged_reason`, a field the block does not have. Read `approval_notes`.
+- Open: the entry sheet re-reads on every `workBlocks` refresh. Re-read only when this entry's block changed.
+- Open: `getTaskWorkflowMenuItems`, `promptWorkflowAction` and `showWorkflowModal` in `useWorkstationPortal.js` are a second, unused workflow path. Remove them along with their interaction-test references.
+- Open: `SwitchTaskModal.vue` is unreachable, `selectedDashboardDateLabel` is unused, and the `pushManager.subscribe` path is dead. Removing the files needs the owner's go-ahead.
+- Open: "Upcoming focus blocks" offers Start session on a block that is already Logged (Full). The block sheet says 0h of 1.5h while it lists a session. "Close your day" figures disagree with Today.
+- Open: "Edit entry" and "Add timesheet entry" wording against the vocabulary rule (Work Session, never bare "timesheet").
+- Open: phone push. The page plays a chime, but a closed app gets nothing. That needs FCM (Firebase) through the Frappe push relay, which means a new dependency, so it waits for the owner's decision. Production also needs deploying, the scheduler and the relay enabled.

@@ -1,5 +1,6 @@
 import * as Vue from "vue";
 import { WORK } from "../utils/activity.js";
+import { blockTitle } from '../utils/blockTitle.js';
 const { ref, computed } = Vue;
 
 export function useAssignmentStore({
@@ -143,7 +144,7 @@ export function useAssignmentStore({
     const blocks = todayPlannedBlocks ? todayPlannedBlocks.value : [];
     if (!q) return blocks;
     return blocks.filter(b => {
-      const title = (b.task_subject || b.work_item_label || b.task || b.deliverable_notes || b.name || '').toLowerCase();
+      const title = blockTitle(b, b.task || b.name || '').toLowerCase();
       const proj = (b.project_name || b.project || '').toLowerCase();
       return title.includes(q) || proj.includes(q);
     });
@@ -155,7 +156,7 @@ export function useAssignmentStore({
     const qLower = q.toLowerCase();
     const matchesTodo = openTodos.value.some(t => (t.subject || t.title || t.name || '').toLowerCase() === qLower);
     const blocks = todayPlannedBlocks ? todayPlannedBlocks.value : [];
-    const matchesBlock = blocks.some(b => (b.task_subject || b.work_item_label || b.task || '').toLowerCase() === qLower);
+    const matchesBlock = blocks.some(b => blockTitle(b, b.task || '').toLowerCase() === qLower);
     return !matchesTodo && !matchesBlock;
   });
 

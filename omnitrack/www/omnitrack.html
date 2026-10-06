@@ -85,6 +85,8 @@
       is_manager: {{ 'true' if is_manager else 'false' }},
       is_client: {{ 'true' if is_client else 'false' }},
       min_log_line_chars: {{ min_log_line_chars | int }},
+      site: "{{ site_name }}",
+      socketio_port: {{ socketio_port | int }},
       csrf_token: "{{ csrf_token }}",
       active_session: {{ (active_session | tojson) if active_session else 'null' }}
     };

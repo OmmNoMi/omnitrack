@@ -7,6 +7,7 @@
  */
 
 import * as Vue from "vue";
+import { blockTitle } from '../utils/blockTitle.js';
 const { ref } = Vue;
 
 export function useWorkstationAudioSync({
@@ -263,11 +264,11 @@ export function useWorkstationAudioSync({
       if (!lastOverrunAlertTime.value || timeSinceAlert >= REPEAT_MS) {
         lastOverrunAlertTime.value = nowMs;
         playInactivityChime();
-        const blockTitle = b.work_item_label || b.task_subject || b.name;
+        const title = blockTitle(b, b.name);
         const endHHMM = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
         const msg = overdueMins > 0
-          ? `Planned block "${blockTitle}" ended at ${endHHMM} (${overdueMins}m overdue). Wrap up or continue?`
-          : `Planned block "${blockTitle}" ended at ${endHHMM}. Wrap up or continue?`;
+          ? `Planned block "${title}" ended at ${endHHMM} (${overdueMins}m overdue). Wrap up or continue?`
+          : `Planned block "${title}" ended at ${endHHMM}. Wrap up or continue?`;
 
         dispatchInactivityNotification(msg, 'omnitrack-block-overrun');
       }

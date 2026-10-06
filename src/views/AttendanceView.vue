@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4 sm:space-y-6">
 <!-- TEAM WORK BLOCK & TIMESHEET APPROVALS (Manager Governance) -->
-      <div v-if="isManager" class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+      <div v-if="isManager" class="rounded-2xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
         <div class="p-4 border-b flex flex-wrap items-center justify-between gap-3 transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-800' : 'bg-gray-50/60 border-gray-200'">
           <div class="flex items-center gap-2">
             <svg class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -81,7 +81,7 @@
                 </td>
                 <td class="py-3.5 px-4">
                   <div class="font-bold leading-snug line-clamp-1" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
-                    {{ b.work_item_label || b.deliverable_notes || b.name }}
+                    {{ blockTitle(b, b.name) }}
                   </div>
                   <div class="text-[11px] text-gray-600 flex items-center gap-1.5 mt-0.5">
                     <span v-if="b.project">{{ b.project }} ·</span>
@@ -94,9 +94,9 @@
                 </td>
                 <td class="py-3.5 px-4">
                   <span v-if="b.pairing_partner" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
-                    👥 {{ b.pairing_partner_name || b.pairing_partner }}
+                    {{ b.pairing_partner_name || b.pairing_partner }}
                   </span>
-                  <span v-else class="text-[11px] text-gray-600">— Solo —</span>
+                  <span v-else class="text-xs text-gray-700 dark:text-gray-300">Solo</span>
                 </td>
                 <td class="py-3.5 px-4 text-right">
                   <Button
@@ -106,15 +106,13 @@
                     :disabled="loadingApprovals"
                     @click="approveWorkBlockSingle(b)"
                   >
-                    ✓ Approve
+                    Approve
                   </Button>
                 </td>
               </tr>
               <tr v-if="pendingApprovals.length === 0">
                 <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
-                  <div class="text-xl mb-1">🎉</div>
-                  <div class="font-bold">All team work blocks and timesheets are up to date!</div>
-                  <div class="text-[11px] text-gray-600 mt-0.5">No logged sessions are currently awaiting manager approval.</div>
+                  Nothing is waiting for your approval.
                 </td>
               </tr>
             </tbody>
@@ -122,7 +120,7 @@
         </div>
       </div>
 
-      <div class="rounded-3xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
+      <div class="rounded-2xl border shadow-xs overflow-hidden transition-colors" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
         
         <div class="p-4 border-b flex items-center justify-between transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-800' : 'bg-gray-50/60 border-gray-200'">
           <div class="flex items-center gap-2">
@@ -175,9 +173,11 @@
 
 <script>
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 export default {
   name: 'AttendanceView',
+  methods: { blockTitle },
   setup() {
     return useWorkstationContext([
       'approveAllPending',

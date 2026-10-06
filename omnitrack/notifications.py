@@ -102,6 +102,31 @@ def dispatch_push_notification(user, title, message, action_url="/omnitrack", is
 	return {"status": "dispatched", "user": user, "pushed_via_relay": pushed_via_relay}
 
 
+# Mirrors src/utils/blockReminders.js. The job runs every minute but can run late, so each
+# reminder has a range, and the cache key makes sure it goes out once.
+REMINDER_LEAD_MIN = 10
+REMINDER_START_GRACE_MIN = 5
+
+
+def reminder_kind(minutes_until_start):
+	if -REMINDER_START_GRACE_MIN <= minutes_until_start <= 0:
+		return "start_on_time"
+	if 0 < minutes_until_start <= REMINDER_LEAD_MIN:
+		return "upcoming_10m"
+	return None
+
+
+def _block_label(b):
+	"""The block's own title, as the app shows it (src/utils/blockTitle.js)."""
+	given = (b.get("work_item_label") or "").strip()
+	if given:
+		return given
+	for line in (b.get("deliverable_notes") or "").splitlines():
+		if line.strip():
+			return line.strip()
+	return _("Planned block")
+
+
 def dispatch_block_notification(user, title, message, action_url="/omnitrack", alert_type="upcoming_10m", block_name=None, actions=None, is_urgent=False):
 	"""
 	Dispatches an upcoming or on-time work block notification across:
@@ -206,7 +231,7 @@ def check_upcoming_planned_block_reminders(test_now=None):
 			"status": ["in", ["Draft", "Planned"]],
 			"start_time": ["is", "set"]
 		},
-		fields=["name", "employee", "start_time", "end_time", "work_item_label", "status"]
+		fields=["name", "employee", "start_time", "end_time", "work_item_label", "deliverable_notes", "status"]
 	)
 
 	alerts_10m = 0
@@ -225,15 +250,16 @@ def check_upcoming_planned_block_reminders(test_now=None):
 		block_start_mins = start_t.hour * 60 + start_t.minute
 		delta_mins = block_start_mins - cur_mins
 
-		task_label = (b.get("work_item_label") or b.name)[:50]
+		task_label = _block_label(b)[:50]
 		start_hhmm = start_t.strftime("%H:%M")
+		kind = reminder_kind(delta_mins)
 
-		# 1. T-10m Warning Window (8 <= delta_mins <= 11)
-		if 8 <= delta_mins <= 11:
+		# 1. Before the start: one reminder, sent the first minute the block is within the lead.
+		if kind == "upcoming_10m":
 			cache_key_10m = f"omnitrack:notif_10m:{b.name}"
 			if not frappe.cache.get_value(cache_key_10m):
-				title = _("⏳ Upcoming in 10m: {0}").format(task_label)
-				msg = _("Scheduled for {0}. Wrap up current work and get ready to start.").format(start_hhmm)
+				title = _("In {0} min: {1}").format(delta_mins, task_label)
+				msg = _("Starts at {0}. Wrap up what you are on.").format(start_hhmm)
 				action_url = f"/omnitrack?action=view_block&block={b.name}"
 				dispatch_block_notification(
 					user=employee,
@@ -243,21 +269,22 @@ def check_upcoming_planned_block_reminders(test_now=None):
 					alert_type="upcoming_10m",
 					block_name=b.name,
 					actions=[
-						{"action": "view_block", "title": _("📅 View in Calendar")}
+						{"action": "view_block", "title": _("Open in calendar")}
 					]
 				)
 				frappe.cache.set_value(cache_key_10m, "1", expires_in_sec=86400)
 				alerts_10m += 1
 
-		# 2. T-0 On-Time Alert Window (-1 <= delta_mins <= 2)
-		elif -1 <= delta_mins <= 2:
+		# 2. At the start, or a few minutes late when the job ran late. Tapping the alert opens
+		# the block; only its Start session button starts one.
+		elif kind == "start_on_time":
 			cache_key_0m = f"omnitrack:notif_0m:{b.name}"
 			if not frappe.cache.get_value(cache_key_0m):
 				end_t = get_time(b.end_time) if b.get("end_time") else None
 				time_desc = f"{start_hhmm} - {end_t.strftime('%H:%M')}" if end_t else start_hhmm
-				title = _("🚀 Time to Start: {0}").format(task_label)
-				msg = _("Scheduled for {0}. Tap to start your timesheet session now!").format(time_desc)
-				action_url = f"/omnitrack?action=start_block&block={b.name}"
+				title = _("Time to start: {0}").format(task_label)
+				msg = _("Planned for {0}.").format(time_desc)
+				action_url = f"/omnitrack?action=view_block&block={b.name}"
 				dispatch_block_notification(
 					user=employee,
 					title=title,
@@ -266,8 +293,8 @@ def check_upcoming_planned_block_reminders(test_now=None):
 					alert_type="start_on_time",
 					block_name=b.name,
 					actions=[
-						{"action": "start_now", "title": _("▶ Start Session Now")},
-						{"action": "view_block", "title": _("📅 View in Calendar")}
+						{"action": "start_now", "title": _("Start session")},
+						{"action": "view_block", "title": _("Open in calendar")}
 					]
 				)
 				frappe.cache.set_value(cache_key_0m, "1", expires_in_sec=86400)

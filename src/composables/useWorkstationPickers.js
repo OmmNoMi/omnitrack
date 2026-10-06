@@ -132,9 +132,12 @@ export function useWorkstationPickers(w) {
   // body, remember where focus came from, keep Tab inside the dialog, and
   // hand focus back on close — WCAG 2.1 2.4.3 / 2.1.2, not decoration.
   let _sessionPopupReturnFocus = null;
+  // The card lives in SessionOverlay, so a template ref there never reaches this module (it
+  // stayed null and the trap never ran). The Tab handler gets the card as currentTarget.
+  const _sessionPopupCard = () => document.querySelector('[role="dialog"][aria-labelledby="session-popup-title"]');
   const trapSessionPopupTab = (ev) => {
     if (!isSessionElevated.value) return;
-    const root = sessionCardRef.value;
+    const root = ev.currentTarget || _sessionPopupCard();
     if (!root) return;
     const items = [...root.querySelectorAll(
       'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -155,8 +158,10 @@ export function useWorkstationPickers(w) {
       document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
       nextTick(() => {
-        const root = sessionCardRef.value;
-        const target = root && root.querySelector('textarea, button');
+        // "/" has already put focus in the log input; only an opening from elsewhere needs a target.
+        const root = _sessionPopupCard();
+        if (!root || root.contains(document.activeElement)) return;
+        const target = root.querySelector('[data-session-input], textarea, input, button');
         if (target) target.focus();
       });
     } else {
@@ -263,7 +268,6 @@ export function useWorkstationPickers(w) {
       });
     }
   };
-  const sessionCardRef = ref(null);
 
   Object.assign(w, {
     showAppMenu,
@@ -287,6 +291,5 @@ export function useWorkstationPickers(w) {
     focusLogRowDeleteBtn,
     onLogRowKey,
     onRemoveBtnKey,
-    sessionCardRef,
   });
 }

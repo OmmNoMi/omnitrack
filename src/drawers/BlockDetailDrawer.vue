@@ -37,11 +37,11 @@
 
           <!-- Actions: the session and the plan up front; the rarer ones behind More -->
           <div v-if="!inline" class="flex items-center gap-2">
-            <Button v-if="!isBlockCompleted(block) && !isRecording" variant="solid" icon-left="play" label="Start Session" class="flex-1 !bg-blue-700 hover:!bg-blue-800 !text-white" @click="$emit('start-session', block)">Start Session</Button>
+            <Button v-if="!isBlockCompleted(block) && !isRecording" variant="solid" icon-left="play" label="Start session" class="flex-1 !bg-blue-700 hover:!bg-blue-800 !text-white" @click="$emit('start-session', block)" />
             <Button v-if="isRecording" variant="solid" theme="red" icon-left="square" label="Stop live session" class="flex-1 !bg-red-700 hover:!bg-red-800 !text-white" @click="$emit('stop-session', block)">Stop live session</Button>
             <Button v-if="isBlockReschedulable(block)" variant="outline" icon-left="calendar" label="Reschedule" aria-haspopup="dialog" @click="showReschedule = true">Reschedule</Button>
             <Dropdown v-if="moreActions.length" :options="moreActions" placement="right">
-              <Button variant="ghost" icon="more-horizontal" label="More actions" />
+              <Button variant="outline" icon-right="chevron-down" label="More" aria-haspopup="menu">More</Button>
             </Dropdown>
           </div>
 
@@ -75,7 +75,7 @@
             <div v-if="!block.is_live_active" class="w-full h-1 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="Logged against planned">
               <div class="h-full rounded-full" :class="block.variance_hours > 0.25 ? 'bg-red-600' : 'bg-blue-600'" :style="{ width: progress + '%' }"></div>
             </div>
-            <p v-if="!sessions.length" class="text-sm py-1" :class="mutedText">{{ isRecording ? 'Recording now. The time is logged here when you stop.' : 'Nothing logged yet. Start a session, or add a timesheet entry from More actions.' }}</p>
+            <p v-if="!sessions.length" class="text-sm py-1" :class="mutedText">{{ isRecording ? 'Recording now. The time is logged here when you stop.' : 'Nothing logged yet. Start a session, or add a timesheet entry from More.' }}</p>
             <ul v-else class="-mx-2">
               <li v-for="s in sessions" :key="s.name || s.from_time" class="group flex items-start gap-1 rounded-lg pl-2 pr-1 py-1.5" :class="hoverRow">
                 <div class="min-w-0 flex-1 py-0.5">
@@ -129,6 +129,7 @@ import { toneChipClass } from '../utils/taskState.js';
 import { whenLine } from '../utils/clockTime.js';
 import { hrs } from '../utils/taskMeta.js';
 import { WORK, toKind } from '../utils/activity.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 
 export default {
@@ -158,7 +159,7 @@ export default {
   computed: {
     title() {
       const b = this.block;
-      return b.task_subject || b.work_item_label || b.deliverable_notes || 'Work block';
+      return blockTitle(b);
     },
     when() {
       return whenLine(this.block.work_date, this.block.start_time, this.block.end_time);

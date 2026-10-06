@@ -93,6 +93,10 @@ def get_context(context):
 		settings = {}
 
 	ctx.settings = settings
+	# The realtime socket joins the namespace named after the site (Frappe's socket server
+	# rejects any other), and in development it listens on its own port.
+	ctx.site_name = frappe.local.site
+	ctx.socketio_port = frappe.conf.get("socketio_port") or 9000
 	ctx.app_logo_url = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg?v=shiva_eye_v1"
 	ctx.manifest_url = "/assets/omnitrack/manifest.json"
 

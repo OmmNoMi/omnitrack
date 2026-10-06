@@ -87,7 +87,7 @@
             </div>
           </div>
           <span class="shrink-0 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-            Switch →
+            Switch
           </span>
         </button>
       </div>

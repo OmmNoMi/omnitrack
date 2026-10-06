@@ -70,7 +70,7 @@
       <div class="flex flex-wrap items-center justify-end gap-2">
         <div v-if="taskMenu.length" class="mr-auto">
           <Dropdown :options="taskMenu" placement="left">
-            <Button variant="ghost" icon="more-horizontal" label="More for this task" :disabled="!!busy" />
+            <Button variant="ghost" icon-right="chevron-down" label="More" aria-haspopup="menu" :disabled="!!busy">More</Button>
           </Dropdown>
         </div>
         <Button variant="ghost" label="Cancel" @click="closeTaskForm">Cancel</Button>
@@ -211,6 +211,12 @@ export default {
         if (!taskForm.open || this.task !== t) return;
         this.fill(d, false);
         this.loaded = true;
+        // Opened from a move picked elsewhere: straight to that move's confirm step
+        const wanted = taskForm.ask;
+        taskForm.ask = null;
+        const a = wanted && this.detail.actions.find((x) => x.action === wanted);
+        if (a) this.ask(a);
+        else if (wanted) this.showToast(wanted + ' is no longer open for this task', 'warning');
       } catch (e) {
         this.showToast('Could not open this task: ' + (e && e.message || e), 'danger');
         closeTaskForm();
@@ -231,7 +237,7 @@ export default {
       if (res.tasks) b.tasks = res.tasks;
       if (res.block) {
         Object.assign(b, res.block);
-        if (b.task_subject !== undefined) b.task_subject = res.block.work_item_label || b.task_subject;
+        if (b.task_subject !== undefined && res.block.work_item_label) b.task_subject = res.block.work_item_label;
       }
     },
     async save() {

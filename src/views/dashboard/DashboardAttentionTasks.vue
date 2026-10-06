@@ -199,8 +199,8 @@
               @focus="setAttentionRoving(rIdx, 2)"
               @keydown="onAttentionGridKey($event, rIdx, 2)"
               icon-left="play"
-              :label="'Start Session now for ' + t.subject">
-              Start Session
+              :label="'Start session on ' + t.subject">
+              Start session
             </Button>
 
           </div>

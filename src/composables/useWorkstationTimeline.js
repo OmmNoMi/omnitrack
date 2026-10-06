@@ -1,5 +1,7 @@
 import * as Vue from "vue";
 import { toKind } from "../utils/activity.js";
+import { TIMELINE_ZOOM_OPTIONS, defaultTimelineZoom } from "../utils/timelineZoom.js";
+import { countedHours } from "../utils/countedHours.js";
 const { ref, computed, watch, nextTick, onMounted } = Vue;
 
 export function useWorkstationTimeline({
@@ -19,13 +21,9 @@ export function useWorkstationTimeline({
   _minsOf,
   hourLabel
 }) {
-  const timelineZoomOptions = [6, 12, 24];
-  const getTimelineDefaultZoom = (dateStr) => {
-    const todayStr = todayDate.value || getLocalTodayISO();
-    if (dateStr === todayStr) return 6; // 6-hour stretch for Today so the red line stays centered with past & future blocks
-    const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
-    return w < 640 ? 6 : (w < 1024 ? 12 : 24);
-  };
+  const timelineZoomOptions = TIMELINE_ZOOM_OPTIONS;
+  const getTimelineDefaultZoom = (dateStr) =>
+    defaultTimelineZoom(typeof window !== 'undefined' ? window.innerWidth : 1280, dateStr === (todayDate.value || getLocalTodayISO()));
 
   const timelineZoom = ref(getTimelineDefaultZoom(selectedDashboardDate.value));
   const timelineTrackWidth = computed(() => (24 / timelineZoom.value * 100) + '%');
@@ -35,13 +33,14 @@ export function useWorkstationTimeline({
     const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
     if (keys.indexOf(ev.key) === -1) return;
     ev.preventDefault();
-    const cur = Math.max(0, timelineZoomOptions.indexOf(timelineZoom.value));
+    const opts = timelineZoomOptions;
+    const cur = Math.max(0, opts.indexOf(timelineZoom.value));
     let next = cur;
-    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % timelineZoomOptions.length;
-    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + timelineZoomOptions.length) % timelineZoomOptions.length;
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % opts.length;
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + opts.length) % opts.length;
     else if (ev.key === 'Home') next = 0;
-    else next = timelineZoomOptions.length - 1;
-    timelineZoom.value = timelineZoomOptions[next];
+    else next = opts.length - 1;
+    timelineZoom.value = opts[next];
     nextTick(() => {
       const group = ev.currentTarget;
       const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-timeline-zoom]') : [];
@@ -105,8 +104,9 @@ export function useWorkstationTimeline({
       if (isViewingToday) {
         const d = new Date(startTime.value);
         const ss = d.getHours() * 60 + d.getMinutes();
-        const curNow = new Date();
-        const ee = Math.max(ss + 1, curNow.getHours() * 60 + curNow.getMinutes());
+        // nowMinute, not new Date(): a computed only re-runs when a ref it reads changes,
+        // so the bar froze while the now line kept moving.
+        const ee = Math.max(ss + 1, nowMinute.value);
         const runningBlock = blocks.find(b => b.name === trackerBlockName.value) || {
           name: trackerBlockName.value || 'live_running_session',
           work_item_label: trackerNotes.value || 'Active Work Session',
@@ -222,9 +222,12 @@ export function useWorkstationTimeline({
     nextTick(() => scrollTimelineToWork(false));
   });
 
+  // Counted hours, not actual_hours: time logged before the block or still ahead is not logged yet.
+  const loggedHours = (b) => countedHours(b, { date: todayDate.value || getLocalTodayISO(), minute: nowMinute.value });
+
   const blockLogState = (b) => {
     const planned = Number(b.duration_hours) || 0;
-    const actual = Number(b.actual_hours) || 0;
+    const actual = loggedHours(b);
     if (!actual) return 'none';
     if (planned && actual > planned + 0.01) return 'over';
     if (planned && actual < planned - 0.01) return 'short';
@@ -233,7 +236,7 @@ export function useWorkstationTimeline({
 
   const blockLogPct = (b) => {
     const planned = Number(b.duration_hours) || 0;
-    const actual = Number(b.actual_hours) || 0;
+    const actual = loggedHours(b);
     if (!planned) return actual ? 100 : 0;
     return Math.min(100, Math.round((actual / planned) * 100));
   };

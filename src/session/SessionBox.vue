@@ -22,6 +22,7 @@ import { SESSION_KEY } from './useSessionContext.js';
 import { useSessionChat } from './useSessionChat.js';
 import { useSessionDisplay } from './useSessionDisplay.js';
 import { useSessionNotes } from './useSessionNotes.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 const props = defineProps({
   isTracking: { type: Boolean, default: false },
@@ -87,7 +88,7 @@ watch(() => props.isElevated, (elevated) => {
 // Auto-fill connected task whenever a Planned Work Block is bound
 watch(() => props.trackerBoundBlock, (newBlock) => {
   if (newBlock && !props.trackerNotes) {
-    const taskTitle = newBlock.task_subject || newBlock.work_item_label || (newBlock.task ? (newBlock.task_subject || newBlock.task) : '') || newBlock.deliverable_notes || '';
+    const taskTitle = blockTitle(newBlock, '');
     if (taskTitle) emit('update:notes', taskTitle);
     if (newBlock.project) emit('update:project', newBlock.project);
     if (newBlock.task_nature) emit('update:nature', newBlock.task_nature);

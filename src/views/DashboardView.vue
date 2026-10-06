@@ -39,7 +39,7 @@
         <!-- Empty day: one sentence and a way to the planner; "Plan" sits in the header above -->
         <div v-else class="rounded-2xl px-6 py-10 border text-center" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'">
           <FeatherIcon name="calendar" class="w-8 h-8 mx-auto text-blue-600" aria-hidden="true" />
-          <p class="mt-3 text-sm font-medium" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">Nothing planned for {{ selectedDashboardDateLabel }}</p>
+          <p class="mt-3 text-sm font-medium" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">Nothing planned</p>
           <p class="mt-1 text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Book focus time like a meeting so it stays protected.</p>
           <div class="mt-4 flex justify-center gap-2">
             <Button variant="ghost" icon-right="arrow-right" label="Open week planner" @click="activeTab = 'planner'">Week planner</Button>
@@ -87,7 +87,6 @@ export default {
       'isDarkMode',
       'pastFocusBlocks',
       'selectedDashboardDate',
-      'selectedDashboardDateLabel',
       'todayDate',
       'untrackedCurrentBlocks',
       'upNextBlock',

@@ -20,10 +20,35 @@ export function useWorkstationStoreBindings(w) {
   const syncActiveSession = lazy(w, 'syncActiveSession');
 
   // 5. Toast Notifications
-  const toast = ref({ show: false, message: '', type: 'info' });
-  const showToast = (message, type = 'info') => {
-    toast.value = { show: true, message, type };
-    setTimeout(() => { toast.value.show = false; }, 3500);
+  // One toast at a time. `action` ({ label, onClick }) adds a button such as Undo; the timer
+  // waits while the pointer or keyboard focus is on the toast, so the button stays reachable.
+  const toast = ref({ show: false, message: '', type: 'info', action: null });
+  let toastTimer = null;
+  let toastLeft = 0;
+  let toastSince = 0;
+  const runToastTimer = (ms) => {
+    clearTimeout(toastTimer);
+    toastLeft = ms;
+    toastSince = Date.now();
+    toastTimer = setTimeout(() => { toast.value.show = false; }, ms);
+  };
+  const showToast = (message, type = 'info', { action = null, duration = 3500 } = {}) => {
+    toast.value = { show: true, message, type, action };
+    runToastTimer(duration);
+  };
+  const holdToast = () => {
+    if (!toastTimer) return;
+    clearTimeout(toastTimer);
+    toastTimer = null;
+    toastLeft = Math.max(0, toastLeft - (Date.now() - toastSince));
+  };
+  const releaseToast = () => { if (!toastTimer && toast.value.show) runToastTimer(Math.max(toastLeft, 1500)); };
+  const runToastAction = () => {
+    const a = toast.value.action;
+    clearTimeout(toastTimer);
+    toastTimer = null;
+    toast.value.show = false;
+    if (a && typeof a.onClick === 'function') a.onClick();
   };
   // Collaboration Domain Store Integration
   const collaborationStore = useCollaborationStore({ postJSON, showToast });
@@ -220,6 +245,9 @@ export function useWorkstationStoreBindings(w) {
   Object.assign(w, {
     toast,
     showToast,
+    holdToast,
+    releaseToast,
+    runToastAction,
     showTaskRavenDrawer,
     ravenTask,
     ravenChannel,

@@ -6,6 +6,11 @@ import { Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, Mul
 // <badge> element, with no warning in a production build. Every frappe-ui
 // component a template uses must be listed here; check_component_registry
 // reads this map.
+// The plugin also opens its own realtime socket by default, on port 9000 to window.site_name, which
+// this page never sets: a second socket that fails and retries forever. OmniTrack owns one socket
+// (useWorkstationEod), joined to the site the page names.
+export const FRAPPE_UI_OPTIONS = { socketio: false };
+
 export const FRAPPE_UI_COMPONENTS = { Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, MultiSelect, TabButtons, Textarea, TextInput, TimePicker, Tooltip };
 
 export function registerFrappeUIComponents(app) {

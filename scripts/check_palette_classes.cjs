@@ -39,8 +39,21 @@ for (const file of walk(path.join(root, 'src'))) {
   });
 }
 
+// Radius too: the preset's scale stops at 2xl, so `rounded-3xl` compiled to nothing and the
+// recording dialog rendered as a square card among rounded ones.
+const radii = theme.borderRadius;
+const radiusRe = /(?<![\w-])rounded(?:-(?:[trblse]|tl|tr|bl|br|ss|se|es|ee))?-([a-z0-9]+)(?![\w-])/g;
+for (const file of walk(path.join(root, 'src'))) {
+  fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+    for (const m of line.matchAll(radiusRe)) {
+      seen++;
+      if (radii[m[1]] === undefined) problems.push(`${path.relative(root, file)}:${i + 1} ${m[0]} (no "${m[1]}" radius in the theme)`);
+    }
+  });
+}
+
 if (problems.length) {
-  console.error('FAIL: colour classes that do not exist in the frappe-ui/Tailwind theme (they compile to nothing):\n  ' + problems.join('\n  '));
+  console.error('FAIL: colour or radius classes that do not exist in the frappe-ui/Tailwind theme (they compile to nothing):\n  ' + problems.join('\n  '));
   process.exit(1);
 }
-console.log(`SUCCESS: all ${seen} colour classes resolve to theme colours.`);
+console.log(`SUCCESS: all ${seen} colour and radius classes resolve to the theme.`);

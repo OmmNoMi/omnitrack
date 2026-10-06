@@ -1,5 +1,6 @@
 import { createApp, reactive, h } from "vue";
 import { FrappeUI } from "frappe-ui";
+import { FRAPPE_UI_OPTIONS } from "../frappeUiComponents.js";
 import "frappe-ui/style.css";
 import "./styles.css";
 import SessionBox from "./SessionBox.vue";
@@ -44,7 +45,7 @@ function mount(target, props = {}) {
 		},
 	});
 
-	app.use(FrappeUI);
+	app.use(FrappeUI, FRAPPE_UI_OPTIONS);
 	app.mount(root);
 	appInstance = app;
 

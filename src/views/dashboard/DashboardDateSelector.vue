@@ -1,19 +1,22 @@
 <template>
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-    <!-- Title names the day; subtitle says what is in it. Shift+D lives in the strip tooltip. -->
-    <div class="min-w-0" data-day-section>
-      <h2 class="text-xl sm:text-2xl font-bold tracking-tight" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
-        {{ dashboardDayTitle }}
-      </h2>
-      <p class="text-xs mt-0.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
-        {{ dashboardDaySummary }}
-      </p>
+  <div class="flex flex-col gap-2 pb-1">
+    <!-- Line 1: the day, named once, and the one "Plan" action. Line 2: the week strip, full width,
+         so on a phone nothing collides. Shift+D lives in the strip tooltip. -->
+    <div class="flex items-center justify-between gap-3" data-day-section>
+      <div class="min-w-0">
+        <h2 class="text-xl sm:text-2xl font-bold tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+          {{ dashboardDayTitle }}
+        </h2>
+        <p v-if="dashboardDaySummary" class="text-xs mt-0.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+          {{ dashboardDaySummary }}
+        </p>
+      </div>
+      <Button variant="solid" theme="blue" icon-left="plus" label="Plan" tooltip="Plan a focus block" class="shrink-0 !bg-blue-700 hover:!bg-blue-800" @click="openNewTaskModal">Plan</Button>
     </div>
 
-    <div class="flex items-center gap-2 min-w-0">
-      <!-- 7-day strip: the day chips are a roving radiogroup; Today and the arrows are plain buttons -->
-      <div class="flex items-center gap-1 min-w-0 overflow-x-auto no-scrollbar py-1"
-        aria-label="Pick a day" data-day-strip @keydown="onDashboardDayKey">
+    <!-- 7-day strip: the day chips are a roving radiogroup; Today and the arrows are plain buttons -->
+    <div class="flex items-center gap-1 min-w-0 overflow-x-auto no-scrollbar py-1"
+      aria-label="Pick a day" data-day-strip @keydown="onDashboardDayKey">
         <Button v-if="todayDirection === 'left'" size="sm" variant="subtle" icon-left="chevron-left" label="Jump to today" tooltip="Jump to today" @click="resetDashboardToToday">Today</Button>
         <Button size="sm" variant="ghost" icon="chevron-left" label="Previous 7 days" tooltip="Previous week" @click="shiftDashboardWeek(-1)" />
         <!-- No title on a wrapper: it is inherited by every child and stacks on the arrow Buttons' own tooltips -->
@@ -26,7 +29,7 @@
             role="radio"
             :aria-checked="d.isSelected ? 'true' : 'false'"
             :aria-label="d.dateStr"
-            :title="d.dateStr + ' · Shift+D, then ← →'"
+            :title="d.dateStr + ' · Shift+D, then Left or Right'"
             :tabindex="d.isSelected ? 0 : -1"
             class="flex flex-col items-center justify-center min-w-[36px] sm:min-w-[42px] py-1.5 rounded-xl text-center transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
             :class="d.isSelected ? 'bg-[#1B64DA] text-white' : (isDarkMode ? 'hover:bg-gray-800 text-gray-200' : 'hover:bg-gray-100 text-gray-800')"
@@ -39,12 +42,6 @@
         <Button size="sm" variant="ghost" icon="chevron-right" label="Next 7 days" tooltip="Next week" @click="shiftDashboardWeek(1)" />
         <Button v-if="todayDirection === 'right'" size="sm" variant="subtle" icon-right="chevron-right" label="Jump to today" tooltip="Jump to today" @click="resetDashboardToToday">Today</Button>
       </div>
-
-      <!-- The one "plan" action on the dashboard; icon-only on phones -->
-      <Button variant="solid" theme="blue" icon-left="plus" label="Plan a new focus block" tooltip="Plan focus block" class="shrink-0" @click="openNewTaskModal">
-        <span class="hidden sm:inline">Plan</span>
-      </Button>
-    </div>
   </div>
 </template>
 

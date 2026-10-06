@@ -1,4 +1,5 @@
 import { ref, computed } from "vue";
+import { blockTitle } from '../utils/blockTitle.js';
 
 /**
  * Workstation API methods.
@@ -341,7 +342,7 @@ export function useWorkstationApi(w) {
     if (isTracking.value) { showToast('Stop the current timer first', 'danger'); return; }
     _explicitBoundBlock.value = b;
     trackerBlockName.value = b.name;
-    let rawN = b.task_subject || b.work_item_label || (b.task ? (b.task_subject || b.task) : '') || b.deliverable_notes || '';
+    let rawN = blockTitle(b, '');
     if (rawN.includes('•')) {
       const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
       trackerNotes.value = parts[0] || '';

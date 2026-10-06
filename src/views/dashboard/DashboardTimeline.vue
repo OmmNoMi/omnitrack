@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-3xl p-4 sm:p-5 border shadow-xs"
+  <div class="rounded-2xl p-4 sm:p-5 border shadow-xs"
     :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
     <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
       <h4 class="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Day at a glance</h4>
@@ -7,10 +7,10 @@
         <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm border border-gray-400 bg-gray-400/20" aria-hidden="true"></span><span class="text-gray-700 dark:text-gray-300">Planned {{ dayTimeline.plannedH.toFixed(1) }}h</span></span>
         <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-gray-500" aria-hidden="true"></span><span class="text-gray-700 dark:text-gray-300">Logged {{ dayTimeline.loggedH.toFixed(1) }}h</span></span>
         <span class="inline-flex items-center gap-1.5" title="Time logged when nothing was planned for it"><span class="w-3 h-2 rounded-sm bg-rose-500" aria-hidden="true"></span><span class="text-gray-700 dark:text-gray-300">Off plan</span></span>
-        <span v-if="dayTimeline.gapH > 0.05" class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-amber-400" aria-hidden="true"></span><span class="text-amber-600 dark:text-amber-400">{{ dayTimeline.gapH.toFixed(1) }}h unlogged</span></span>
+        <span v-if="dayTimeline.gapH > 0.05" class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm bg-amber-400" aria-hidden="true"></span><span class="text-orange-700 dark:text-orange-300">{{ dayTimeline.gapH.toFixed(1) }}h unlogged</span></span>
         <span v-if="attendancePresence && attendancePresence.shift_presence_hours > 0" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border" :class="attendancePresence.unallocated_presence_hours > 0.5 ? (isDarkMode ? 'bg-amber-950/60 border-amber-800 text-amber-300' : 'bg-amber-50 border-amber-300 text-amber-800') : (isDarkMode ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300' : 'bg-emerald-50 border-emerald-300 text-emerald-800')">
-          <span>🏢 Office Presence: {{ attendancePresence.shift_presence_hours }}h</span>
-          <span v-if="attendancePresence.unallocated_presence_hours > 0.5" class="ml-1 text-red-500 font-extrabold">({{ attendancePresence.unallocated_presence_hours }}h unallocated)</span>
+          <span>At work {{ attendancePresence.shift_presence_hours }}h</span>
+          <span v-if="attendancePresence.unallocated_presence_hours > 0.5" class="ml-1">({{ attendancePresence.unallocated_presence_hours }}h unallocated)</span>
         </span>
         <div class="inline-flex items-center rounded-full p-0.5 border" role="radiogroup" aria-label="Hours visible across the timeline"
           @keydown="onTimelineZoomKey"
@@ -21,7 +21,7 @@
             data-timeline-zoom
             :tabindex="timelineZoom === z ? 0 : -1"
             @click="timelineZoom = z"
-            class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            class="min-h-6 px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             :class="timelineZoom === z ? (isDarkMode ? 'bg-[#1E1F22] text-white' : 'bg-white text-gray-900 shadow-xs') : (isDarkMode ? 'text-gray-600' : 'text-gray-700')">{{ z }}h</button>
         </div>
       </div>
@@ -83,13 +83,13 @@
           class="absolute top-0 h-7 rounded-md border text-[10px] font-bold px-1.5 leading-7 truncate cursor-pointer hover:brightness-95"
           :style="Object.assign({ left: r.left, width: r.width }, timelinePlannedStyle(r.block))"
           tabindex="0"
-          :aria-label="(r.block.task_subject || r.block.deliverable_notes || 'Work block') + ' ' + formatBlockRange(r.block)"
+          :aria-label="blockTitle(r.block) + ' ' + formatBlockRange(r.block)"
           @mouseenter="showBlockHover($event, r, 'timeline')"
           @mouseleave="hideBlockHover"
           @focus="showBlockHover($event, r, 'timeline')"
           @blur="hideBlockHover"
           @keydown.enter.prevent="openBlockDrawer(r.block)"
-          @click="openBlockDrawer(r.block)">{{ r.block.task_subject || r.block.deliverable_notes || 'Block' }}</div>
+          @click="openBlockDrawer(r.block)">{{ blockTitle(r.block, 'Block') }}</div>
       </div>
       <!-- logged lane -->
       <div class="relative h-6 mt-1.5">
@@ -98,15 +98,15 @@
           :class="r.is_live_active ? 'rounded-r-none z-10' : ''"
           :style="Object.assign({ left: r.left, width: r.width }, timelineLoggedStyle(r))"
           tabindex="0"
-          :aria-label="'Logged: ' + (r.notes || r.block.task_subject || 'Session') + ' · ' + fmtHrs(r.hours) + 'h'"
+          :aria-label="'Logged: ' + (r.notes || blockTitle(r.block, 'Session')) + ' · ' + fmtHrs(r.hours) + 'h'"
           @mouseenter="showBlockHover($event, r, 'logged')"
           @mouseleave="hideBlockHover"
           @focus="showBlockHover($event, r, 'logged')"
           @blur="hideBlockHover"
-          @keydown.enter.prevent="openBlockDrawer(r.block)"
-          @click="openBlockDrawer(r.block)">
+          @keydown.enter.prevent="openLogged(r)"
+          @click="openLogged(r)">
           <span v-if="r.is_live_active" class="w-1.5 h-1.5 rounded-full bg-white animate-pulse mr-1.5 shrink-0"></span>
-          <span class="truncate">{{ r.notes || r.block.task_subject || (r.timesheet ? 'TS: ' + r.timesheet : 'Logged ' + fmtHrs(r.hours) + 'h') }}</span>
+          <span class="truncate">{{ r.notes || blockTitle(r.block, '') || (r.timesheet ? 'TS: ' + r.timesheet : 'Logged ' + fmtHrs(r.hours) + 'h') }}</span>
           <span v-if="r.is_live_active" class="ml-auto text-[9px] font-mono tracking-tight text-white/90 font-black pl-1 shrink-0">REC &bull;</span>
         </div>
         <!-- Interactive 1-Click Gap Booking Pills -->
@@ -139,9 +139,20 @@
 
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
+import { blockTitle } from '../../utils/blockTitle.js';
 
 export default {
   name: 'DashboardTimeline',
+  methods: {
+    blockTitle,
+    // Each lane opens what it draws. A planned bar is the block; a logged bar is one
+    // session of it, so it opens that session's details, and the running bar opens the live one.
+    openLogged(r) {
+      if (r.is_live_active) this.openAdjustModal();
+      else if (r.session && r.session.name) this.openSessionDrawer(r.block, r.session);
+      else this.openBlockDrawer(r.block);
+    },
+  },
   setup() {
     return useWorkstationContext([
       'attendancePresence',
@@ -153,8 +164,10 @@ export default {
       'nowLineLabel',
       'nowMinute',
       'nudgeTimeline',
+      'openAdjustModal',
       'onTimelineZoomKey',
       'openBlockDrawer',
+      'openSessionDrawer',
       'quickLogTimelineGap',
       'selectedDashboardDate',
       'selectedDashboardDateLabel',

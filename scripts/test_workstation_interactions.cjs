@@ -80,6 +80,7 @@ const SHORT_MENUS = new Set([
   'moreActions',                // block drawer: Add timesheet entry, Cancel block
   'taskMenu',                   // task form: Open discussion, Open full form, Remove from block
   'statusMenu',                 // task form: the workflow moves open from one state
+  'taskMoves(t)',               // entry sheet: a task's workflow moves, each opening the task form
   'priorityMenu',               // task form: the DocType's priorities (3 on ToDo, 4 on Task)
   'plannerNatureMenuItems'      // multi-select toggles; ROADMAP: move to a searchable multi-select
 ]);
@@ -189,11 +190,9 @@ console.log('✓ Test 8: onAttentionGridKey leaves non-navigation keys alone.');
 assert.ok(content.includes('in visiblePastFocusBlocks"'), 'FAIL: Concluded deliverables list must iterate over visiblePastFocusBlocks');
 assert.ok(content.includes('toggleShowAllPastBlocks'), 'FAIL: toggleShowAllPastBlocks must be present');
 assert.ok(content.includes('remainingPastBlocksCount'), 'FAIL: remainingPastBlocksCount must be present');
-assert.ok(content.includes('Show {{ remainingPastBlocksCount }} more deliverables'), 'FAIL: Show more button must display remaining deliverables count');
-assert.ok(content.includes('toggleBlockNotes(b.name)'), 'FAIL: toggleBlockNotes must be bound to deliverable card notes');
-assert.ok(content.includes('isBlockNotesExpanded(b.name)'), 'FAIL: isBlockNotesExpanded must control note expansion');
-assert.ok(content.includes('-webkit-line-clamp: 2'), 'FAIL: Multi-line notes must be clamped when collapsed');
-console.log('✓ Test 9: Concluded deliverables show-more and note-expansion invariants verified.');
+assert.ok(content.includes("'Show ' + remainingPastBlocksCount + ' more'"), 'FAIL: Show more button must display the remaining count');
+assert.ok(content.includes(':title="concludedRowNote(b)"'), 'FAIL: A row shows one line of notes, with the full text on hover');
+console.log('✓ Test 9: Done today show-more and one-line notes invariants verified.');
 
 // Test 10: Standard Searchable Combobox (FCombobox) & Anti-Native-Select Invariants
 // 10.1: Assert complete elimination of raw <select> elements in the HTML template
@@ -232,9 +231,9 @@ assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 0)"'), 'FAIL: Tit
 assert.ok(content.includes(':data-concluded-row="rIdx"'), 'FAIL: Title button must bind data-concluded-row');
 assert.ok(content.includes(':data-concluded-col="0"'), 'FAIL: Title button must bind data-concluded-col 0');
 assert.ok(content.includes('@keydown="onConcludedGridKey($event, rIdx, 0)"'), 'FAIL: Title button must bind onConcludedGridKey');
-assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 1)"'), 'FAIL: View Audit button must bind concludedTabindex for col 1');
-assert.ok(content.includes(':data-concluded-col="1"'), 'FAIL: View Audit button must bind data-concluded-col 1');
-assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 2)"'), 'FAIL: Re-open button must bind concludedTabindex for col 2');
+assert.ok(content.includes(':tabindex="concludedTabindex(rIdx, 1)"'), 'FAIL: Re-open button must bind concludedTabindex for col 1');
+assert.ok(content.includes(':data-concluded-col="1"'), 'FAIL: Re-open button must bind data-concluded-col 1');
+assert.ok(!content.includes('concludedTabindex(rIdx, 2)'), 'FAIL: a Done today row has two cells (title, Re-open); there is no Log cell');
 assert.ok(content.includes('onConcludedGridKey'), 'FAIL: onConcludedGridKey must be defined in omnitrack.html');
 
 // Validate roving tabindex math and arrow key isolation in sandbox
@@ -254,13 +253,7 @@ const rovingCode = `
     concludedRovingRow.value = r;
     concludedRovingCol.value = c;
   };
-  const canBlockReopen = (b) => b && b.status !== 'Cancelled' && b.status !== 'Rescheduled';
-  const getMaxConcludedCol = (b) => {
-    if (!b) return 1;
-    const hasReopen = canBlockReopen(b);
-    return hasReopen ? 2 : 1;
-  };
-  ({ concludedRovingRow, concludedRovingCol, concludedTabindex, setConcludedRoving, getMaxConcludedCol });
+  ({ concludedRovingRow, concludedRovingCol, concludedTabindex, setConcludedRoving });
 `;
 const rovingInst = vm.runInContext(rovingCode, rovingSandbox);
 
@@ -273,10 +266,6 @@ rovingInst.setConcludedRoving(1, 0);
 assert.strictEqual(rovingInst.concludedTabindex(0, 0), -1, 'FAIL: Previous row must now have tabindex -1');
 assert.strictEqual(rovingInst.concludedTabindex(1, 0), 0, 'FAIL: New active row must have tabindex 0');
 
-// Column clamping check for cancelled block
-const cancelledBlock = { status: 'Cancelled' };
-const activeBlock = { status: 'Completed' };
-assert.strictEqual(rovingInst.getMaxConcludedCol(cancelledBlock), 1, 'FAIL: Cancelled block without reopen must clamp max col to 1');
 // Simulate toggleShowAllPastBlocks focus retention (show more and show less)
 let focusedTargetRow = null;
 rovingInst.focusConcludedCell = (r, c) => {
@@ -1145,6 +1134,10 @@ assert.ok(
   content.includes('const onTimelineZoomKey = (ev) => {'),
   'FAIL: onTimelineZoomKey must be defined in omnitrack.html setup'
 );
+assert.ok(
+  content.includes('const opts = timelineZoomOptions;'),
+  'FAIL: onTimelineZoomKey must step through timelineZoomOptions'
+);
 
 const zoomNavSandbox = {
   timelineZoomOptions: [6, 12, 24],
@@ -1158,13 +1151,14 @@ const zoomNavCode = `
     const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
     if (keys.indexOf(ev.key) === -1) return;
     ev.preventDefault();
-    const cur = Math.max(0, timelineZoomOptions.indexOf(timelineZoom.value));
+    const opts = timelineZoomOptions;
+    const cur = Math.max(0, opts.indexOf(timelineZoom.value));
     let next = cur;
-    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % timelineZoomOptions.length;
-    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + timelineZoomOptions.length) % timelineZoomOptions.length;
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') next = (cur + 1) % opts.length;
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') next = (cur - 1 + opts.length) % opts.length;
     else if (ev.key === 'Home') next = 0;
-    else next = timelineZoomOptions.length - 1;
-    timelineZoom.value = timelineZoomOptions[next];
+    else next = opts.length - 1;
+    timelineZoom.value = opts[next];
     nextTick(() => {
       const group = ev.currentTarget;
       const btns = group && group.querySelectorAll ? group.querySelectorAll('[data-timeline-zoom]') : [];
@@ -1382,66 +1376,20 @@ console.log('✓ Test 36: Configurable temporal horizon & past block grace invar
 // ---------------------------------------------------------------------------
 // TEST 37: 1-Click Wrap & Start Next Session Universal Transition Invariants
 // ---------------------------------------------------------------------------
-assert.ok(content.includes('Wrap & Start Next Session'), 'FAIL: Wrap & Start Next Session dialog title must exist in omnitrack.html');
-assert.ok(content.includes('showSwitchConfirmModal'), 'FAIL: showSwitchConfirmModal must exist in omnitrack.html');
-assert.ok(content.includes('switch-confirm-notes'), 'FAIL: switch-confirm-notes textarea id must exist in omnitrack.html');
-assert.ok(content.includes('promptSwitchSession'), 'FAIL: promptSwitchSession must exist in omnitrack.html');
-
-const wrapStartSandbox = {
-  ref: (val) => ({ value: val }),
-  computed: (fn) => ({ get value() { return fn(); } }),
-  triggerHaptic: () => {},
-  showToast: () => {}
-};
-vm.createContext(wrapStartSandbox);
-const wrapStartCode = `
-  const isTracking = ref(true);
-  const trackerBlockName = ref('PWB-100');
-  const trackerNotes = ref('Current active sprint session');
-  const sessionNotesList = ref(['Implemented core feature', 'Tested edge cases']);
-  const showSwitchConfirmModal = ref(false);
-  const switchTargetItem = ref(null);
-  const switchWrapUpNote = ref('');
-
-  const promptSwitchSession = (target) => {
-    switchTargetItem.value = target;
-    const rawTitle = (trackerNotes.value || '').trim();
-    const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => '• ' + p.trim()).join('\\n');
-    switchWrapUpNote.value = (rawTitle && bullets) ? (rawTitle + '\\n\\n' + bullets) : (rawTitle || bullets || '');
-    showSwitchConfirmModal.value = true;
-  };
-
-  const startFocusBlock = (b) => {
-    if (!b) return;
-    if (isTracking.value && trackerBlockName.value === b.name) {
-      return;
-    }
-    if (isTracking.value) {
-      promptSwitchSession({
-        id: b.name,
-        name: b.name,
-        label: b.task_subject || b.name,
-        is_block: true
-      });
-      return;
-    }
-  };
-
-  // Test 1: Clicking start on another block while tracking prompts confirmation
-  const targetBlock = { name: 'PWB-200', task_subject: 'Campus Credit Support (Angela Drumm)' };
-  startFocusBlock(targetBlock);
-
-  const modalOpened = showSwitchConfirmModal.value;
-  const targetName = switchTargetItem.value && switchTargetItem.value.name;
-  const notePrefilled = switchWrapUpNote.value.includes('Implemented core feature') &&
-                        switchWrapUpNote.value.includes('Current active sprint session');
-
-  ({ modalOpened, targetName, notePrefilled });
-`;
-const wrapStartRes = vm.runInContext(wrapStartCode, wrapStartSandbox);
-assert.strictEqual(wrapStartRes.modalOpened, true, 'FAIL: Clicking start on another block while tracking must open switch confirm modal');
-assert.strictEqual(wrapStartRes.targetName, 'PWB-200', 'FAIL: Switch target item must match target block');
-assert.strictEqual(wrapStartRes.notePrefilled, true, 'FAIL: Switch wrap-up notes must prefill with current session notes & bullets');
+{
+  // The switch dialog never asks to retype the log: it shows what ends and what starts, and takes
+  // one optional last line. The saved notes are composed by composeWrapNote (check_switch_dialog.mjs).
+  const wrapSrc = fs.readFileSync(path.join(__dirname, '..', 'src/components/dialogs/WrapAndStartNextModal.vue'), 'utf8');
+  assert.ok(wrapSrc.includes("'Start the next block?'"), 'FAIL: the switch dialog (WrapAndStartNextModal) must exist');
+  assert.ok(!/<Textarea|<textarea/.test(wrapSrc) && /<label for="wrap-last-line"/.test(wrapSrc) && /<TextInput\s+id="wrap-last-line"/.test(wrapSrc),
+    'FAIL: the switch dialog takes one labelled optional line, never a textarea prefilled with the log');
+  const attendanceSrc = fs.readFileSync(path.join(__dirname, '..', 'src/composables/useWorkstationAttendance.js'), 'utf8');
+  const prompt = attendanceSrc.slice(attendanceSrc.indexOf('const promptSwitchSession'), attendanceSrc.indexOf('};', attendanceSrc.indexOf('const promptSwitchSession')));
+  assert.ok(/switchTargetItem\.value = /.test(prompt) && /switchWrapUpNote\.value = '';/.test(prompt) && /showSwitchConfirmModal\.value = true/.test(prompt),
+    'FAIL: promptSwitchSession sets the target, starts the last line empty and opens the dialog');
+}
+assert.ok(content.includes('showSwitchConfirmModal'), 'FAIL: showSwitchConfirmModal must exist');
+assert.ok(content.includes('promptSwitchSession'), 'FAIL: promptSwitchSession must exist');
 
 console.log('✓ Test 37: 1-Click Wrap & Start Next Session universal transition invariants verified.');
 

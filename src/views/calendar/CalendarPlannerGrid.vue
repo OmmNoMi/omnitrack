@@ -1,5 +1,5 @@
 <template>
-  <div :class="['omni-card', 'omni-card--flush']" class="-mx-3 sm:mx-0 rounded-none sm:rounded-3xl border-x-0 sm:border-x overflow-hidden flex flex-col min-h-0 h-[640px] lg:h-full lg:max-h-full lg:min-h-0 order-1 lg:order-2">
+  <div :class="['omni-card', 'omni-card--flush']" class="-mx-3 sm:mx-0 rounded-none sm:rounded-2xl border-x-0 sm:border-x overflow-hidden flex flex-col min-h-0 h-[640px] lg:h-full lg:max-h-full lg:min-h-0 order-1 lg:order-2">
     <!-- toolbar (Frappe UI Controls) -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 border-b transition-colors" :class="isDarkMode ? 'border-gray-800 bg-[#25262A]' : 'border-gray-200 bg-gray-50/60'">
       
@@ -204,9 +204,9 @@
                 @pointerleave="hideBlockHover"
                 @focus="showBlockHover($event, seg)"
                 @blur="hideBlockHover"
-                :aria-label="(seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block') + ' ' + segTimeTitle(seg)"
-                class="absolute rounded-lg px-2 py-1 text-left overflow-hidden border touch-pan-y select-none hover:z-20 transition-[left,width] duration-75"
-                :class="[blockClass(seg.block), isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab'), holdArmed === seg.block.name ? 'ring-2 ring-blue-500 ring-offset-1 z-30 scale-[1.02]' : '']"
+                :aria-label="blockTitle(seg.block) + ' ' + segTimeTitle(seg)"
+                class="absolute rounded-lg py-1 text-left overflow-hidden border touch-pan-y select-none hover:z-20 transition-[left,width] duration-75"
+                :class="[blockClass(seg.block), isSplit(seg) ? 'px-1' : 'px-2', isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab'), holdArmed === seg.block.name ? 'ring-2 ring-blue-500 ring-offset-1 z-30 scale-[1.02]' : '']"
                 :style="segStyle(seg)">
                 <!-- recorded (timesheet) time filling up from the bottom of the planned block -->
                 <div v-if="seg.block.actual_hours > 0 && seg.block.status !== 'Cancelled' && !seg.block.is_away"
@@ -220,13 +220,14 @@
                   :style="{ height: Math.min(100, Math.max(8, ((trackerSeconds / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
                   :title="'Live Recording: ' + formattedTime + ' elapsed'"></div>
                 <!-- Timesheet status: one dot clipped inside the card, so narrow lanes never spill -->
-                <span v-if="approvalDot(seg.block)" class="absolute top-1 right-1 w-2 h-2 rounded-full ring-1 ring-white/70 pointer-events-none" :class="approvalDot(seg.block).cls" :title="approvalDot(seg.block).title" aria-hidden="true"></span>
-                <div class="relative text-[11px] font-semibold leading-tight truncate pr-2.5">
-                  <span v-if="isLive(seg.block)" class="font-mono font-bold text-red-600">{{ formattedTime }} · </span>
-                  <span v-if="seg.is_segment && seg.segment_type === 'head'" class="font-normal opacity-80">(cont.) </span>{{ seg.block.task_subject || seg.block.work_item_label || seg.block.deliverable_notes || 'Work block' }}
+                <span v-if="approvalDot(seg.block)" class="absolute right-1 w-2 h-2 rounded-full ring-1 ring-white/70 pointer-events-none" :class="[approvalDot(seg.block).cls, isSplit(seg) ? 'bottom-1' : 'top-1']" :title="approvalDot(seg.block).title" aria-hidden="true"></span>
+                <!-- The title wraps onto every line the block has room for, never one clipped line -->
+                <div class="relative text-[11px] font-semibold leading-tight [overflow-wrap:anywhere]" :class="isSplit(seg) ? '' : 'pr-2.5'" :style="clampStyle(titleLines(seg))">
+                  <span v-if="isLive(seg.block) && !isSplit(seg)" class="font-mono font-bold text-red-600">{{ formattedTime }} · </span>
+                  <span v-if="seg.is_segment && seg.segment_type === 'head'" class="font-normal opacity-80">(cont.) </span>{{ blockTitle(seg.block) }}
                 </div>
-                <div class="relative text-[10px] opacity-90 truncate">{{ dragTimeLabel(seg) }}</div>
-                <div class="relative text-[10px] opacity-90 truncate" v-if="segHeight(seg) > 44">
+                <div v-if="lineRoom(seg).time" class="relative text-[10px] opacity-90 truncate">{{ dragTimeLabel(seg) }}</div>
+                <div v-if="lineRoom(seg).hours" class="relative text-[10px] opacity-90 truncate">
                   <template v-if="isLive(seg.block)">{{ fmtHrs(trackerSeconds / 3600) }} of {{ fmtHrs(seg.block.duration_hours) }}h</template>
                   <template v-else>{{ fmtHrs(seg.block.actual_hours) }} of {{ fmtHrs(seg.block.duration_hours) }}h</template>
                   <template v-if="seg.block.pairing_partner"> · with {{ seg.block.pairing_partner_name || seg.block.pairing_partner }}</template>
@@ -249,11 +250,27 @@
 
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
+import { blockTitle } from '../../utils/blockTitle.js';
 
 export default {
   name: 'CalendarPlannerGrid',
   methods: {
+    blockTitle,
     isLive(b) { return this.isTracking && (this.trackerBlockName === b.name || b.is_live_active); },
+    // A block sharing its hour with another is a narrow lane: the title gets every line, and the
+    // time and hours move to the hover card, like Google Calendar's side-by-side events
+    isSplit(seg) { return (seg.totalLanes || 1) > 1; },
+    lineRoom(seg) {
+      const lines = Math.max(1, Math.floor((this.segHeight(seg) - 8) / 14));
+      const time = !this.isSplit(seg) && lines >= 2;
+      const hours = time && lines >= 4;
+      return { lines, time, hours };
+    },
+    titleLines(seg) {
+      const r = this.lineRoom(seg);
+      return Math.max(1, r.lines - (r.time ? 1 : 0) - (r.hours ? 1 : 0));
+    },
+    clampStyle(n) { return { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: n, overflow: 'hidden' }; },
     approvalDot(b) {
       if (b.approval_status === 'Approved') return { cls: 'bg-emerald-500', title: 'Timesheet approved' };
       if (b.approval_status === 'Flagged') return { cls: 'bg-orange-500', title: 'Timesheet flagged: ' + (b.flagged_reason || 'needs clarifying') };

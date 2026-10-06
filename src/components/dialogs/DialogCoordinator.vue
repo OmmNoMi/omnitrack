@@ -110,11 +110,10 @@
       @update:wrap-up-note="$emit('update:switchWrapUpNote', $event)"
       :formatted-time="formattedTime"
       :current-session-label="currentSessionLabel"
+      :current-log-count="currentLogCount"
       :selected-project="selectedProject"
-      :selected-nature="selectedNature"
       :target-item="switchTargetItem"
       :is-switching="isSwitchingSession"
-      :is-dark-mode="isDarkMode"
       @confirm="$emit('confirm-switch-and-start')"
     />
 
@@ -208,8 +207,8 @@ export default {
     // WrapAndStartNextModal
     showSwitchConfirmModal: { type: Boolean, default: false },
     currentSessionLabel: { type: String, default: "" },
+    currentLogCount: { type: Number, default: 0 },
     selectedProject: { type: String, default: "" },
-    selectedNature: { type: String, default: "" },
     switchTargetItem: { type: Object, default: null },
     isSwitchingSession: { type: Boolean, default: false },
 

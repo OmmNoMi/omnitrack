@@ -10,17 +10,16 @@
       @click.self="$emit('update:isSessionElevated', false)"
     >
       <div
-        ref="sessionCardRef"
         :class="[
           isSessionElevated
-            ? 'relative w-full max-w-4xl bg-white dark:bg-[#1E1F22] rounded-3xl shadow-2xl p-4 sm:p-6 space-y-4 my-auto'
+            ? 'relative w-full max-w-4xl bg-white dark:bg-[#1E1F22] rounded-2xl shadow-2xl p-4 sm:p-6 space-y-4 my-auto'
             : 'relative w-full'
         ]"
         @click.stop
         :role="isSessionElevated ? 'dialog' : null"
         :aria-modal="isSessionElevated ? 'true' : null"
         :aria-labelledby="isSessionElevated ? 'session-popup-title' : null"
-        @keydown.tab="$emit('trap-tab', $event)"
+        @keydown.tab="isSessionElevated && $emit('trap-tab', $event)"
       >
         <!-- Elevated header: what this is, and the way back -->
         <div v-if="isSessionElevated" class="flex items-center justify-between gap-3">

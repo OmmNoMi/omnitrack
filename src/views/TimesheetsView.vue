@@ -43,7 +43,7 @@
           @click="openBlockDrawer(b)">
           <span class="w-20 shrink-0 text-xs tabular-nums" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">{{ shortDate(b.work_date) }}</span>
           <span class="min-w-0 flex-1">
-            <span class="block text-sm font-medium truncate" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">{{ b.deliverable_notes || b.task_subject || 'Work block' }}</span>
+            <span class="block text-sm font-medium truncate" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">{{ blockTitle(b) }}</span>
             <span class="block text-xs truncate" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
               <template v-if="selectedEmployee === 'All'">{{ b.associate_name || b.employee }} · </template>{{ b.project_name || 'General' }}
             </span>
@@ -58,6 +58,7 @@
 
 <script>
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 export default {
   name: 'TimesheetsView',
@@ -72,6 +73,7 @@ export default {
     };
   },
   methods: {
+    blockTitle,
     hoursOf(b) { return Number(b.actual_hours || b.duration_hours || 0).toFixed(2); },
     shortDate(d) {
       if (!d) return '';

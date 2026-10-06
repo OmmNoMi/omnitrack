@@ -69,7 +69,7 @@
     >
       <FeatherIcon name="link-2" class="w-4 h-4 shrink-0 text-blue-700 dark:text-blue-300" aria-hidden="true" />
       <p class="min-w-0 flex-1 truncate text-sm text-blue-950 dark:text-blue-100" :title="[trackerBoundBlock.name, connectedTaskName, currentProjectLabel, trackerBoundBlock.work_date, trackerBoundBlock.task_nature, trackerBoundBlock.duration_hours ? trackerBoundBlock.duration_hours + 'h planned' : '', trackerBoundBlock.actual_hours ? trackerBoundBlock.actual_hours + 'h logged' : ''].filter(Boolean).join(' · ')">
-        Logging to <span class="font-semibold">{{ trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || 'Work block' }}</span>
+        Logging to <span class="font-semibold">{{ blockTitle(trackerBoundBlock) }}</span>
       </p>
       <span class="shrink-0 text-xs tabular-nums text-blue-900 dark:text-blue-200">{{ formatCleanTime(trackerBoundBlock.start_time) }}–{{ formatCleanTime(trackerBoundBlock.end_time) }}</span>
       <Button variant="ghost" size="sm" icon="x" label="Unbind from this planned block" tooltip="Unbind" @click="emit('unbind-block')" />
@@ -114,6 +114,7 @@ import { Button, Combobox, FeatherIcon } from 'frappe-ui';
 import BlockTasksSection from '../drawers/BlockTasksSection.vue';
 import { useSessionContext } from './useSessionContext.js';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { blockTitle } from '../utils/blockTitle.js';
 
 // Under 480px the toolbar buttons are icon only. frappe-ui still renders their (hidden)
 // label's wrapper and the 8px gap, which pushed each icon off centre: square them up.
@@ -122,6 +123,7 @@ const TOOL_SQUARE = 'max-[479px]:w-7 max-[479px]:px-0 max-[479px]:gap-0';
 export default {
   name: 'SessionControlsPane',
   components: { BlockTasksSection, Button, Combobox, FeatherIcon },
+  methods: { blockTitle },
   setup() {
     return {
       TOOL_SQUARE,

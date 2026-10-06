@@ -6,7 +6,7 @@ import { useWorkstationDashboard } from "./useWorkstationDashboard.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationDashboardBinding(w) {
-  const { _minsOf, addDays, currentUser, filteredWorkBlocks, getLocalTodayISO, isDarkMode, isNonWorkingNature, isTracking, selectedEmployee, selectedProject, teamMembers, todayDate, todayISO, trackerBlockName, trackerBoundBlock } = w;
+  const { _minsOf, addDays, currentUser, filteredWorkBlocks, getLocalTodayISO, isDarkMode, isNonWorkingNature, isTracking, nowMinute, selectedEmployee, selectedProject, teamMembers, todayDate, todayISO, trackerBlockName, trackerBoundBlock } = w;
 
   // Dashboard Domain Store Integration
   const dashboardStore = useWorkstationDashboard({
@@ -20,7 +20,8 @@ export function useWorkstationDashboardBinding(w) {
     getLocalTodayISO,
     todayISO,
     addDays,
-    _minsOf
+    _minsOf,
+    nowMinute
   });
   const {
     selectedDashboardDate,
@@ -28,10 +29,7 @@ export function useWorkstationDashboardBinding(w) {
     dashboardWeekDays,
     selectedDashboardDateLabel,
     pastBlocksHeading,
-    pastDeliverablesStats,
-    getBlockCardAccent,
     getBlockBadgeTheme,
-    getBlockVarianceBadge,
     focusBlocksHeading,
     dashboardDayTitle,
     dashboardDaySummary,
@@ -53,6 +51,8 @@ export function useWorkstationDashboardBinding(w) {
     isBlockInNow,
     isBlockConcluded,
     isBlockCompleted,
+    countedNow,
+    blockCountedHours,
     getStartsInText,
     upcomingFocusBlocks,
     pastFocusBlocks,
@@ -62,18 +62,11 @@ export function useWorkstationDashboardBinding(w) {
     concludedRovingRow,
     concludedRovingCol,
     canBlockReopen,
-    hasBlockExpandableNotes,
-    getConcludedNotesCol,
-    getMaxConcludedCol,
     setConcludedRoving,
     concludedTabindex,
     focusConcludedCell,
     onConcludedGridKey,
     toggleShowAllPastBlocks,
-    expandedBlockNotes,
-    isBlockNotesExpanded,
-    toggleBlockNotes,
-    isLongNote,
     dashboardKPIs,
     updateDashboardKPIs,
     paciPlannedHours,
@@ -98,10 +91,7 @@ export function useWorkstationDashboardBinding(w) {
     dashboardWeekDays,
     selectedDashboardDateLabel,
     pastBlocksHeading,
-    pastDeliverablesStats,
-    getBlockCardAccent,
     getBlockBadgeTheme,
-    getBlockVarianceBadge,
     focusBlocksHeading,
     dashboardDayTitle,
     dashboardDaySummary,
@@ -123,6 +113,8 @@ export function useWorkstationDashboardBinding(w) {
     isBlockInNow,
     isBlockConcluded,
     isBlockCompleted,
+    countedNow,
+    blockCountedHours,
     getStartsInText,
     upcomingFocusBlocks,
     pastFocusBlocks,
@@ -132,18 +124,11 @@ export function useWorkstationDashboardBinding(w) {
     concludedRovingRow,
     concludedRovingCol,
     canBlockReopen,
-    hasBlockExpandableNotes,
-    getConcludedNotesCol,
-    getMaxConcludedCol,
     setConcludedRoving,
     concludedTabindex,
     focusConcludedCell,
     onConcludedGridKey,
     toggleShowAllPastBlocks,
-    expandedBlockNotes,
-    isBlockNotesExpanded,
-    toggleBlockNotes,
-    isLongNote,
     dashboardKPIs,
     updateDashboardKPIs,
     paciPlannedHours,

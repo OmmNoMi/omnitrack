@@ -1,6 +1,7 @@
 import { lazy } from "./workstationBag.js";
 import { ref, computed, nextTick } from "vue";
 import { WORK } from "../utils/activity.js";
+import { blockTitle } from '../utils/blockTitle.js';
 
 // Attention rows: subject, Plan, Start Session (the task form holds the rest)
 const ATTENTION_LAST_COL = 2;
@@ -284,7 +285,7 @@ const attentionTasks = ref([]);
     }
     _explicitBoundBlock.value = b;
     trackerBlockName.value = b.name;
-    const taskTitle = b.task_subject || b.work_item_label || (b.task ? (b.task_subject || b.task) : '') || b.deliverable_notes || '';
+    const taskTitle = blockTitle(b, '');
     if (taskTitle) trackerNotes.value = taskTitle;
     if (b.project) {
       selectedProject.value = b.project;

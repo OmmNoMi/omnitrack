@@ -1,93 +1,64 @@
 <template>
   <f-dialog
     :model-value="modelValue"
-    title="End of Day Reconciliation Ritual"
-    subtitle="Review today's accomplishments, unallocated gaps, and finalize your timesheet."
+    title="Wrap up the day"
+    subtitle="Log what you planned, then finish the day."
     size="lg"
     z-index="z-[85]"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <template #header-icon>
-      <span class="text-xl">🏁</span>
-    </template>
-    <div class="space-y-4 py-2 text-xs">
-      <!-- Target vs Logged Bar -->
-      <div class="p-4 rounded-2xl bg-gray-50 dark:bg-[#1E1F22] border border-gray-200 dark:border-gray-800 space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="font-bold text-gray-700 dark:text-gray-300">Daily Target: 8.0 Hours</span>
-          <span
-            class="font-mono font-extrabold text-sm"
-            :class="summary && summary.total_actual_hours >= 8.0 ? 'text-emerald-500' : 'text-amber-500'"
-          >
-            {{ summary ? summary.total_actual_hours : 0 }}h / 8.0h ({{ remainingStatus }})
+    <div class="space-y-4 py-2 text-sm">
+      <div class="space-y-2">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-gray-700 dark:text-gray-300">Logged today</span>
+          <span class="font-semibold tabular-nums" :title="remainingStatus">
+            {{ formatDuration(summary ? summary.total_actual_hours : 0) }}h of 8h
           </span>
         </div>
-        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-emerald-500 rounded-full transition-all duration-300"
-            :style="{ width: progressPercentage + '%' }"
-          ></div>
+        <div
+          class="w-full h-2 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700"
+          role="progressbar"
+          aria-label="Logged today"
+          :aria-valuenow="Math.round(progressPercentage)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <div class="h-full rounded-full bg-green-600 dark:bg-green-500 transition-all duration-300" :style="{ width: progressPercentage + '%' }"></div>
         </div>
       </div>
 
-      <!-- Pending unlogged blocks list -->
       <div v-if="pendingBlocks && pendingBlocks.length" class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="font-bold text-gray-700 dark:text-gray-300">
-            Unlogged Planned Commitments ({{ pendingBlocks.length }})
-          </span>
-          <button
-            type="button"
+        <div class="flex items-center justify-between gap-3">
+          <span class="font-medium text-gray-900 dark:text-gray-100">Planned, not logged ({{ pendingBlocks.length }})</span>
+          <Button
+            variant="subtle"
+            :label="'Log all ' + formatDuration(summary ? summary.unconverted_hours : 0) + 'h'"
             @click="$emit('convert-all')"
-            class="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
-          >
-            ⚡ Convert All ({{ summary ? summary.unconverted_hours : 0 }}h)
-          </button>
+          />
         </div>
-        <div class="space-y-1.5 max-h-48 overflow-y-auto">
-          <div
-            v-for="b in pendingBlocks"
-            :key="b.name"
-            class="flex items-center justify-between p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#161618]"
-          >
-            <div>
-              <div class="font-bold">{{ b.task_subject || b.deliverable_notes || 'Focus Block' }}</div>
-              <div class="text-[11px] text-gray-700">
-                {{ b.start_time }}–{{ b.end_time }} ({{ formatDuration(b.duration_hours) }}h)
-              </div>
+        <ul class="divide-y divide-gray-100 dark:divide-gray-800 max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-800">
+          <li v-for="b in pendingBlocks" :key="b.name" class="flex items-center justify-between gap-3 px-3 py-2">
+            <div class="min-w-0">
+              <div class="truncate font-medium" :title="blockTitle(b)">{{ blockTitle(b) }}</div>
+              <div class="text-xs text-gray-700 dark:text-gray-300 tabular-nums">{{ b.start_time }}–{{ b.end_time }}</div>
             </div>
-            <Button
-              size="sm"
-              variant="solid"
-              theme="green"
-              @click="$emit('convert-block', b)"
-            >
-              Convert ({{ formatDuration(b.duration_hours) }}h)
-            </Button>
-          </div>
-        </div>
+            <Button variant="outline" :label="'Log ' + formatDuration(b.duration_hours) + 'h'" @click="$emit('convert-block', b)" />
+          </li>
+        </ul>
       </div>
-      <div
-        v-else
-        class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center gap-2"
-      >
-        <span>✓ All planned blocks for today have been logged or addressed.</span>
-      </div>
+      <p v-else class="text-gray-700 dark:text-gray-300">Every planned block for today is logged.</p>
     </div>
     <template #actions>
-      <div class="flex items-center justify-between w-full">
-        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
-          Close
-        </Button>
-        <Button variant="solid" theme="blue" size="sm" @click="$emit('complete')">
-          Complete EOD Ritual ✓
-        </Button>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <Button variant="ghost" label="Close" @click="$emit('update:modelValue', false)" />
+        <Button variant="solid" label="Finish the day" @click="$emit('complete')" />
       </div>
     </template>
   </f-dialog>
 </template>
 
 <script>
+import { blockTitle } from '../../utils/blockTitle.js';
 export default {
   name: "EODWrapUpModal",
   props: {
@@ -105,11 +76,12 @@ export default {
       if (!this.summary) return "";
       const actual = this.summary.total_actual_hours || 0;
       const rem = 8.0 - actual;
-      if (rem <= 0) return "Goal Met";
+      if (rem <= 0) return "Target met";
       return `${rem.toFixed(1)}h remaining`;
     },
   },
   methods: {
+    blockTitle,
     formatDuration(hours) {
       return Number(hours || 0).toFixed(1);
     },

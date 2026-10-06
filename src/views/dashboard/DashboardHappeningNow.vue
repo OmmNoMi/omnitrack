@@ -11,7 +11,10 @@
           <span>{{ recording ? 'Recording' : 'Now' }}</span>
           <span :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">· {{ formatBlockRange(block) }}<template v-if="project"> · {{ project }}</template></span>
         </p>
-        <h3 class="mt-1 text-base sm:text-lg font-semibold leading-snug break-words [overflow-wrap:anywhere]">{{ title }}</h3>
+        <!-- The title is the way into the block: details, tasks, Reschedule and More live in the drawer -->
+        <h3 class="mt-1 text-base sm:text-lg font-semibold leading-snug">
+          <button type="button" class="text-left break-words [overflow-wrap:anywhere] rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" :aria-label="'Open details of ' + title" @click.stop="openBlockDrawer(block)">{{ title }}</button>
+        </h3>
       </div>
 
       <div class="flex items-center gap-1.5 justify-end shrink-0">
@@ -37,8 +40,7 @@
           </Button>
         </template>
         <template v-else>
-          <Button v-if="!isBlockLocked(block)" variant="ghost" icon="calendar" :label="'Reschedule ' + title" tooltip="Reschedule" @click.stop="openBlockDrawer(block)" />
-          <Button variant="solid" theme="blue" icon-left="play" :label="'Start session for ' + title" @click.stop="startFocusBlock(block)">Start Session</Button>
+          <Button variant="solid" theme="blue" icon-left="play" label="Start session" :title="'Start a session on ' + title" @click.stop="startFocusBlock(block)" />
         </template>
       </div>
     </div>
@@ -53,6 +55,7 @@
 
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
+import { blockTitle } from '../../utils/blockTitle.js';
 
 export default {
   name: 'DashboardHappeningNow',
@@ -62,7 +65,7 @@ export default {
   computed: {
     recording() { return this.isTracking && this.trackerBlockName === this.block.name; },
     stopConfirm() { return this.stopConfirmName === this.block.name; },
-    title() { return this.block.task_subject || this.block.deliverable_notes || 'Focus block'; },
+    title() { return blockTitle(this.block, 'Focus block'); },
     project() { return this.block.project_name || this.block.project || ''; },
     details() {
       const b = this.block;
@@ -83,7 +86,6 @@ export default {
       'formatBlockRange',
       'formattedTime',
       'getNatureBadge',
-      'isBlockLocked',
       'isDarkMode',
       'isTracking',
       'openAdjustModal',

@@ -1,5 +1,6 @@
 <template>
-  <!-- End of day: one line of status, one primary action. Details live in the review dialog. -->
+  <!-- End of day: one line of status, one action. Logging planned blocks happens in the review
+       dialog, where each one is seen first; there is no blind one-click log here. -->
   <section
     class="rounded-2xl px-4 py-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-3"
     :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'"
@@ -16,14 +17,6 @@
       </div>
     </div>
     <div class="flex items-center gap-2 shrink-0">
-      <Button
-        v-if="eodSummary.unconverted_count > 0"
-        variant="subtle"
-        label="Log all planned blocks as worked"
-        tooltip="Log as planned"
-        @click="convertAllPendingPlannedBlocks">
-        Log {{ eodSummary.unconverted_hours }}h
-      </Button>
       <Button variant="solid" theme="blue" label="Review day" @click="openEODWrapUpDrawer">Review day</Button>
     </div>
   </section>
@@ -39,7 +32,6 @@ export default {
   },
   setup() {
     return useWorkstationContext([
-      'convertAllPendingPlannedBlocks',
       'eodSummary',
       'isDarkMode',
       'openEODWrapUpDrawer'

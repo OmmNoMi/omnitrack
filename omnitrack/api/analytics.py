@@ -199,7 +199,7 @@ def get_user_heatmap_data(user=None, days=30):
 			"blocks": [],
 			"status": "Absent",
 			"color": "#161b22", # GitHub Empty
-			"badge": "○ Absent"
+			"badge": "Absent"
 		}
 		curr += timedelta(days=1)
 
@@ -228,27 +228,27 @@ def get_user_heatmap_data(user=None, days=30):
 		if hrs >= 8.0:
 			item["status"] = "Overtime"
 			item["color"] = "#39d353"
-			item["badge"] = "● Overtime"
+			item["badge"] = "Overtime"
 			streak += 1
 		elif hrs >= 6.0:
 			item["status"] = "Present"
 			item["color"] = "#26a641"
-			item["badge"] = "● Present"
+			item["badge"] = "Present"
 			streak += 1
 		elif hrs >= 3.0:
 			item["status"] = "Half Day"
 			item["color"] = "#006d32"
-			item["badge"] = "◐ Half Day"
+			item["badge"] = "Half Day"
 			streak += 1
 		elif hrs > 0:
 			item["status"] = "Partial"
 			item["color"] = "#0e4429"
-			item["badge"] = "◔ Partial"
+			item["badge"] = "Partial"
 			streak += 1
 		else:
 			item["status"] = "Absent"
 			item["color"] = "#161b22"
-			item["badge"] = "○ Absent"
+			item["badge"] = "Absent"
 			streak = 0
 		matrix.append(item)
 

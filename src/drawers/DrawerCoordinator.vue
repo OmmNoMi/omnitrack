@@ -27,6 +27,22 @@
       @flag="(block, reason) => $emit('flag-block', block, reason)"
     />
 
+    <!-- One logged Work Session (the timeline's logged bar) -->
+    <SessionDetailDrawer
+      :show="showSessionDrawer"
+      :entry="sessionEntry"
+      :is-dark-mode="isDarkMode"
+      :can-log-timesheet="canLogTimesheet"
+      :can-review="canReview"
+      @close="$emit('close-session-drawer')"
+      @open-block="$emit('open-session-block', $event)"
+      @open-raven="$emit('open-raven', $event)"
+      @edit-session="(session, block) => $emit('edit-session', session, block)"
+      @delete-session="(session, block) => $emit('delete-session', session, block)"
+      @approve-block="$emit('approve-block', $event)"
+      @flag-block="(block, reason) => $emit('flag-block', block, reason)"
+    />
+
     <!-- Raven Collaboration Drawer -->
     <RavenCollaborationDrawer
       :show="showTaskRavenDrawer"
@@ -63,6 +79,10 @@ export default {
     canLogTimesheet: { type: Function, default: () => true },
     canReview: { type: Boolean, default: false },
 
+    // Session Detail Drawer props
+    showSessionDrawer: { type: Boolean, default: false },
+    sessionEntry: { type: Object, default: null },
+
     // Raven Collaboration Drawer props
     showTaskRavenDrawer: { type: Boolean, default: false },
     ravenTask: { type: Object, default: null },
@@ -73,6 +93,8 @@ export default {
   },
   emits: [
     "close-block-drawer",
+    "close-session-drawer",
+    "open-session-block",
     "start-session",
     "stop-session",
     "open-cancel-modal",

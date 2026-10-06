@@ -9,6 +9,7 @@ class PlannedWorkBlock(Document):
 		self.normalize_activity()
 		self.validate_past_plan_immutability()
 		self.validate_timesheet_session_horizons()
+		self.validate_no_future_sessions()
 		self.resolve_project_from_task()
 		self.sync_primary_task()
 		self.calculate_duration()
@@ -76,6 +77,21 @@ class PlannedWorkBlock(Document):
 		for sess in (self.sessions or []):
 			if sess.get("session_date"):
 				check_timesheet_date_permission(sess.session_date)
+
+	def validate_no_future_sessions(self):
+		"""Rule: a session records work done, so it cannot end after now. Only new or changed
+		rows are checked, so a block that already holds such a row can still be saved."""
+		from frappe.utils import now_datetime
+		from omnitrack.utils.session_time import ends_in_future
+
+		before = self.get_doc_before_save()
+		old = {r.name: (str(r.session_date), str(r.from_time), str(r.to_time)) for r in (before.sessions if before else [])}
+		now = now_datetime()
+		for sess in self.sessions or []:
+			if old.get(sess.name) == (str(sess.session_date), str(sess.from_time), str(sess.to_time)):
+				continue
+			if ends_in_future(sess, now):
+				frappe.throw(frappe._("That time hasn't happened yet. Log a session once it is over."), frappe.ValidationError)
 
 	def on_trash(self):
 		if not getattr(self.flags, "ignore_past_block_lock", False):
@@ -167,7 +183,12 @@ class PlannedWorkBlock(Document):
 		A single Task can be booked across many Planned Work Blocks (multi-day / multi-session);
 		each block accumulates its own real sessions here.
 		"""
-		actual = sum(flt(s.hours) for s in (self.sessions or []))
+		from frappe.utils import now_datetime
+		from omnitrack.utils.session_time import counted_hours
+
+		# Only time after the block starts and already past counts; a session logged ahead of
+		# the block stays on record but cannot make it Logged or Done.
+		actual = counted_hours(self.work_date, self.start_time, self.sessions, now_datetime())
 		self.actual_hours = round(actual, 2)
 		self.variance_hours = round(actual - flt(self.duration_hours), 2)
 
@@ -179,7 +200,7 @@ class PlannedWorkBlock(Document):
 			if actual <= 0:
 				if block_date < today:
 					self.status = "Missed"
-				elif self.status in (None, "", "Draft"):
+				elif self.status in (None, "", "Draft", "In Progress", "Completed", "Logged (Full)", "Logged (Partial)", "Logged (Over)"):
 					self.status = "Planned"
 			elif self.status in ("Completed", "Logged (Full)", "Logged (Partial)", "Logged (Over)"):
 				# Categorize completion accuracy

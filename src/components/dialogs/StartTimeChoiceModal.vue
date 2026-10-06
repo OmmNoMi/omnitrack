@@ -56,6 +56,7 @@
 </template>
 
 <script>
+import { blockTitle } from '../../utils/blockTitle.js';
 export default {
   name: "StartTimeChoiceModal",
   props: {
@@ -68,12 +69,7 @@ export default {
   computed: {
     pendingBlockLabel() {
       if (!this.pendingBlock) return "this block";
-      return (
-        this.pendingBlock.task_subject ||
-        this.pendingBlock.work_item_label ||
-        this.pendingBlock.name ||
-        "this block"
-      );
+      return blockTitle(this.pendingBlock, this.pendingBlock.name || "this block");
     },
   },
 };

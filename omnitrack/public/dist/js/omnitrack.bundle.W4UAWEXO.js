@@ -149,21 +149,21 @@
 				<span class="omnitrack-timer-dot" id="omni-timer-dot" aria-hidden="true"></span>
 				<span id="omni-timer-text">00:00:00</span>
 				<button type="button" class="omnitrack-timer-action" id="omni-timer-btn">Punch</button>
-				<button type="button" class="omnitrack-timer-opts" id="omni-timer-opts-btn" title="${__("Stopwatch Settings")}" aria-haspopup="true">\u25BE</button>
+				<button type="button" class="omnitrack-timer-opts" id="omni-timer-opts-btn" title="${__("Stopwatch Settings")}" aria-label="${__("Stopwatch Settings")}" aria-haspopup="true">${frappe.utils.icon ? frappe.utils.icon("chevron-down", "xs") : ""}</button>
 			</div>
 			<div class="omnitrack-opts-dropdown" id="omni-timer-dropdown" role="menu" aria-label="${__("Stopwatch Settings")}">
 				<div class="omni-opt-header" role="presentation">${__("Timer Style")}</div>
 				<div class="omni-opt-item" data-mode="pill" role="menuitemradio" tabindex="-1" aria-label="${__("Always Visible")}">
 					<span>${frappe.utils.icon ? frappe.utils.icon("eye", "xs") : ""} ${__("Always Visible")}</span>
-					<span class="check">\u2713</span>
+					<span class="check" aria-hidden="true">${frappe.utils.icon ? frappe.utils.icon("check", "xs") : ""}</span>
 				</div>
 				<div class="omni-opt-item" data-mode="zen" role="menuitemradio" tabindex="-1" aria-label="${__("Zen Dot (Hover to see time)")}">
 					<span>${frappe.utils.icon ? frappe.utils.icon("minimize-2", "xs") : ""} ${__("Zen Dot (Hover to see time)")}</span>
-					<span class="check">\u2713</span>
+					<span class="check" aria-hidden="true">${frappe.utils.icon ? frappe.utils.icon("check", "xs") : ""}</span>
 				</div>
 				<div class="omni-opt-item" data-mode="hidden" role="menuitemradio" tabindex="-1" aria-label="${__("Hidden (On-Demand)")}">
 					<span>${frappe.utils.icon ? frappe.utils.icon("eye-off", "xs") : ""} ${__("Hidden (On-Demand)")}</span>
-					<span class="check">\u2713</span>
+					<span class="check" aria-hidden="true">${frappe.utils.icon ? frappe.utils.icon("check", "xs") : ""}</span>
 				</div>
 			</div>
 		</div>
@@ -347,7 +347,7 @@
             callback: function(r) {
               if (r.message && r.message.status === "success") {
                 frappe.show_alert({
-                  message: __("\u2705 " + r.message.message + " [" + (r.message.cryptographic_hash || "").substring(0, 10) + "...]"),
+                  message: r.message.message,
                   indicator: "green"
                 }, 7);
                 omnitrack.state.timerActive = false;
@@ -413,7 +413,7 @@
         method: "omnitrack.api.quick_timer_punch",
         args: { action: "punch_in" },
         callback: function(r) {
-          frappe.show_alert({ message: __("\u{1F680} OmniTrack Stopwatch Started"), indicator: "green" });
+          frappe.show_alert({ message: __("Stopwatch started"), indicator: "green" });
         }
       });
       clearInterval(omnitrack.state.timerInterval);
@@ -449,7 +449,7 @@
         let cellsHtml = "";
         data.matrix.forEach(function(item) {
           cellsHtml += `
-					<div class="omnitrack-heatmap-cell" style="background: ${item.color}" title="${item.date} (${item.day_name}): ${item.hours}h \u2022 ${item.badge}">
+					<div class="omnitrack-heatmap-cell" style="background: ${item.color}" title="${item.date} (${item.day_name}): ${item.hours}h \xB7 ${item.status}">
 						<span class="omnitrack-tooltip">${item.date} (${item.day_name})<br><strong>${item.hours} hrs</strong> \u2022 ${item.status}</span>
 					</div>
 				`;
@@ -458,8 +458,8 @@
 				<div class="omnitrack-heatmap-card">
 					<div class="omnitrack-heatmap-header">
 						<div class="omnitrack-heatmap-title">
-							<strong>\u{1F4CA} Contribution Streak (${days} Days)</strong>
-							<span class="omnitrack-badge omnitrack-badge-present">\u{1F525} ${data.current_streak} Day Streak</span>
+							<strong>${__("Contribution streak ({0} days)", [days])}</strong>
+							<span class="omnitrack-badge omnitrack-badge-present">${__("{0}-day streak", [data.current_streak])}</span>
 						</div>
 						<div class="omnitrack-heatmap-stats">
 							<span>Total: <strong>${data.total_hours}h</strong></span>
@@ -561,7 +561,7 @@
       frappe.ui.form.on("Task", {
         refresh: function(frm) {
           if (!frm.is_new()) {
-            frm.add_custom_button(__("\u{1F4AC} Open Raven Channel"), function() {
+            frm.add_custom_button(__("Open Raven channel"), function() {
               frappe.call({
                 method: "omnitrack.api.get_task_chat",
                 args: { task_id: frm.doc.name },
@@ -576,4 +576,4 @@
     }
   });
 })();
-//# sourceMappingURL=omnitrack.bundle.B7FUPABF.js.map
+//# sourceMappingURL=omnitrack.bundle.W4UAWEXO.js.map

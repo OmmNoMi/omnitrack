@@ -23,42 +23,30 @@
           </div>
           
           <div class="flex items-center gap-1.5 shrink-0">
-            <a href="/raven" target="_blank" class="p-1.5 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors" title="Open Full Raven App ↗" aria-label="Open Full Raven App">
+            <a href="/raven" target="_blank" class="p-1.5 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/50 transition-colors" title="Open Raven" aria-label="Open Raven">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </a>
-            <button type="button" @click="$emit('close')" aria-label="Close" class="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer text-gray-600 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">✕</button>
+            <Button variant="ghost" icon="x" label="Close" @click="$emit('close')" />
           </div>
         </div>
 
         <!-- Task Metadata Strip -->
         <div class="px-4 py-2 border-b text-xs flex items-center justify-between gap-2 shrink-0" :class="isDarkMode ? 'border-gray-800 bg-[#1E1F22]' : 'border-gray-100 bg-white'">
           <div class="flex items-center gap-2 overflow-x-auto">
-            <span v-if="task.status" class="px-2 py-0.5 rounded-md font-semibold text-[11px]" :class="task.status === 'Open' ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'">
+            <span v-if="task.status" class="px-2 py-0.5 rounded-md font-semibold text-[11px]" :class="task.status === 'Open' ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'">
               {{ task.status }}
             </span>
-            <span v-if="task.priority" class="px-2 py-0.5 rounded-md font-semibold text-[11px]" :class="task.priority === 'Urgent' ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300' : (task.priority === 'High' ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300')">
+            <span v-if="task.priority" class="px-2 py-0.5 rounded-md font-semibold text-[11px]" :class="task.priority === 'Urgent' ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300' : (task.priority === 'High' ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300')">
               {{ task.priority }}
             </span>
-            <span v-if="task.exp_end_date" class="text-gray-600 text-[11px]">
-              Due: {{ task.exp_end_date }}
+            <span v-if="task.exp_end_date" class="text-gray-700 dark:text-gray-300 text-xs">
+              Due {{ task.exp_end_date }}
             </span>
           </div>
 
           <div class="flex items-center gap-1.5 shrink-0">
-            <button 
-              type="button" 
-              class="px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 cursor-pointer"
-              @click="$emit('start-task-immediately', task); $emit('close')">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Start Session
-            </button>
-            <button 
-              type="button" 
-              class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 flex items-center gap-1 cursor-pointer"
-              @click="$emit('plan-attention-task', task); $emit('close')">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              Plan
-            </button>
+            <Button variant="outline" size="sm" icon-left="calendar" label="Plan" @click="$emit('plan-attention-task', task); $emit('close')" />
+            <Button variant="solid" theme="blue" size="sm" class="!bg-blue-700 hover:!bg-blue-800" icon-left="play" label="Start session" @click="$emit('start-task-immediately', task); $emit('close')" />
           </div>
         </div>
 
@@ -116,7 +104,7 @@
                   <span class="font-bold text-[11px]" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">{{ msg.sender_name || msg.sender }}</span>
                   <span class="text-[10px] text-gray-600 font-mono">{{ (msg.creation || '').slice(11, 16) }}</span>
                 </div>
-                <div class="p-2.5 rounded-xl rounded-tl-xs whitespace-pre-wrap leading-relaxed" :class="isDarkMode ? 'bg-[#2B2D30] text-gray-100' : 'bg-gray-100 text-gray-800'">
+                <div class="p-2.5 rounded-xl rounded-tl-sm whitespace-pre-wrap leading-relaxed" :class="isDarkMode ? 'bg-[#2B2D30] text-gray-100' : 'bg-gray-100 text-gray-800'">
                   {{ msg.content || msg.text }}
                 </div>
               </div>
@@ -183,7 +171,7 @@
               <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="b.status === 'Completed' || b.status === 'Logged (Full)' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'">
                 {{ b.status }}
               </span>
-              <button type="button" @click="$emit('open-block-drawer', b); $emit('close')" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline p-1">View →</button>
+              <button type="button" @click="$emit('open-block-drawer', b); $emit('close')" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline p-1">Open</button>
             </div>
           </div>
         </div>

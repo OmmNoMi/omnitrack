@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt, get_datetime, now_datetime, strip_html
+from frappe.utils import cint, escape_html, flt, get_datetime, now_datetime, strip_html
 
 
 def is_raven_available() -> bool:
@@ -254,7 +254,7 @@ def broadcast_session_start(task_id: str, duration_hours: float | None = None, e
 
 	user_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
 	dur_str = f" for ~{duration_hours:.1f}h" if duration_hours else ""
-	message_text = f"⚡ **{user_name}** started a focus session{dur_str}."
+	message_text = f"**{user_name}** started a session{dur_str}."
 
 	channel_id = get_or_create_task_channel(task_id)
 	if not channel_id:
@@ -323,14 +323,14 @@ def post_session_accomplishment_recap(
 		return
 
 	user_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
-	dur_display = f"{flt(duration_hours, 2):.2f}h" if duration_hours else "Active Sitting"
+	dur_display = f"{flt(duration_hours, 2):.2f}h" if duration_hours else "no time logged"
 
 	# Build rich markdown card
 	lines_md = "\n".join([f"{i+1}. {note}" for i, note in enumerate(session_notes)])
 	ts_ref = f" · Timesheet `{timesheet_name}`" if timesheet_name else ""
 	recap_md = (
-		f"⏱️ **Work Session Completed** ({dur_display}) by **{user_name}**\n\n"
-		f"**Accomplished Micro-Notes:**\n{lines_md}\n\n"
+		f"**{user_name}** finished a session ({dur_display}).\n\n"
+		f"**Notes**\n{lines_md}\n\n"
 		f"<small style=\"color: #6c757d;\">Block: `{work_block_name}`{ts_ref}</small>"
 	)
 
@@ -374,7 +374,7 @@ def pin_message_as_task_spec(message_id: str, task_id: str) -> dict:
 
 	spec_snippet = (
 		f"\n\n<!-- raven-pinned-spec:{message_id} -->\n"
-		f"### 📌 Pinned Spec / Decision ({msg_doc.creation[:16]} by {author_name})\n"
+		f"### Pinned decision ({msg_doc.creation[:16]} by {author_name})\n"
 		f"{msg_content}\n"
 		f"<!-- end-raven-pinned-spec -->"
 	)
@@ -409,7 +409,7 @@ def get_task_raven_timeline_content(doctype: str, docname: str) -> list[dict]:
 			content_html = f"""
 			<div class="raven-timeline-card" style="font-size: 12px; line-height: 1.5; padding: 4px 0;">
 				<div style="font-weight: 600; color: #1B64DA; margin-bottom: 2px;">
-					💬 Raven Chat · {author}
+					Raven · {escape_html(author)}
 				</div>
 				<div style="color: #374151;">
 					{m.content or m.text or 'File attachment'}

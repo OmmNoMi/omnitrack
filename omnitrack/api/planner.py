@@ -32,6 +32,7 @@ from omnitrack.utils import (
 )
 from omnitrack.utils.block_tasks import resolve_ref, tasks_by_block, todo_subject
 from omnitrack.api.tasks import update_task_kpi_progress
+from omnitrack.utils.session_time import counted_hours
 
 
 @frappe.whitelist()
@@ -227,6 +228,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			b["project_name"] = proj_names.get(b.get("project"))
 			b["sessions"] = [
 				{
+					"name": s.name,
 					"session_date": str(s.session_date or ""),
 					"from_time": _time_str(s.from_time),
 					"to_time": _time_str(s.to_time),
@@ -237,10 +239,13 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 				for s in frappe.get_all(
 					"OmniTrack Work Session",
 					filters={"parent": b["name"], "parenttype": "Planned Work Block"},
-					fields=["session_date", "from_time", "to_time", "hours", "notes", "logged_via"],
+					fields=["name", "session_date", "from_time", "to_time", "hours", "notes", "logged_via"],
 					order_by="session_date asc, from_time asc",
 				)
 			]
+			# Counted hours, as on the dashboard (utils/session_time.py)
+			if b["sessions"]:
+				b["actual_hours"] = counted_hours(b["work_date"], b["start_time"], b["sessions"], now_datetime())
 			b["output_metrics"] = [
 				{
 					"metric_type": m.metric_type,
@@ -365,7 +370,8 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	# after the past-date check, so a failed booking rolls the new task back with it.
 	if new_task_subject:
 		created = _create_assigned_work(new_task_subject, target, project)
-		if not refs:
+		# A typed title names the block; the new task names it only when there is none
+		if not refs and not work_item_label:
 			work_item_label = str(new_task_subject).strip()[:140]
 		refs.append(created)
 	work_item = refs[0] if refs else None

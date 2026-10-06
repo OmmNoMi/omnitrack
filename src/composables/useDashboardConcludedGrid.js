@@ -1,26 +1,16 @@
 import { ref, watch, nextTick } from "vue";
 
 /**
- * Roving-tabindex grid of concluded deliverables (WCAG 2.2 AA) plus the
- * expand/collapse state of long notes.
+ * Roving-tabindex grid of the "Done today" list (WCAG 2.2 AA).
  */
 export function useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBlocks, visiblePastFocusBlocks }) {
   const concludedRovingRow = ref(0);
   const concludedRovingCol = ref(0);
 
   const canBlockReopen = (b) => b && b.status !== 'Cancelled' && b.status !== 'Rescheduled';
-  const hasBlockExpandableNotes = (b) => b && (isLongNote(b.deliverable_notes) || (b.sessions && b.sessions.length > 1));
 
-  const getConcludedNotesCol = (b) => canBlockReopen(b) ? 3 : 2;
-
-  const getMaxConcludedCol = (b) => {
-    if (!b) return 1;
-    const hasReopen = canBlockReopen(b);
-    const hasNotes = hasBlockExpandableNotes(b);
-    if (hasReopen && hasNotes) return 3;
-    if (hasReopen || hasNotes) return 2;
-    return 1;
-  };
+  // Columns: 0 title, 1 re-open. Re-open exists only on some rows,
+  // so arrow keys move between the cells that are actually rendered in the row.
 
   const setConcludedRoving = (r, c) => {
     concludedRovingRow.value = r;
@@ -29,29 +19,32 @@ export function useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBl
 
   const concludedTabindex = (r, c) => (concludedRovingRow.value === r && concludedRovingCol.value === c) ? 0 : -1;
 
+  const rowCells = (r) => [...document.querySelectorAll(`[data-concluded-row="${r}"]`)]
+    .sort((x, y) => Number(x.dataset.concludedCol) - Number(y.dataset.concludedCol));
+
+  const focusEl = (r, el) => {
+    if (!el) return;
+    setConcludedRoving(r, Number(el.dataset.concludedCol));
+    el.focus();
+    if (el.scrollIntoView) {
+      const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView({ block: 'nearest', behavior: prefersReduced ? 'auto' : 'smooth' });
+    }
+  };
+
+  // The rendered cell nearest to column c at or before it, else the first one.
+  const cellNear = (r, c) => {
+    const cells = rowCells(r);
+    const before = cells.filter((el) => Number(el.dataset.concludedCol) <= c);
+    return before.length ? before[before.length - 1] : cells[0];
+  };
+
   const focusConcludedCell = (targetRow, targetCol) => {
     const rows = visiblePastFocusBlocks.value || [];
     if (!rows.length) return;
     const r = Math.max(0, Math.min(targetRow, rows.length - 1));
-    const b = rows[r];
-    const maxCol = getMaxConcludedCol(b);
-    const c = Math.max(0, Math.min(targetCol, maxCol));
-
-    setConcludedRoving(r, c);
-    nextTick(() => {
-      let el = document.querySelector(`[data-concluded-row="${r}"][data-concluded-col="${c}"]`);
-      if (!el) {
-        el = document.querySelector(`[data-concluded-row="${r}"][data-concluded-col="0"]`);
-        if (el) setConcludedRoving(r, 0);
-      }
-      if (el) {
-        el.focus();
-        if (el.scrollIntoView) {
-          const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          el.scrollIntoView({ block: 'nearest', behavior: prefersReduced ? 'auto' : 'smooth' });
-        }
-      }
-    });
+    setConcludedRoving(r, Math.max(0, targetCol));
+    nextTick(() => focusEl(r, cellNear(r, targetCol)));
   };
 
   const onConcludedGridKey = (ev, r, c) => {
@@ -64,25 +57,19 @@ export function useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBl
 
     const rows = visiblePastFocusBlocks.value || [];
     if (!rows.length) return;
+    const cells = rowCells(r);
+    const i = cells.findIndex((el) => Number(el.dataset.concludedCol) === c);
+    const ctrl = ev.ctrlKey || ev.metaKey;
 
-    if (k === 'ArrowDown') {
-      focusConcludedCell(r + 1, c);
-    } else if (k === 'ArrowUp') {
-      focusConcludedCell(r - 1, c);
-    } else if (k === 'ArrowRight') {
-      focusConcludedCell(r, c + 1);
-    } else if (k === 'ArrowLeft') {
-      focusConcludedCell(r, c - 1);
-    } else if (k === 'Home') {
-      if (ev.ctrlKey || ev.metaKey) focusConcludedCell(0, 0);
-      else focusConcludedCell(r, 0);
-    } else if (k === 'End') {
-      if (ev.ctrlKey || ev.metaKey) {
-        const lastRow = rows.length - 1;
-        focusConcludedCell(lastRow, getMaxConcludedCol(rows[lastRow]));
-      } else {
-        focusConcludedCell(r, getMaxConcludedCol(rows[r]));
-      }
+    if (k === 'ArrowRight') focusEl(r, cells[Math.min(cells.length - 1, i + 1)]);
+    else if (k === 'ArrowLeft') focusEl(r, cells[Math.max(0, i - 1)]);
+    else if (k === 'ArrowDown' && r < rows.length - 1) focusEl(r + 1, cellNear(r + 1, c));
+    else if (k === 'ArrowUp' && r > 0) focusEl(r - 1, cellNear(r - 1, c));
+    else if (k === 'Home') focusEl(ctrl ? 0 : r, rowCells(ctrl ? 0 : r)[0]);
+    else if (k === 'End') {
+      const last = ctrl ? rows.length - 1 : r;
+      const lastCells = rowCells(last);
+      focusEl(last, lastCells[lastCells.length - 1]);
     }
   };
 
@@ -96,22 +83,8 @@ export function useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBl
     });
   };
 
-  const expandedBlockNotes = ref(new Set());
-  const isBlockNotesExpanded = (name) => expandedBlockNotes.value.has(name);
-  const toggleBlockNotes = (name) => {
-    const next = new Set(expandedBlockNotes.value);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    expandedBlockNotes.value = next;
-  };
-  const isLongNote = (notes) => {
-    if (!notes) return false;
-    return notes.length > 110 || notes.includes('\n');
-  };
-
   watch(selectedDashboardDate, () => {
     showAllPastBlocks.value = false;
-    expandedBlockNotes.value = new Set();
     concludedRovingRow.value = 0;
     concludedRovingCol.value = 0;
   });
@@ -120,17 +93,10 @@ export function useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBl
     concludedRovingRow,
     concludedRovingCol,
     canBlockReopen,
-    hasBlockExpandableNotes,
-    getConcludedNotesCol,
-    getMaxConcludedCol,
     setConcludedRoving,
     concludedTabindex,
     focusConcludedCell,
     onConcludedGridKey,
-    toggleShowAllPastBlocks,
-    expandedBlockNotes,
-    isBlockNotesExpanded,
-    toggleBlockNotes,
-    isLongNote
+    toggleShowAllPastBlocks
   };
 }

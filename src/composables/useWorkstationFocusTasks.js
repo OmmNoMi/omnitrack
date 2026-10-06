@@ -248,6 +248,14 @@ export function useWorkstationFocusTasks(w) {
     fetchDrawerChat(b.task || b.name);
     showBlockDrawer.value = true;
   };
+  // One logged entry's details (the timeline's logged bar). The sheet fetches the rest itself.
+  const showSessionDrawer = ref(false);
+  const sessionEntry = ref(null);
+  const openSessionDrawer = (block, session) => {
+    hideBlockHover();
+    sessionEntry.value = { block, session };
+    showSessionDrawer.value = true;
+  };
   // Same endpoint the planner drag uses, typed instead of dragged. The drawer's Reschedule
   // dialog sends its own form; the block is the drawer's (workBlockStore keeps a separate
   // activeBlock that the drawer never sets, so its submitReschedule was a silent no-op).
@@ -323,6 +331,9 @@ export function useWorkstationFocusTasks(w) {
     submitAttachTasks,
     carryForwardUnfinished,
     openBlockDrawer,
+    showSessionDrawer,
+    sessionEntry,
+    openSessionDrawer,
     submitReschedule,
     openCancelModal,
     openCancelModalForActive,

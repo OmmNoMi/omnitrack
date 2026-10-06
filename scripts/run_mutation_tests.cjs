@@ -175,6 +175,51 @@ runMutationTest(
 );
 
 runMutationTest(
+  'An emoji comes back into a user-facing label',
+  path.resolve(__dirname, '..', 'src/components/dialogs/WrapAndStartNextModal.vue'),
+  (code) => code.replace('label="Keep working"', 'label="\u{1F680} Keep working"'),
+  'node scripts/check_no_glyphs.cjs',
+  'emoji or pictographic glyphs'
+);
+runMutationTest(
+  'A glyph comes back into a service-worker notification action',
+  path.resolve(__dirname, '..', 'omnitrack/public/sw.js'),
+  (code) => code.replace("title: 'Stop' }", "title: '\u23F9\uFE0F Stop' }"),
+  'node scripts/check_no_glyphs.cjs',
+  'omnitrack/public/sw.js'
+);
+
+runMutationTest(
+  'The timeline loses its 3h zoom',
+  path.resolve(__dirname, '..', 'src/utils/timelineZoom.js'),
+  (code) => code.replace('= [3, 6, 12, 24]', '= [6, 12, 24]'),
+  'node scripts/check_timeline_zoom.mjs',
+  'every screen offers 3h'
+);
+runMutationTest(
+  'Phones open the timeline on 6h again',
+  path.resolve(__dirname, '..', 'src/utils/timelineZoom.js'),
+  (code) => code.replace('if (width < PHONE_MAX_WIDTH) return 3;', ''),
+  'node scripts/check_timeline_zoom.mjs',
+  'opens on 3h'
+);
+runMutationTest(
+  'The day subtitle repeats logged hours again',
+  path.resolve(__dirname, '..', 'src/composables/useWorkstationDashboard.js'),
+  (code) => code.replace("return n ? n + (n === 1 ? ' block' : ' blocks') : '';", "return n ? n + (n === 1 ? ' block' : ' blocks') + ' · 0.0h logged' : '';"),
+  'node scripts/check_timeline_zoom.mjs',
+  'must not repeat planned or logged hours'
+);
+
+runMutationTest(
+  'The recording bar reads the wall clock again and falls behind the now line',
+  path.resolve(__dirname, '..', 'src/composables/useWorkstationTimeline.js'),
+  (code) => code.replace('const ee = Math.max(ss + 1, nowMinute.value);', 'const curNow = new Date();\n        const ee = Math.max(ss + 1, curNow.getHours() * 60 + curNow.getMinutes());'),
+  'node scripts/check_timeline_zoom.mjs',
+  'must end at nowMinute.value'
+);
+
+runMutationTest(
   'Planner mouse drag goes back to waiting for a hold',
   path.resolve(__dirname, '..', 'src/composables/useWorkstationPlannerSelect.js'),
   (code) => code.replace("if (ev.pointerType === 'mouse') {", "if (false) {"),
@@ -420,7 +465,7 @@ runMutationTest('A drawer chip goes back to frappe-ui subtle blue', drawerDir('B
 runMutationTest('Add tasks offers tasks the block already has', drawerDir('AddBlockTasksDialog.vue'),
   (code) => code.replace('.filter((o) => !have.has(o.value))', ''), DP, 'less the block');
 runMutationTest('An Escape a dialog took closes the drawer too', path.resolve(__dirname, '..', 'src/composables/useWorkstationEod.js'),
-  (code) => code.replace('    else if (dialogEsc) return;\n', ''), DP, 'must not also close the block drawer');
+  (code) => code.replace('    else if (dialogEsc) return;\n', ''), DP, 'must not also close the entry sheet or the block drawer');
 runMutationTest('FDialog stops claiming its Escape', path.resolve(__dirname, '..', 'src/components/common/FDialog.vue'),
   (code) => code.replace('      markDialogEscape(e);\n', ''), DP, 'claim its Escape');
 runMutationTest('Timesheet day chips ignore the horizon', path.resolve(__dirname, '..', 'src/utils/timesheetEntry.js'),
@@ -493,6 +538,134 @@ runMutationTest('The session picker adds a Non-Paid suffix again', SRC('src/sess
   (code) => code.replace('map(n => ({ label: n.label, value: n.value }))', 'map(n => ({ label: n.is_working ? n.label : `${n.label} (Non-Paid)`, value: n.value }))'), AK, 'legacy activity value');
 runMutationTest('The calendar styles Absent apart from Away again', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
   (code) => code.replace(`:class="isDarkMode ? 'text-amber-300' : 'text-amber-700'"`, `:class="b.task_nature.includes('Absent') ? 'text-rose-700' : 'text-amber-700'"`), AK, 'legacy activity value');
+
+// Block reminders: the app's clock, the server's windows, the socket, one alert each
+const BR = 'node scripts/check_block_reminders.mjs';
+runMutationTest('The reminder lead grows to eleven minutes', SRC('src/utils/blockReminders.js'),
+  (code) => code.replace('export const LEAD_MIN = 10;', 'export const LEAD_MIN = 11;'), BR, 'FAIL: block reminders');
+runMutationTest('A start reminder goes out however late', SRC('src/utils/blockReminders.js'),
+  (code) => code.replace('until <= 0 && until >= -START_GRACE_MIN', 'until <= 0'), BR, 'six minutes late');
+runMutationTest('A started block is reminded again', SRC('src/utils/blockReminders.js'),
+  (code) => code.replace("new Set(['Draft', 'Planned'])", "new Set(['Draft', 'Planned', 'In Progress'])"), BR, 'started block');
+runMutationTest("Someone else's block reminds me", SRC('src/utils/blockReminders.js'),
+  (code) => code.replace('if (user && b.employee && b.employee !== user) continue;\n', ''), BR, 'not mine');
+runMutationTest('The running block is reminded', SRC('src/utils/blockReminders.js'),
+  (code) => code.replace('if (runningBlock && b.name === runningBlock) continue;\n', ''), BR, 'already running');
+runMutationTest('The server goes back to narrow fixed windows', SRC('omnitrack/notifications.py'),
+  (code) => code.replace('kind = reminder_kind(delta_mins)', 'kind = "upcoming_10m" if 8 <= delta_mins <= 11 else None'), BR, 'reminder_kind');
+runMutationTest('The server lead drifts from the app', SRC('omnitrack/notifications.py'),
+  (code) => code.replace('REMINDER_LEAD_MIN = 10', 'REMINDER_LEAD_MIN = 15'), BR, 'must equal blockReminders.js');
+runMutationTest('Tapping the start reminder starts a session', SRC('omnitrack/notifications.py'),
+  (code) => code.replace(/(Time to start: \{0\}[\s\S]*?)action_url = f"\/omnitrack\?action=view_block/, '$1action_url = f"/omnitrack?action=start_block'), BR, 'only its Start session button');
+runMutationTest('The socket namespace is literal Jinja again', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('const siteName = page.site || host;', 'const siteName = "{{ frappe.local.site }}";'), BR, 'never rendered by Jinja');
+runMutationTest('A reminder is shown twice', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('if (localStorage.getItem(key)) return;', 'localStorage.getItem(key);'), BR, 'not shown again');
+runMutationTest('The app has no reminder clock', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('_reminderTimer = setInterval(checkBlockReminders, 20000);', ''), BR, 'reminder clock');
+runMutationTest('Notify only when the tab is hidden', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace("const away = document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus());", 'const away = document.hidden;'), BR, 'not in front');
+runMutationTest('The page does not tell the app its site', SRC('omnitrack/www/omnitrack.html'),
+  (code) => code.replace('      site: "{{ site_name }}",\n', ''), BR, 'its site and socket port');
+runMutationTest('A logged bar opens the block again', SRC('src/views/dashboard/DashboardTimeline.vue'),
+  (code) => code.replace('@click="openLogged(r)"', '@click="openBlockDrawer(r.block)"'), BR, 'opens its session, not the block');
+runMutationTest('Served sessions lose their names', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('"name": s.name,\n', ''), BR, 'carries its name');
+runMutationTest('A logged bar opens the edit form again', SRC('src/views/dashboard/DashboardTimeline.vue'),
+  (code) => code.replace('this.openSessionDrawer(r.block, r.session)', 'this.openEditSessionModal(r.block, r.session)'), BR, "entry's details sheet");
+runMutationTest('The entry form grows a view mode again', SRC('src/components/dialogs/TimesheetEntryDialog.vue'),
+  (code) => code.replace('<form class="space-y-4"', '<div v-if="form.viewing" data-entry-view></div><form v-else class="space-y-4"'), BR, 'the one entry form is only a form');
+runMutationTest('The entry sheet loses its dialog role', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('role="dialog" aria-modal="true" ', ''), BR, 'a labelled modal dialog');
+runMutationTest('The entry sheet drops the task moves', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('<section v-if="moves.length"', '<section v-if="false"'), BR, 'task moves made while the entry ran');
+runMutationTest('An unplanned entry shows a plan', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('<section v-if="!block.unplanned"', '<section'), BR, 'an unplanned entry shows no plan');
+runMutationTest('Escape leaves the entry sheet open', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('    else if (showSessionDrawer.value) showSessionDrawer.value = false;\n', ''), BR, 'Escape closes the entry sheet');
+runMutationTest('A workflow move is not a task change', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('_TASK_STATE_FIELDS = ("status", "workflow_state")', '_TASK_STATE_FIELDS = ("status",)'), BR, 'status or a workflow_state change');
+runMutationTest("An entry's tasks lose their workflow", SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('"tasks": [_with_workflow(t) for t in block_tasks(block)]', '"tasks": block_tasks(block)'), BR, "each task's workflow state and moves");
+runMutationTest('An entry shows tasks the viewer cannot read', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace(' or not frappe.has_permission(doctype, "read", name)', ''), BR, 'only for tasks the viewer may read');
+runMutationTest('A task row shows its stale status again', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('taskState(t) { return t.state || t.status', 'taskState(t) { return t.status || t.state'), BR, 'shows its workflow state');
+runMutationTest('A task row offers no moves', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('<Dropdown v-if="taskMoves(t).length" :options="taskMoves(t)"', '<Dropdown v-if="false" :options="taskMoves(t)"'), BR, 'shows its workflow state');
+runMutationTest('A move skips the confirm step', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('openTaskForm(t, { block: this.entry && this.entry.block, ask: a.action })', 'openTaskForm(t, { block: this.entry && this.entry.block })'), BR, 'opens the task form at its confirm step');
+runMutationTest('The task list loses Left/Right', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('ArrowRight: [r, cols(r)], ArrowLeft: [r, 0]', 'ArrowRight: [r, 0], ArrowLeft: [r, 0]'), BR, 'Left/Right between a task and its status');
+runMutationTest('A reload strands the tab stop', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('        this.clampCell();\n', ''), BR, 'Left/Right between a task and its status');
+runMutationTest('The entry sheet leaves focus behind', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace("sheet.querySelector('[data-sheet-close]')", "sheet.querySelector('[data-none]')"), BR, 'focus moves into the sheet');
+runMutationTest('Closing the entry sheet drops focus', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('if (lost && opener && document.contains(opener)) opener.focus();', ''), BR, 'back to its opener on close');
+runMutationTest('The task form ignores the move it was opened for', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace('if (a) this.ask(a);', 'if (a) void a;'), BR, "straight to that move's confirm step");
+runMutationTest('A manager loses New task again', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace('        theme="gray"\n', '        v-else\n        theme="gray"\n'), BR, 'New task shows for managers too');
+runMutationTest('The bottom bar becomes a tablist again', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace('    aria-label="Workstation navigation"', '    role="tablist"\n    aria-label="Workstation navigation"'), BR, 'no tab roles');
+runMutationTest('Planner titles clip to one line again', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
+  (code) => code.replace(':style="clampStyle(titleLines(seg))"', 'class="truncate"'), BR, "a block's title wraps");
+runMutationTest('A split lane crams its time in again', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
+  (code) => code.replace('const time = !this.isSplit(seg) && lines >= 2;', 'const time = lines >= 2;'), BR, 'leaves its time to the hover card');
+runMutationTest('Task names in the entry sheet are cut off again', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('text-left text-base [overflow-wrap:anywhere]', 'text-left text-base truncate'), BR, "full name shows, wrapped");
+runMutationTest('A flag loses its reason again', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('b_doc.approval_notes = b_doc.flagged_reason', 'pass'), BR, 'keeps the reason in approval_notes');
+runMutationTest("The dashboard's sessions lose their names", SRC('omnitrack/api/workstation.py'),
+  (code) => code.replace('SELECT name, parent, session_date', 'SELECT parent, session_date'), BR, "dashboard's sessions carry their name");
+runMutationTest("frappe-ui's own socket is switched back on", SRC('src/frappeUiComponents.js'),
+  (code) => code.replace('{ socketio: false }', '{}'), BR, 'socket stays off');
+runMutationTest('The app installs FrappeUI bare again', SRC('src/main.js'),
+  (code) => code.replace('app.use(FrappeUI, FRAPPE_UI_OPTIONS);', 'app.use(FrappeUI);'), BR, 'never bare');
+
+// The day is named once
+const DH = 'node scripts/check_day_header.mjs';
+runMutationTest('Plan loses its visible label', SRC('src/views/dashboard/DashboardDateSelector.vue'),
+  (code) => code.replace('@click="openNewTaskModal">Plan</Button>', '@click="openNewTaskModal" />'), DH, 'visible label');
+runMutationTest('The summary repeats the date', SRC('src/composables/useWorkstationDashboard.js'),
+  (code) => code.replace("return n ? n + (n === 1 ? ' block' : ' blocks') : '';", "return new Date().toLocaleDateString() + (n ? ' · ' + n + ' blocks' : '');"), DH, 'never repeats the date');
+
+// A block is called by its typed title
+const BT = 'node scripts/check_block_title.mjs';
+runMutationTest('Booking names the block after the first task', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace(/work_item_label:\s*notes\s*\|\|\s*\(picked \? picked\.subject : newTask\)/, 'work_item_label: (picked ? picked.subject : newTask) || notes'), BT, 'typed Title first');
+runMutationTest('A view builds its own title chain', SRC('src/views/dashboard/DashboardTimeline.vue'),
+  (code) => code.replace("{{ blockTitle(r.block, 'Block') }}", "{{ r.block.task_subject || r.block.deliverable_notes }}"), BT, 'builds its own block title');
+
+// The switch dialog never asks to retype the log
+const SD = 'node scripts/check_switch_dialog.mjs';
+runMutationTest('The switch prefills the log again', SRC('src/composables/useWorkstationAttendance.js'),
+  (code) => code.replace("switchWrapUpNote.value = '';", "switchWrapUpNote.value = (sessionNotesList.value || []).join('\\n');"), SD, 'FAIL: switch dialog');
+runMutationTest('The last line is dropped from the saved notes', SRC('src/utils/wrapNote.js'),
+  (code) => code.replace('[...(logLines || []), lastLine]', '[...(logLines || [])]'), SD, 'FAIL: switch dialog');
+
+// Undo an approval: briefly, by its approver, with the draft Timesheet it made
+runMutationTest('An approval forgets what it replaced', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('_remember_review(b_name, approver, before)', 'pass'), BR, 'so it can be undone');
+runMutationTest("Anyone can undo someone else's approval", SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('if not saved or saved.get("by") != user:', 'if not saved:'), BR, 'only the approver');
+runMutationTest('Undo overwrites a review made since', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('b_doc.approval_status != "Approved" or b_doc.approved_by != user:', 'False:'), BR, 'only the approver');
+runMutationTest('Undo removes a submitted Timesheet', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('"docstatus") != 0:', '"docstatus") > 1:'), BR, 'never a submitted one');
+runMutationTest('Approving offers no Undo', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace("action: { label: 'Undo', onClick: () => undoApproval(b) }, ", ''), BR, 'offers Undo for 5 seconds');
+runMutationTest('The Undo window shrinks', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('const UNDO_APPROVAL_MS = 5000;', 'const UNDO_APPROVAL_MS = 1000;'), BR, 'offers Undo for 5 seconds');
+runMutationTest('The toast hides its action', SRC('src/App.vue'),
+  (code) => code.replace('v-if="toast.action"', 'v-if="false"'), BR, 'the toast shows its action');
+runMutationTest('The toast closes under the pointer', SRC('src/App.vue'),
+  (code) => code.replace(' @mouseenter="holdToast"', ''), BR, 'waits while it is hovered');
+runMutationTest("An old toast's timer closes a new one", SRC('src/composables/useWorkstationStoreBindings.js'),
+  (code) => code.replace('clearTimeout(toastTimer);\n    toastLeft = ms;', 'toastLeft = ms;'), BR, 'restarts the timer');
+runMutationTest('Flagged is not an approval status', SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.json'),
+  (code) => code.replace('Approved\\nFlagged\\nRejected', 'Approved\\nRejected'), BR, 'every Flag is rejected');
 
 // Summary Report
 console.log('\n===========================================================');

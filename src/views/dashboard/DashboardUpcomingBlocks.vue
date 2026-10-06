@@ -15,7 +15,7 @@
               </Badge>
             </div>
             <h3 class="text-base sm:text-lg font-bold leading-snug truncate">
-              {{ b.task_subject || b.deliverable_notes || 'Focus Work Block' }}
+              {{ blockTitle(b, 'Focus block') }}
             </h3>
             <p class="text-xs text-gray-700 dark:text-gray-300 truncate">
               <span v-if="b.project_name || b.project">{{ b.project_name || b.project }} · </span>{{ Number(b.duration_hours || 0).toFixed(1) }}h
@@ -30,7 +30,7 @@
               variant="outline"
               size="sm"
               @click.stop="openBlockDrawer(b)"
-              :label="'Reschedule ' + (b.task_subject || b.deliverable_notes || 'Work Block')"
+              :label="'Reschedule ' + blockTitle(b)"
               title="Reschedule this planned block">
               Reschedule
             </Button>
@@ -38,10 +38,10 @@
               theme="blue"
               variant="solid"
               size="sm"
+              icon-left="play"
               @click.stop="startFocusBlock(b)"
-              :label="'Start session for ' + (b.task_subject || b.deliverable_notes || 'Work Block')">
-              ▶ Start Session
-            </Button>
+              label="Start session"
+              :title="'Start a session on ' + blockTitle(b, 'this block')" />
           </div>
         </div>
 
@@ -52,10 +52,12 @@
 
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
+import { blockTitle } from '../../utils/blockTitle.js';
 
 export default {
   name: 'DashboardUpcomingBlocks',
   methods: {
+    blockTitle,
     // Secondary facts live in the hover tooltip so the card stays uncluttered.
     blockDetails(b) {
       return [

@@ -2,7 +2,6 @@
   <nav
     class="fixed bottom-0 left-0 right-0 z-40 border-t flex items-center justify-around px-3 py-2 transition-colors pb-safe backdrop-blur-md"
     :class="isDarkMode ? 'bg-[#1E1F22]/95 border-gray-800 shadow-2xl' : 'bg-white/95 border-gray-200 shadow-lg'"
-    role="tablist"
     aria-label="Workstation navigation"
   >
     <div class="w-full max-w-xl mx-auto flex items-center justify-around">
@@ -13,8 +12,7 @@
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
         :class="activeTab === 'dashboard' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'dashboard' ? 'true' : 'false'"
+        :aria-current="activeTab === 'dashboard' ? 'page' : null"
         label="Dashboard"
         @click="$emit('update:activeTab', 'dashboard')"
       >
@@ -36,8 +34,7 @@
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
         :class="activeTab === 'planner' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'planner' ? 'true' : 'false'"
+        :aria-current="activeTab === 'planner' ? 'page' : null"
         label="Calendar"
         @click="$emit('update:activeTab', 'planner')"
       >
@@ -102,8 +99,7 @@
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
         :class="activeTab === 'timesheets' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'timesheets' ? 'true' : 'false'"
+        :aria-current="activeTab === 'timesheets' ? 'page' : null"
         label="Timesheets"
         @click="$emit('update:activeTab', 'timesheets')"
       >
@@ -116,7 +112,7 @@
         <span class="text-[10px] mt-0.5">Timesheets</span>
       </Button>
 
-      <!-- Team Tab (if Manager) or + Task -->
+      <!-- Team: managers only -->
       <Button
         v-if="isManager"
         variant="ghost"
@@ -124,8 +120,7 @@
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
         :class="activeTab === 'attendance' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
-        role="tab"
-        :aria-selected="activeTab === 'attendance' ? 'true' : 'false'"
+        :aria-current="activeTab === 'attendance' ? 'page' : null"
         label="Team"
         @click="$emit('update:activeTab', 'attendance')"
       >
@@ -136,8 +131,9 @@
         </template>
         <span class="text-[10px] mt-0.5">Team</span>
       </Button>
+
+      <!-- New task: everyone, managers included (a manager plans their own work too) -->
       <Button
-        v-else
         variant="ghost"
         theme="gray"
         size="sm"
@@ -152,7 +148,7 @@
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
         </template>
-        <span class="text-[10px] mt-0.5">+ Task</span>
+        <span class="text-[10px] mt-0.5">New task</span>
       </Button>
     </div>
   </nav>

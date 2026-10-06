@@ -232,7 +232,7 @@
       "fieldname": "approval_status",
       "fieldtype": "Select",
       "label": "Approval Status",
-      "options": "Draft\nPending Approval\nApproved\nRejected",
+      "options": "Draft\nPending Approval\nApproved\nFlagged\nRejected",
       "default": "Draft",
       "in_list_view": 1,
       "in_standard_filter": 1
@@ -353,5 +353,5 @@
     }
   ],
   "icon": "calendar",
-  "modified": "2026-10-06 15:10:00.000000"
+  "modified": "2026-10-06 21:10:00.000000"
 }

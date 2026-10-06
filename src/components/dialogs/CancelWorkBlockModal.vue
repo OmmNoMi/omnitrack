@@ -19,11 +19,10 @@
       <div class="p-3 rounded-2xl border" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
         <div class="text-[10px] uppercase font-bold tracking-wider text-gray-600">Target Block</div>
         <div class="font-extrabold text-sm text-gray-900 dark:text-white mt-0.5">
-          {{ targetBlock.task_subject || targetBlock.work_item_label || targetBlock.deliverable_notes || 'Work block' }}
+          {{ blockTitle(targetBlock) }}
         </div>
         <div class="text-[11px] text-gray-700 dark:text-gray-300 mt-1 flex items-center gap-2">
-          <span>📅 {{ targetBlock.work_date }}</span>
-          <span>⏱ {{ formatHHMM(targetBlock.start_time) }}–{{ formatHHMM(targetBlock.end_time) }} ({{ formatDuration(targetBlock.duration_hours) }}h planned)</span>
+          <span class="tabular-nums">{{ targetBlock.work_date }} · {{ formatHHMM(targetBlock.start_time) }}–{{ formatHHMM(targetBlock.end_time) }} · {{ formatDuration(targetBlock.duration_hours) }}h</span>
         </div>
       </div>
 
@@ -93,6 +92,7 @@
 </template>
 
 <script>
+import { blockTitle } from '../../utils/blockTitle.js';
 export default {
   name: "CancelWorkBlockModal",
   props: {
@@ -107,6 +107,7 @@ export default {
   },
   emits: ["update:modelValue", "confirm"],
   methods: {
+    blockTitle,
     formatHHMM(val) {
       if (!val) return "";
       return String(val).substring(0, 5);

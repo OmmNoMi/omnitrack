@@ -1,7 +1,7 @@
 import * as Vue from "vue";
 import { createApp, reactive, h } from "vue";
 import { FrappeUI } from "frappe-ui";
-import { registerFrappeUIComponents } from "./frappeUiComponents.js";
+import { registerFrappeUIComponents, FRAPPE_UI_OPTIONS } from "./frappeUiComponents.js";
 import { io } from "socket.io-client";
 import "frappe-ui/style.css";
 import "./styles/main.css";
@@ -21,6 +21,7 @@ import TimesheetEntryDialog from "./components/dialogs/TimesheetEntryDialog.vue"
 import TaskWorkflowModal from "./components/dialogs/TaskWorkflowModal.vue";
 import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
+import SessionDetailDrawer from "./drawers/SessionDetailDrawer.vue";
 import RavenCollaborationDrawer from "./drawers/RavenCollaborationDrawer.vue";
 import DashboardView from "./views/DashboardView.vue";
 import CalendarView from "./views/CalendarView.vue";
@@ -62,6 +63,7 @@ if (typeof window !== "undefined") {
 		TimesheetEntryDialog,
 		TaskWorkflowModal,
 		BlockDetailDrawer,
+		SessionDetailDrawer,
 		RavenCollaborationDrawer,
 		DashboardView,
 		CalendarView,
@@ -87,7 +89,7 @@ function mountApp(target = "#app") {
 
 	container.innerHTML = "";
 	const app = createApp(App);
-	app.use(FrappeUI);
+	app.use(FrappeUI, FRAPPE_UI_OPTIONS);
 	registerFrappeUIComponents(app);
 	app.use(router);
 	app.component("FDialog", FDialog);
@@ -106,6 +108,7 @@ function mountApp(target = "#app") {
 	app.component("TaskWorkflowModal", TaskWorkflowModal);
 	app.component("TaskFormDialog", TaskFormDialog);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
+	app.component("SessionDetailDrawer", SessionDetailDrawer);
 	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
 	app.component("WorkstationHeader", WorkstationHeader);
 	app.component("WorkstationBottomNav", WorkstationBottomNav);
@@ -161,7 +164,7 @@ function mountSessionBox(target, props = {}) {
 		},
 	});
 
-	app.use(FrappeUI);
+	app.use(FrappeUI, FRAPPE_UI_OPTIONS);
 	registerFrappeUIComponents(app);
 	app.mount(root);
 	sessionBoxInstance = app;

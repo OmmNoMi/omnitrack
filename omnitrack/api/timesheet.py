@@ -483,14 +483,7 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 	elif hours:
 		sess_row.hours = flt(hours)
 
-	# Recalculate block actual hours and variance
-	doc.actual_hours = round(sum(flt(s.hours) for s in doc.sessions), 2)
-	doc.variance_hours = round(doc.actual_hours - flt(doc.duration_hours), 2)
-	if doc.actual_hours >= flt(doc.duration_hours):
-		doc.status = "Completed" if doc.status != "Logged (Full)" else "Logged (Full)"
-	elif doc.actual_hours > 0:
-		doc.status = "Logged (Partial)"
-
+	# save() rolls the sessions up into actual hours, variance and status (roll_up_sessions)
 	doc.flags.ignore_permissions = True
 	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
 		doc.flags.ignore_links = True
@@ -545,14 +538,7 @@ def delete_work_session(session_name, block_name=None):
 	check_timesheet_date_permission(base_date, frappe.session.user)
 
 	doc.sessions = [s for s in doc.sessions if s.name != session_name]
-	doc.actual_hours = round(sum(flt(s.hours) for s in doc.sessions), 2)
-	doc.variance_hours = round(doc.actual_hours - flt(doc.duration_hours), 2)
-	if doc.actual_hours == 0:
-		doc.status = "Planned"
-	elif doc.actual_hours >= flt(doc.duration_hours):
-		doc.status = "Completed" if doc.status != "Logged (Full)" else "Logged (Full)"
-	else:
-		doc.status = "Logged (Partial)"
+	# save() rolls the remaining sessions up into actual hours, variance and status
 
 	doc.flags.ignore_permissions = True
 	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
@@ -584,11 +570,171 @@ def delete_work_session(session_name, block_name=None):
 	}
 
 
+# A task's status or workflow state, the two fields a move changes
+_TASK_STATE_FIELDS = ("status", "workflow_state")
+# Stop is pressed a moment after the last move
+_SESSION_SLACK = timedelta(minutes=2)
+
+
+def _session_window(row):
+	"""(start, end) datetimes a session ran, across midnight if it did."""
+	day = getdate(row.session_date)
+	if not (row.from_time and row.to_time):
+		start = get_datetime(f"{day} 00:00:00")
+		return start, start + timedelta(days=1)
+	start = get_datetime(f"{day} {_time_str(row.from_time)}")
+	end = get_datetime(f"{day} {_time_str(row.to_time)}")
+	if end <= start:
+		end += timedelta(days=1)
+	return start, end
+
+
+def _task_moves(block, start, end):
+	"""What happened to the session's tasks while it ran: rows ticked off on the block, and status
+	or workflow moves from each Task or ToDo's own history (Version), made by the block's person.
+	Read by time, so an entry logged before this existed shows its moves too."""
+	moves = []
+	refs = {}
+	for row in block.get("tasks") or []:
+		if row.completed_at and start <= get_datetime(row.completed_at) <= end + _SESSION_SLACK:
+			moves.append({"subject": row.subject, "to": "Completed", "at": str(row.completed_at), "ref": row.work_item})
+		if row.reference_doctype in ("Task", "ToDo") and row.reference_name:
+			refs[(row.reference_doctype, row.reference_name)] = row
+	for (dt, name), row in refs.items():
+		if not frappe.db.exists("DocType", dt):
+			continue
+		for v in frappe.get_all(
+			"Version",
+			filters={"ref_doctype": dt, "docname": name, "owner": block.employee,
+				"creation": ["between", [start, end + _SESSION_SLACK]]},
+			fields=["data", "creation"],
+			order_by="creation asc",
+		):
+			try:
+				changed = json.loads(v.data or "{}").get("changed") or []
+			except Exception:
+				continue
+			for field, old, new in changed:
+				if field in _TASK_STATE_FIELDS and new and old != new:
+					moves.append({"subject": row.subject, "from": old, "to": new, "at": str(v.creation), "ref": row.work_item})
+	return sorted(moves, key=lambda m: m["at"])
+
+
+def _with_workflow(task):
+	"""A block task row plus where its document stands now and the moves the viewer can make.
+	The row's own status is a snapshot; the document's workflow state is the truth."""
+	task.update({"workflow": None, "state": task.get("status") or "Open", "actions": []})
+	doctype, name = task.get("doctype"), task.get("id")
+	if doctype not in ("Task", "ToDo") or not name or not frappe.db.exists("DocType", doctype):
+		return task
+	if not frappe.db.exists(doctype, name) or not frappe.has_permission(doctype, "read", name):
+		return task
+	from omnitrack.api.tasks import _workflow_of
+	try:
+		task.update(_workflow_of(frappe.get_doc(doctype, name)))
+	except Exception:
+		frappe.log_error(title="OmniTrack: task workflow for a Work Session")
+	return task
+
+
+@frappe.whitelist()
+def get_work_session(session_name):
+	"""One Work Session and everything it stands for: the block it sits in (planned, or the carrier
+	of an unplanned entry), the tasks it was for, the task moves made while it ran, the block's
+	output, its approval and its ERPNext Timesheet. Any of those may be missing."""
+	parent = frappe.db.get_value("OmniTrack Work Session", {"name": session_name, "parenttype": "Planned Work Block"}, "parent")
+	if not parent:
+		frappe.throw(_("Work Session {0} not found").format(session_name), frappe.DoesNotExistError)
+	block = frappe.get_doc("Planned Work Block", parent)
+	from omnitrack.permissions import has_work_block_permission
+	if not has_work_block_permission(block, "read"):
+		frappe.throw(_("Not permitted to read this Work Session."), frappe.PermissionError)
+
+	row = next(s for s in block.sessions if s.name == session_name)
+	start, end = _session_window(row)
+	from omnitrack.utils.block_tasks import block_tasks
+	full_name = lambda user: (frappe.db.get_value("User", user, "full_name") or user) if user else None
+	timesheet = None
+	if block.timesheet and frappe.db.exists("DocType", "Timesheet"):
+		ts = frappe.db.get_value("Timesheet", block.timesheet, ["name", "docstatus"], as_dict=True)
+		if ts:
+			timesheet = {"name": ts.name, "state": ("Draft", "Submitted", "Cancelled")[ts.docstatus or 0]}
+	return {
+		"session": {
+			"name": row.name, "session_date": str(row.session_date or ""), "from_time": str(row.from_time or ""),
+			"to_time": str(row.to_time or ""), "hours": flt(row.hours), "notes": row.notes or "",
+			"logged_via": row.logged_via or "", "task_nature": to_kind(row.task_nature or block.task_nature),
+		},
+		"employee": block.employee,
+		"employee_name": full_name(block.employee),
+		"block": {
+			"name": block.name, "unplanned": block.unplanned, "unplanned_reason": block.unplanned_reason,
+			"work_date": str(block.work_date or ""), "start_time": str(block.start_time or ""), "end_time": str(block.end_time or ""),
+			"duration_hours": flt(block.duration_hours), "actual_hours": flt(block.actual_hours),
+			"status": block.status, "project": block.project,
+			"work_item_label": block.work_item_label, "deliverable_notes": block.deliverable_notes,
+			"approval_status": block.approval_status or "", "approved_by": block.approved_by,
+			"approved_by_name": full_name(block.approved_by),
+			"approval_date": str(block.approval_date or ""), "approval_notes": block.approval_notes or "",
+			"entries": len(block.sessions),
+		},
+		"tasks": [_with_workflow(t) for t in block_tasks(block)],
+		"task_moves": _task_moves(block, start, end),
+		"output_metrics": [
+			{"metric_type": m.metric_type, "quantity": flt(m.quantity), "unit": m.unit or "", "notes": m.notes or ""}
+			for m in (block.get("output_metrics") or [])
+		],
+		"timesheet": timesheet,
+	}
+
+
 def _is_recording(block):
 	"""Whether the block's owner has a live session running on it right now."""
 	from omnitrack.api.stopwatch import get_active_session
 	live = get_active_session(user=block.employee) or {}
 	return live.get("trackerBlockName") == block.name
+
+
+# What an approval changes on a block, kept briefly so its approver can take it back
+REVIEW_FIELDS = ("approval_status", "approved_by", "approval_date", "approval_notes", "timesheet")
+# The client offers Undo for 5 seconds; the server allows a slow network some slack beyond that
+UNDO_REVIEW_SECONDS = 30
+
+
+def _review_key(block_name):
+	return f"omnitrack:undo-review:{block_name}"
+
+
+def _remember_review(block_name, user, before):
+	frappe.cache.set_value(_review_key(block_name), {"by": user, "before": before}, expires_in_sec=UNDO_REVIEW_SECONDS)
+
+
+@frappe.whitelist(methods=["POST"])
+def undo_block_approval(block_name):
+	"""Puts an entry back as it was before its approver approved it, moments ago.
+	Only the approver can, only while the block is still as they left it, and a draft
+	Timesheet the approval created goes with it."""
+	user = frappe.session.user
+	saved = frappe.cache.get_value(_review_key(block_name)) if block_name else None
+	if not saved or saved.get("by") != user:
+		frappe.throw(_("It is too late to undo this approval."))
+	b_doc = frappe.get_doc("Planned Work Block", block_name)
+	if b_doc.approval_status != "Approved" or b_doc.approved_by != user:
+		frappe.throw(_("This entry has changed since you approved it."))
+	before = saved["before"]
+	made = b_doc.timesheet if b_doc.timesheet and b_doc.timesheet != before.get("timesheet") else None
+	if made and frappe.db.get_value("Timesheet", made, "docstatus") != 0:
+		frappe.throw(_("The Timesheet for this approval is already submitted."))
+	for f in ("approval_status", "approved_by", "approval_date", "approval_notes"):
+		b_doc.set(f, before.get(f))
+	b_doc.approval_status = b_doc.approval_status or "Draft"
+	b_doc.flags.ignore_permissions = True
+	b_doc.save()
+	if made:
+		b_doc.db_set("timesheet", before.get("timesheet"))
+		frappe.delete_doc("Timesheet", made, ignore_permissions=True)
+	frappe.cache.delete_value(_review_key(block_name))
+	return {"name": b_doc.name, "approval_status": b_doc.approval_status}
 
 
 @frappe.whitelist()
@@ -660,6 +806,7 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		if _is_recording(b_doc):
 			still_recording.append(b_name)
 			continue
+		before = {f: b_doc.get(f) for f in REVIEW_FIELDS}
 		b_doc.approval_status = "Approved"
 		b_doc.approved_by = approver
 		b_doc.approval_date = now_datetime()
@@ -674,6 +821,7 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 				ts_name = create_timesheet_from_work_block(b_doc.name, force=True)
 			except Exception as te:
 				frappe.log_error(f"Error syncing approved timesheet for {b_name}: {te}", "OmniTrack Approval")
+		_remember_review(b_name, approver, before)
 
 		approved_list.append({
 			"block_name": b_name,
@@ -723,6 +871,8 @@ def flag_work_block(block_name, reason=None):
 	b_doc = frappe.get_doc("Planned Work Block", block_name)
 	b_doc.approval_status = "Flagged"
 	b_doc.flagged_reason = reason or "Flagged by manager for clarification."
+	# The block has no flagged_reason field; approval_notes is where the reason is kept
+	b_doc.approval_notes = b_doc.flagged_reason
 	b_doc.approved_by = approver
 	b_doc.approval_date = now_datetime()
 	b_doc.flags.ignore_permissions = True

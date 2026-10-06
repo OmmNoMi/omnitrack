@@ -120,7 +120,7 @@ const resched = whenForms['src/drawers/RescheduleBlockDialog.vue'];
 if (/<DayTimeFields\b|<form[^>]*aria-label="Reschedule"/.test(drawer)) problems.push('BlockDetailDrawer.vue: no inline reschedule form; Reschedule opens RescheduleBlockDialog');
 if (!/<RescheduleBlockDialog\b[^>]*v-model="showReschedule"/.test(drawer) || !/@click="showReschedule = true"/.test(drawer)) problems.push('BlockDetailDrawer.vue: Reschedule must open RescheduleBlockDialog');
 if (!/title="Reschedule"/.test(resched) || !/\$emit\('submit', \{ \.\.\.this\.form \}\)/.test(resched)) problems.push('RescheduleBlockDialog.vue: a dialog titled Reschedule that submits its own form');
-if (!/<Dropdown v-if="moreActions\.length"[\s\S]*?label="More actions"/.test(drawer)) problems.push('BlockDetailDrawer.vue: rarer actions live in a More actions menu');
+if (!/<Dropdown v-if="moreActions\.length"[\s\S]*?label="More"[^>]*>More<\/Button>/.test(drawer)) problems.push('BlockDetailDrawer.vue: rarer actions live in a menu behind a visible "More" button, not an unlabelled "..." icon');
 const more = (drawer.match(/moreActions\(\)\s*\{[\s\S]*?return [^;]*;/) || [''])[0];
 if (!/'Add timesheet entry'[\s\S]*?\$emit\('log-session'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Add timesheet entry" (log-session)');
 if (!/'Cancel block'[\s\S]*?\$emit\('open-cancel-modal'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Cancel block"');
@@ -136,7 +136,7 @@ if (!/'attach_tasks_to_block'/.test(addDialog) || !/<PlanTaskStep\b/.test(addDia
 
 // 10. Escape in a dialog opened over the drawer closes that dialog only
 if (!/markDialogEscape\(e\)/.test(fdialog)) problems.push('FDialog.vue: an open dialog must claim its Escape (markDialogEscape)');
-if (!/else if \(dialogEsc\) return;\s*else if \(showBlockDrawer\.value\)/.test(eod)) problems.push('useWorkstationEod.js: Escape a dialog took must not also close the block drawer');
+if (!/else if \(dialogEsc\) return;\s*else if \(showSessionDrawer\.value\)[^\n]*\n\s*else if \(showBlockDrawer\.value\)/.test(eod)) problems.push('useWorkstationEod.js: Escape a dialog took must not also close the entry sheet or the block drawer');
 
 // 7. Readable task list (the list itself is PlanTaskStep.vue; the details come from utils/taskMeta.js)
 const taskStep = read('src/components/dialogs/PlanTaskStep.vue');
@@ -322,6 +322,18 @@ if ((logPane.match(/:class="INDICATOR" aria-hidden="true"/g) || []).length !== 3
 //     ring or border of its own (a "flash" ring once boxed the popup's contents in blue).
 const sessionBox = read('src/session/SessionBox.vue');
 if (/\bring-\d|CardFlash/.test(sessionBox) || !/:class="isElevated \? '' :/.test(sessionBox)) problems.push('SessionBox.vue: the elevated session card has no ring or border of its own; the popup is the frame');
+
+// Across src: a menu of further actions is a visible "More" button, never an unlabelled "..." icon.
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) walk(f);
+    else if (/\.(vue|js)$/.test(e.name)) {
+      const src = fs.readFileSync(f, 'utf8');
+      if (/icon=["']more-(horizontal|vertical)["']/.test(src)) problems.push(path.relative(root, f) + ': a menu trigger is a labelled "More" button, not a "..." icon');
+    }
+  }
+})(path.join(root, 'src'));
 
 if (problems.length) {
   console.error('FAIL: dialog popover guard:\n  ' + problems.join('\n  '));

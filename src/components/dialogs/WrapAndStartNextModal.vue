@@ -1,115 +1,83 @@
 <template>
   <f-dialog
     :model-value="modelValue"
-    title="Wrap & Start Next Session"
-    subtitle="Save your running session and transition immediately"
+    :title="targetItem && !targetItem.is_block ? 'Start the next task?' : 'Start the next block?'"
     size="md"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <template #header-icon>
-      <svg class="w-4 h-4 text-blue-500 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-    </template>
-
-    <div class="space-y-4 text-xs">
-      <!-- 1. Current Running Session Card -->
-      <div class="p-3.5 rounded-2xl border bg-amber-50/70 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/60 space-y-2.5">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-            <span class="text-[10px] uppercase font-bold tracking-wider text-amber-800 dark:text-amber-200">Current Session to Wrap</span>
+    <!-- A route of two stops, the way directions read: what stops and is saved, then what starts.
+         The log already holds what was done, so nothing is retyped; one optional last line. -->
+    <ol class="text-sm" aria-label="Switch">
+      <li class="relative flex gap-3 pb-5">
+        <span class="absolute left-[5px] top-4 bottom-0 w-0.5 bg-gray-300 dark:bg-gray-600" aria-hidden="true"></span>
+        <span class="relative mt-1 h-3 w-3 shrink-0 rounded-full bg-red-600 dark:bg-red-400" aria-hidden="true"></span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline justify-between gap-3 text-xs font-medium text-ink-gray-7">
+            <span>Ends now and is saved</span>
+            <span class="tabular-nums" :aria-label="'Running for ' + formattedTime">{{ formattedTime }}</span>
           </div>
-          <span class="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-white/80 dark:bg-black/40 text-amber-900 dark:text-amber-100 border border-amber-300 dark:border-amber-700">
-            ⏱ {{ formattedTime }}
-          </span>
+          <div class="mt-0.5 text-base font-semibold text-ink-gray-9 break-words">{{ currentSessionLabel }}</div>
+          <div class="text-xs text-ink-gray-7">{{ fromLine }}</div>
         </div>
-        <div class="font-extrabold text-sm text-gray-900 dark:text-white">
-          {{ currentSessionLabel }}
+      </li>
+      <li v-if="targetItem" class="flex gap-3">
+        <span class="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-blue-700 bg-surface-modal dark:border-blue-400" aria-hidden="true"></span>
+        <div class="min-w-0 flex-1">
+          <div class="text-xs font-medium text-ink-gray-7">Starts now</div>
+          <div class="mt-0.5 text-base font-semibold text-ink-gray-9 break-words">{{ targetItem.label }}</div>
+          <div v-if="toLine" class="text-xs text-ink-gray-7">{{ toLine }}</div>
         </div>
-        <div class="text-[11px] text-gray-700 dark:text-gray-300 flex items-center gap-3">
-          <span v-if="selectedProject">{{ selectedProject }}</span>
-          <span>{{ selectedNature }}</span>
-        </div>
+      </li>
+    </ol>
 
-        <!-- Session Summary Notes -->
-        <div class="pt-1">
-          <label for="switch-confirm-notes" class="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1">
-            Session Summary &amp; Work Logged (will be saved to timesheet) *
-          </label>
-          <textarea
-            id="switch-confirm-notes"
-            v-model="internalWrapUpNote"
-            rows="3"
-            class="w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
-            :class="isDarkMode ? 'bg-[#121212] border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
-            placeholder="Review or add notes for this completed session..."
-          ></textarea>
-        </div>
-      </div>
-
-      <!-- Transition Indicator -->
-      <div class="flex items-center justify-center gap-2 text-gray-600 text-xs font-bold">
-        <span>↓</span>
-        <span>Transitioning to</span>
-        <span>↓</span>
-      </div>
-
-      <!-- 2. Target Block to Start Immediately Card -->
-      <div v-if="targetItem" class="p-3.5 rounded-2xl border bg-blue-50/70 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800/60 space-y-1.5">
-        <div class="flex items-center justify-between">
-          <span class="text-[10px] uppercase font-bold tracking-wider text-blue-700 dark:text-blue-300">
-            {{ targetItem.is_block ? 'Next Planned Block' : 'Next Task' }}
-          </span>
-          <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-            Starts Immediately
-          </span>
-        </div>
-        <div class="font-extrabold text-sm text-gray-900 dark:text-white">
-          {{ targetItem.label }}
-        </div>
-        <div class="text-[11px] text-gray-700 dark:text-gray-300 flex items-center gap-3">
-          <span v-if="targetItem.sublabel">{{ targetItem.sublabel }}</span>
-        </div>
-      </div>
+    <div>
+      <label for="wrap-last-line" class="block mb-1 text-sm font-medium text-ink-gray-8">Last line for the log</label>
+      <TextInput
+        id="wrap-last-line"
+        v-model="internalWrapUpNote"
+        variant="outline"
+        size="md"
+        placeholder="Optional"
+        aria-describedby="wrap-last-line-hint"
+        autocomplete="off"
+      />
+      <p id="wrap-last-line-hint" class="mt-1 text-xs text-ink-gray-7">Added to the log before it is saved.</p>
     </div>
 
-    <!-- Actions -->
     <template #actions>
-      <div class="flex items-center justify-between gap-3 w-full">
-        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
-          Cancel (Keep Current)
-        </Button>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <Button variant="ghost" label="Keep working" @click="$emit('update:modelValue', false)" />
         <Button
           variant="solid"
           theme="blue"
-          size="sm"
-          class="!font-bold shadow-md"
+          class="!bg-blue-700 hover:!bg-blue-800"
+          label="Switch"
+          data-autofocus
           :loading="isSwitching"
           :disabled="isSwitching"
           @click="$emit('confirm')"
-        >
-          <template #prefix>
-            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          </template>
-          <span>Save &amp; Start Next Session</span>
-        </Button>
+        />
       </div>
     </template>
   </f-dialog>
 </template>
 
 <script>
+import { clock, toMin } from "../../utils/clockTime.js";
+
+const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
 export default {
   name: "WrapAndStartNextModal",
   props: {
     modelValue: { type: Boolean, default: false },
     formattedTime: { type: String, default: "00:00:00" },
-    currentSessionLabel: { type: String, default: "Active Work Session" },
+    currentSessionLabel: { type: String, default: "Current session" },
+    currentLogCount: { type: Number, default: 0 },
     selectedProject: { type: String, default: "" },
-    selectedNature: { type: String, default: "Work" },
     wrapUpNote: { type: String, default: "" },
     targetItem: { type: Object, default: null },
     isSwitching: { type: Boolean, default: false },
-    isDarkMode: { type: Boolean, default: false },
   },
   emits: ["update:modelValue", "update:wrapUpNote", "confirm"],
   computed: {
@@ -120,6 +88,20 @@ export default {
       set(val) {
         this.$emit("update:wrapUpNote", val);
       },
+    },
+    // Only what is worth knowing: how much is in the log, and for whom.
+    fromLine() {
+      const n = this.currentLogCount;
+      return [n ? plural(n, "line") + " in the log" : "Nothing in the log yet", this.selectedProject].filter(Boolean).join(" · ");
+    },
+    // A planned block says when it was planned for, in the clock people read.
+    toLine() {
+      const t = this.targetItem;
+      if (!t) return "";
+      const when = t.start_time && t.end_time
+        ? `Planned ${clock(toMin(t.start_time))} – ${clock(toMin(t.end_time))}`
+        : "";
+      return [when, t.project ? t.project_name || t.project : ""].filter(Boolean).join(" · ");
     },
   },
 };

@@ -1,6 +1,7 @@
 import { computed, nextTick } from "vue";
 import { useWorkstationSessionModals } from "./useWorkstationSessionModals.js";
 import { popoverOpen } from "../utils/popover.js";
+import { blockTitle } from '../utils/blockTitle.js';
 
 /**
  * Keyboard shortcuts, session modals and schedule tracks.
@@ -258,9 +259,9 @@ export function useWorkstationShortcuts(w) {
       promptSwitchSession({
         id: b.name,
         name: b.name,
-        label: b.task_subject || b.work_item_label || b.name,
-        sublabel: `${b.start_time || ''} – ${b.end_time || ''} · ${b.project || 'General'}`,
+        label: blockTitle(b, b.name),
         project: b.project,
+        project_name: b.project_name,
         is_block: true,
         task_nature: b.task_nature,
         work_date: b.work_date,
@@ -305,84 +306,6 @@ export function useWorkstationShortcuts(w) {
 
     trackBlock(b);
   };
-  // Timeline Schedule Tracks
-  const timelineMembers = computed(() => {
-    const members = [
-      {
-        name: 'Hardik Sharma',
-        initials: 'HS',
-        isYou: true,
-        avatarBg: 'bg-indigo-600',
-        hoursSummary: '7.5h (🏢 3.5h 🏠 4.0h)',
-        slots: [
-          { time: '9:00 AM', left: '38%', label: '🏢 9:00 AM (3.5h)', type: 'office' },
-          { time: '2:30 PM', left: '62%', label: '🏠 2:30 PM (4.0h)', type: 'remote' }
-        ]
-      },
-      {
-        name: 'Alex Vance',
-        initials: 'AV',
-        isYou: false,
-        avatarBg: 'bg-blue-600',
-        hoursSummary: '6.5h (🏢 2.5h 🏠 4.0h)',
-        slots: [
-          { time: '8:00 AM', left: '34%', label: '🏠 8:00 AM (4h)', type: 'remote' },
-          { time: '1:30 PM', left: '58%', label: '🏢 1:30 PM (2.5h)', type: 'office' }
-        ]
-      },
-      {
-        name: 'Nomeshwer Sharma',
-        initials: 'NS',
-        isYou: false,
-        avatarBg: 'bg-emerald-600',
-        hoursSummary: '7.0h (🏢 4.0h 🏠 3.0h)',
-        slots: [
-          { time: '8:30 AM', left: '36%', label: '🏢 8:30 AM (4h)', type: 'office' },
-          { time: '3:00 PM', left: '65%', label: '🏠 3:00 PM (3h)', type: 'remote' }
-        ]
-      },
-      {
-        name: 'Meenaxi Maxi',
-        initials: 'MM',
-        isYou: false,
-        avatarBg: 'bg-purple-600',
-        hoursSummary: '6.0h (🏠 6.0h)',
-        slots: [
-          { time: '9:30 AM', left: '40%', label: '🏠 9:30 AM (3h)', type: 'remote' },
-          { time: '2:00 PM', left: '60%', label: '🏠 2:00 PM (3h)', type: 'remote' }
-        ]
-      },
-      {
-        name: 'Elena Rostova',
-        initials: 'ER',
-        isYou: false,
-        avatarBg: 'bg-sky-600',
-        hoursSummary: '6.5h (🏢 4.0h 🏠 2.5h)',
-        slots: [
-          { time: '8:30 AM', left: '36%', label: '🏢 8:30 AM (4h)', type: 'office' },
-          { time: '2:30 PM', left: '62%', label: '🏠 2:30 PM (2.5h)', type: 'remote' }
-        ]
-      },
-      {
-        name: 'Amara Okafor',
-        initials: 'AO',
-        isYou: false,
-        avatarBg: 'bg-amber-600',
-        hoursSummary: '5.0h (🏠 5.0h)',
-        slots: [
-          { time: '9:00 AM', left: '38%', label: '🏠 9:00 AM (3h)', type: 'remote' },
-          { time: '4:00 PM', left: '68%', label: '⚠️ 4:00 PM (2h)', type: 'unplanned' }
-        ]
-      }
-    ];
-
-    if (selectedEmployee.value !== 'All') {
-      const first = selectedEmployee.value.split(' ')[0].toLowerCase();
-      return members.filter(m => m.name.toLowerCase().includes(first));
-    }
-    return members;
-  });
-
   Object.assign(w, {
     openSessionCard,
     toggleSessionFocus,
@@ -433,6 +356,5 @@ export function useWorkstationShortcuts(w) {
     confirmDeleteSession,
     requestStopFocusBlock,
     startFocusBlock,
-    timelineMembers,
   });
 }

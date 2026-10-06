@@ -7,6 +7,7 @@
 import * as Vue from "vue";
 import { whenLine } from "../utils/clockTime.js";
 import { newEntryTimes } from "../utils/timesheetEntry.js";
+import { blockTitle } from '../utils/blockTitle.js';
 const { ref, computed } = Vue;
 
 export function useWorkstationSessionModals(opts) {
@@ -31,7 +32,7 @@ export function useWorkstationSessionModals(opts) {
     const elapsedSecs = trackerSeconds.value;
     emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
     const defaultNote = String(trackerNotes.value || '').trim() ||
-      (trackerBoundBlock.value ? (trackerBoundBlock.value.work_item_label || trackerBoundBlock.value.task_subject || trackerBoundBlock.value.name) : '') ||
+      (trackerBoundBlock.value ? blockTitle(trackerBoundBlock.value, trackerBoundBlock.value.name) : '') ||
       'Focus work session';
     emptyStopQuickNote.value = defaultNote;
     showEmptyStopModal.value = true;
@@ -98,7 +99,7 @@ export function useWorkstationSessionModals(opts) {
   const withSeconds = (t) => (t && t.length === 5 ? t + ':00' : t);
   // The old Adjust dialog saved the session's lines back into its notes (with a bullet or a
   // tick), so the stop path logged them twice. Notes never repeat a line.
-  const bare = (l) => String(l).replace(/^[\s•✓*-]+/, '').trim();
+  const bare = (l) => String(l).replace(/^[\s•\u2713*-]+/, '').trim();
   const notesWithoutLines = (notes, lines) => {
     const known = new Set(lines.map(bare));
     return String(notes).split('\n').filter(l => bare(l) && !known.has(bare(l))).join('\n');
@@ -119,7 +120,7 @@ export function useWorkstationSessionModals(opts) {
     openPanel({
       mode: session.name ? 'edit' : 'add',
       name: session.name || '',
-      block_title: block ? (block.task_subject || block.work_item_label || block.deliverable_notes || '') : '',
+      block_title: block ? blockTitle(block, '') : '',
       block_when: block ? whenLine(block.work_date, block.start_time, block.end_time) : '',
       session_date: fresh ? fresh.date : (session.session_date || todayISO()),
       from_time: fresh ? fresh.from : hhmm(session.from_time || ''),
@@ -143,7 +144,7 @@ export function useWorkstationSessionModals(opts) {
     const lines = (sessionNotesList.value || []).filter(p => String(p).trim());
     openPanel({
       mode: 'live',
-      block_title: block ? (block.task_subject || block.work_item_label || '') : '',
+      block_title: block ? blockTitle(block, '') : '',
       started_at: clockOf(start),
       session_date: dayOf(start),
       from_time: clockOf(start),

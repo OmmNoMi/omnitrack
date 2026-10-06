@@ -498,7 +498,7 @@ def quick_timer_action(
 	"""Controls live stopwatch session for the target user (defaults to human operator).
 
 	Terminology invariant:
-	- Starting is strictly "Start Session" (Play ▶).
+	- Starting is strictly "Start Session" (play icon).
 	- Stopping requires notes and an active running timer.
 	- Discard allows discarding without blank timesheets.
 

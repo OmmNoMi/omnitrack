@@ -1,13 +1,17 @@
 import { ref, watch, onMounted, onUnmounted } from "vue";
 import { popoverOpen, dialogTookEscape } from "../utils/popover.js";
+import { dueReminders, reminderKey } from "../utils/blockReminders.js";
+import { blockTitle } from "../utils/blockTitle.js";
+import { clock, toMin, localISO } from "../utils/clockTime.js";
 
 /**
  * End-of-day wrap-up and lifecycle effects.
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchDrawerChat, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, showWorkflowModal, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchDrawerChat, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, showWorkflowModal, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
+  let _reminderTimer = null;
 
   // ----------------------------------------------------
   // Team Work Block & Timesheet Approvals (Manager Governance)
@@ -28,24 +32,24 @@ export function useWorkstationEod(w) {
       loadingApprovals.value = false;
     }
   };
-  const approveWorkBlockSingle = async (b) => {
-    if (!b || !b.name) return;
-    loadingApprovals.value = true;
+  const refreshReviews = async () => {
+    await fetchPendingApprovals();
+    await fetchWorkstationData(selectedEmployee.value);
+    if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+  };
+  // An approval can be taken back for a few seconds (the server keeps what it replaced)
+  const UNDO_APPROVAL_MS = 5000;
+  const undoApproval = async (b) => {
     try {
-      await postJSON('approve_work_blocks', {
-        block_names: [b.name]
-      });
-      showToast(`Approved work block for ${b.associate_name || b.employee}`, 'success');
-      await fetchPendingApprovals();
-      await fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+      const res = await postJSON('undo_block_approval', { block_name: b.name });
+      b.approval_status = (res && res.approval_status) || 'Draft';
+      showToast('Approval undone', 'info');
+      await refreshReviews();
     } catch (e) {
-      showToast('Failed to approve work block: ' + (e && e.message || e), 'danger');
-    } finally {
-      loadingApprovals.value = false;
+      showToast('Could not undo: ' + (e && e.message || e), 'danger');
     }
   };
-  const quickApproveBlock = async (b) => {
+  const approveOne = async (b, message) => {
     if (!b || !b.name) return;
     loadingApprovals.value = true;
     try {
@@ -53,16 +57,16 @@ export function useWorkstationEod(w) {
         block_names: [b.name]
       });
       b.approval_status = 'Approved'; // the open drawer shows the new state at once
-      showToast(`Approved ${b.name}`, 'success');
-      await fetchPendingApprovals();
-      await fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+      showToast(message, 'success', { action: { label: 'Undo', onClick: () => undoApproval(b) }, duration: UNDO_APPROVAL_MS });
+      await refreshReviews();
     } catch (e) {
-      showToast('Failed to approve block: ' + (e && e.message || e), 'danger');
+      showToast('Failed to approve: ' + (e && e.message || e), 'danger');
     } finally {
       loadingApprovals.value = false;
     }
   };
+  const approveWorkBlockSingle = (b) => approveOne(b, `Approved for ${b && (b.associate_name || b.employee)}`);
+  const quickApproveBlock = (b) => approveOne(b, 'Entry approved');
   // The drawer passes the reason it collected; other callers fall back to a prompt.
   const quickFlagBlock = async (b, givenReason) => {
     if (!b || !b.name) return;
@@ -135,12 +139,13 @@ export function useWorkstationEod(w) {
     else if (showCancelModal.value) showCancelModal.value = false;
     else if (showWorkflowModal.value) showWorkflowModal.value = false;
     else if (dialogEsc) return;
+    else if (showSessionDrawer.value) showSessionDrawer.value = false;
     else if (showBlockDrawer.value) showBlockDrawer.value = false;
     else if (showAppMenu.value) showAppMenu.value = false;
     else if (showTrackerPopup.value) showTrackerPopup.value = false;
     else if (showNatureFilter.value) showNatureFilter.value = false;
   };
-  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showWorkflowModal, showBlockDrawer, showTaskRavenDrawer], (vals) => {
+  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showWorkflowModal, showBlockDrawer, showSessionDrawer, showTaskRavenDrawer], (vals) => {
     const anyOpen = vals.some(Boolean);
     if (anyOpen) {
       document.addEventListener('keydown', notePopoverEscape, true);
@@ -297,45 +302,83 @@ export function useWorkstationEod(w) {
       }
     } catch (_) {}
 
-    // Centralized Handler for Realtime Block Alerts
+    // One path for every block alert, from the server or from the app's own clock. Each block's
+    // reminder goes out once, whichever source is first. The system notification shows whenever
+    // this window is not in front, not only when its tab is hidden.
+    const alertKeyFor = (data) => {
+      const kind = data.alert_type || '';
+      if (!data.block_name || (kind !== 'upcoming_10m' && kind !== 'start_on_time')) return '';
+      return reminderKey(localISO(new Date()), data.block_name, kind);
+    };
     const handleIncomingBlockAlert = (data) => {
       if (!data) return;
+      const key = alertKeyFor(data);
+      if (key) {
+        try {
+          if (localStorage.getItem(key)) return;
+          localStorage.setItem(key, '1');
+        } catch (e) {}
+      }
       const aType = data.alert_type || '';
       if (aType === 'upcoming_10m') {
         playUpcoming10mChime();
-        showToast(data.title || '⏳ Upcoming in 10m', 'info');
+        showToast(data.title || 'A planned block starts soon', 'info');
       } else if (aType === 'start_on_time') {
         playStartOnTimeChime();
-        showToast(data.title || '🚀 Time to Start Session', 'success');
+        showToast(data.title || 'Time to start your planned block', 'success');
       } else {
         playInactivityChime();
         showToast(data.title || 'OmniTrack Alert', 'info');
       }
 
-      // Trigger local OS notification if tab is in background and permission granted
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) {
-        try {
-          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-              type: 'SHOW_NOTIFICATION',
-              title: data.title,
-              alert_type: aType,
-              options: {
-                body: data.message,
-                icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
-                badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
-                data: { url: data.action_url || '/omnitrack', block_name: data.block_name }
-              }
-            });
-          } else {
-            new Notification(data.title, {
-              body: data.message,
-              icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg'
-            });
-          }
-        } catch (notifErr) {}
+      const away = document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus());
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !away) return;
+      const payload = {
+        type: 'SHOW_NOTIFICATION',
+        title: data.title,
+        alert_type: aType,
+        options: {
+          body: data.message,
+          tag: key || undefined,
+          icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+          badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
+          data: { url: data.action_url || '/omnitrack', block_name: data.block_name }
+        }
+      };
+      const fallback = () => {
+        try { new Notification(data.title, { body: data.message, tag: key || undefined, icon: payload.options.icon }); } catch (e) {}
+      };
+      // The worker adds the Start session and Open buttons. A page loaded before the worker took
+      // over has no controller yet, so post to the active worker instead.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((reg) => (reg && reg.active ? reg.active.postMessage(payload) : fallback()))
+          .catch(fallback);
+      } else {
+        fallback();
       }
     };
+
+    // The app's own reminder clock: while any OmniTrack tab is open, a planned block alerts
+    // ten minutes before and at its start even when the server's alert never arrives.
+    const checkBlockReminders = () => {
+      const now = new Date();
+      const due = dueReminders(w.workBlocks ? w.workBlocks.value : [], {
+        date: localISO(now),
+        minute: now.getHours() * 60 + now.getMinutes(),
+        user: (window.OMNITRACK_SESSION || {}).user,
+        runningBlock: isTracking.value ? (w.trackerBlockName && w.trackerBlockName.value) : ''
+      });
+      for (const { block, kind, until } of due) {
+        const title = blockTitle(block, 'Planned block');
+        const when = clock(toMin(block.start_time)) + (block.end_time ? ' – ' + clock(toMin(block.end_time)) : '');
+        handleIncomingBlockAlert(kind === 'start_on_time'
+          ? { alert_type: kind, block_name: block.name, title: 'Time to start: ' + title, message: 'Planned for ' + when + '.', action_url: '/omnitrack?action=view_block&block=' + encodeURIComponent(block.name) }
+          : { alert_type: kind, block_name: block.name, title: 'In ' + until + ' min: ' + title, message: 'Starts at ' + when + '. Wrap up what you are on.', action_url: '/omnitrack?action=view_block&block=' + encodeURIComponent(block.name) });
+      }
+    };
+    _reminderTimer = setInterval(checkBlockReminders, 20000);
+    setTimeout(checkBlockReminders, 3000);
 
     // Unlock Web Audio context on first user tap/key for mobile chime reliability
     const unlockAudio = () => {
@@ -377,10 +420,13 @@ export function useWorkstationEod(w) {
         const host = window.location.hostname;
         const isLocal = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')
           || /^192\.168\./.test(host) || /^10\./.test(host) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
-        const siteName = "{{ frappe.local.site }}";
+        // Bundled code is never rendered by Jinja: the site and port come from the page.
+        // A namespace other than the site's own is refused, and then no alert ever arrives.
+        const page = window.OMNITRACK_SESSION || {};
+        const siteName = page.site || host;
         let socketHost;
         if (isLocal) {
-          const socketPort = (window.frappe && frappe.boot && frappe.boot.socketio_port) || 9003;
+          const socketPort = page.socketio_port || 9000;
           socketHost = `${window.location.protocol}//${host}:${socketPort}/${siteName}`;
         } else {
           socketHost = `${window.location.protocol}//${host}/${siteName}`;
@@ -425,6 +471,7 @@ export function useWorkstationEod(w) {
   });
   onUnmounted(() => {
     if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
+    if (_reminderTimer) { clearInterval(_reminderTimer); _reminderTimer = null; }
     document.removeEventListener('keydown', _slashFocus);
     document.removeEventListener('pointerdown', _dropdownOutside);
     document.removeEventListener('pointerdown', _appMenuOutside);

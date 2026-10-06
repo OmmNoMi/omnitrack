@@ -1,5 +1,7 @@
 import { ref, computed } from "vue";
 import { WORK, toKind } from "../utils/activity.js";
+import { blockTitle } from '../utils/blockTitle.js';
+import { composeWrapNote } from '../utils/wrapNote.js';
 
 /**
  * Attendance presence and block tracking.
@@ -21,7 +23,7 @@ export function useWorkstationAttendance(w) {
         block_name: block.name,
         session_notes: block.deliverable_notes || 'Completed as scheduled.'
       });
-      showToast(`⚡ Plan converted to logged time (${res.actual_hours}h)!`, 'success');
+      showToast(`Logged ${res.actual_hours}h from the plan`, 'success');
       fetchWorkstationData(selectedEmployee.value);
       if (typeof fetchPlannerData === 'function') fetchPlannerData();
     } catch (err) {
@@ -42,11 +44,16 @@ export function useWorkstationAttendance(w) {
     } catch (err) {}
   };
   // Pillar 5: EOD Wrap-Up Ritual & Reconciliation
+  // A block is waiting to be logged only once it is over: one still ahead (or running) is not
+  // "not logged", and logging its plan would claim time that has not happened.
+  const isPendingLog = (b) => blockLogState(b) === 'none'
+    && b.status !== 'Cancelled' && b.status !== 'Rescheduled'
+    && w.isBlockConcluded(b);
   const showEODModal = ref(false);
   const eodSummary = computed(() => {
     const blocks = workFocusBlocks.value || [];
     const actualH = blocks.reduce((acc, b) => acc + flt(b.actual_hours || 0), 0);
-    const unloggedBlocks = blocks.filter(b => blockLogState(b) === 'none' && b.status !== 'Cancelled');
+    const unloggedBlocks = blocks.filter(isPendingLog);
     const unloggedH = unloggedBlocks.reduce((acc, b) => acc + flt(b.duration_hours || 0), 0);
     const curH = new Date().getHours();
     return {
@@ -60,7 +67,7 @@ export function useWorkstationAttendance(w) {
   });
   const eodPendingBlocks = computed(() => {
     const blocks = workFocusBlocks.value || [];
-    return blocks.filter(b => blockLogState(b) === 'none' && b.status !== 'Cancelled');
+    return blocks.filter(isPendingLog);
   });
   const openEODWrapUpDrawer = () => {
     showEODModal.value = true;
@@ -81,7 +88,7 @@ export function useWorkstationAttendance(w) {
         converted++;
       } catch (e) {}
     }
-    showToast(`⚡ Converted ${converted} planned block(s) to logged timesheets!`, 'success');
+    showToast(`Logged ${converted} planned ${converted === 1 ? 'block' : 'blocks'}`, 'success');
     fetchWorkstationData(selectedEmployee.value);
     if (typeof fetchPlannerData === 'function') fetchPlannerData();
   };
@@ -91,9 +98,9 @@ export function useWorkstationAttendance(w) {
       promptSwitchSession({
         id: block.name,
         name: block.name,
-        label: block.task_subject || block.work_item_label || block.name,
-        sublabel: `${block.start_time || ''} – ${block.end_time || ''} · ${block.project || 'General'}`,
+        label: blockTitle(block, block.name),
         project: block.project,
+        project_name: block.project_name,
         is_block: true,
         task_nature: block.task_nature,
         work_date: block.work_date,
@@ -107,7 +114,7 @@ export function useWorkstationAttendance(w) {
     if (block.status === 'Completed' || block.status === 'Logged (Full)') {
       block.status = 'In Progress';
     }
-    let rawN = block.task_subject || block.work_item_label || (block.task ? (block.task_subject || block.task) : '') || block.deliverable_notes || '';
+    let rawN = blockTitle(block, '');
     if (rawN.includes('•')) {
       const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
       trackerNotes.value = parts[0] || '';
@@ -135,9 +142,8 @@ export function useWorkstationAttendance(w) {
     if (!target) return;
     triggerHaptic([20]);
     switchTargetItem.value = target;
-    const rawTitle = (trackerNotes.value || '').trim();
-    const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
-    switchWrapUpNote.value = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
+    // The log is saved as it stands; this is only an optional last line for it
+    switchWrapUpNote.value = '';
     showSwitchConfirmModal.value = true;
   };
   const confirmSwitchAndStart = async () => {
@@ -155,9 +161,7 @@ export function useWorkstationAttendance(w) {
   const openSwitchTaskModal = () => {
     if (isSessionElevated.value) isSessionElevated.value = false;
     switchSearchQuery.value = '';
-    const rawTitle = (trackerNotes.value || '').trim();
-    const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
-    switchWrapUpNote.value = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
+    switchWrapUpNote.value = '';
     showSwitchTaskModal.value = true;
   };
   const switchCandidates = computed(() => {
@@ -170,7 +174,7 @@ export function useWorkstationAttendance(w) {
     blocks.forEach(b => {
       if (b.name === curBlock) return;
       if (b.status === 'Cancelled' || b.status === 'Logged (Full)') return;
-      const label = b.task_subject || b.work_item_label || b.name;
+      const label = blockTitle(b, b.name);
       const sublabel = `${b.start_time || ''} – ${b.end_time || ''} · ${b.project || 'General'}`;
       if (!q || label.toLowerCase().includes(q) || (b.project || '').toLowerCase().includes(q)) {
         list.push({
@@ -210,7 +214,7 @@ export function useWorkstationAttendance(w) {
     const isBlock = !!target.is_block;
     const targetBlock = isBlock ? target.name : null;
     const targetTask = !isBlock ? target.name : null;
-    const wrapNote = (switchWrapUpNote.value || '').trim();
+    const wrapNote = composeWrapNote(trackerNotes.value, sessionNotesList.value, switchWrapUpNote.value);
 
     showSwitchTaskModal.value = false;
     showSwitchConfirmModal.value = false;

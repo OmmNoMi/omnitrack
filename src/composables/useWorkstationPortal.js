@@ -64,7 +64,6 @@ export function useWorkstationPortal(w) {
         id: t.name || t.id,
         name: t.name || t.id,
         label: t.subject || t.title || t.name,
-        sublabel: `Task · ${t.project || 'General'}`,
         project: t.project,
         is_block: false,
         task_nature: WORK,

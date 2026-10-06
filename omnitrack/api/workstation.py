@@ -32,6 +32,7 @@ from omnitrack.utils import (
 
 )
 from omnitrack.utils.block_tasks import tasks_by_block
+from omnitrack.utils.session_time import counted_hours
 
 
 @frappe.whitelist()
@@ -148,7 +149,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	sessions_by_block = {}
 	if block_names and frappe.db.exists("DocType", "OmniTrack Work Session"):
 		all_sessions = frappe.db.sql("""
-			SELECT parent, session_date, from_time, to_time, hours, notes, logged_via
+			SELECT name, parent, session_date, from_time, to_time, hours, notes, logged_via, task_nature
 			FROM `tabOmniTrack Work Session`
 			WHERE parent IN %(block_names)s AND parenttype = 'Planned Work Block'
 			ORDER BY session_date ASC, from_time ASC
@@ -174,6 +175,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			metrics_by_block.setdefault(m.parent, []).append(m)
 
 	# Enrich blocks with Project Name, Task Subject, Sessions, Pairing Info, and Output Metrics
+	now_dt = now_datetime()
 	for b in work_blocks:
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
@@ -203,8 +205,10 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 					"logged_via": "Stopwatch"
 				}]
 
-		if flt(b.get("actual_hours")) <= 0 and b["sessions"]:
-			b["actual_hours"] = round(sum(flt(s.get("hours") or 0) for s in b["sessions"]), 2)
+		# Served as counted hours (utils/session_time.py), so a block saved before the rule, or one
+		# whose logged slot is still ahead, reads the same everywhere without rewriting stored data.
+		if b["sessions"]:
+			b["actual_hours"] = counted_hours(b.work_date, b.start_time, b["sessions"], now_dt)
 
 		if b.project and frappe.db.exists("DocType", "Project") and frappe.db.exists("Project", b.project):
 			b["project_name"] = frappe.db.get_value("Project", b.project, "project_name") or b.project

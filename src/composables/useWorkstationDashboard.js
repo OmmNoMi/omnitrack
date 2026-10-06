@@ -1,6 +1,7 @@
 import { ref, computed, watch, nextTick } from "vue";
 import { useDashboardDayNav } from "./useDashboardDayNav.js";
 import { toKind } from "../utils/activity.js";
+import { countedHours } from "../utils/countedHours.js";
 import { useDashboardKpis } from "./useDashboardKpis.js";
 import { useDashboardConcludedGrid } from "./useDashboardConcludedGrid.js";
 
@@ -15,7 +16,8 @@ export function useWorkstationDashboard({
   getLocalTodayISO,
   todayISO,
   addDays,
-  _minsOf
+  _minsOf,
+  nowMinute
 }) {
   // Google Meet-Style Dashboard State & Agenda
   const selectedDashboardDate = ref(getLocalTodayISO());
@@ -97,11 +99,19 @@ export function useWorkstationDashboard({
     return dayFocusBlocks.value.filter(b => !isNonWorkingNature(b.task_nature));
   });
 
+  // The clock done-ness is measured against. Read through nowMinute so every computed that
+  // asks "is this block done?" re-runs as time passes.
+  const countedNow = computed(() => ({ date: todayDate.value || getLocalTodayISO(), minute: nowMinute.value }));
+  const blockCountedHours = (b) => countedHours(b, countedNow.value);
+
+  // Done means time was logged inside the block's own window. A Logged status alone is not
+  // enough: a session logged before the block starts, or into a slot still ahead, does not count.
   const isBlockCompleted = (b) => {
     if (!b) return false;
-    const act = parseFloat(b.actual_hours) || 0;
+    const act = blockCountedHours(b);
+    if (act <= 0) return false;
     const dur = parseFloat(b.duration_hours) || 0;
-    return b.status === 'Completed' || b.status === 'Logged (Full)' || b.status === 'Logged (Partial)' || b.status === 'Logged (Over)' || (act > 0 && act >= dur);
+    return b.status === 'Completed' || b.status === 'Logged (Full)' || b.status === 'Logged (Partial)' || b.status === 'Logged (Over)' || act >= dur;
   };
 
   const activeOrCurrentBlocks = computed(() => {
@@ -114,8 +124,7 @@ export function useWorkstationDashboard({
       if (isBlockCompleted(b) || b.status === 'Cancelled' || b.status === 'Rescheduled' || b.status === 'Missed') return;
       const todayStr = todayDate.value || getLocalTodayISO();
       if (selectedDashboardDate.value === todayStr && b.start_time && b.end_time) {
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
+        const nowMins = nowMinute.value;
         const [sh, sm] = b.start_time.split(':').map(Number);
         const [eh, em] = b.end_time.split(':').map(Number);
         const sMins = sh * 60 + (sm || 0);
@@ -140,13 +149,12 @@ export function useWorkstationDashboard({
   const isBlockConcluded = (b) => {
     if (!b) return false;
     if (isBlockCompleted(b)) return true;
-    if (b.status === 'Cancelled' || b.status === 'Rescheduled' || b.status === 'Missed' || b.status === 'Completed' || b.status === 'Logged (Full)' || b.status === 'Logged (Over)' || b.status === 'Logged (Partial)') return true;
+    if (b.status === 'Cancelled' || b.status === 'Rescheduled' || b.status === 'Missed') return true;
     if (_isPastDay()) return true;
     const isToday = selectedDashboardDate.value === todayDate.value;
     if (isToday) {
       const endMin = _minsOf(b.end_time);
-      const now = new Date();
-      const nowMins = now.getHours() * 60 + now.getMinutes();
+      const nowMins = nowMinute.value;
       if (endMin > 0 && endMin <= nowMins && (!isTracking.value || trackerBoundBlock.value?.name !== b.name) && !isBlockInNow(b)) return true;
     }
     return false;
@@ -154,8 +162,7 @@ export function useWorkstationDashboard({
 
   const upNextBlock = computed(() => {
     if (_isPastDay()) return null;
-    const now = new Date();
-    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const nowMins = nowMinute.value;
     const activeNames = new Set(activeOrCurrentBlocks.value.map(b => b.name));
 
     const upcoming = workFocusBlocks.value
@@ -216,44 +223,8 @@ export function useWorkstationDashboard({
 
   const pastBlocksHeading = computed(() => {
     const sel = selectedDashboardDate.value, t = todayDate.value;
-    return (sel && t && sel < t) ? 'What Happened · Plan vs Timesheet' : 'Daily Accomplishments & Concluded Deliverables';
+    return (sel && t && sel < t) ? 'What happened' : 'Done today';
   });
-
-  const pastDeliverablesStats = computed(() => {
-    const blocks = pastFocusBlocks.value || [];
-    let completedCount = 0;
-    let cancelledCount = 0;
-    let totalLogged = 0;
-    let totalPlanned = 0;
-    blocks.forEach(b => {
-      if (b.status === 'Cancelled') {
-        cancelledCount++;
-      } else {
-        completedCount++;
-      }
-      totalLogged += parseFloat(b.actual_hours || 0);
-      totalPlanned += parseFloat(b.duration_hours || 0);
-    });
-    const adherencePct = totalPlanned > 0 ? Math.min(100, Math.round((totalLogged / totalPlanned) * 100)) : 100;
-    return {
-      totalCount: blocks.length,
-      completedCount,
-      cancelledCount,
-      totalLogged: totalLogged.toFixed(1),
-      totalPlanned: totalPlanned.toFixed(1),
-      adherencePct
-    };
-  });
-
-  const getBlockCardAccent = (b) => {
-    if (!b) return null;
-    if (b.status === 'Cancelled') return 'red';
-    const act = parseFloat(b.actual_hours || 0);
-    const dur = parseFloat(b.duration_hours || 0);
-    if (b.status === 'Logged (Over)' || act > dur + 0.05) return 'purple';
-    if (b.status === 'Logged (Partial)' || (act < dur - 0.05 && act > 0)) return 'amber';
-    return 'green';
-  };
 
   const getBlockBadgeTheme = (b) => {
     if (!b) return 'gray';
@@ -267,21 +238,6 @@ export function useWorkstationDashboard({
     return 'blue';
   };
 
-  const getBlockVarianceBadge = (b) => {
-    if (!b || b.status === 'Cancelled') return null;
-    const act = parseFloat(b.actual_hours || 0);
-    const dur = parseFloat(b.duration_hours || 0);
-    const diff = Math.round((act - dur) * 100) / 100;
-    if (Math.abs(diff) < 0.05) {
-      return { label: 'On Schedule (±0.0h)', theme: 'green' };
-    }
-    if (diff < 0) {
-      const mins = Math.round(Math.abs(diff) * 60);
-      return { label: `Concluded ${mins}m early (${diff.toFixed(1)}h)`, theme: 'orange' };
-    }
-    const mins = Math.round(diff * 60);
-    return { label: `Overrun +${mins}m (+${diff.toFixed(1)}h)`, theme: 'blue' };
-  };
 
   const focusBlocksHeading = computed(() => {
     const sel = selectedDashboardDate.value;
@@ -291,24 +247,20 @@ export function useWorkstationDashboard({
     return 'Upcoming focus blocks';
   });
 
+  // The header names the day once, in its title. Today is "Today"; any other day is its date.
+  // The week strip below marks the same day, so nothing else repeats it.
   const dashboardDayTitle = computed(() => {
-    if (!selectedDashboardDate.value) return 'Your Day';
-    if (selectedDashboardDate.value === todayDate.value) return 'Your Day';
-    const [y, m, d] = selectedDashboardDate.value.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    const rel = dt > new Date() ? 'Planned for ' : '';
-    return rel + dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const sel = selectedDashboardDate.value;
+    if (!sel || sel === todayDate.value) return 'Today';
+    const [y, m, d] = sel.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   });
 
+  // What is in the day, and nothing else: no date (the title has it), no hours (the
+  // "Day at a glance" legend has them), and nothing at all on an empty day (the empty card says so).
   const dashboardDaySummary = computed(() => {
-    const blocks = dayFocusBlocks.value || [];
-    const planned = blocks.reduce((t, b) => t + (Number(b.duration_hours) || 0), 0);
-    const logged = blocks.reduce((t, b) => t + (Number(b.actual_hours) || 0), 0);
-    const date = selectedDashboardDateLabel.value;
-    // The empty state below already says nothing is planned; the subtitle only names the day.
-    if (!blocks.length) return date;
-    const n = blocks.length + (blocks.length === 1 ? ' block' : ' blocks');
-    return date + ' · ' + n + ' · ' + planned.toFixed(1) + 'h planned · ' + logged.toFixed(1) + 'h logged';
+    const n = (dayFocusBlocks.value || []).length;
+    return n ? n + (n === 1 ? ' block' : ' blocks') : '';
   });
 
   const todayDirection = computed(() => {
@@ -353,7 +305,7 @@ export function useWorkstationDashboard({
     if (!b) return pill('—', 'bg-gray-100 text-gray-600', 'bg-gray-800 text-gray-300');
     const status = (b.status || '').toLowerCase();
     if (status === 'cancelled') return pill(b.cancel_reason ? `Cancelled (${b.cancel_reason})` : 'Cancelled', 'bg-rose-50 text-rose-600 line-through border border-rose-200', 'bg-rose-950/70 text-rose-400 line-through border border-rose-900');
-    if (status === 'rescheduled') return pill('Rescheduled ↗', 'bg-slate-100 text-slate-600 border border-dashed border-slate-300', 'bg-slate-800 text-slate-400 border border-dashed border-slate-700');
+    if (status === 'rescheduled') return pill('Rescheduled', 'bg-slate-100 text-slate-600 border border-dashed border-slate-300', 'bg-slate-800 text-slate-400 border border-dashed border-slate-700');
     if (status === 'logged (full)') return pill('Logged (Full)', 'bg-emerald-50 text-emerald-700 border border-emerald-200', 'bg-emerald-950/70 text-emerald-300 border border-emerald-800');
     if (status === 'logged (partial)') return pill('Logged (Partial)', 'bg-amber-50 text-amber-700 border border-amber-200', 'bg-amber-950/70 text-amber-300 border border-amber-800');
     if (status === 'logged (over)') return pill('Logged (Over)', 'bg-purple-50 text-purple-700 border border-purple-200', 'bg-purple-950/70 text-purple-300 border border-purple-800');
@@ -381,9 +333,8 @@ export function useWorkstationDashboard({
     useDashboardKpis({ filteredWorkBlocks, isNonWorkingNature });
 
   const {
-    concludedRovingRow, concludedRovingCol, canBlockReopen, hasBlockExpandableNotes, getConcludedNotesCol, getMaxConcludedCol,
-    setConcludedRoving, concludedTabindex, focusConcludedCell, onConcludedGridKey, toggleShowAllPastBlocks,
-    expandedBlockNotes, isBlockNotesExpanded, toggleBlockNotes, isLongNote
+    concludedRovingRow, concludedRovingCol, canBlockReopen,
+    setConcludedRoving, concludedTabindex, focusConcludedCell, onConcludedGridKey, toggleShowAllPastBlocks
   } = useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBlocks, visiblePastFocusBlocks });
 
 
@@ -393,10 +344,7 @@ export function useWorkstationDashboard({
     dashboardWeekDays,
     selectedDashboardDateLabel,
     pastBlocksHeading,
-    pastDeliverablesStats,
-    getBlockCardAccent,
     getBlockBadgeTheme,
-    getBlockVarianceBadge,
     focusBlocksHeading,
     dashboardDayTitle,
     dashboardDaySummary,
@@ -418,6 +366,8 @@ export function useWorkstationDashboard({
     isBlockInNow,
     isBlockConcluded,
     isBlockCompleted,
+    countedNow,
+    blockCountedHours,
     getStartsInText,
     upcomingFocusBlocks,
     pastFocusBlocks,
@@ -427,18 +377,11 @@ export function useWorkstationDashboard({
     concludedRovingRow,
     concludedRovingCol,
     canBlockReopen,
-    hasBlockExpandableNotes,
-    getConcludedNotesCol,
-    getMaxConcludedCol,
     setConcludedRoving,
     concludedTabindex,
     focusConcludedCell,
     onConcludedGridKey,
     toggleShowAllPastBlocks,
-    expandedBlockNotes,
-    isBlockNotesExpanded,
-    toggleBlockNotes,
-    isLongNote,
     dashboardKPIs,
     updateDashboardKPIs,
     paciPlannedHours,
