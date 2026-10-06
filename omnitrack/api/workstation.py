@@ -93,7 +93,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			       unplanned_reason, deliverable_notes, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
 			       cancel_reason, rescheduled_to, rescheduled_from,
-			       pairing_partner, paired_block, approval_status
+			       pairing_partner, paired_block, approval_status, approval_notes
 			FROM `tabPlanned Work Block`
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
@@ -122,7 +122,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			       unplanned_reason, deliverable_notes, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
 			       cancel_reason, rescheduled_to, rescheduled_from,
-			       pairing_partner, paired_block, approval_status
+			       pairing_partner, paired_block, approval_status, approval_notes
 			FROM `tabPlanned Work Block`
 			WHERE ({where_clause})
 			ORDER BY work_date DESC, start_time DESC
@@ -138,7 +138,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 				"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
 				"billing_status", "associate_name", "appsheet_id",
 				"cancel_reason", "rescheduled_to", "rescheduled_from",
-				"pairing_partner", "paired_block", "approval_status"
+				"pairing_partner", "paired_block", "approval_status", "approval_notes"
 			],
 			order_by="work_date desc, start_time desc",
 			limit=150

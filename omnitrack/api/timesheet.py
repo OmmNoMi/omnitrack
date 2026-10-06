@@ -923,7 +923,7 @@ def get_pending_team_approvals(work_date=None, employee=None):
 			"name", "employee", "associate_name", "work_date",
 			"start_time", "end_time", "duration_hours", "actual_hours",
 			"variance_hours", "work_item_label", "project", "task",
-			"task_nature", "unplanned", "status", "approval_status", "pairing_partner", "paired_block",
+			"task_nature", "unplanned", "status", "approval_status", "approval_notes", "pairing_partner", "paired_block",
 			"deliverable_notes"
 		],
 		order_by="work_date desc, start_time desc",

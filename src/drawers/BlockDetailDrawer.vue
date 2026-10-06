@@ -49,7 +49,7 @@
 
           <!-- Manager review: approve or flag here, with the logged sessions in view below -->
           <section v-if="canReview && hasLoggedTime && block.approval_status !== 'Approved'" class="rounded-xl p-4 space-y-3" :class="panelTone" aria-label="Review this timesheet">
-            <p v-if="block.flagged_reason" class="text-sm" :class="isDarkMode ? 'text-amber-200' : 'text-amber-800'">Flagged: {{ block.flagged_reason }}</p>
+            <p v-if="block.approval_status === 'Flagged' && block.approval_notes" class="text-sm" :class="isDarkMode ? 'text-amber-200' : 'text-amber-800'">Flagged: {{ block.approval_notes }}</p>
             <div v-if="flagging" class="space-y-2">
               <TextInput ref="flagInput" v-model="flagReason" variant="outline" placeholder="What needs clarifying?" aria-label="Reason for flagging" @keydown.enter="sendFlag" @keydown.esc.stop="flagging = false" />
               <div class="flex justify-end gap-2">
@@ -243,7 +243,7 @@ export default {
     hrs,
     chip(tone) { return toneChipClass(tone, this.isDarkMode); },
     startFlag() {
-      this.flagReason = this.block.flagged_reason || '';
+      this.flagReason = this.block.approval_status === 'Flagged' ? (this.block.approval_notes || '') : '';
       this.flagging = true;
       this.$nextTick(() => {
         const el = this.$refs.flagInput && (this.$refs.flagInput.$el || this.$refs.flagInput);

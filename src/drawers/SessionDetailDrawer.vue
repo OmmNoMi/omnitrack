@@ -21,13 +21,13 @@
               <FeatherIcon name="clock" class="w-4 h-4 shrink-0" aria-hidden="true" />
               <span>{{ when }}</span>
             </p>
-            <p v-if="project" class="flex items-center gap-2 text-base min-w-0" :class="mutedText">
-              <FeatherIcon name="folder" class="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span class="truncate" :title="project">{{ project }}</span>
+            <p v-if="project" class="flex items-start gap-2 text-base min-w-0" :class="mutedText">
+              <FeatherIcon name="folder" class="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <span class="min-w-0 break-words">{{ project }}</span>
             </p>
-            <p v-if="person" class="flex items-center gap-2 text-base min-w-0" :class="mutedText">
-              <FeatherIcon name="user" class="w-4 h-4 shrink-0" aria-hidden="true" />
-              <span class="truncate" :title="person">{{ person }}</span>
+            <p v-if="person" class="flex items-start gap-2 text-base min-w-0" :class="mutedText">
+              <FeatherIcon name="user" class="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <span class="min-w-0 break-words">{{ person }}</span>
             </p>
             <div class="flex items-center gap-1.5 flex-wrap pt-1">
               <Badge v-if="approval" variant="subtle" size="md" :class="chip(approval.tone)">{{ approval.label }}</Badge>
@@ -148,7 +148,9 @@ import { hrs } from '../utils/taskMeta.js';
 import { WORK, toKind } from '../utils/activity.js';
 import { blockTitle } from '../utils/blockTitle.js';
 import { openTaskForm } from '../composables/useTaskForm.js';
+import { approvalState } from '../utils/approval.js';
 
+const APPROVAL_CHIP = { approved: 'green', flagged: 'amber', pending: 'gray' };
 const VIA = { Manual: 'Typed in', Stopwatch: 'Timed with the stopwatch', Import: 'Imported', 'AI Assistant': 'Logged by the assistant' };
 
 export default {
@@ -190,16 +192,16 @@ export default {
       const n = toKind(this.session.task_nature || this.block.task_nature);
       return n === WORK ? '' : n;
     },
+    // The same review wording as the calendar and hover card (approvalState); the chip takes the short form
     approval() {
-      const s = this.block.approval_status;
-      if (s === 'Approved') return { tone: 'green', label: 'Approved' };
-      if (s === 'Flagged') return { tone: 'amber', label: 'Flagged' };
-      return { tone: 'gray', label: 'Awaiting approval' };
+      const s = approvalState(this.block);
+      return s && { tone: APPROVAL_CHIP[s.tone], label: s.short };
     },
     approvalLine() {
       const b = this.block;
-      if (b.approval_status === 'Flagged') return b.approval_notes ? 'Flagged: ' + b.approval_notes : '';
-      if (b.approval_status !== 'Approved') return '';
+      const s = approvalState(b);
+      if (!s || s.tone === 'pending') return '';
+      if (s.tone === 'flagged') return b.approval_notes ? s.label : '';
       const by = b.approved_by_name || b.approved_by;
       const on = b.approval_date ? whenLine(b.approval_date) : '';
       return ['Approved' + (by ? ' by ' + by : ''), on, b.approval_notes].filter(Boolean).join(' · ');
@@ -231,14 +233,23 @@ export default {
     iconTone() { return this.isDarkMode ? 'text-gray-300' : 'text-gray-700'; },
     doneTone() { return this.isDarkMode ? 'text-blue-300' : 'text-blue-700'; },
     flagText() { return this.isDarkMode ? 'text-amber-200' : 'text-amber-800'; },
+    // What the dashboard feed says about this entry's block; a change means the sheet is stale
+    blockStamp() {
+      const name = this.entry && this.entry.block && this.entry.block.name;
+      const b = name && (this.workBlocks || []).find((x) => x.name === name);
+      if (!b) return '';
+      const sessions = (b.sessions || []).map((s) => [s.name, s.hours, s.from_time, s.to_time, s.notes]);
+      return JSON.stringify([b.status, b.actual_hours, b.approval_status, b.approval_notes, b.deliverable_notes, b.project, b.work_item_label, sessions]);
+    },
     panelTone() { return this.isDarkMode ? 'bg-gray-800' : 'bg-gray-50'; },
     hoverRow() { return this.isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'; },
   },
   watch: {
     // Opening sets the entry and show together: one read per entry opened
     openKey(key) { if (key) this.open(); else this.closed(); },
-    // An approve, flag, edit or delete refreshes the dashboard; read the entry again
-    workBlocks() { if (this.show && this.details) this.load(); },
+    // An approve, flag, edit or delete refreshes the dashboard; read the entry again only when
+    // this entry's block came back different (the dashboard refreshes on a timer too)
+    blockStamp(now, before) { if (now !== before && this.show && this.details) this.load(); },
     'entry.block.approval_status'() { if (this.show && this.details) this.load(); },
   },
   mounted() { if (this.openKey) this.open(); },
@@ -288,7 +299,7 @@ export default {
       }
     },
     openTask(t) {
-      openTaskForm(t, { block: this.entry && this.entry.block });
+      openTaskForm(t, { block: this.entry && this.entry.block, onChange: () => this.load() });
     },
     // The workflow state when the task has one; its status otherwise
     taskState(t) { return t.state || t.status || 'Open'; },
@@ -302,7 +313,7 @@ export default {
         label: a.action,
         icon: moveIcon(a.action),
         theme: isDangerMove(a) ? 'red' : undefined,
-        onClick: () => openTaskForm(t, { block: this.entry && this.entry.block, ask: a.action }),
+        onClick: () => openTaskForm(t, { block: this.entry && this.entry.block, ask: a.action, onChange: () => this.load() }),
       }));
     },
     // A reload can drop a task, or a move can leave none open: keep the list's one tab stop on something

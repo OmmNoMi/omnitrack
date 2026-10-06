@@ -92,7 +92,7 @@ export default {
         b.name,
         b.task_nature || '',
         b.duration_hours ? Number(b.duration_hours).toFixed(2) + 'h planned' : '',
-        b.flagged_reason ? 'Flagged: ' + b.flagged_reason : '',
+        b.approval_status === 'Flagged' && b.approval_notes ? 'Flagged: ' + b.approval_notes : '',
       ].filter(Boolean).join(' · ');
     },
   },

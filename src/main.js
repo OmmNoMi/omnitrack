@@ -18,7 +18,6 @@ import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import TimesheetEntryDialog from "./components/dialogs/TimesheetEntryDialog.vue";
-import TaskWorkflowModal from "./components/dialogs/TaskWorkflowModal.vue";
 import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
 import SessionDetailDrawer from "./drawers/SessionDetailDrawer.vue";
@@ -61,7 +60,6 @@ if (typeof window !== "undefined") {
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
 		TimesheetEntryDialog,
-		TaskWorkflowModal,
 		BlockDetailDrawer,
 		SessionDetailDrawer,
 		RavenCollaborationDrawer,
@@ -105,7 +103,6 @@ function mountApp(target = "#app") {
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("TimesheetEntryDialog", TimesheetEntryDialog);
-	app.component("TaskWorkflowModal", TaskWorkflowModal);
 	app.component("TaskFormDialog", TaskFormDialog);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("SessionDetailDrawer", SessionDetailDrawer);

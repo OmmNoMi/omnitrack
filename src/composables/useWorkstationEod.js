@@ -9,7 +9,7 @@ import { clock, toMin, localISO } from "../utils/clockTime.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchDrawerChat, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, showWorkflowModal, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchDrawerChat, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -72,7 +72,7 @@ export function useWorkstationEod(w) {
     if (!b || !b.name) return;
     const reason = typeof givenReason === 'string'
       ? givenReason
-      : window.prompt('What needs clarifying?', b.flagged_reason || '');
+      : window.prompt('What needs clarifying?', (b.approval_status === 'Flagged' && b.approval_notes) || '');
     if (reason === null || !reason.trim()) return;
     loadingApprovals.value = true;
     try {
@@ -81,7 +81,7 @@ export function useWorkstationEod(w) {
         reason: reason.trim()
       });
       b.approval_status = 'Flagged';
-      b.flagged_reason = reason.trim();
+      b.approval_notes = reason.trim();
       showToast(`Flagged ${b.name} for clarification`, 'warning');
       await fetchPendingApprovals();
       await fetchWorkstationData(selectedEmployee.value);
@@ -137,7 +137,6 @@ export function useWorkstationEod(w) {
     else if (showSwitchConfirmModal.value) showSwitchConfirmModal.value = false;
     else if (showEmptyStopModal.value) showEmptyStopModal.value = false;
     else if (showCancelModal.value) showCancelModal.value = false;
-    else if (showWorkflowModal.value) showWorkflowModal.value = false;
     else if (dialogEsc) return;
     else if (showSessionDrawer.value) showSessionDrawer.value = false;
     else if (showBlockDrawer.value) showBlockDrawer.value = false;
@@ -145,7 +144,7 @@ export function useWorkstationEod(w) {
     else if (showTrackerPopup.value) showTrackerPopup.value = false;
     else if (showNatureFilter.value) showNatureFilter.value = false;
   };
-  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showWorkflowModal, showBlockDrawer, showSessionDrawer, showTaskRavenDrawer], (vals) => {
+  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showEmptyStopModal, showCancelModal, showBlockDrawer, showSessionDrawer, showTaskRavenDrawer], (vals) => {
     const anyOpen = vals.some(Boolean);
     if (anyOpen) {
       document.addEventListener('keydown', notePopoverEscape, true);

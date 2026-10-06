@@ -214,13 +214,6 @@
     @stop-inactivity-at-last-edit="stopInactivitySessionAtLastEditPlus15"
     @discard-inactivity="discardInactivitySession"
 
-    v-model:show-workflow-modal="showWorkflowModal"
-    :workflow-target-action="workflowTargetAction"
-    :workflow-target-task="workflowTargetTask"
-    v-model:workflow-comment="workflowComment"
-    :workflow-busy="workflowBusy"
-    @submit-workflow-action="submitWorkflowAction"
-
     v-model:show-runaway-alert-modal="showRunawayAlertModal"
     :runaway-guard-data="runawayGuardData"
     :runaway-choice="runawayChoice"

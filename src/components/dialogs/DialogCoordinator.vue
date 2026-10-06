@@ -1,7 +1,7 @@
 <template>
   <div class="omnitrack-dialog-coordinator">
     <!-- ========================================== -->
-    <!-- MODULAR DIALOGS (Part 1: Session & Workflow)-->
+    <!-- MODULAR DIALOGS (Part 1: Session)-->
     <!-- ========================================== -->
     <!-- The only dialog that creates a work block; opened by workBlockStore.openPlanDialog() -->
     <PlanWorkBlockDialog
@@ -53,18 +53,6 @@
       @stop-now="$emit('stop-inactivity-now')"
       @stop-at-last-edit="$emit('stop-inactivity-at-last-edit')"
       @discard="$emit('discard-inactivity')"
-    />
-
-    <TaskWorkflowModal
-      :model-value="showWorkflowModal"
-      @update:model-value="$emit('update:showWorkflowModal', $event)"
-      :target-action="workflowTargetAction"
-      :target-task="workflowTargetTask"
-      :comment="workflowComment"
-      @update:comment="$emit('update:workflowComment', $event)"
-      :busy="workflowBusy"
-      :is-dark-mode="isDarkMode"
-      @confirm="$emit('submit-workflow-action')"
     />
 
     <!-- ========================================== -->
@@ -180,13 +168,6 @@ export default {
     lastActivityTimeHHMM: { type: String, default: "" },
     suggestedStopHHMM: { type: String, default: "" },
 
-    // TaskWorkflowModal
-    showWorkflowModal: { type: Boolean, default: false },
-    workflowTargetAction: { type: Object, default: null },
-    workflowTargetTask: { type: Object, default: null },
-    workflowComment: { type: String, default: "" },
-    workflowBusy: { type: Boolean, default: false },
-
     // RunawayTimerModal
     showRunawayAlertModal: { type: Boolean, default: false },
     runawayGuardData: { type: Object, default: null },
@@ -240,9 +221,6 @@ export default {
     "stop-inactivity-now",
     "stop-inactivity-at-last-edit",
     "discard-inactivity",
-    "update:showWorkflowModal",
-    "update:workflowComment",
-    "submit-workflow-action",
     "update:showRunawayAlertModal",
     "select-runaway-option",
     "confirm-runaway-resolution",

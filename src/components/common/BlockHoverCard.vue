@@ -1,6 +1,7 @@
 <template>
   <div
     v-if="hoverCard"
+    data-block-hover-card
     class="fixed z-50 w-64 rounded-xl border p-3 space-y-2 pointer-events-auto shadow-lg bg-white border-gray-200 text-gray-900 dark:bg-[#1E1F22] dark:border-gray-700 dark:text-gray-100 dark:shadow-black/40"
     :style="{ left: hoverCard.left + 'px', top: hoverCard.top + 'px' }"
     @mouseenter="$emit('cancel-hide')"
@@ -8,7 +9,7 @@
     role="tooltip"
   >
     <div class="flex items-start justify-between gap-2">
-      <div class="text-sm font-semibold leading-snug break-words line-clamp-2">
+      <div class="text-sm font-semibold leading-snug break-words">
         <template v-if="hoverCard.source === 'logged'">
           {{ (hoverCard.seg && hoverCard.seg.notes) || blockTitle(hoverCard.block, 'Logged work') }}
         </template>
@@ -32,9 +33,9 @@
       <div class="tabular-nums">{{ segTimeTitle(hoverCard.seg) }}</div>
       <div
         v-if="hoverCard.block.project_name || hoverCard.block.project"
-        class="truncate"
-        :title="hoverCard.block.project_name || hoverCard.block.project"
+        class="break-words"
       >{{ hoverCard.block.project_name || hoverCard.block.project }}</div>
+      <div v-if="approval && !(hoverCard.seg && hoverCard.seg.is_live_active)" class="break-words">{{ approval.label }}</div>
     </div>
 
     <div class="pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 text-xs">
@@ -53,6 +54,7 @@
 
 <script>
 import { blockTitle } from '../../utils/blockTitle.js';
+import { approvalState } from '../../utils/approval.js';
 const CHIP = 'shrink-0 inline-flex items-center gap-1 h-5 px-2 rounded-full text-[11px] font-medium tabular-nums';
 
 export default {
@@ -65,6 +67,9 @@ export default {
     isBlockLocked: { type: Function, default: () => false }
   },
   emits: ["cancel-hide", "hide", "view-details"],
+  computed: {
+    approval() { return this.hoverCard ? approvalState(this.hoverCard.block) : null; },
+  },
   setup() {
     return { CHIP, blockTitle };
   }

@@ -6,7 +6,7 @@ import { WORK } from "../utils/activity.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationPortal(w) {
-  const { activeBlock, activeTab, activeWorkflowMenuTask, attentionTasks, bookForm, fetchPlannerData, fetchWorkstationData, isPastBlock, isTracking, pickedTask, plannerBusy, plannerData, postJSON, promptSwitchSession, selectedEmployee, selectedNature, selectedProject, sessionNotesList, showBlockDrawer, showBookModal, showToast, showWorkflowModal, todayISO, toggleTrack, trackerBlockName, trackerNotes, workflowBusy, workflowComment, workflowTargetAction, workflowTargetTask } = w;
+  const { activeBlock, fetchPlannerData, isPastBlock, isTracking, plannerBusy, plannerData, postJSON, promptSwitchSession, selectedNature, selectedProject, sessionNotesList, showBlockDrawer, showToast, toggleTrack, trackerBlockName, trackerNotes } = w;
 
   // Executive Client Portal Computed Metrics
   const clientCompletedBlocks = computed(() => {
@@ -78,79 +78,12 @@ export function useWorkstationPortal(w) {
     toggleTrack();
     showToast(`Started tracking: ${t.subject}`, 'success');
   };
-  const getTaskWorkflowMenuItems = (t) => {
-    if (!t || !t.workflow_actions) return [];
-    return t.workflow_actions.map(act => {
-      return {
-        label: act.action,
-        icon: getWorkflowActionIcon(act.action),
-        theme: /cancel|reject/i.test(act.action) ? 'red' : 'gray',
-        onClick: () => promptWorkflowAction(t, act)
-      };
-    });
-  };
-  const toggleTaskWorkflowMenu = (t) => {
-    const taskId = t.ref || t.id || t.docname;
-    if (activeWorkflowMenuTask.value === taskId) {
-      activeWorkflowMenuTask.value = null;
-    } else {
-      activeWorkflowMenuTask.value = taskId;
-    }
-  };
-  const promptWorkflowAction = (t, act) => {
-    activeWorkflowMenuTask.value = null;
-    workflowTargetTask.value = t;
-    workflowTargetAction.value = act;
-    workflowComment.value = '';
-    showWorkflowModal.value = true;
-  };
-  // Feather icon names: frappe-ui's Dropdown renders them via FeatherIcon.
-  const getWorkflowActionIcon = (action) => {
-    const act = (action || '').toLowerCase();
-    if (act.includes('close') || act.includes('complete') || act.includes('approve')) return 'check';
-    if (act.includes('cancel') || act.includes('reject')) return 'x';
-    if (act.includes('review')) return 'eye';
-    if (act.includes('hold') || act.includes('pause')) return 'pause';
-    if (act.includes('start') || act.includes('resume')) return 'play';
-    return 'arrow-right';
-  };
   const getTaskDeskUrl = (t) => {
     if (!t) return '#';
     const dt = t.doctype ? t.doctype.toLowerCase() : (t.type === 'todo' ? 'todo' : 'task');
     const dn = t.docname || t.id || t.name;
     return `/app/${encodeURIComponent(dt)}/${encodeURIComponent(dn)}`;
   };
-  const submitWorkflowAction = async () => {
-    if (!workflowTargetTask.value || !workflowTargetAction.value) return;
-    workflowBusy.value = true;
-    const task = workflowTargetTask.value;
-    const act = workflowTargetAction.value;
-    try {
-      const res = await postJSON('execute_task_workflow_action', {
-        doctype: task.doctype || (task.type === 'todo' ? 'ToDo' : 'Task'),
-        docname: task.docname || task.id,
-        action: act.action,
-        comment: workflowComment.value || ''
-      });
-      showToast((res && res.message) || `Action applied: ${act.action}`, 'success');
-      showWorkflowModal.value = false;
-      // Optimistically remove from attention tasks if closed or cancelled
-      const actionLower = (act.action || '').toLowerCase();
-      if (actionLower.includes('close') || actionLower.includes('cancel') || actionLower.includes('complete')) {
-        const targetId = task.ref || task.id || task.docname;
-        attentionTasks.value = attentionTasks.value.filter(item => (item.ref || item.id || item.docname) !== targetId);
-      }
-      await Promise.all([
-        fetchWorkstationData(selectedEmployee.value),
-        fetchPlannerData()
-      ]);
-    } catch (err) {
-      showToast('Failed to execute workflow action: ' + (err && err.message ? err.message : err), 'danger');
-    } finally {
-      workflowBusy.value = false;
-    }
-  };
-
   Object.assign(w, {
     clientCompletedBlocks,
     clientInProgressBlocks,
@@ -165,11 +98,6 @@ export function useWorkstationPortal(w) {
     removeActiveBlock,
     planAttentionTask,
     startTaskImmediately,
-    getTaskWorkflowMenuItems,
-    toggleTaskWorkflowMenu,
-    promptWorkflowAction,
-    getWorkflowActionIcon,
     getTaskDeskUrl,
-    submitWorkflowAction,
   });
 }

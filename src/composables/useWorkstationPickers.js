@@ -5,7 +5,7 @@ import { ref, computed, watch, nextTick } from "vue";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationPickers(w) {
-  const { activeWorkflowMenuTask, currentUserFullName, filteredTeamMembers, isDarkMode, isManager, isSessionElevated, natureOptions, openNewTaskModal, projects, selectedEmployee, selectedNature, selectedProject, sessionNotesScroll, sessionPointInput, syncActiveSession, todoDropdownOpen, toggleTheme } = w;
+  const { currentUserFullName, filteredTeamMembers, isDarkMode, isManager, isSessionElevated, natureOptions, openNewTaskModal, projects, selectedEmployee, selectedNature, selectedProject, sessionNotesScroll, sessionPointInput, syncActiveSession, todoDropdownOpen, toggleTheme } = w;
   const onEmployeeChange = (...args) => w.onEmployeeChange(...args);
   const openSessionCard = (...args) => w.openSessionCard(...args);
   const removeSessionPoint = (...args) => w.removeSessionPoint(...args);
@@ -120,11 +120,6 @@ export function useWorkstationPickers(w) {
     if (todoDropdownOpen.value) {
       if (!ev.target.closest || !ev.target.closest('[data-todo-picker-container]')) {
         todoDropdownOpen.value = false;
-      }
-    }
-    if (activeWorkflowMenuTask.value) {
-      if (!ev.target.closest || !ev.target.closest('[data-taskmenu]')) {
-        activeWorkflowMenuTask.value = null;
       }
     }
   };

@@ -280,3 +280,13 @@ The live session popup's task checkboxes and the entry sheet's task list both us
 
 ## Gotcha: bench console takes one line
 `bench --site <site> console` reads stdin line by line, so multi-line Python breaks. Write the probe to a file and run `echo "exec(open('<file>').read())" | bench --site <site> console`.
+
+## Gotcha: a block field must be added to every feed
+The screens get Planned Work Blocks from five hand-written field lists: three in `api/workstation.py` (two SQL, one `get_all`), one in `api/planner.py` (the calendar) and one in `get_pending_approvals` in `api/timesheet.py`. A field missing from one of them is `undefined` on that screen only, with no error. This is how the calendar showed every logged block as awaiting approval. When a screen reads a new block field, add it to every list that feeds that screen. `check_block_reminders.mjs` guards `approval_status` and `approval_notes`.
+
+## Gotcha: the agent's browser pane cannot reach socket.io
+In the Claude desktop browser pane, `ws://ommnomi.local:9003/socket.io/` fails hundreds of times, and a `fetch` to port 9003 never leaves the page. The pane treats the second port as another origin. The server is fine: `curl -H "Origin: http://ommnomi.local:8003" "http://ommnomi.local:9003/socket.io/?EIO=4&transport=polling"` returns 200. Filter those errors out of console checks; do not debug them as an app bug.
+
+## Gotcha: the mutation suite restarts the dev server
+`scripts/run_mutation_tests.cjs` rewrites real source files for a moment, the Python API files among them (`api/timesheet.py`, `api/planner.py`, `api/workstation.py`). `bench start` serves with the reloader, so each Python mutant restarts the web process. A page that loads during a restart gets its 4.7 MB stylesheet cut off and renders as bare HTML, or reports "Workstation initialization timed out". Do not run the suite while someone is using the site, and reload any page opened during a run.
+

@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useWorkstationPlannerLayout } from "./useWorkstationPlannerLayout.js";
 import { useWorkstationCardStyles } from "./useWorkstationCardStyles.js";
 
@@ -227,13 +227,7 @@ export function useWorkstationPlannerState(w) {
     const b = (seg && seg.block) || seg;
     if (!b) return;
     const r = ev.currentTarget.getBoundingClientRect();
-    const CARD_EST_HEIGHT = 85;
-    const spaceBelow = window.innerHeight - r.bottom;
-    // Never position on top of the card! Place below if there is room, otherwise above
-    const placeBelow = spaceBelow >= CARD_EST_HEIGHT + 16 || spaceBelow >= r.top;
-    const top = placeBelow
-      ? Math.min(r.bottom + 8, window.innerHeight - CARD_EST_HEIGHT - 10)
-      : Math.max(10, r.top - CARD_EST_HEIGHT - 8);
+    const top = placeHoverCard(r, 85);
 
     hoverCard.value = {
       block: b,
@@ -245,6 +239,23 @@ export function useWorkstationPlannerState(w) {
       left: Math.max(10, Math.min(r.left, window.innerWidth - 280)),
       top: Math.round(top)
     };
+    // Titles wrap, so the card's height is only known once it renders. Measure it, then
+    // place it again, clear of the bottom bar and its raised session button.
+    nextTick(() => {
+      const card = document.querySelector('[data-block-hover-card]');
+      if (!card || !hoverCard.value || hoverCard.value.block !== b) return;
+      hoverCard.value.top = Math.round(placeHoverCard(r, card.offsetHeight));
+    });
+  };
+  // Below the block when it fits, otherwise above; never on top of the block, under the bottom bar or off screen.
+  const placeHoverCard = (r, height) => {
+    const nav = document.querySelector('nav[aria-label="Workstation navigation"]');
+    const floor = nav
+      ? Math.min(...[nav, ...nav.querySelectorAll('*')].map((e) => e.getBoundingClientRect().top).filter((t) => t > 0)) - 8
+      : window.innerHeight - 10;
+    if (r.bottom + 8 + height <= floor) return r.bottom + 8;
+    if (r.top - 8 - height >= 10) return r.top - 8 - height;
+    return Math.max(10, floor - height);
   };
   const hoverStateText = computed(() => {
     const hc = hoverCard.value;

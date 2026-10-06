@@ -80,7 +80,7 @@ need(/v-if="!block\.unplanned"/.test(sheet) && /v-if="tasks\.length"/.test(sheet
 need(/\$emit\('approve-block', entry\.block\)/.test(sheet) && /\$emit\('flag-block', this\.entry\.block, reason\)/.test(sheet), "SessionDetailDrawer.vue: a manager approves or flags the entry here");
 // A task row shows its workflow state, and every move it offers goes through the one task form
 need(/taskState\(t\) \{ return t\.state \|\| t\.status/.test(sheet) && /<Dropdown v-if="taskMoves\(t\)\.length" :options="taskMoves\(t\)"/.test(sheet), "SessionDetailDrawer.vue: a task row shows its workflow state with the moves open from it");
-need(/onClick: \(\) => openTaskForm\(t, \{ block: this\.entry && this\.entry\.block, ask: a\.action \}\)/.test(sheet) && !/execute_task_workflow_action/.test(sheet), "SessionDetailDrawer.vue: a move opens the task form at its confirm step, never applies itself");
+need(/onClick: \(\) => openTaskForm\(t, \{ block: this\.entry && this\.entry\.block, ask: a\.action[,} ]/.test(sheet) && !/execute_task_workflow_action/.test(sheet), "SessionDetailDrawer.vue: a move opens the task form at its confirm step, never applies itself");
 need(/ArrowRight: \[r, cols\(r\)\], ArrowLeft: \[r, 0\]/.test(sheet) && /clampCell\(\);/.test(sheet), "SessionDetailDrawer.vue: the task list is one tab stop, Left/Right between a task and its status");
 need(/sheet\.querySelector\('\[data-sheet-close\]'\)/.test(sheet) && /if \(lost && opener && document\.contains\(opener\)\) opener\.focus\(\);/.test(sheet), "SessionDetailDrawer.vue: focus moves into the sheet and back to its opener on close");
 // The bottom bar: New task for everyone (a manager plans their own work too), Team on top for managers.
@@ -118,6 +118,31 @@ need(/"name": s\.name,/.test(planner) && /fields=\["name", "session_date"/.test(
 // The dashboard's own feed: without the row name the logged bar silently falls back to the block.
 const ws = read("omnitrack/api/workstation.py");
 need(/SELECT name, parent, session_date/.test(ws), "workstation.py: the dashboard's sessions carry their name, or the logged bar opens the block");
+// A Flag's reason is kept in approval_notes. Every feed that draws an approval sends both fields,
+// and no screen reads the flagged_reason field the block does not have.
+need(/"approval_status", "approval_notes",/.test(planner), "planner.py: the calendar's blocks carry approval_status and approval_notes, or every logged block reads as awaiting approval");
+need((ws.match(/approval_status, approval_notes\n|"approval_status", "approval_notes"/g) || []).length === 3, "workstation.py: all three block queries send approval_notes");
+need(/"approval_status", "approval_notes", "pairing_partner"/.test(tsPy), "timesheet.py: pending approvals send approval_notes");
+for (const f of ["src/utils/approval.js", "src/components/common/BlockHoverCard.vue", "src/views/calendar/CalendarPlannerGrid.vue", "src/drawers/BlockDetailDrawer.vue", "src/views/TimesheetsView.vue", "src/composables/useWorkstationEod.js"]) {
+  need(!/flagged_reason/.test(read(f)), `${f}: reads flagged_reason, which the block does not have (use approval_notes)`);
+}
+// A details surface shows names in full: the hover card and the drawers' task lists never clamp a title.
+for (const f of ["src/components/common/BlockHoverCard.vue", "src/drawers/BlockTasksSection.vue", "src/drawers/SessionDetailDrawer.vue"]) {
+  need(!/line-clamp|class="truncate"[^>]*>\s*\{\{\s*(t\.subject|blockTitle|project|person|hoverCard\.block\.project)/.test(read(f)), `${f}: a name is clamped where its details are meant to be read in full`);
+}
+const plannerState = read("src/composables/useWorkstationPlannerState.js");
+need(/placeHoverCard\(r, card\.offsetHeight\)/.test(plannerState) && /nav\[aria-label="Workstation navigation"\]/.test(plannerState), "useWorkstationPlannerState.js: the hover card is placed by its measured height and kept clear of the bottom bar");
+// The dot alone is aria-hidden and takes no pointer, so the words must be on the block's name and its hover card.
+need(/\{\{ approval\.label \}\}/.test(read("src/components/common/BlockHoverCard.vue")), "BlockHoverCard.vue: the hover card says where the entry stands in review");
+need(/:aria-label="\[blockTitle\(seg\.block\), segTimeTitle\(seg\), approvalLabel\(seg\.block\)\]/.test(gridSrc), "CalendarPlannerGrid.vue: a calendar block's name says where it stands in review");
+// The dot is aria-hidden and pointer-events-none, so a title on it can never show
+// The entry sheet words its review through approvalState too, so the screens cannot drift apart
+need(/approval\(\) \{\n\s*const s = approvalState\(this\.block\);/.test(sheet) && !/label: 'Awaiting approval'/.test(sheet), "SessionDetailDrawer.vue: the sheet's approval chip comes from approvalState, not its own wording");
+// The dashboard refreshes on a timer: the sheet re-reads only when its own block changed,
+// and when a task it opened in the task form was saved or moved
+need(!/\n    workBlocks\(\) \{/.test(sheet) && /blockStamp\(now, before\) \{ if \(now !== before/.test(sheet), "SessionDetailDrawer.vue: the sheet re-reads only when its block changed, not on every dashboard refresh");
+need((sheet.match(/onChange: \(\) => this\.load\(\)/g) || []).length === 2, "SessionDetailDrawer.vue: a task saved or moved from the sheet reads the sheet again");
+need(!/approvalDot\(seg\.block\)[^>]*:title=/.test(gridSrc), "CalendarPlannerGrid.vue: the approval dot carries no title nobody can see");
 
 if (problems.length) {
   console.error("FAIL: block reminders and timeline lanes\n  " + problems.join("\n  "));

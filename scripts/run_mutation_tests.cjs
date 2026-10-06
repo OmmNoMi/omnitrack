@@ -594,7 +594,7 @@ runMutationTest('A task row shows its stale status again', SRC('src/drawers/Sess
 runMutationTest('A task row offers no moves', SRC('src/drawers/SessionDetailDrawer.vue'),
   (code) => code.replace('<Dropdown v-if="taskMoves(t).length" :options="taskMoves(t)"', '<Dropdown v-if="false" :options="taskMoves(t)"'), BR, 'shows its workflow state');
 runMutationTest('A move skips the confirm step', SRC('src/drawers/SessionDetailDrawer.vue'),
-  (code) => code.replace('openTaskForm(t, { block: this.entry && this.entry.block, ask: a.action })', 'openTaskForm(t, { block: this.entry && this.entry.block })'), BR, 'opens the task form at its confirm step');
+  (code) => code.replace('openTaskForm(t, { block: this.entry && this.entry.block, ask: a.action, onChange', 'openTaskForm(t, { block: this.entry && this.entry.block, onChange'), BR, 'opens the task form at its confirm step');
 runMutationTest('The task list loses Left/Right', SRC('src/drawers/SessionDetailDrawer.vue'),
   (code) => code.replace('ArrowRight: [r, cols(r)], ArrowLeft: [r, 0]', 'ArrowRight: [r, 0], ArrowLeft: [r, 0]'), BR, 'Left/Right between a task and its status');
 runMutationTest('A reload strands the tab stop', SRC('src/drawers/SessionDetailDrawer.vue'),
@@ -666,6 +666,45 @@ runMutationTest("An old toast's timer closes a new one", SRC('src/composables/us
   (code) => code.replace('clearTimeout(toastTimer);\n    toastLeft = ms;', 'toastLeft = ms;'), BR, 'restarts the timer');
 runMutationTest('Flagged is not an approval status', SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.json'),
   (code) => code.replace('Approved\\nFlagged\\nRejected', 'Approved\\nRejected'), BR, 'every Flag is rejected');
+runMutationTest('The calendar is not sent approvals', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('"rescheduled_from", "approval_status", "approval_notes",', '"rescheduled_from",'), BR, 'every logged block reads as awaiting approval');
+runMutationTest('The dashboard feed drops the flag reason', SRC('omnitrack/api/workstation.py'),
+  (code) => code.replace('"approval_status", "approval_notes"\n', '"approval_status"\n'), BR, 'all three block queries send approval_notes');
+runMutationTest('Pending approvals drop the flag reason', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('"approval_status", "approval_notes", "pairing_partner"', '"approval_status", "pairing_partner"'), BR, 'pending approvals send approval_notes');
+runMutationTest('Approval wording reads a field that does not exist', SRC('src/utils/approval.js'),
+  (code) => code.replace("(b.approval_notes || 'needs clarifying')", "(b.flagged_reason || 'needs clarifying')"), BR, 'reads flagged_reason');
+runMutationTest('The hover card clamps the title', SRC('src/components/common/BlockHoverCard.vue'),
+  (code) => code.replace('leading-snug break-words">', 'leading-snug break-words line-clamp-2">'), BR, 'is clamped where its details');
+runMutationTest('The block drawer clamps task names', SRC('src/drawers/BlockTasksSection.vue'),
+  (code) => code.replace('<p class="text-base leading-snug break-words"', '<p class="text-base leading-snug break-words line-clamp-2"'), BR, 'is clamped where its details');
+runMutationTest('The entry sheet cuts the project name', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('<span class="min-w-0 break-words">{{ project }}</span>', '<span class="truncate">{{ project }}</span>'), BR, 'is clamped where its details');
+runMutationTest('The hover card trusts a guessed height', SRC('src/composables/useWorkstationPlannerState.js'),
+  (code) => code.replace('placeHoverCard(r, card.offsetHeight)', 'placeHoverCard(r, 85)'), BR, 'placed by its measured height');
+runMutationTest('The hover card covers the bottom bar', SRC('src/composables/useWorkstationPlannerState.js'),
+  (code) => code.replace(`document.querySelector('nav[aria-label="Workstation navigation"]')`, 'null'), BR, 'clear of the bottom bar');
+runMutationTest('The hover card drops the approval', SRC('src/components/common/BlockHoverCard.vue'),
+  (code) => code.replace('{{ approval.label }}', ''), BR, 'the hover card says where the entry stands in review');
+runMutationTest('A calendar block hides its approval from screen readers', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
+  (code) => code.replace(", approvalLabel(seg.block)]", "]"), BR, "a calendar block's name says where it stands in review");
+
+const WI = 'node scripts/test_workstation_interactions.cjs';
+runMutationTest('Task form shows Cancel in the same colour as Approve', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("theme: isDangerMove(a) ? 'red' : undefined,", 'theme: undefined,'), WI, 'TaskFormDialog statusMenu destructive moves');
+runMutationTest('Entry sheet task menu repeats the next state', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace("        label: a.action,\n        icon: moveIcon(a.action),", "        label: a.action,\n        description: a.next_state,\n        icon: moveIcon(a.action),"), WI, 'SessionDetailDrawer taskMoves options must not repeat');
+
+runMutationTest('Calendar approval dot gets an unseeable title', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
+  (code) => code.replace('\' : \'top-1\']" aria-hidden="true"', '\' : \'top-1\']" :title="approvalLabel(seg.block)" aria-hidden="true"'), BR, 'approval dot carries no title');
+
+runMutationTest('Entry sheet words its approval itself again', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace("      const s = approvalState(this.block);\n      return s && { tone: APPROVAL_CHIP[s.tone], label: s.short };", "      return { tone: 'gray', label: 'Awaiting approval' };"), BR, 'approval chip comes from approvalState');
+
+runMutationTest('Entry sheet re-reads on every dashboard refresh', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace('blockStamp(now, before) { if (now !== before && this.show', 'workBlocks() { if (this.show'), BR, 'not on every dashboard refresh');
+runMutationTest('Entry sheet misses a task moved from it', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace(', ask: a.action, onChange: () => this.load() })', ', ask: a.action })'), BR, 'a task saved or moved from the sheet');
 
 // Summary Report
 console.log('\n===========================================================');

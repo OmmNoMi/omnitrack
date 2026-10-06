@@ -204,7 +204,7 @@
                 @pointerleave="hideBlockHover"
                 @focus="showBlockHover($event, seg)"
                 @blur="hideBlockHover"
-                :aria-label="blockTitle(seg.block) + ' ' + segTimeTitle(seg)"
+                :aria-label="[blockTitle(seg.block), segTimeTitle(seg), approvalLabel(seg.block)].filter(Boolean).join(', ')"
                 class="absolute rounded-lg py-1 text-left overflow-hidden border touch-pan-y select-none hover:z-20 transition-[left,width] duration-75"
                 :class="[blockClass(seg.block), isSplit(seg) ? 'px-1' : 'px-2', isBlockLocked(seg.block) ? 'cursor-pointer' : ((plannerDrag && plannerDrag.name === seg.block.name) ? 'cursor-grabbing' : 'cursor-grab'), holdArmed === seg.block.name ? 'ring-2 ring-blue-500 ring-offset-1 z-30 scale-[1.02]' : '']"
                 :style="segStyle(seg)">
@@ -220,7 +220,7 @@
                   :style="{ height: Math.min(100, Math.max(8, ((trackerSeconds / 3600) / (parseFloat(seg.block.duration_hours) || 1) * 100))) + '%' }"
                   :title="'Live Recording: ' + formattedTime + ' elapsed'"></div>
                 <!-- Timesheet status: one dot clipped inside the card, so narrow lanes never spill -->
-                <span v-if="approvalDot(seg.block)" class="absolute right-1 w-2 h-2 rounded-full ring-1 ring-white/70 pointer-events-none" :class="[approvalDot(seg.block).cls, isSplit(seg) ? 'bottom-1' : 'top-1']" :title="approvalDot(seg.block).title" aria-hidden="true"></span>
+                <span v-if="approvalDot(seg.block)" class="absolute right-1 w-2 h-2 rounded-full ring-1 ring-white/70 pointer-events-none" :class="[approvalDot(seg.block), isSplit(seg) ? 'bottom-1' : 'top-1']" aria-hidden="true"></span>
                 <!-- The title wraps onto every line the block has room for, never one clipped line -->
                 <div class="relative text-[11px] font-semibold leading-tight [overflow-wrap:anywhere]" :class="isSplit(seg) ? '' : 'pr-2.5'" :style="clampStyle(titleLines(seg))">
                   <span v-if="isLive(seg.block) && !isSplit(seg)" class="font-mono font-bold text-red-600">{{ formattedTime }} · </span>
@@ -251,6 +251,8 @@
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
 import { blockTitle } from '../../utils/blockTitle.js';
+import { approvalState } from '../../utils/approval.js';
+const APPROVAL_DOT = { approved: 'bg-emerald-500', flagged: 'bg-orange-500', pending: 'bg-blue-500' };
 
 export default {
   name: 'CalendarPlannerGrid',
@@ -271,11 +273,14 @@ export default {
       return Math.max(1, r.lines - (r.time ? 1 : 0) - (r.hours ? 1 : 0));
     },
     clampStyle(n) { return { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: n, overflow: 'hidden' }; },
+    // The dot is decoration; its words are on the block's name and in the hover card
     approvalDot(b) {
-      if (b.approval_status === 'Approved') return { cls: 'bg-emerald-500', title: 'Timesheet approved' };
-      if (b.approval_status === 'Flagged') return { cls: 'bg-orange-500', title: 'Timesheet flagged: ' + (b.flagged_reason || 'needs clarifying') };
-      if (Number(b.actual_hours) > 0) return { cls: 'bg-blue-500', title: 'Timesheet awaiting approval' };
-      return null;
+      const s = approvalState(b);
+      return s ? APPROVAL_DOT[s.tone] : '';
+    },
+    approvalLabel(b) {
+      const s = approvalState(b);
+      return s ? s.label : '';
     },
   },
   setup() {

@@ -28,7 +28,7 @@
           @click="toggle(t, !t.done)"
         />
         <div class="min-w-0 flex-1 py-1.5">
-          <p class="text-base leading-snug break-words line-clamp-2" :class="t.done ? [mutedText, 'line-through'] : strongText" :title="t.subject">{{ t.subject }}</p>
+          <p class="text-base leading-snug break-words" :class="t.done ? [mutedText, 'line-through'] : strongText">{{ t.subject }}</p>
           <p v-if="t.meta" class="text-sm" :class="mutedText">{{ t.meta }}</p>
         </div>
         <!-- Shown on hover or focus; always on touch screens, which have no hover -->

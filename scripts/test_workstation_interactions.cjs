@@ -76,7 +76,6 @@ let pickerCount = 0;
 const SHORT_MENUS = new Set([
   'headerMenuItems',            // New task / timesheet / theme / alerts
   'menuItems',                  // header: Raven chat + headerMenuItems
-  'getTaskWorkflowMenuItems(t)', // a task's workflow transitions
   'moreActions',                // block drawer: Add timesheet entry, Cancel block
   'taskMenu',                   // task form: Open discussion, Open full form, Remove from block
   'statusMenu',                 // task form: the workflow moves open from one state
@@ -118,14 +117,18 @@ assert.ok(pickerCount >= 9, `FAIL: expected >= 9 searchable Comboboxes / MultiSe
 console.log(`✓ Test 1: ${dropdownCount} short menus are labelled frappe-ui Dropdowns, ${pickerCount} data pickers are searchable Comboboxes; FDropdownMenu removed.`);
 
 // 2. Menu option builders produce the frappe-ui option shape.
-const portalSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'composables', 'useWorkstationPortal.js'), 'utf8');
-// The action verb already names the outcome ("Approve"); a next-state pill or
-// description line only repeats it, so workflow options carry no description.
-const wfBuilder = portalSrc.match(/const getTaskWorkflowMenuItems = [\s\S]*?\n  };/);
-assert.ok(wfBuilder, 'FAIL: getTaskWorkflowMenuItems not found');
-assert.ok(!/next_state|description:/.test(wfBuilder[0]), 'FAIL: workflow options must not repeat the next state (duplicate information)');
-assert.ok(/theme:[^\n]*'red'/.test(portalSrc), 'FAIL: destructive workflow options (cancel/reject) must use theme red');
-assert.ok(!portalSrc.includes('getWorkflowActionClass'), 'FAIL: ad-hoc workflow option classes must not return');
+// Workflow moves are built in two places: the task form's state menu and the entry
+// sheet's per-task menu. The action verb already names the outcome ("Approve"); a
+// next-state pill or description line only repeats it, so options carry no description.
+const formSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'components', 'dialogs', 'TaskFormDialog.vue'), 'utf8');
+const sheetSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'drawers', 'SessionDetailDrawer.vue'), 'utf8');
+for (const [name, src, re] of [['TaskFormDialog statusMenu', formSrc, /statusMenu\(\) \{[\s\S]*?\n    \},/], ['SessionDetailDrawer taskMoves', sheetSrc, /taskMoves\(t\) \{[\s\S]*?\n    \},/]]) {
+  const wfBuilder = src.match(re);
+  assert.ok(wfBuilder, `FAIL: ${name} not found`);
+  assert.ok(!/next_state|description:/.test(wfBuilder[0]), `FAIL: ${name} options must not repeat the next state (duplicate information)`);
+  assert.ok(/theme: isDangerMove\(a\) \? 'red'/.test(wfBuilder[0]), `FAIL: ${name} destructive moves (cancel/reject) must use theme red`);
+  assert.ok(!src.includes('getWorkflowActionClass'), `FAIL: ${name} ad-hoc workflow option classes must not return`);
+}
 const layoutSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'composables', 'useWorkstationPlannerLayout.js'), 'utf8');
 assert.ok(/e\.preventDefault\(\)/.test(layoutSrc) && layoutSrc.includes('toggleNatureFilter(n)'), 'FAIL: nature multi-select must keep the menu open (event.preventDefault) while toggling');
 console.log('✓ Test 2: Workflow and nature options use the frappe-ui Dropdown option shape.');

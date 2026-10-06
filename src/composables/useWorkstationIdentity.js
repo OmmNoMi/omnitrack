@@ -240,12 +240,6 @@ const attentionTasks = ref([]);
       }
     }
   };
-  const activeWorkflowMenuTask = ref(null);
-  const showWorkflowModal = ref(false);
-  const workflowTargetTask = ref(null);
-  const workflowTargetAction = ref(null);
-  const workflowComment = ref('');
-  const workflowBusy = ref(false);
   const todayPlannedBlocks = computed(() => {
     return (workBlocks.value || []).filter(b => {
       const st = (b.status || '').toLowerCase();
@@ -364,12 +358,6 @@ const attentionTasks = ref([]);
     focusAttentionCell,
     toggleShowAllAttentionTasks,
     onAttentionGridKey,
-    activeWorkflowMenuTask,
-    showWorkflowModal,
-    workflowTargetTask,
-    workflowTargetAction,
-    workflowComment,
-    workflowBusy,
     todayPlannedBlocks,
     selectPlannedBlock,
     onTodoSearchEnter,

@@ -204,7 +204,7 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 				"name", "employee", "associate_name", "work_date", "start_time", "end_time", "duration_hours",
 				"actual_hours", "variance_hours", "status", "task", "project",
 				"work_item", "work_item_label", "task_nature", "unplanned", "deliverable_notes", "location",
-				"cancel_reason", "rescheduled_to", "rescheduled_from",
+				"cancel_reason", "rescheduled_to", "rescheduled_from", "approval_status", "approval_notes",
 			],
 			order_by="work_date asc, start_time asc",
 			limit=500,
