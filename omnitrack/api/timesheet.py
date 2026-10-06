@@ -131,7 +131,8 @@ def create_timesheet_from_work_block(block_name, force=False):
 				ts.customer = cust
 
 	kind = to_kind(block.task_nature)
-	desired_activity = "Break" if kind == "Break" else ("Leave / Absence" if kind in AWAY else "Execution")
+	is_away = kind in AWAY
+	desired_activity = "Break" if kind == "Break" else ("Leave / Absence" if is_away else "Execution")
 	activity = desired_activity
 	if frappe.db.exists("DocType", "Activity Type"):
 		if not frappe.db.exists("Activity Type", desired_activity):

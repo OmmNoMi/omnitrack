@@ -22,7 +22,7 @@ def execute():
 
 	block = frappe.qb.DocType("Planned Work Block")
 	if frappe.db.has_column("Planned Work Block", "unplanned"):
-		for value in frappe.db.sql_list("select distinct task_nature from `tabPlanned Work Block`"):
+		for value in frappe.qb.from_(block).select(block.task_nature).distinct().run(pluck=True):
 			if said_unplanned(value):
 				frappe.qb.update(block).set(block.unplanned, 1).where(block.task_nature == value).run()
 
@@ -30,7 +30,7 @@ def execute():
 		if not frappe.db.exists("DocType", doctype):
 			continue
 		table = frappe.qb.DocType(doctype)
-		for value in frappe.db.sql_list(f"select distinct task_nature from `tab{doctype}`"):
+		for value in frappe.qb.from_(table).select(table.task_nature).distinct().run(pluck=True):
 			kind = to_kind(value)
 			if value == kind:
 				continue
