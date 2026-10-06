@@ -1,234 +1,275 @@
 <template>
   <div>
-    <!-- Backdrop for Block Detail Drawer -->
-    <div v-if="show && block" @click="$emit('close')" class="fixed inset-0 z-[59] bg-black/40 backdrop-blur-xs transition-opacity" aria-hidden="true"></div>
+    <!-- Scrim for the block side sheet -->
+    <div v-if="show && block && !inline" @click="$emit('close')" class="fixed inset-0 z-[44] bg-black/30 transition-opacity" aria-hidden="true"></div>
 
-    <transition enter-active-class="transition ease-out duration-150" enter-from-class="translate-x-full" enter-to-class="translate-x-0" leave-active-class="transition ease-in duration-100" leave-from-class="translate-x-0" leave-to-class="translate-x-full">
-      <div v-if="show && block" class="fixed inset-y-0 right-0 z-[60] w-full max-w-md shadow-2xl overflow-y-auto" :class="isDarkMode ? 'bg-[#1E1F22] border-l border-gray-800' : 'bg-white'" role="dialog" aria-modal="true" aria-label="Work block detail">
-        <div class="p-5 space-y-4">
-          
-          <!-- Header -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 flex-1">
-              <div class="text-[11px] font-bold uppercase text-gray-400">{{ block.work_date }} · {{ hhmm(block.start_time) }}–{{ hhmm(block.end_time) }}</div>
-              <h3 class="font-extrabold text-base mt-0.5 leading-snug break-words" :class="isDarkMode ? 'text-white' : 'text-gray-900'">{{ block.task_subject || block.work_item_label || block.deliverable_notes || 'Work block' }}</h3>
-              <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                <f-badge :theme="isBlockCompleted(block) ? 'green' : (isTracking && trackerBlockName === block.name ? 'red' : (block.status === 'Cancelled' ? 'red' : (block.status === 'Rescheduled' ? 'gray' : 'blue')))" variant="subtle" size="xs">
-                  {{ isTracking && trackerBlockName === block.name ? '● Recording' : (block.status === 'Cancelled' ? (block.cancel_reason ? 'Cancelled (' + block.cancel_reason + ')' : 'Cancelled') : (isBlockCompleted(block) ? '✓ ' + (block.status || 'Completed') : block.status)) }}
-                </f-badge>
-                <f-badge v-if="block.rescheduled_to" theme="gray" variant="outline" size="xs">↷ to {{ block.rescheduled_to }}</f-badge>
-                <f-badge v-if="block.rescheduled_from" theme="gray" variant="outline" size="xs">↶ from {{ block.rescheduled_from }}</f-badge>
-                <f-badge v-if="block.task_nature" theme="gray" variant="outline" size="xs">{{ block.task_nature }}</f-badge>
-                <f-badge v-if="block.pairing_partner" theme="purple" variant="subtle" size="xs">
-                  👥 Paired with {{ block.pairing_partner_name || block.pairing_partner }}
-                </f-badge>
-                <f-badge v-if="block.approval_status === 'Approved'" theme="green" variant="subtle" size="xs">
-                  ✓ Approved
-                </f-badge>
-                <f-badge v-else-if="block.actual_hours > 0" theme="amber" variant="subtle" size="xs">
-                  ⏳ Pending Approval
-                </f-badge>
-                <span v-if="block.project_name || block.project" class="text-gray-400 truncate max-w-[150px]">📁 {{ block.project_name || block.project }}</span>
+    <!-- inline: the same details inside the session popup's Details tab, with no sheet, title,
+         actions or task list (the popup shows those); Open block brings the full sheet. -->
+    <transition :enter-active-class="inline ? '' : 'transition ease-out duration-150'" enter-from-class="translate-x-full" enter-to-class="translate-x-0" :leave-active-class="inline ? '' : 'transition ease-in duration-100'" leave-from-class="translate-x-0" leave-to-class="translate-x-full">
+      <div v-if="show && block" :class="inline ? '' : ['fixed inset-y-0 right-0 z-[45] w-full max-w-md shadow-xl overflow-y-auto sm:rounded-l-2xl', isDarkMode ? 'bg-[#1E1F22]' : 'bg-white']" :role="inline ? null : 'dialog'" :aria-modal="inline ? null : 'true'" :aria-labelledby="inline ? null : 'block-drawer-title'">
+        <div :class="inline ? 'space-y-5' : 'px-6 pt-4 pb-6 space-y-6'">
+
+          <!-- Header: what, when, and one status -->
+          <div class="space-y-2">
+            <div v-if="!inline" class="flex items-start gap-1">
+              <h2 id="block-drawer-title" class="min-w-0 flex-1 pt-1.5 text-[22px] leading-7 font-normal break-words" :class="strongText">{{ title }}</h2>
+              <Button variant="ghost" icon="x" class="shrink-0" label="Close" @click="$emit('close')" />
+            </div>
+            <p class="flex items-center gap-2 text-base" :class="mutedText">
+              <FeatherIcon name="clock" class="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{{ when }}</span>
+            </p>
+            <p v-if="block.project_name || block.project" class="flex items-center gap-2 text-base min-w-0" :class="mutedText">
+              <FeatherIcon name="folder" class="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span class="truncate" :title="block.project_name || block.project">{{ block.project_name || block.project }}</span>
+            </p>
+            <div class="flex items-center gap-1.5 flex-wrap pt-1">
+              <Badge v-if="!(inline && isRecording)" variant="subtle" size="md" :class="chip(status.tone)">{{ status.label }}</Badge>
+              <Badge v-if="nature" variant="subtle" size="md" :class="chip('gray')">{{ nature }}</Badge>
+              <Badge v-if="block.unplanned" variant="subtle" size="md" :class="chip('amber')" :title="block.unplanned_reason || 'Logged with no work block planned for it'">Unplanned</Badge>
+              <Badge v-if="approvalBadge" variant="subtle" size="md" :class="chip(approvalBadge.tone)">{{ approvalBadge.label }}</Badge>
+              <Badge v-if="block.pairing_partner" variant="subtle" size="md" :class="chip('blue')">With {{ block.pairing_partner_name || block.pairing_partner }}</Badge>
+            </div>
+            <p v-if="block.rescheduled_to || block.rescheduled_from" class="text-sm" :class="mutedText">
+              {{ block.rescheduled_to ? 'Moved to ' + block.rescheduled_to : 'Moved from ' + block.rescheduled_from }}
+            </p>
+          </div>
+
+          <!-- Actions: the session and the plan up front; the rarer ones behind More -->
+          <div v-if="!inline" class="flex items-center gap-2">
+            <Button v-if="!isBlockCompleted(block) && !isRecording" variant="solid" icon-left="play" label="Start Session" class="flex-1 !bg-blue-700 hover:!bg-blue-800 !text-white" @click="$emit('start-session', block)">Start Session</Button>
+            <Button v-if="isRecording" variant="solid" theme="red" icon-left="square" label="Stop live session" class="flex-1 !bg-red-700 hover:!bg-red-800 !text-white" @click="$emit('stop-session', block)">Stop live session</Button>
+            <Button v-if="isBlockReschedulable(block)" variant="outline" icon-left="calendar" label="Reschedule" aria-haspopup="dialog" @click="showReschedule = true">Reschedule</Button>
+            <Dropdown v-if="moreActions.length" :options="moreActions" placement="right">
+              <Button variant="ghost" icon="more-horizontal" label="More actions" />
+            </Dropdown>
+          </div>
+
+          <BlockTasksSection v-if="!inline" :block="block" :is-dark-mode="isDarkMode" />
+
+          <!-- Manager review: approve or flag here, with the logged sessions in view below -->
+          <section v-if="canReview && hasLoggedTime && block.approval_status !== 'Approved'" class="rounded-xl p-4 space-y-3" :class="panelTone" aria-label="Review this timesheet">
+            <p v-if="block.flagged_reason" class="text-sm" :class="isDarkMode ? 'text-amber-200' : 'text-amber-800'">Flagged: {{ block.flagged_reason }}</p>
+            <div v-if="flagging" class="space-y-2">
+              <TextInput ref="flagInput" v-model="flagReason" variant="outline" placeholder="What needs clarifying?" aria-label="Reason for flagging" @keydown.enter="sendFlag" @keydown.esc.stop="flagging = false" />
+              <div class="flex justify-end gap-2">
+                <Button variant="ghost" label="Cancel" @click="flagging = false">Cancel</Button>
+                <Button variant="solid" label="Send flag" :disabled="!flagReason.trim()" @click="sendFlag">Flag</Button>
               </div>
             </div>
-            <f-button variant="ghost" theme="gray" size="sm" class="!w-8 !h-8 !p-0 shrink-0" @click="$emit('close')" aria-label="Close">
-              <template #prefix>
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </template>
-            </f-button>
-          </div>
-
-          <!-- Planned vs Actual Progress Card -->
-          <div class="rounded-2xl p-3.5 border space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="flex items-center justify-between text-xs font-semibold">
-              <span class="text-gray-500">Duration</span>
-              <span :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">
-                <span class="font-bold text-sm">{{ block.actual_hours != null ? Number(block.actual_hours).toFixed(2) : '0.00' }}h</span>
-                <span class="text-gray-400"> / {{ block.duration_hours }}h planned</span>
-                <span v-if="block.variance_hours != null && Math.abs(block.variance_hours) > 0.05" class="ml-1.5 text-[11px] font-bold" :class="block.variance_hours > 0 ? 'text-rose-500' : 'text-emerald-500'">
-                  ({{ block.variance_hours > 0 ? '+' : '' }}{{ Number(block.variance_hours).toFixed(2) }}h)
-                </span>
-              </span>
+            <div v-else class="flex gap-2">
+              <Button variant="solid" icon-left="check" label="Approve this timesheet" class="flex-1 !bg-green-700 hover:!bg-green-800 !text-white" @click="$emit('approve', block)">Approve</Button>
+              <Button variant="outline" icon-left="flag" label="Flag for clarification" @click="startFlag">Flag</Button>
             </div>
-            <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
-              <div class="h-full rounded-full transition-all duration-300" :class="block.variance_hours > 0.25 ? 'bg-rose-500' : 'bg-blue-600'" :style="{ width: Math.min(100, Math.round(((block.actual_hours || 0) / (block.duration_hours || 1)) * 100)) + '%' }"></div>
-            </div>
-          </div>
+          </section>
 
-          <!-- Actions Bar -->
-          <div class="flex items-center gap-2 flex-wrap">
-            <f-button v-if="!isBlockCompleted(block) && (!isTracking || trackerBlockName !== block.name)" variant="solid" theme="blue" size="sm" class="flex-1 !font-bold" @click="$emit('start-session', block)">
-              <template #prefix>
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              </template>
-              Start Session
-            </f-button>
-            <f-button v-if="isTracking && trackerBlockName === block.name" variant="solid" theme="red" size="sm" class="flex-1 !font-bold animate-pulse" @click="$emit('stop-session', block)">
-              <template #prefix>
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-              </template>
-              Stop live session
-            </f-button>
-            <f-button v-if="isBlockReschedulable(block)" variant="subtle" theme="gray" size="sm" @click="$emit('toggle-reschedule')">
-              Reschedule
-            </f-button>
-            <f-button v-if="isBlockCancellable(block)" variant="subtle" theme="red" size="sm" @click="$emit('open-cancel-modal', block)">
-              Cancel
-            </f-button>
-            <f-button v-if="canLogTimesheet(block)" variant="subtle" theme="green" size="sm" @click="$emit('toggle-manual-log')">
-              + Log manually
-            </f-button>
-          </div>
-
-          <!-- Quantitative Deliverables & Outputs Card -->
-          <div v-if="block.deliverable_target || block.deliverable_metric || block.deliverable_output_summary || block.deliverable_notes" class="rounded-2xl p-3.5 border space-y-2.5" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                Deliverable & Output Metrics
-              </span>
-              <span v-if="block.deliverable_metric" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
-                {{ block.deliverable_metric }}
-              </span>
+          <!-- Time: planned against logged, then each session -->
+          <section class="space-y-2" aria-labelledby="block-drawer-time">
+            <div class="flex items-baseline justify-between gap-2">
+              <h3 id="block-drawer-time" class="text-sm font-medium" :class="mutedText">Time logged</h3>
+              <p class="text-sm tabular-nums" :class="mutedText">
+                <span class="font-medium" :class="strongText">{{ hrs(block.actual_hours) }}</span><template v-if="!block.is_live_active"> of {{ hrs(block.duration_hours) }} planned</template><template v-else> so far</template>
+                <span v-if="block.actual_hours > 0 && Math.abs(block.variance_hours || 0) > 0.05" :class="block.variance_hours > 0 ? overText : underText">({{ block.variance_hours > 0 ? '+' : '−' }}{{ hrs(Math.abs(block.variance_hours)) }})</span>
+              </p>
             </div>
-            
-            <div v-if="block.deliverable_target" class="flex items-baseline justify-between text-xs pt-1 border-t" :class="isDarkMode ? 'border-gray-700' : 'border-gray-200'">
-              <span class="text-gray-400">Target Output:</span>
-              <span class="font-extrabold text-sm text-gray-800 dark:text-gray-100">{{ block.deliverable_target }} <span class="text-[11px] font-medium text-gray-400">{{ block.deliverable_metric || 'units' }}</span></span>
+            <div v-if="!block.is_live_active" class="w-full h-1 rounded-full overflow-hidden" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="Logged against planned">
+              <div class="h-full rounded-full" :class="block.variance_hours > 0.25 ? 'bg-red-600' : 'bg-blue-600'" :style="{ width: progress + '%' }"></div>
             </div>
-
-            <div v-if="block.deliverable_notes" class="text-xs text-gray-600 dark:text-gray-300 pt-1">
-              <span class="font-semibold text-gray-400 text-[10px] uppercase block mb-0.5">Commitment Notes</span>
-              {{ block.deliverable_notes }}
-            </div>
-
-            <div v-if="block.deliverable_output_summary" class="rounded-xl p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 mt-2">
-              <div class="font-bold text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 flex items-center gap-1 mb-1">
-                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                Achieved Output Summary
-              </div>
-              <div class="font-medium whitespace-pre-wrap">{{ block.deliverable_output_summary }}</div>
-            </div>
-          </div>
-
-          <!-- Living Specifications & Raven Link -->
-          <div class="rounded-2xl p-3 border flex items-center justify-between gap-3 cursor-pointer hover:border-purple-400 transition-colors" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'" @click="$emit('open-raven', block)">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <div class="min-w-0">
-                <div class="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                  Task Discussion & Living Specs
-                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            <p v-if="!sessions.length" class="text-sm py-1" :class="mutedText">{{ isRecording ? 'Recording now. The time is logged here when you stop.' : 'Nothing logged yet. Start a session, or add a timesheet entry from More actions.' }}</p>
+            <ul v-else class="-mx-2">
+              <li v-for="s in sessions" :key="s.name || s.from_time" class="group flex items-start gap-1 rounded-lg pl-2 pr-1 py-1.5" :class="hoverRow">
+                <div class="min-w-0 flex-1 py-0.5">
+                  <p class="text-sm tabular-nums" :class="mutedText">{{ whenLine(s.session_date, s.from_time, s.to_time) || hrs(s.hours) }}</p>
+                  <p v-if="s.notes" class="mt-0.5 text-base whitespace-pre-line break-words" :class="strongText">{{ s.notes }}</p>
                 </div>
-                <div class="text-[11px] text-gray-400 truncate">{{ drawerChatMessages && drawerChatMessages.length ? drawerChatMessages.length + ' message(s)' : 'Specs & thread' }}</div>
-              </div>
-            </div>
-            <f-button variant="subtle" theme="purple" size="xs">Open Raven ↗</f-button>
-          </div>
-
-          <!-- Timesheet Sessions list -->
-          <div class="space-y-2 pt-2 border-t" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'">
-            <div class="flex items-center justify-between text-xs font-bold text-gray-500">
-              <span>Logged Sessions ({{ (block.sessions || []).length }})</span>
-              <span>{{ block.actual_hours != null ? Number(block.actual_hours).toFixed(2) : '0.00' }} hrs</span>
-            </div>
-            <div v-if="!block.sessions || !block.sessions.length" class="text-xs text-gray-400 py-3 text-center">
-              No sessions recorded yet. Click "Start Session" to begin.
-            </div>
-            <div v-else class="space-y-2">
-              <div v-for="s in block.sessions" :key="s.name || s.from_time" class="p-2.5 rounded-xl border text-xs" :class="isDarkMode ? 'bg-[#25262A] border-gray-800' : 'bg-gray-50 border-gray-200'">
-                <div class="flex items-center justify-between text-gray-400 text-[11px]">
-                  <span>{{ s.session_date }} · {{ hhmm(s.from_time) }}–{{ hhmm(s.to_time) }}</span>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-gray-700 dark:text-gray-300">{{ Number(s.hours || 0).toFixed(2) }}h</span>
-                    <button v-if="canLogTimesheet(block)" type="button" @click="$emit('edit-session', s, block)" class="text-blue-500 hover:text-blue-700 p-0.5" title="Edit session">
-                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button v-if="canLogTimesheet(block)" type="button" @click="$emit('delete-session', s, block)" class="text-rose-500 hover:text-rose-700 p-0.5" title="Delete session">
-                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
-                  </div>
+                <div v-if="canLogTimesheet(block) && s.name" class="flex shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+                  <Button variant="ghost" icon="edit-2" label="Edit session" @click="$emit('edit-session', s, block)" />
+                  <Button variant="ghost" icon="trash-2" label="Delete session" @click="$emit('delete-session', s, block)" />
                 </div>
-                <div v-if="s.notes" class="mt-1 text-gray-700 dark:text-gray-200 text-xs whitespace-pre-line">{{ s.notes }}</div>
-              </div>
-            </div>
-          </div>
+              </li>
+            </ul>
+          </section>
 
-          <!-- Collapsible Reschedule Form -->
-          <div v-if="showRescheduleForm && isBlockReschedulable(block)" class="rounded-2xl p-3.5 border space-y-2 transition-all" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <h4 class="text-xs font-bold" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">Reschedule block</h4>
-            <div class="grid grid-cols-3 gap-2">
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">Date</span>
-                <input type="date" v-model="rescheduleForm.work_date" aria-label="New work date" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">Start</span>
-                <input type="time" v-model="rescheduleForm.start_time" aria-label="New start time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">End</span>
-                <input type="time" v-model="rescheduleForm.end_time" aria-label="New end time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            </div>
-            <f-button variant="solid" theme="blue" size="sm" class="w-full !font-bold" @click="$emit('submit-reschedule')" :disabled="plannerBusy">Save new time</f-button>
-          </div>
+          <!-- What this block should produce -->
+          <section v-if="block.deliverable_target || block.deliverable_output_summary || showNotes" class="space-y-1.5" aria-labelledby="block-drawer-output">
+            <h3 id="block-drawer-output" class="text-sm font-medium" :class="mutedText">{{ isRecording ? 'Done this session' : 'Output' }}</h3>
+            <p v-if="block.deliverable_target" class="text-base" :class="strongText">Target: {{ block.deliverable_target }} {{ block.deliverable_metric || 'units' }}</p>
+            <p v-if="showNotes && notes.text" class="text-base whitespace-pre-line break-words" :class="strongText">{{ notes.text }}</p>
+            <ul v-if="showNotes && notes.done.length" class="space-y-1" aria-label="Tasks completed">
+              <li v-for="d in notes.done" :key="d" class="flex items-start gap-2 text-base" :class="strongText">
+                <FeatherIcon name="check-circle" class="w-4 h-4 mt-1 shrink-0" :class="isDarkMode ? 'text-blue-300' : 'text-blue-700'" aria-hidden="true" />
+                <span class="min-w-0 break-words">{{ d }}</span>
+              </li>
+            </ul>
+            <p v-if="block.deliverable_output_summary" class="text-base whitespace-pre-wrap" :class="strongText"><span class="font-medium">Achieved:</span> {{ block.deliverable_output_summary }}</p>
+          </section>
 
-          <!-- Collapsible Manual Session Form -->
-          <div v-if="showBlockManualLog && canLogTimesheet(block)" class="rounded-2xl p-3.5 border space-y-2 transition-all" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <h4 class="text-xs font-bold" :class="isDarkMode ? 'text-gray-200' : 'text-gray-700'">Log a work session manually</h4>
-            <div class="grid grid-cols-3 gap-2">
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">Date</span>
-                <input type="date" v-model="sessionForm.session_date" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">From</span>
-                <input type="time" v-model="sessionForm.from_time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-              <label class="block"><span class="text-[10px] font-bold text-gray-500">To</span>
-                <input type="time" v-model="sessionForm.to_time" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            </div>
-            <div class="flex items-center gap-2">
-              <label class="block flex-1"><span class="text-[10px] font-bold text-gray-500">or hours</span>
-                <input type="number" step="0.25" min="0" v-model="sessionForm.hours" placeholder="e.g. 1.5" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-              <label class="block flex-[2]"><span class="text-[10px] font-bold text-gray-500">Notes (required)</span>
-                <input type="text" v-model="sessionForm.notes" placeholder="What did you get done?" class="mt-1 w-full text-xs rounded-lg px-2 py-1.5 border outline-none" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-700 text-gray-100' : 'bg-white border-gray-300 text-gray-800'"></label>
-            </div>
-            <f-button variant="solid" theme="green" size="sm" class="w-full !font-bold" @click="$emit('submit-session')" :disabled="plannerBusy">Add session</f-button>
-          </div>
+          <!-- Inline, the rest of the block (reschedule, edit, earlier days) is one step away -->
+          <Button v-if="inline && !block.is_session_tasks" variant="outline" icon-left="maximize-2" class="w-full" label="Open block" @click="$emit('open-full', block)">Open block</Button>
+
+          <!-- The task's discussion lives in Raven -->
+          <Button v-if="!inline" variant="outline" icon-left="message-square" class="w-full" label="Open discussion" @click="$emit('open-raven', block)">
+            {{ drawerChatMessages && drawerChatMessages.length ? `Discussion (${drawerChatMessages.length})` : 'Open discussion' }}
+          </Button>
 
         </div>
       </div>
     </transition>
+    <RescheduleBlockDialog v-if="block" v-model="showReschedule" :block="block" :title="title" :busy="plannerBusy" :is-dark-mode="isDarkMode" @submit="$emit('submit-reschedule', $event)" />
+    <EditBlockDialog v-if="block" v-model="showEdit" :block="block" :title="title" :is-dark-mode="isDarkMode" />
   </div>
 </template>
 
 <script>
+import BlockTasksSection from './BlockTasksSection.vue';
+import RescheduleBlockDialog from './RescheduleBlockDialog.vue';
+import EditBlockDialog from './EditBlockDialog.vue';
+import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { toneChipClass } from '../utils/taskState.js';
+import { whenLine } from '../utils/clockTime.js';
+import { hrs } from '../utils/taskMeta.js';
+import { WORK, toKind } from '../utils/activity.js';
+
+
 export default {
   name: 'BlockDetailDrawer',
+  components: { BlockTasksSection, RescheduleBlockDialog, EditBlockDialog },
   props: {
     show: { type: Boolean, default: false },
+    inline: { type: Boolean, default: false },
     block: { type: Object, default: () => null },
     isDarkMode: { type: Boolean, default: false },
     isTracking: { type: Boolean, default: false },
     trackerBlockName: { type: String, default: '' },
     plannerBusy: { type: Boolean, default: false },
-    showRescheduleForm: { type: Boolean, default: false },
-    rescheduleForm: { type: Object, default: () => ({ work_date: '', start_time: '', end_time: '' }) },
-    showBlockManualLog: { type: Boolean, default: false },
-    sessionForm: { type: Object, default: () => ({ session_date: '', from_time: '', to_time: '', hours: '', notes: '' }) },
     drawerChatMessages: { type: Array, default: () => [] },
-    hhmm: { type: Function, default: (t) => t ? t.slice(0, 5) : '' },
     isBlockCompleted: { type: Function, default: () => false },
     isBlockReschedulable: { type: Function, default: () => false },
     isBlockCancellable: { type: Function, default: () => false },
-    canLogTimesheet: { type: Function, default: () => true }
+    canLogTimesheet: { type: Function, default: () => true },
+    canReview: { type: Boolean, default: false }
+  },
+  setup() {
+    return useWorkstationContext(['isPastBlock', 'isManager', 'currentUser']);
+  },
+  data() {
+    return { flagging: false, flagReason: '', showReschedule: false, showEdit: false };
+  },
+  computed: {
+    title() {
+      const b = this.block;
+      return b.task_subject || b.work_item_label || b.deliverable_notes || 'Work block';
+    },
+    when() {
+      return whenLine(this.block.work_date, this.block.start_time, this.block.end_time);
+    },
+    // The planner draws an unplanned live session as a block of its own (is_live_active)
+    isRecording() {
+      return !!this.block.is_live_active || (this.isTracking && this.trackerBlockName === this.block.name);
+    },
+    status() {
+      const b = this.block;
+      if (this.isRecording) return { tone: 'red', label: 'Recording' };
+      if (b.status === 'Cancelled') return { tone: 'red', label: b.cancel_reason ? `Cancelled: ${b.cancel_reason}` : 'Cancelled' };
+      if (this.isBlockCompleted(b)) return { tone: 'green', label: b.status || 'Completed' };
+      return { tone: b.status === 'Rescheduled' ? 'gray' : 'blue', label: b.status || 'Planned' };
+    },
+    // The activity, only when it says something: Work is the default
+    nature() {
+      const n = toKind(this.block.task_nature);
+      return n === WORK ? '' : n;
+    },
+    // One status for approval, shown once in the header.
+    approvalBadge() {
+      const b = this.block;
+      if (b.approval_status === 'Approved') return { tone: 'green', label: 'Approved' };
+      if (b.approval_status === 'Flagged') return { tone: 'amber', label: 'Flagged' };
+      if (this.hasLoggedTime) return { tone: 'gray', label: 'Awaiting approval' };
+      return null;
+    },
+    // Editing the title, adding a timesheet entry and cancelling are rarer than starting a session
+    moreActions() {
+      const b = this.block, out = [];
+      if (this.canEditBlock) out.push({ label: 'Edit block', icon: 'edit-2', onClick: () => { this.showEdit = true; } });
+      if (this.canLogTimesheet(b)) out.push({ label: 'Add timesheet entry', icon: 'edit-3', onClick: () => this.$emit('log-session', b) });
+      if (this.isBlockCancellable(b)) out.push({ label: 'Cancel block', icon: 'x-circle', theme: 'red', onClick: () => this.$emit('open-cancel-modal', b) });
+      // An unplanned live session (is_live_active) has no block yet to edit or log against
+      return b.is_live_active ? [] : out;
+    },
+    sessions() {
+      return this.block.sessions || [];
+    },
+    // Time a manager can review: sessions that ended. A session still running is not a timesheet yet.
+    hasLoggedTime() {
+      return !this.isRecording && this.sessions.length > 0;
+    },
+    progress() {
+      return Math.min(100, Math.round(((this.block.actual_hours || 0) / (this.block.duration_hours || 1)) * 100));
+    },
+    // Notes split into the tasks ticked off ("Completed: X", from a session) and anything else
+    notes() {
+      const done = [], text = [];
+      for (const raw of String(this.block.deliverable_notes || '').split('\n')) {
+        const line = raw.trim();
+        const m = line.match(/^\W*Completed:\s*(.+)$/);
+        if (m) { if (!done.includes(m[1])) done.push(m[1]); } else if (line) text.push(line);
+      }
+      return { done, text: text.join('\n') };
+    },
+    // Commitment notes, unless they are the title already
+    showNotes() {
+      const n = String(this.block.deliverable_notes || '').trim();
+      return !!n && n !== this.title.trim();
+    },
+    // Its title and notes: the people update_work_block lets edit it, while its day is open
+    canEditBlock() {
+      const b = this.block;
+      return (this.isManager || b.employee === this.currentUser) && !this.isPastBlock(b) && b.status !== 'Cancelled';
+    },
+    strongText() { return this.isDarkMode ? 'text-gray-100' : 'text-gray-800'; },
+    mutedText() { return this.isDarkMode ? 'text-gray-300' : 'text-gray-700'; },
+    overText() { return this.isDarkMode ? 'text-red-300' : 'text-red-700'; },
+    underText() { return this.isDarkMode ? 'text-green-300' : 'text-green-800'; },
+    panelTone() { return this.isDarkMode ? 'bg-gray-800' : 'bg-gray-50'; },
+    hoverRow() { return this.isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'; }
+  },
+  watch: {
+    block() { this.flagging = false; this.flagReason = ''; this.showReschedule = false; this.showEdit = false; },
+    show(open) { if (!open) { this.showReschedule = false; this.showEdit = false; } }
+  },
+  methods: {
+    whenLine,
+    hrs,
+    chip(tone) { return toneChipClass(tone, this.isDarkMode); },
+    startFlag() {
+      this.flagReason = this.block.flagged_reason || '';
+      this.flagging = true;
+      this.$nextTick(() => {
+        const el = this.$refs.flagInput && (this.$refs.flagInput.$el || this.$refs.flagInput);
+        const input = el && el.querySelector ? el.querySelector('input') : null;
+        if (input) input.focus();
+      });
+    },
+    sendFlag() {
+      const reason = this.flagReason.trim();
+      if (!reason) return;
+      this.$emit('flag', this.block, reason);
+      this.flagging = false;
+    }
   },
   emits: [
     'close',
+    'open-full',
     'start-session',
     'stop-session',
-    'toggle-reschedule',
     'open-cancel-modal',
-    'toggle-manual-log',
+    'log-session',
     'open-raven',
     'edit-session',
     'delete-session',
     'submit-reschedule',
-    'submit-session'
+    'approve',
+    'flag'
   ]
 }
 </script>

@@ -1,4 +1,5 @@
 import { ref, computed, watch, nextTick } from 'vue';
+import { KINDS, toKind } from '../utils/activity.js';
 
 export function useWorkstationPlannerLayout(opts) {
   const {
@@ -19,6 +20,8 @@ export function useWorkstationPlannerLayout(opts) {
     trackerSeconds,
     selectedNature,
     selectedProject,
+    sessionTasks,
+    currentUser,
     plannerDrag,
     slotSel,
     plannerShift,
@@ -64,7 +67,7 @@ export function useWorkstationPlannerLayout(opts) {
     }
   };
 
-  const plannerNatureOptions = ['🎯 Planned', '⚠️ Unplanned', '🔄 Review & Sync', '☕ Break', '🚫 Out-of-Office', '🌴 Leave', '🤒 Absent'];
+  const plannerNatureOptions = KINDS;
   const showNatureFilter = ref(false);
   const natureFilter = ref([]);
   const natureFilterLabel = computed(() =>
@@ -77,32 +80,19 @@ export function useWorkstationPlannerLayout(opts) {
     const i = natureFilter.value.indexOf(n);
     if (i >= 0) natureFilter.value.splice(i, 1); else natureFilter.value.push(n);
   };
-  const _blockNature = customBlockNature || ((b) => (b.task_nature && b.task_nature.trim()) ? b.task_nature.trim() : '🎯 Planned');
+  const _blockNature = customBlockNature || ((b) => toKind(b.task_nature));
 
-  const plannerNatureMenuItems = computed(() => {
-    const items = [
-      {
-        label: 'All types',
-        badge: natureFilter.value.length === 0 ? '✓' : '',
-        action: 'all',
-        onClick: () => setNatureFilter('all')
-      },
-      {
-        label: '── Filter by Nature ──',
-        disabled: true
-      }
-    ];
-    plannerNatureOptions.forEach((n) => {
-      items.push({
+  const plannerNatureMenuItems = computed(() => [
+    { label: 'All types', selected: natureFilter.value.length === 0, onClick: () => setNatureFilter('all') },
+    {
+      group: 'Filter by activity',
+      items: plannerNatureOptions.map((n) => ({
         label: n,
-        badge: natureFilter.value.includes(n) ? '✓' : '',
-        action: n,
-        keepOpen: true,
-        onClick: () => toggleNatureFilter(n)
-      });
-    });
-    return items;
-  });
+        selected: natureFilter.value.includes(n),
+        onClick: (e) => { if (e && e.preventDefault) e.preventDefault(); toggleNatureFilter(n); }
+      }))
+    }
+  ]);
 
   const _utc = (iso) => _utcDate(iso);
   const mondayOf = (iso) => { const dow = (_utc(iso).getUTCDay() + 6) % 7; return addDays(iso, -dow); };
@@ -201,19 +191,25 @@ export function useWorkstationPlannerLayout(opts) {
           const curNow = new Date();
           const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
           const eMins = Math.max(sMins + 15, curNowMins);
+          // The session's notes are what got done, not a title: name it by the first line
+          // that is not a ticked-off task
+          const notes = String(trackerNotes.value || '').trim();
+          const heading = notes.split('\n').map((l) => l.trim()).find((l) => l && !/^\W*Completed:/.test(l)) || 'Live session';
           const liveBlock = {
             name: trackerBlockName.value || 'live_active_session',
             is_live_active: true,
-            task_subject: trackerNotes.value || 'Active Work Session',
-            work_item_label: trackerNotes.value || 'Active Work Session',
-            deliverable_notes: trackerNotes.value || 'Active Running Session',
+            task_subject: heading,
+            work_item_label: heading,
+            deliverable_notes: notes,
             start_time: _minToHHMM(sMins),
             end_time: _minToHHMM(eMins),
             duration_hours: ((eMins - sMins) / 60).toFixed(2),
             actual_hours: (trackerSeconds.value / 3600).toFixed(2),
-            task_nature: selectedNature.value || '🎯 Planned',
+            task_nature: toKind(selectedNature.value),
             project: selectedProject.value || '',
-            status: 'In Progress'
+            status: 'In Progress',
+            // An unbound session carries its own tasks until Stop makes its block
+            ...(trackerBlockName.value ? {} : { is_session_tasks: true, employee: currentUser && currentUser.value, work_date: iso, tasks: sessionTasks ? sessionTasks.value : [] })
           };
           segments.push({
             key: 'live_active_session_seg',
@@ -338,6 +334,10 @@ export function useWorkstationPlannerLayout(opts) {
       const n = new Date();
       nowMinute.value = n.getHours() * 60 + n.getMinutes();
     }, 30000);
+  };
+
+  const stopNowClock = () => {
+    if (_nowTimer) { clearInterval(_nowTimer); _nowTimer = null; }
   };
 
   const nowLineTop = computed(() => {
@@ -465,6 +465,7 @@ export function useWorkstationPlannerLayout(opts) {
     segHeight,
     segStyle,
     startNowClock,
+    stopNowClock,
     nowLineTop,
     nowLineLabel,
     isTodayCol,

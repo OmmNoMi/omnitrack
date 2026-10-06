@@ -26,6 +26,3 @@ from omnitrack.api.planner import (
 from omnitrack.api.timesheet import (
 	_require_session_notes,
 )
-from omnitrack.api.tasks import (
-	_parse_block_tasks,
-)

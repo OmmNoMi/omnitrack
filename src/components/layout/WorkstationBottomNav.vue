@@ -7,15 +7,15 @@
   >
     <div class="w-full max-w-xl mx-auto flex items-center justify-around">
       <!-- Dashboard Tab -->
-      <f-button
+      <Button
         variant="ghost"
         :theme="activeTab === 'dashboard' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'dashboard' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
+        :class="activeTab === 'dashboard' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
         role="tab"
         :aria-selected="activeTab === 'dashboard' ? 'true' : 'false'"
-        aria-label="Dashboard"
+        label="Dashboard"
         @click="$emit('update:activeTab', 'dashboard')"
       >
         <template #prefix>
@@ -27,18 +27,18 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">Dashboard</span>
-      </f-button>
+      </Button>
 
       <!-- Calendar Tab -->
-      <f-button
+      <Button
         variant="ghost"
         :theme="activeTab === 'planner' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'planner' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
+        :class="activeTab === 'planner' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
         role="tab"
         :aria-selected="activeTab === 'planner' ? 'true' : 'false'"
-        aria-label="Calendar"
+        label="Calendar"
         @click="$emit('update:activeTab', 'planner')"
       >
         <template #prefix>
@@ -52,10 +52,10 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">Calendar</span>
-      </f-button>
+      </Button>
 
       <!-- Floating Quick Start/Stop Timer Button in Center -->
-      <f-button
+      <Button
         variant="solid"
         :theme="isTracking ? 'red' : 'blue'"
         size="lg"
@@ -64,7 +64,7 @@
           isDarkMode ? 'ring-[#1E1F22]' : 'ring-white',
           (isTracking && bottomBarTimer.isHours) ? '!w-auto !min-w-[4.75rem] !px-3 !rounded-full shadow-2xl' : '!w-14 !rounded-full'
         ]"
-        aria-label="Open the current session timesheet"
+        label="Open the current session timesheet"
         :title="isTracking ? 'Open the session timesheet — recording ' + formattedTime : 'Open the session timesheet'"
         @click="$emit('open-session')"
       >
@@ -93,18 +93,18 @@
           </div>
         </template>
         <span v-else class="text-[11px] font-extrabold uppercase tracking-wide leading-none">Log</span>
-      </f-button>
+      </Button>
 
       <!-- Timesheets Tab -->
-      <f-button
+      <Button
         variant="ghost"
         :theme="activeTab === 'timesheets' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'timesheets' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
+        :class="activeTab === 'timesheets' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
         role="tab"
         :aria-selected="activeTab === 'timesheets' ? 'true' : 'false'"
-        aria-label="Timesheets"
+        label="Timesheets"
         @click="$emit('update:activeTab', 'timesheets')"
       >
         <template #prefix>
@@ -114,19 +114,19 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">Timesheets</span>
-      </f-button>
+      </Button>
 
       <!-- Team Tab (if Manager) or + Task -->
-      <f-button
+      <Button
         v-if="isManager"
         variant="ghost"
         :theme="activeTab === 'attendance' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'attendance' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium')"
+        :class="activeTab === 'attendance' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
         role="tab"
         :aria-selected="activeTab === 'attendance' ? 'true' : 'false'"
-        aria-label="Team"
+        label="Team"
         @click="$emit('update:activeTab', 'attendance')"
       >
         <template #prefix>
@@ -135,15 +135,15 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">Team</span>
-      </f-button>
-      <f-button
+      </Button>
+      <Button
         v-else
         variant="ghost"
         theme="gray"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="isDarkMode ? '!text-gray-400 font-medium' : '!text-gray-500 font-medium'"
-        aria-label="Create a new task"
+        :class="isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium'"
+        label="Create a new task"
         @click="$emit('open-new-task')"
       >
         <template #prefix>
@@ -153,7 +153,7 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">+ Task</span>
-      </f-button>
+      </Button>
     </div>
   </nav>
 </template>

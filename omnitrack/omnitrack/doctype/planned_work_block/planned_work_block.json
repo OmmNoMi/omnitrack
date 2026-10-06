@@ -112,16 +112,26 @@
     {
       "fieldname": "task_nature",
       "fieldtype": "Select",
-      "options": "\ud83c\udfaf Planned\n\ud83e\udd1d Virtual Meeting\n\u26a0\ufe0f Unplanned\n\ud83d\udd04 Review & Sync\n\u2615 Break\n\ud83d\udeab Out-of-Office\n\ud83c\udf34 Leave\n\ud83e\udd12 Absent",
-      "label": "Task Nature",
-      "default": "\ud83c\udfaf Planned",
-      "in_list_view": 1
+      "options": "Work\nBreak\nAway",
+      "label": "Activity",
+      "default": "Work",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "unplanned",
+      "fieldtype": "Check",
+      "label": "Unplanned",
+      "default": "0",
+      "read_only": 1,
+      "in_standard_filter": 1,
+      "description": "Set by OmniTrack: this time was logged with no work block planned for it."
     },
     {
       "fieldname": "unplanned_reason",
       "fieldtype": "Data",
       "label": "Unplanned Reason / Incident Note",
-      "depends_on": "eval:doc.task_nature=='\u26a0\ufe0f Unplanned'"
+      "depends_on": "eval:doc.unplanned"
     },
     {
       "fieldname": "project",
@@ -147,6 +157,13 @@
       "fieldname": "work_item_label",
       "fieldtype": "Data",
       "label": "Work Item"
+    },
+    {
+      "description": "Every task this block is for. The first row is the block's main task (work_item); tick tasks off here while you work.",
+      "fieldname": "tasks",
+      "fieldtype": "Table",
+      "label": "Tasks",
+      "options": "OmniTrack Block Task"
     },
     {
       "fieldname": "status",
@@ -197,12 +214,6 @@
       "fieldname": "deliverable_notes",
       "fieldtype": "Small Text",
       "label": "Deliverable & Handoff Notes"
-    },
-    {
-      "description": "Connected task references and action checklist items (JSON)",
-      "fieldname": "connected_tasks",
-      "fieldtype": "Long Text",
-      "label": "Connected Tasks & Deliverables"
     },
     {
       "description": "Countable deliverables and output metrics produced during this work block.",
@@ -341,5 +352,6 @@
       "delete": 0
     }
   ],
-  "icon": "calendar"
+  "icon": "calendar",
+  "modified": "2026-10-06 15:10:00.000000"
 }

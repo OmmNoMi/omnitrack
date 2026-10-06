@@ -51,6 +51,8 @@ runStep('Axe-Core WCAG 2.2 AA Compliance Audit', 'node scripts/test_axe_wcag.cjs
 console.log('\n🧪  Pillar 3: Code Quality & TDD++');
 runStep('Ruff Python Syntax & Reference Linter', `${ruffBin} check --select E9,F63,F7,F82 omnitrack/`);
 runStep('Standalone Workspace Fixture Isolation Tests', `${pythonBin} -m unittest omnitrack.tests.test_workspace_fixtures`);
+runStep('Static SPA Checks (undefined refs, view contexts, component registry, file size)', 'npm run --silent test:static');
+runStep('Runtime Smoke Test (every tab + dialog, zero console errors)', 'node scripts/test_spa_smoke.cjs');
 runStep('Frontend Bundle & Vue Runtime Verification', 'node scripts/test_bundle_and_components.cjs');
 runStep('Automated Mutation Testing (100% Score Invariant)', 'node scripts/run_mutation_tests.cjs');
 

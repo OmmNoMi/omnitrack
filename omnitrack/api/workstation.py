@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 import frappe
+from omnitrack.utils.activity import is_away
 from frappe import _
 from frappe.utils import (
 	flt,
@@ -28,8 +29,9 @@ from omnitrack.utils import (
 	mins_of,
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
-	parse_block_tasks as _parse_block_tasks,
+
 )
+from omnitrack.utils.block_tasks import tasks_by_block
 
 
 @frappe.whitelist()
@@ -86,8 +88,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		work_blocks = frappe.db.sql(f"""
 			SELECT name, employee, work_date, start_time, end_time, 
 			       duration_hours, actual_hours, variance_hours, project, task, 
-			       work_item, work_item_label, status, task_nature, 
-			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
+			       work_item, work_item_label, status, task_nature, unplanned, 
+			       unplanned_reason, deliverable_notes, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
 			       cancel_reason, rescheduled_to, rescheduled_from,
 			       pairing_partner, paired_block, approval_status
@@ -115,8 +117,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		work_blocks = frappe.db.sql(f"""
 			SELECT name, employee, work_date, start_time, end_time, 
 			       duration_hours, actual_hours, variance_hours, project, task, 
-			       work_item, work_item_label, status, task_nature, 
-			       unplanned_reason, deliverable_notes, connected_tasks, cryptographic_hash, 
+			       work_item, work_item_label, status, task_nature, unplanned, 
+			       unplanned_reason, deliverable_notes, cryptographic_hash, 
 			       billing_status, associate_name, appsheet_id,
 			       cancel_reason, rescheduled_to, rescheduled_from,
 			       pairing_partner, paired_block, approval_status
@@ -131,8 +133,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			fields=[
 				"name", "employee", "work_date", "start_time", "end_time", 
 				"duration_hours", "actual_hours", "variance_hours", "project", "task", 
-				"work_item", "work_item_label", "status", "task_nature", 
-				"unplanned_reason", "deliverable_notes", "connected_tasks", "cryptographic_hash", 
+				"work_item", "work_item_label", "status", "task_nature", "unplanned", 
+				"unplanned_reason", "deliverable_notes", "cryptographic_hash", 
 				"billing_status", "associate_name", "appsheet_id",
 				"cancel_reason", "rescheduled_to", "rescheduled_from",
 				"pairing_partner", "paired_block", "approval_status"
@@ -158,6 +160,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			s["hours"] = flt(s.hours)
 			sessions_by_block.setdefault(s.parent, []).append(s)
 
+	tasks_of_block = tasks_by_block(block_names)
+
 	metrics_by_block = {}
 	if block_names and frappe.db.exists("DocType", "OmniTrack Output Metric"):
 		all_metrics = frappe.db.sql("""
@@ -174,7 +178,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
 		b["work_date"] = str(b.get("work_date") or "")
-		b["connected_tasks"] = _parse_block_tasks(b.get("connected_tasks"))
+		b["tasks"] = tasks_of_block.get(b.name, [])
 
 		# Attach real child sessions and metrics
 		b["sessions"] = sessions_by_block.get(b.name, [])
@@ -212,8 +216,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			subject = frappe.db.get_value("Task", b.task, "subject") or b.task
 		b["task_subject"] = subject or b.get("deliverable_notes") or f"Block {b.name}"
 
-		nature = (b.get("task_nature") or "").lower()
-		b["is_away"] = any(m in nature for m in ("leave", "absent", "out-of-office", "out of office", "break"))
+		b["is_away"] = is_away(b.get("task_nature"))
 		b["is_working"] = not b["is_away"]
 		b["is_paid"] = not b["is_away"]
 
@@ -283,8 +286,10 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 			})
 
 	# 5. PACI / PAI Calculation (Real live hours)
-	planned_hours = sum([flt(b.duration_hours) for b in work_blocks if b.get("task_nature") != "⚠️ Unplanned" and b.get("task_nature") != "Unplanned"])
-	unplanned_hours = sum([flt(b.duration_hours) for b in work_blocks if b.get("task_nature") == "⚠️ Unplanned" or b.get("task_nature") == "Unplanned"])
+	# Planned or not is the block's own fact (`unplanned`), never its activity
+	work = [b for b in work_blocks if not b.get("is_away")]
+	planned_hours = sum(flt(b.duration_hours) for b in work if not b.get("unplanned"))
+	unplanned_hours = sum(flt(b.duration_hours) for b in work if b.get("unplanned"))
 	total_hours = planned_hours + unplanned_hours
 	paci_ratio = round((planned_hours / total_hours * 100), 1) if total_hours > 0 else 85.0
 

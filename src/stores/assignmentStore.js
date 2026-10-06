@@ -1,11 +1,11 @@
 import * as Vue from "vue";
+import { WORK } from "../utils/activity.js";
 const { ref, computed } = Vue;
 
 export function useAssignmentStore({
   assignedTasks,
   attentionTasks,
   todayDate,
-  openBookModal,
   postJSON,
   showToast,
   fetchWorkstationData,
@@ -168,8 +168,8 @@ export function useAssignmentStore({
         sessionStore.selectedProject.value = t.project;
         sessionStore.trackerProject.value = t.project;
       }
-      sessionStore.selectedNature.value = 'Planned Work';
-      sessionStore.trackerNature.value = 'Planned Work';
+      sessionStore.selectedNature.value = WORK;
+      sessionStore.trackerNature.value = WORK;
       if (syncActiveSession) syncActiveSession();
     }
     todoDropdownOpen.value = false;
@@ -189,12 +189,6 @@ export function useAssignmentStore({
     todoDropdownOpen.value = false;
     todoSearchQuery.value = '';
     if (triggerHaptic) triggerHaptic([20]);
-  };
-
-  const planAttentionTask = (task) => {
-    if (openBookModal) {
-      openBookModal(task);
-    }
   };
 
   return {
@@ -223,7 +217,6 @@ export function useAssignmentStore({
     filteredPlannedBlocks,
     showCustomOption,
     selectTodoToAutofill,
-    selectCustomTitle,
-    planAttentionTask
+    selectCustomTitle
   };
 }

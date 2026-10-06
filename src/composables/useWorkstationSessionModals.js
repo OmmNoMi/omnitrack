@@ -1,14 +1,17 @@
 /**
  * useWorkstationSessionModals Composable
  * Encapsulates modal dialogs: Empty session guard, Start time choice,
- * Adjust timesheet timing, Runaway timer guard, and Edit/Delete session.
+ * the one timesheet panel (add / edit / adjust / stop and log), Runaway timer guard,
+ * and deleting a logged entry.
  */
 import * as Vue from "vue";
+import { whenLine } from "../utils/clockTime.js";
+import { newEntryTimes } from "../utils/timesheetEntry.js";
 const { ref, computed } = Vue;
 
 export function useWorkstationSessionModals(opts) {
   const {
-    postJSON, showToast, isTracking, trackerSeconds, trackerTimer,
+    postJSON, showToast, isTracking, startTime, trackerSeconds, trackerTimer,
     trackerNotes, trackerBoundBlock, trackerBlockName, sessionNotesList,
     sessionHasLines, selectedNature, selectedProject, todayDate, todayISO,
     isSessionElevated, isManager, activeBlock, selectedEmployee,
@@ -74,222 +77,191 @@ export function useWorkstationSessionModals(opts) {
     }
   };
 
-  // 3. Adjust Timesheet Timing & Backdating
-  const showAdjustModal = ref(false);
-  const adjustMode = ref('keep_running'); // 'keep_running' | 'stop_and_log'
-  const originalStartTimeFormatted = ref('');
-  const adjustForm = ref({
-    work_date: getLocalTodayISO(),
-    from_time: '09:00',
-    to_time: '10:00',
-    notes: ''
-  });
+  // 3. The one timesheet panel (TimesheetEntryDialog). Every way of writing time opens it:
+  //    'add'  an entry against a block, for time already worked (never the block's future slot)
+  //    'edit' a logged entry
+  //    'free' a window with no block (a timeline gap, or Adjust with no clock running)
+  //    'live' the running session: correct its start and keep going, or stop and log it
+  const showEditSessionModal = ref(false);
+  const isSavingEditSession = ref(false);
+  const editSessionTargetBlock = ref(null);
+  const editSessionForm = ref({ mode: 'add', name: '', session_date: '', from_time: '', to_time: '', notes: '' });
 
-  const minTimesheetDate = computed(() => {
-    if (isManager.value) return '';
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  });
-
-  const adjustDurationMinutes = computed(() => {
-    if (!adjustForm.value.from_time || !adjustForm.value.to_time) return 0;
-    try {
-      const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
-      const [th, tm] = adjustForm.value.to_time.split(':').map(Number);
-      let diff = (th * 60 + tm) - (fh * 60 + fm);
-      if (diff < 0) diff += 1440;
-      return diff;
-    } catch (e) {
-      return 0;
-    }
-  });
-
-  const adjustDurationShort = computed(() => {
-    const mins = adjustDurationMinutes.value;
-    if (mins <= 0) return '0m';
-    const h = Math.floor(mins / 60), m = mins % 60;
-    return h ? (m ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
-  });
-
-  const adjustDurationFormatted = computed(() => {
-    const mins = adjustDurationMinutes.value;
-    if (mins <= 0) return '0h 00m (0.00 hrs)';
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    const dec = (mins / 60).toFixed(2);
-    return `${h}h ${String(m).padStart(2, '0')}m (${dec} hrs)`;
-  });
-
-  const keepRunningElapsedFormatted = computed(() => {
-    if (!adjustForm.value.from_time) return '0m 00s';
-    try {
-      const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
-      const parts = (adjustForm.value.work_date || todayDate.value).split('-').map(Number);
-      const startMs = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0).getTime();
-      const diffSecs = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-      const h = Math.floor(diffSecs / 3600), m = Math.floor((diffSecs % 3600) / 60), s = diffSecs % 60;
-      const dec = (diffSecs / 3600).toFixed(2);
-      if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s (${dec} hrs)`;
-      return `${m}m ${String(s).padStart(2, '0')}s (${dec} hrs)`;
-    } catch (e) {
-      return '0m 00s';
-    }
-  });
-
-  const openAdjustModal = () => {
-        if (isSessionElevated.value) {
-          isSessionElevated.value = false;
-        }
-    const pad = (n) => String(n).padStart(2, '0');
-    const nowObj = new Date();
-    let startObj = new Date();
-    if (isTracking.value && trackerSeconds.value > 0) {
-      startObj = new Date(Date.now() - (trackerSeconds.value * 1000));
-      originalStartTimeFormatted.value = `${pad(startObj.getHours())}:${pad(startObj.getMinutes())}`;
-      adjustMode.value = 'keep_running';
-    } else {
-      startObj = new Date(Date.now() - 3600 * 1000);
-      originalStartTimeFormatted.value = '';
-      adjustMode.value = 'stop_and_log';
-    }
-
-    const work_date = `${startObj.getFullYear()}-${pad(startObj.getMonth() + 1)}-${pad(startObj.getDate())}`;
-    const from_time = `${pad(startObj.getHours())}:${pad(startObj.getMinutes())}`;
-    const to_time = `${pad(nowObj.getHours())}:${pad(nowObj.getMinutes())}`;
-    const rawTitle = (trackerNotes.value || '').trim();
-    const bullets = (sessionNotesList.value || []).filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
-    const notes = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || '');
-
-    adjustForm.value = { work_date, from_time, to_time, notes };
-    showAdjustModal.value = true;
+  const pad = (n) => String(n).padStart(2, '0');
+  const clockOf = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const dayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const msOf = (day, hm) => {
+    const [y, m, d] = String(day).split('-').map(Number);
+    const [h, mi] = String(hm).split(':').map(Number);
+    return new Date(y, m - 1, d, h, mi, 0).getTime();
+  };
+  const withSeconds = (t) => (t && t.length === 5 ? t + ':00' : t);
+  // The old Adjust dialog saved the session's lines back into its notes (with a bullet or a
+  // tick), so the stop path logged them twice. Notes never repeat a line.
+  const bare = (l) => String(l).replace(/^[\s•✓*-]+/, '').trim();
+  const notesWithoutLines = (notes, lines) => {
+    const known = new Set(lines.map(bare));
+    return String(notes).split('\n').filter(l => bare(l) && !known.has(bare(l))).join('\n');
   };
 
-  const nudgeAdjustTime = (field, deltaMinutes) => {
-    const key = field === 'from' ? 'from_time' : 'to_time';
-    const curVal = adjustForm.value[key] || '00:00';
-    try {
-      const [h, m] = curVal.split(':').map(Number);
-      let totalMins = h * 60 + m + deltaMinutes;
-      if (totalMins < 0) totalMins = (totalMins % 1440) + 1440;
-      else if (totalMins >= 1440) totalMins = totalMins % 1440;
-      const pad = (n) => String(n).padStart(2, '0');
-      adjustForm.value[key] = `${pad(Math.floor(totalMins / 60))}:${pad(totalMins % 60)}`;
-    } catch (e) {}
+  const openPanel = (form, block = null) => {
+    // The elevated session card sits above dialogs; lower it so the panel is never covered
+    if (isSessionElevated.value) {
+      isSessionElevated.value = false;
+    }
+    editSessionTargetBlock.value = block;
+    editSessionForm.value = { mode: 'add', name: '', block_title: '', block_when: '', started_at: '', lines: 0, notes: '', ...form };
+    showEditSessionModal.value = true;
   };
 
-  const setAdjustEndNow = () => {
+  const openEditSessionModal = (block, session = {}) => {
+    const fresh = session.name ? null : newEntryTimes(block);
+    openPanel({
+      mode: session.name ? 'edit' : 'add',
+      name: session.name || '',
+      block_title: block ? (block.task_subject || block.work_item_label || block.deliverable_notes || '') : '',
+      block_when: block ? whenLine(block.work_date, block.start_time, block.end_time) : '',
+      session_date: fresh ? fresh.date : (session.session_date || todayISO()),
+      from_time: fresh ? fresh.from : hhmm(session.from_time || ''),
+      to_time: fresh ? fresh.to : hhmm(session.to_time || ''),
+      notes: session.notes || ''
+    }, block);
+  };
+
+  // The session box's Adjust: the running session, or the last hour when nothing runs.
+  // capMinutes (the runaway guard) proposes an end that many minutes after the start.
+  const openAdjustModal = (opt = {}) => {
     const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    adjustForm.value.to_time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  };
-
-  const applyAdjustedStartTime = () => {
-    if (!adjustForm.value.from_time) { showToast('Start time is required', 'warning'); return; }
-    try {
-      const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
-      const parts = (adjustForm.value.work_date || todayDate.value).split('-').map(Number);
-      const newStartMs = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0).getTime();
-      const nowMs = Date.now();
-      if (newStartMs > nowMs) { showToast('Start time cannot be in the future for an ongoing session', 'warning'); return; }
-      const newElapsedSecs = Math.max(0, Math.floor((nowMs - newStartMs) / 1000));
-      trackerSeconds.value = newElapsedSecs;
-      if (trackerTimer.value) clearInterval(trackerTimer.value);
-      trackerTimer.value = setInterval(() => {
-        trackerSeconds.value = Math.max(0, Math.floor((Date.now() - newStartMs) / 1000));
-        checkInactivity();
-      }, 1000);
-
-      if (adjustForm.value.notes) trackerNotes.value = adjustForm.value.notes;
-      recordUserActivity();
-      const saved = localStorage.getItem('omnitrack_active_session');
-      let activePayload = {};
-      try { if (saved) activePayload = JSON.parse(saved); } catch (e) {}
-      activePayload.startTime = newStartMs;
-      activePayload.lastUpdated = Date.now();
-      activePayload.lastActivityTime = Date.now();
-      if (adjustForm.value.notes) activePayload.trackerNotes = adjustForm.value.notes;
-      localStorage.setItem('omnitrack_active_session', JSON.stringify(activePayload));
-      syncActiveSession(true);
-
-      showAdjustModal.value = false;
-      showToast(`Running clock updated: started at ${adjustForm.value.from_time} (${Math.round(newElapsedSecs / 60)}m elapsed)`, 'success');
-    } catch (err) {
-      showToast('Failed to adjust start time: ' + (err && err.message || err), 'danger');
-    }
-  };
-
-  const submitAdjustedTimesheet = async () => {
-    const targetDate = adjustForm.value.work_date || todayDate.value;
-    if (!targetDate) { showToast('Session date is required', 'warning'); return; }
-    if (!isManager.value && minTimesheetDate.value && targetDate < minTimesheetDate.value) {
-      showToast(`Regular users can only log for today and yesterday (${minTimesheetDate.value}). Older dates require Manager role.`, 'danger');
+    if (!isTracking.value) {
+      const from = new Date(now.getTime() - 3600 * 1000);
+      openPanel({ mode: 'free', session_date: dayOf(from), from_time: clockOf(from), to_time: clockOf(now) });
       return;
     }
-    if (adjustDurationMinutes.value <= 0) { showToast('Duration must be greater than 0 minutes', 'warning'); return; }
-    if (!sessionHasLines.value && String(adjustForm.value.notes || '').trim().length < 3) {
-      showToast('Describe what you did in the notes below before logging this time — an hour with no description cannot be justified to a manager or a client.', 'warning');
-      return;
+    const start = new Date(Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000));
+    const cap = opt && opt.capMinutes ? new Date(Math.min(now.getTime(), start.getTime() + opt.capMinutes * 60000)) : now;
+    const block = trackerBoundBlock.value;
+    const lines = (sessionNotesList.value || []).filter(p => String(p).trim());
+    openPanel({
+      mode: 'live',
+      block_title: block ? (block.task_subject || block.work_item_label || '') : '',
+      started_at: clockOf(start),
+      session_date: dayOf(start),
+      from_time: clockOf(start),
+      to_time: clockOf(cap),
+      // The session's own lines stay as they are and are added when it is logged
+      notes: notesWithoutLines(trackerNotes.value || '', lines),
+      lines: lines.length
+    }, block);
+  };
+
+  const quickLogTimelineGap = (gap) => {
+    if (!gap) return;
+    openPanel({
+      mode: 'free',
+      session_date: selectedDashboardDate.value || getLocalTodayISO(),
+      from_time: gap.from_time.substring(0, 5),
+      to_time: gap.to_time.substring(0, 5),
+      notes: ''
+    });
+  };
+
+  // Moves the running clock's start (and its notes) without stopping it. The start goes on
+  // startTime itself: syncActiveSession writes startTime back, so a start set only in
+  // localStorage was overwritten by the very sync that followed it.
+  const restartClockAt = (f) => {
+    const ms = msOf(f.session_date, f.from_time);
+    if (!(ms <= Date.now())) { showToast('The start cannot be in the future', 'warning'); return null; }
+    startTime.value = ms;
+    trackerSeconds.value = Math.floor((Date.now() - ms) / 1000);
+    if (trackerTimer.value) clearInterval(trackerTimer.value);
+    trackerTimer.value = setInterval(() => {
+      trackerSeconds.value = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+      checkInactivity();
+    }, 1000);
+    trackerNotes.value = String(f.notes || '').trim();
+    recordUserActivity();
+    syncActiveSession(true);
+    return ms;
+  };
+
+  const keepSessionRunning = () => {
+    const f = editSessionForm.value;
+    if (f.mode !== 'live' || !isTracking.value) return;
+    if (restartClockAt(f) == null) return;
+    showEditSessionModal.value = false;
+    showToast(`Start set to ${f.from_time}. The clock keeps running.`, 'success');
+  };
+
+  // Stopping goes through the one stop path (toggleTrack), which logs against the bound
+  // block or as a free entry, with the session's lines.
+  const stopAndLogSession = async (f) => {
+    if (!isTracking.value) return;
+    if (restartClockAt(f) == null) return;
+    const end = msOf(f.session_date, f.to_time);
+    showEditSessionModal.value = false;
+    await toggleTrack(end < Date.now() ? end : null);
+  };
+
+  const applyBlockTotals = (res) => {
+    if (!res || !activeBlock.value || res.name !== activeBlock.value.name) return;
+    activeBlock.value.actual_hours = res.actual_hours;
+    activeBlock.value.variance_hours = res.variance_hours;
+    activeBlock.value.status = res.block_status;
+    if (res.sessions) activeBlock.value.sessions = res.sessions;
+  };
+  const afterSave = (message, res) => {
+    showToast(message, 'success');
+    showEditSessionModal.value = false;
+    applyBlockTotals(res);
+    if (fetchPlannerData) fetchPlannerData();
+    fetchWorkstationData(selectedEmployee.value);
+  };
+  // How far back is the server's call (its horizon is configurable); its refusal says why
+  const writeEntry = async (f) => {
+    const block = editSessionTargetBlock.value;
+    const times = { session_date: f.session_date, from_time: withSeconds(f.from_time), to_time: withSeconds(f.to_time), notes: f.notes };
+    if (f.mode === 'edit') {
+      const res = await postJSON('update_work_session', { session_name: f.name, block_name: block ? block.name : null, ...times });
+      if (!res || res.status !== 'success') throw res;
+      return afterSave('Timesheet entry saved', res);
     }
+    if (f.mode === 'add' && block) {
+      return afterSave('Timesheet entry added', await postJSON('log_work_session', { block_name: block.name, ...times }));
+    }
+    const mins = toMinutes(f.to_time) - toMinutes(f.from_time);
+    await postJSON('quick_timer_punch', {
+      action: 'stop',
+      work_date: f.session_date,
+      from_time: times.from_time,
+      to_time: times.to_time,
+      duration_seconds: mins * 60,
+      duration_hours: Math.round((mins / 60) * 100) / 100,
+      work_nature: selectedNature.value,
+      task_nature: selectedNature.value,
+      deliverable_notes: f.notes,
+      notes: f.notes,
+      project: selectedProject.value
+    });
+    afterSave('Timesheet entry added');
+  };
+  const toMinutes = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return h * 60 + m; };
 
-    const hrs = Math.max(Math.round((adjustDurationMinutes.value / 60.0) * 100) / 100, 0.01);
-    const fromTimeStr = adjustForm.value.from_time.length === 5 ? adjustForm.value.from_time + ':00' : adjustForm.value.from_time;
-    const toTimeStr = adjustForm.value.to_time.length === 5 ? adjustForm.value.to_time + ':00' : adjustForm.value.to_time;
-    const boundBlock = trackerBlockName.value;
-    const finalNotes = (adjustForm.value.notes || '').trim() || `Adjusted focus session (${selectedNature.value})`;
-
+  const saveEditSession = async () => {
+    const f = editSessionForm.value;
+    if (!f.session_date) { showToast('Pick the day you worked', 'warning'); return; }
+    if (!f.from_time || !f.to_time || toMinutes(f.to_time) <= toMinutes(f.from_time)) { showToast('The end must be after the start', 'warning'); return; }
+    if (f.mode === 'live') return stopAndLogSession(f);
+    isSavingEditSession.value = true;
     try {
-      if (boundBlock) {
-        await postJSON('log_work_session', {
-          block_name: boundBlock,
-          session_date: targetDate,
-          from_time: fromTimeStr,
-          to_time: toTimeStr,
-          hours: hrs,
-          notes: finalNotes,
-          logged_via: 'Adjusted Stopwatch'
-        });
-        showToast(`Logged ${hrs.toFixed(2)}h against focus block`, 'success');
-      } else {
-        await postJSON('quick_timer_punch', {
-          action: 'stop',
-          work_date: targetDate,
-          from_time: fromTimeStr,
-          to_time: toTimeStr,
-          duration_seconds: adjustDurationMinutes.value * 60,
-          duration_hours: hrs,
-          work_nature: selectedNature.value,
-          task_nature: selectedNature.value,
-          deliverable_notes: finalNotes,
-          notes: finalNotes,
-          project: selectedProject.value
-        });
-        showToast(`Logged ${hrs.toFixed(2)} hrs successfully!`, 'success');
-      }
-
-      isTracking.value = false;
-      if (trackerTimer.value) clearInterval(trackerTimer.value);
-      trackerTimer.value = null;
-      trackerSeconds.value = 0;
-      trackerBlockName.value = null;
-      trackerNotes.value = '';
-      sessionNotesList.value = [];
-      newSessionPoint.value = '';
-      stopConfirmName.value = '';
-      markSessionEnded();
-      localStorage.removeItem('omnitrack_active_session');
-      postJSON('sync_active_session', { session_data: null }).catch(() => {});
-
-      showAdjustModal.value = false;
-      fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') fetchPlannerData();
-    } catch (err) {
-      showToast('Not saved — the clock is still running. ' + (typeof _errText === 'function' ? _errText(err) : (err && err.message || err)), 'danger');
+      await writeEntry(f);
+    } catch (e) {
+      showToast(extractErrorMessage(e, 'Could not save this timesheet entry'), 'danger');
+    } finally {
+      isSavingEditSession.value = false;
     }
   };
 
-  // 4. Runaway Timer Guard & Gap Booking
+  // 4. Runaway Timer Guard
   const showRunawayAlertModal = ref(false);
   const runawayGuardData = ref({ elapsed_hours: 0, suggested_cap_hours: 0, reason: '', started_at_str: '' });
   const runawayChoice = ref('keep'); // 'keep' | 'cap' | 'custom'
@@ -321,98 +293,15 @@ export function useWorkstationSessionModals(opts) {
     if (runawayChoice.value === 'keep') {
       showToast('Timer kept running. Remember to stop when done!', 'info');
     } else if (runawayChoice.value === 'cap') {
-      openAdjustModal();
-      const capMins = Math.round(flt(runawayGuardData.value.suggested_cap_hours || 2.0) * 60);
-      adjustDurationMinutes.value = capMins;
-      adjustMode.value = 'stop_and_log';
-      nudgeAdjustTime('to', 0);
+      // The panel opens on the running session with its end at the suggested cap
+      openAdjustModal({ capMinutes: Math.round(flt(runawayGuardData.value.suggested_cap_hours || 2.0) * 60) });
     } else if (runawayChoice.value === 'custom') {
       openAdjustModal();
     }
   };
 
-  const quickLogTimelineGap = (gap) => {
-    if (!gap) return;
-    adjustForm.value = {
-      work_date: selectedDashboardDate.value || getLocalTodayISO(),
-      from_time: gap.from_time.substring(0, 5),
-      to_time: gap.to_time.substring(0, 5),
-      notes: `Unplanned gap work (${gap.label})`
-    };
-    adjustMode.value = 'stop_and_log';
-    showAdjustModal.value = true;
-  };
 
-  // 5. Edit & Delete Logged Work Sessions
-  const showEditSessionModal = ref(false);
-  const isSavingEditSession = ref(false);
-  const editSessionTargetBlock = ref(null);
-  const editSessionForm = ref({ name: '', session_date: '', from_time: '', to_time: '', notes: '' });
-
-  const editSessionDuration = computed(() => {
-    const f = editSessionForm.value.from_time;
-    const t = editSessionForm.value.to_time;
-    if (!f || !t) return '0.00';
-    try {
-      const [fh, fm] = f.split(':').map(Number);
-      const [th, tm] = t.split(':').map(Number);
-      let diff = (th * 60 + tm) - (fh * 60 + fm);
-      if (diff < 0) diff += 1440;
-      return (diff / 60).toFixed(2);
-    } catch (e) {
-      return '0.00';
-    }
-  });
-
-  const openEditSessionModal = (block, session) => {
-    editSessionTargetBlock.value = block;
-    editSessionForm.value = {
-      name: session.name || '',
-      session_date: session.session_date || (block && block.work_date) || todayISO(),
-      from_time: session.from_time ? hhmm(session.from_time) : '',
-      to_time: session.to_time ? hhmm(session.to_time) : '',
-      notes: session.notes || ''
-    };
-    showEditSessionModal.value = true;
-  };
-
-  const saveEditSession = async () => {
-    if (!editSessionForm.value.name) return;
-    if (!editSessionForm.value.session_date) { showToast('Session date is required', 'warning'); return; }
-    if (!editSessionForm.value.from_time || !editSessionForm.value.to_time) {
-      showToast('Start and end times are required', 'warning');
-      return;
-    }
-    isSavingEditSession.value = true;
-    try {
-      const res = await postJSON('update_work_session', {
-        session_name: editSessionForm.value.name,
-        block_name: editSessionTargetBlock.value ? editSessionTargetBlock.value.name : null,
-        session_date: editSessionForm.value.session_date,
-        from_time: editSessionForm.value.from_time.length === 5 ? editSessionForm.value.from_time + ':00' : editSessionForm.value.from_time,
-        to_time: editSessionForm.value.to_time.length === 5 ? editSessionForm.value.to_time + ':00' : editSessionForm.value.to_time,
-        notes: editSessionForm.value.notes
-      });
-      if (res && res.status === 'success') {
-        showToast('Work session updated successfully', 'success');
-        showEditSessionModal.value = false;
-        fetchWorkstationData(selectedEmployee.value);
-        if (activeBlock.value && res.name === activeBlock.value.name) {
-          activeBlock.value.actual_hours = res.actual_hours;
-          activeBlock.value.variance_hours = res.variance_hours;
-          activeBlock.value.status = res.block_status;
-          if (res.sessions) activeBlock.value.sessions = res.sessions;
-        }
-      } else {
-        showToast(extractErrorMessage(res, 'Failed to update work session'), 'danger');
-      }
-    } catch (e) {
-      showToast(extractErrorMessage(e, 'Failed to update work session'), 'danger');
-    } finally {
-      isSavingEditSession.value = false;
-    }
-  };
-
+  // 5. Delete a logged entry
   const confirmDeleteSession = async (block, session) => {
     if (!session || !session.name) return;
     const timeLabel = session.from_time ? hhmm(session.from_time) + '–' + hhmm(session.to_time) : fmtHrs(session.hours) + 'h';
@@ -425,12 +314,7 @@ export function useWorkstationSessionModals(opts) {
       if (res && res.status === 'success') {
         showToast('Work session deleted', 'info');
         fetchWorkstationData(selectedEmployee.value);
-        if (activeBlock.value && res.name === activeBlock.value.name) {
-          activeBlock.value.actual_hours = res.actual_hours;
-          activeBlock.value.variance_hours = res.variance_hours;
-          activeBlock.value.status = res.block_status;
-          if (res.sessions) activeBlock.value.sessions = res.sessions;
-        }
+        applyBlockTotals(res);
       } else {
         showToast(extractErrorMessage(res, 'Failed to delete work session'), 'danger');
       }
@@ -452,34 +336,26 @@ export function useWorkstationSessionModals(opts) {
     pendingStartTimeOptions,
     parseBlockStartEpoch,
     selectStartTimeChoice,
-    showAdjustModal,
-    adjustMode,
-    originalStartTimeFormatted,
-    adjustForm,
-    minTimesheetDate,
-    adjustDurationMinutes,
-    adjustDurationShort,
-    adjustDurationFormatted,
-    keepRunningElapsedFormatted,
-    openAdjustModal,
-    nudgeAdjustTime,
-    setAdjustEndNow,
-    applyAdjustedStartTime,
-    submitAdjustedTimesheet,
     showRunawayAlertModal,
     runawayGuardData,
     runawayChoice,
     checkRunawayStopwatch,
     resolveRunawayOption,
     confirmRunawayResolution,
-    quickLogTimelineGap,
     showEditSessionModal,
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
-    editSessionDuration,
     openEditSessionModal,
+    openAdjustModal,
+    quickLogTimelineGap,
+    keepSessionRunning,
     saveEditSession,
+    // Older names for the same panel, kept for callers outside this file
+    showAdjustModal: showEditSessionModal,
+    adjustForm: editSessionForm,
+    applyAdjustedStartTime: keepSessionRunning,
+    submitAdjustedTimesheet: saveEditSession,
     confirmDeleteSession
   };
 }

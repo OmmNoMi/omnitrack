@@ -23,7 +23,7 @@ def _block(**kwargs):
 		"work_date": nowdate(),
 		"start_time": "09:00:00",
 		"end_time": "12:00:00",
-		"task_nature": "🎯 Planned",
+		"task_nature": "Work",
 		"employee": "Administrator",
 	}
 	defaults.update(kwargs)
@@ -49,7 +49,7 @@ class TestStopwatch(FrappeTestCase):
 		# 1. Start / sync session from device A (computer)
 		session_payload = {
 			"startTime": start_ms,
-			"selectedNature": "🎯 Planned",
+			"selectedNature": "Work",
 			"selectedProject": "PROJ-TEST",
 			"trackerNotes": "Cross-device planning session",
 			"trackerBlockName": "TEST-BLOCK-1",

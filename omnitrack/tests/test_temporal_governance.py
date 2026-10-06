@@ -20,7 +20,7 @@ def _block(**kwargs):
 		"work_date": nowdate(),
 		"start_time": "09:00:00",
 		"end_time": "12:00:00",
-		"task_nature": "🎯 Planned",
+		"task_nature": "Work",
 		"employee": "Administrator",
 	}
 	defaults.update(kwargs)

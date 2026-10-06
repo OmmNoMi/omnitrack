@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 import frappe
+from omnitrack.utils.activity import is_away
 from frappe import _
 from frappe.utils import (
 	flt,
@@ -29,6 +30,7 @@ from omnitrack.utils import (
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
 )
+from omnitrack.utils.block_tasks import resolve_ref, tasks_by_block, todo_subject
 from omnitrack.api.tasks import update_task_kpi_progress
 
 
@@ -45,7 +47,7 @@ def toggle_work_block_status(block_name):
 
 
 @frappe.whitelist()
-def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="10:00:00", duration_hours=1.0, project=None, task=None, deliverable_notes=None, task_nature="🎯 Planned", employee=None, status="Planned"):
+def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="10:00:00", duration_hours=1.0, project=None, task=None, deliverable_notes=None, task_nature="Work", employee=None, status="Planned"):
 	"""Creates a new Planned Work Block in Frappe DB."""
 	doc = frappe.new_doc("Planned Work Block")
 	assigned_emp = employee or frappe.session.user
@@ -66,7 +68,7 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 	if task:
 		doc.task = task
 	doc.deliverable_notes = deliverable_notes or "Planned Task Entry"
-	doc.task_nature = task_nature or "🎯 Planned"
+	doc.task_nature = task_nature or "Work"
 	doc.status = status or "Planned"
 
 	# Cryptographic Hash
@@ -85,6 +87,35 @@ def _is_planner_manager(user=None):
 def _resolve_planner_user(employee=None):
 	from omnitrack.utils.user_resolver import resolve_planner_user
 	return resolve_planner_user(employee)
+
+
+def _create_assigned_work(subject, user, project=None):
+	"""Create an open Task (ERPNext) or ToDo assigned to ``user``; return its work-item ref."""
+	subject = str(subject or "").strip()
+	if not subject:
+		frappe.throw(_("Task name cannot be empty."))
+	has_project = project and frappe.db.exists("DocType", "Project") and frappe.db.exists("Project", project)
+	if frappe.db.exists("DocType", "Task"):
+		task = frappe.new_doc("Task")
+		task.subject = subject[:140]
+		task.status = "Open"
+		if has_project:
+			task.project = project
+		task.flags.ignore_permissions = True
+		task.insert()
+		from frappe.desk.form.assign_to import add as add_assignment
+		add_assignment({"doctype": "Task", "name": task.name, "assign_to": [user]})
+		return task.name
+	todo = frappe.new_doc("ToDo")
+	todo.description = subject
+	todo.allocated_to = user
+	todo.status = "Open"
+	if has_project:
+		todo.reference_type = "Project"
+		todo.reference_name = project
+	todo.flags.ignore_permissions = True
+	todo.insert()
+	return f"todo:{todo.name}"
 
 
 def _week_bounds(week_start=None):
@@ -171,14 +202,16 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			fields=[
 				"name", "employee", "associate_name", "work_date", "start_time", "end_time", "duration_hours",
 				"actual_hours", "variance_hours", "status", "task", "project",
-				"work_item", "work_item_label", "task_nature", "deliverable_notes", "location",
+				"work_item", "work_item_label", "task_nature", "unplanned", "deliverable_notes", "location",
 				"cancel_reason", "rescheduled_to", "rescheduled_from",
 			],
 			order_by="work_date asc, start_time asc",
 			limit=500,
 		)
 		proj_names = {}
+		tasks_of = tasks_by_block([b.name for b in raw])
 		for b in raw:
+			b["tasks"] = tasks_of.get(b["name"], [])
 			b["start_time"] = _time_str(b.get("start_time"))
 			b["end_time"] = _time_str(b.get("end_time"))
 			b["work_date"] = str(b.get("work_date") or "")
@@ -224,12 +257,10 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			] if frappe.db.exists("DocType", "OmniTrack Output Metric") else []
 			blocks.append(b)
 
-	# Leave / absence / out-of-office / break are non-working & non-paid — flag them and keep
+	# Break and Away (leave, absence, out-of-office) are non-working & non-paid — flag them and keep
 	# them out of the plan-vs-actual maths.
-	away_markers = ("leave", "absent", "out-of-office", "out of office", "break")
 	for b in blocks:
-		nature = (b.get("task_nature") or "").lower()
-		b["is_away"] = any(m in nature for m in away_markers)
+		b["is_away"] = is_away(b.get("task_nature"))
 		b["is_working"] = not b["is_away"]
 		b["is_paid"] = not b["is_away"]
 
@@ -275,15 +306,45 @@ def _duration_hours(start_time, end_time):
 	return duration_hours(start_time, end_time)
 
 
+def _parse_refs(work_items):
+	"""work_items as sent by the client (JSON array, list or comma text) -> unique refs, in order."""
+	if not work_items:
+		return []
+	if isinstance(work_items, str):
+		try:
+			work_items = json.loads(work_items)
+		except Exception:
+			work_items = work_items.split(",")
+	if not isinstance(work_items, list):
+		work_items = [work_items]
+	refs = []
+	for r in work_items:
+		r = str(r or "").strip()
+		if r and r not in refs:
+			refs.append(r)
+	return refs
+
+
+def _copy_tasks(src, dst):
+	"""A partner or team block covers the same tasks as the block it mirrors."""
+	for r in src.tasks:
+		dst.append("tasks", {
+			"work_item": r.work_item, "subject": r.subject, "reference_doctype": r.reference_doctype,
+			"reference_name": r.reference_name, "project": r.project, "status": "Open",
+		})
+
+
 @frappe.whitelist()
 def book_work_block(work_date, start_time, end_time, work_item=None, work_item_label=None,
 					task=None, project=None, deliverable_notes=None,
-					task_nature="\U0001f3af Planned", employee=None, pairing_partner=None,
-					assignees=None):
+					task_nature="Work", employee=None, pairing_partner=None,
+					assignees=None, new_task_subject=None, work_items=None):
 	"""Create a planned block: 'from 12 to 2pm I will work on <work item>'. This is the PLAN.
 
 	``work_item`` is the generic assigned-work id from get_assigned_tasks (an ERPNext Task
 	name, or ``todo:<name>``). A real ERPNext Task link is also set when available.
+	``work_items`` (JSON array or list of the same refs) books one block for several tasks:
+	the first is the block's main task, and every one becomes a row of its ``tasks`` table.
 	If ``pairing_partner`` is specified, automatically mirrors a reciprocal work block for
 	the collaborator with synchronized status and bidirectional links.
 	If ``assignees`` (JSON array or list) is provided, creates synchronized planned blocks
@@ -297,6 +358,17 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		frappe.throw(_("Cannot plan or book work blocks in the past."), frappe.ValidationError)
 
 	has_task = frappe.db.exists("DocType", "Task")
+	refs = _parse_refs(work_items)
+	if work_item:
+		refs = [work_item] + [r for r in refs if r != work_item]
+	# "Plan time" can name a task that does not exist yet. It is created in this request,
+	# after the past-date check, so a failed booking rolls the new task back with it.
+	if new_task_subject:
+		created = _create_assigned_work(new_task_subject, target, project)
+		if not refs:
+			work_item_label = str(new_task_subject).strip()[:140]
+		refs.append(created)
+	work_item = refs[0] if refs else None
 	if work_item and not work_item.startswith("todo:") and has_task and frappe.db.exists("Task", work_item):
 		task = task or work_item
 	if task and has_task:
@@ -308,7 +380,7 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 			work_item_label = frappe.db.get_value("Task", task, "subject")
 		elif work_item and work_item.startswith("todo:"):
 			td = work_item.split(":", 1)[1]
-			desc = frappe.db.get_value("ToDo", td, "description") or ""
+			work_item_label = todo_subject(frappe.db.get_value("ToDo", td, "description"))
 	if work_item_label:
 		work_item_label = str(work_item_label).strip()[:140]
 	elif deliverable_notes:
@@ -339,9 +411,13 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	doc.work_item = work_item
 	doc.work_item_label = work_item_label
 	doc.project = project
-	doc.task_nature = task_nature or "🎯 Planned"
+	doc.task_nature = task_nature or "Work"
 	doc.deliverable_notes = deliverable_notes or work_item_label
 	doc.status = "Planned"
+	for ref in refs[1:]:
+		row = resolve_ref(ref)
+		if row:
+			doc.append("tasks", row)
 	if pairing_partner and pairing_partner != target and frappe.db.exists("User", pairing_partner):
 		doc.pairing_partner = pairing_partner
 	if frappe.db.exists("User", target):
@@ -369,6 +445,7 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		partner_doc.pairing_partner = target
 		partner_doc.paired_block = doc.name
 		partner_doc.associate_name = frappe.db.get_value("User", pairing_partner, "full_name") or pairing_partner
+		_copy_tasks(doc, partner_doc)
 		partner_doc.flags.ignore_permissions = True
 		if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
 			partner_doc.flags.ignore_links = True
@@ -396,6 +473,7 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 			team_doc.status = "Planned"
 			team_doc.paired_block = doc.name
 			team_doc.associate_name = frappe.db.get_value("User", colleague, "full_name") or colleague
+			_copy_tasks(doc, team_doc)
 			team_doc.flags.ignore_permissions = True
 			if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
 				team_doc.flags.ignore_links = True
@@ -414,8 +492,8 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 @frappe.whitelist()
 def update_work_block(block_name, work_date=None, start_time=None, end_time=None,
 					  task=None, project=None, deliverable_notes=None, status=None,
-					  cancel_reason=None):
-	"""Move / resize / re-target a planned block from the calendar."""
+					  cancel_reason=None, work_item_label=None):
+	"""Move / resize / re-target / retitle a planned block from the calendar or its drawer."""
 	from omnitrack.api.timesheet import sync_work_block_timesheet
 	doc = frappe.get_doc("Planned Work Block", block_name)
 	if doc.employee != frappe.session.user and not _is_planner_manager():
@@ -432,10 +510,19 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 	if end_time:
 		doc.end_time = end_time
 	if task is not None:
+		if (task or None) != doc.task:
+			# Re-targeting replaces the main task; any other tasks on the block stay.
+			doc.set("tasks", [r for r in doc.tasks if r.work_item not in (doc.work_item, doc.task)])
 		doc.task = task or None
 		if task and frappe.db.exists("DocType", "Task"):
 			doc.work_item = task
 			doc.work_item_label = frappe.db.get_value("Task", task, "subject") or doc.work_item_label
+	if work_item_label is not None:
+		# The block's own title; its tasks keep their names
+		work_item_label = str(work_item_label).strip()[:140]
+		if not work_item_label:
+			frappe.throw(_("A work block needs a title."), frappe.ValidationError)
+		doc.work_item_label = work_item_label
 	if project is not None:
 		doc.project = project or None
 	if deliverable_notes is not None:
@@ -469,6 +556,9 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 				synced = True
 			if status and partner_doc.status != doc.status:
 				partner_doc.status = doc.status
+				synced = True
+			if work_item_label and partner_doc.work_item_label != doc.work_item_label:
+				partner_doc.work_item_label = doc.work_item_label
 				synced = True
 			if cancel_reason and getattr(partner_doc, "cancel_reason", None) != doc.cancel_reason:
 				partner_doc.cancel_reason = doc.cancel_reason

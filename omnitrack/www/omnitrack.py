@@ -22,6 +22,8 @@ def get_context(context):
 	ctx.is_manager = 1 if is_omnitrack_manager(user) else 0
 	user_roles = frappe.get_roles(user)
 	ctx.is_client = 1 if ("OmniTrack Client" in user_roles and not ctx.is_manager) else 0
+	from omnitrack.utils.validators import get_min_log_line_chars
+	ctx.min_log_line_chars = get_min_log_line_chars()
 	# Bundle URLs carried a hard-coded version, so a rebuilt HUD bundle never
 	# reached the browser. Key the query on the built file's mtime instead:
 	# changes bust the cache, unchanged builds keep it.
@@ -51,7 +53,7 @@ def get_context(context):
 			blocks = frappe.get_all(
 				"Planned Work Block",
 				filters={"work_date": nowdate()},
-				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
+				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
 				order_by="start_time asc",
 				limit=50
 			)
@@ -59,14 +61,14 @@ def get_context(context):
 			blocks = frappe.get_all(
 				"Planned Work Block",
 				filters={"employee": user, "work_date": nowdate()},
-				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
+				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
 				order_by="start_time asc"
 			)
 			if not blocks:
 				blocks = frappe.get_all(
 					"Planned Work Block",
 					filters={"work_date": nowdate()},
-					fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
+					fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
 					order_by="start_time asc",
 					limit=20
 				)

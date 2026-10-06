@@ -25,7 +25,7 @@ class MidnightSplitter:
 			return False
 
 	@classmethod
-	def split_session_rows(cls, base_date, from_time, to_time, notes=None, logged_via="Manual", task_nature="🎯 Planned"):
+	def split_session_rows(cls, base_date, from_time, to_time, notes=None, logged_via="Manual", task_nature="Work"):
 		"""
 		Returns a tuple of two session row dicts [part1, part2] covering each calendar day.
 		"""

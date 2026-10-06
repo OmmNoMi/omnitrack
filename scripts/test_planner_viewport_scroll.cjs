@@ -30,7 +30,7 @@ const appVuePath = path.resolve(omnitrackDir, 'src', 'App.vue');
 const calendarViewPath = path.resolve(omnitrackDir, 'src', 'views', 'CalendarView.vue');
 
 const appVueContent = fs.existsSync(appVuePath) ? fs.readFileSync(appVuePath, 'utf8') : '';
-const calendarContent = fs.existsSync(calendarViewPath) ? fs.readFileSync(calendarViewPath, 'utf8') : '';
+const calendarContent = (() => { const d = path.resolve(omnitrackDir, 'src', 'views', 'calendar'); return [calendarViewPath, ...(fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.vue')).map((f) => path.join(d, f)) : [])].filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, 'utf8')).join('\n'); })();
 const htmlContent = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf8') : '';
 
 // Test 1: Desktop body / root containment for planner view

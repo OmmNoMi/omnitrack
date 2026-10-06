@@ -4,13 +4,14 @@
  * multi-line bullet session notes, and inactivity/runaway watchdog timers.
  */
 import { ref, computed } from "vue";
+import { WORK } from "../utils/activity.js";
 
 export function useActiveSession() {
   const isTracking = ref(false);
   const trackerSeconds = ref(0);
   const startTime = ref(null);
   const trackerBlockName = ref(null);
-  const selectedNature = ref("⚠️ Unplanned");
+  const selectedNature = ref(WORK);
   const selectedProject = ref("");
   const trackerNotes = ref("");
   const sessionNotesList = ref([]);
@@ -37,7 +38,7 @@ export function useActiveSession() {
     trackerSeconds.value = Math.max(0, Math.floor((now - startTime.value) / 1000));
   };
 
-  const startTimer = ({ blockName = null, nature = "⚠️ Unplanned", project = "", notes = "", initialStartTime = null } = {}) => {
+  const startTimer = ({ blockName = null, nature = WORK, project = "", notes = "", initialStartTime = null } = {}) => {
     isTracking.value = true;
     startTime.value = initialStartTime || Date.now();
     trackerBlockName.value = blockName;

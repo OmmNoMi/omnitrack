@@ -19,14 +19,14 @@
     <div class="space-y-4 text-xs">
       <!-- Current Session Summary & Wrap-Up Note -->
       <div class="p-3 rounded-2xl bg-gray-50 dark:bg-[#18191B] border border-gray-200 dark:border-gray-800 space-y-2">
-        <div class="flex items-center justify-between text-gray-600 dark:text-gray-300 font-medium">
+        <div class="flex items-center justify-between text-gray-700 dark:text-gray-300 font-medium">
           <span>Active Clock: <strong class="font-mono text-gray-900 dark:text-white">{{ formattedTime }}</strong></span>
           <span class="font-mono text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900">
             {{ isBound ? 'Bound to Block' : 'Unbound Focus' }}
           </span>
         </div>
         <div>
-          <label for="switch-wrap-note" class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+          <label for="switch-wrap-note" class="block text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
             Current Session Wrap-Up Note (Saved to timesheet)
           </label>
           <input
@@ -53,7 +53,7 @@
             placeholder="Search today's planned blocks or assigned tasks..."
             autocomplete="off"
           />
-          <svg class="w-4 h-4 absolute left-3 top-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <svg class="w-4 h-4 absolute left-3 top-3 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -62,7 +62,7 @@
 
       <!-- Candidate Selection List -->
       <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
-        <div v-if="candidates.length === 0" class="py-6 text-center text-gray-400 italic">
+        <div v-if="candidates.length === 0" class="py-6 text-center text-gray-600 italic">
           No matching work blocks or tasks found for today.
         </div>
         <button
@@ -82,7 +82,7 @@
               </span>
               <span class="font-bold text-gray-900 dark:text-white truncate text-xs">{{ item.label }}</span>
             </div>
-            <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+            <div class="text-[11px] text-gray-700 dark:text-gray-300 truncate">
               {{ item.sublabel || item.project || 'General' }}
             </div>
           </div>
@@ -95,9 +95,9 @@
 
     <template #footer>
       <div class="flex items-center justify-end gap-2 w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
           Cancel
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>

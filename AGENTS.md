@@ -107,10 +107,24 @@ compile error that renders an empty `#app` with no useful console message. Use
 Even a getter source (`() => dayTimeline.value`) throws if the ref is declared
 later in `setup()`. Register such watches inside `onMounted()`.
 
-## Gotcha: Frappe UI's Button drops `data-*` values
+## Gotcha: frappe-ui Button names and icons (0.1.278)
 
-`data-session-tool="stop"` renders as `data-session-tool=""`. Usable as a marker,
-never as a label — resolve identity positionally.
+* Button binds `:aria-label="label"` *after* `$attrs`, so a passed `aria-label` is replaced by `undefined`. Always name a Button with the `label` prop.
+* With no default-slot text and no `icon` prop or `#icon` slot, Button renders `label` as **visible** text. An icon drawn only in `#prefix` therefore shows a truncated "P…" beside it. Icon-only Buttons use `icon="feather-name"`, which makes the label screen-reader-only. Test 1 guards this.
+* `data-*` attributes keep their values (the older note saying they were dropped is wrong for 0.1.278).
+* The `tooltip` prop is for a few words plus a shortcut. Never repeat the visible text.
+
+## Gotcha: Dropdown vs Combobox
+
+`Dropdown` has no search box. Use it only for short, fixed action menus (the `SHORT_MENUS` allow-list in `scripts/test_workstation_interactions.cjs`). Any list built from data (teammates, projects, activity types, tasks) must be a searchable `Combobox`.
+
+A `Combobox` bound with `:model-value` + `@update:model-value` can emit its display text instead of an option value. Validate the emitted value against the options before acting on it (see `setSelectedEmployee`).
+
+Every frappe-ui component a template uses, `FeatherIcon` included, must be listed in `src/frappeUiComponents.js`.
+
+## Gotcha: tests must never leave data on ommnomi.local
+
+ommnomi.local is the owner's shared, working site. Python tests that insert Planned Work Blocks, ToDos or Users must clean up in `tearDown` and must not commit. Run them on a throwaway site. Past runs left ~100 test blocks and ~255 test ToDos there (see ROADMAP).
 
 ## Workflow
 
@@ -178,7 +192,7 @@ Long workflow action labels (e.g., *"Convert to Sales Invoice with Linked Delive
 ### 1. Mandatory Reuse of Existing Built Functionality
 * **Do Not Reinvent the Wheel**: Before introducing any new table, API endpoint, or UI modal, exhaustively inspect and reuse existing core structures:
   - Time Tracking & Plans: Always reuse `Planned Work Block`, `OmniTrack Work Session`, `OmniTrack Output Metric`, and standard `Timesheet`. Never create parallel data models.
-  - UI Component Layer: Always reuse standardized workstation controls (`f-dialog`, `f-button`, `f-combobox`, `f-dropdown-menu`). Prohibit ad-hoc HTML native inputs that break WCAG 2.2 AA standards.
+  - UI Component Layer: Always reuse standardized workstation controls (frappe-ui `Dialog`, `Button`, `Combobox`, `Dropdown`, `TextInput`, registered in `src/frappeUiComponents.js`). Prohibit ad-hoc HTML native inputs that break WCAG 2.2 AA standards.
   - Work Session Logging: Consolidate all session logging through `log_work_session` and `quick_timer_punch`. Do not scatter divergent time-writing logic across different files.
 
 ### 2. Frappe Native, Efficient & Secure
@@ -202,3 +216,45 @@ Long workflow action labels (e.g., *"Convert to Sales Invoice with Linked Delive
   - Never accept changes that fail `check_www_html.py` (HTML5 spec parser) or `check_www_js.cjs` (VM compilation).
 
 
+
+## Gotcha: an unregistered component is silent in production
+A production Vue build renders an unregistered `<f-button>` as an inert custom element with no warning (this is how dialogs once rendered inline and buttons lost their styling). `scripts/check_component_registry.cjs` resolves every `_resolveComponent()` in every SFC template against `app.component(...)` in `src/main.js`, the SFC's `components`, and the frappe-ui globals. Register new shared components in `main.js` (Pascal and kebab names).
+
+## Gotcha: views only see their own props and setup
+Extracted SFC views get no access to the workstation. Declare dependencies with `useWorkstationContext([...names])`; `scripts/check_sfc_ctx.cjs` verifies the list covers every `_ctx.x` in the template. Also avoid passing values declared later in the facade into composable `opts` bags (const TDZ); pass functions.
+
+## Gotcha: never take a calendar date from `toISOString()`
+`new Date(ms).toISOString().split('T')[0]` is the **UTC** date. In IST, anything between 00:00 and 05:30 local comes out as yesterday. This made `restoreActiveSession` evict live sessions as "prior-day zombies". Use `getLocalTodayISO(date)` (useWorkstationShell) or build `YYYY-MM-DD` from `getFullYear/getMonth/getDate`.
+
+## Gotcha: frappe-ui dialogs have no z-index (0.1.278)
+`.dialog-overlay` stacks only by DOM order, so anything positioned with a z-index (the sticky header z-40, the planner now-line and hovered blocks z-20) paints over an open dialog. `src/styles/main.css` lifts `.dialog-overlay` to z-50. Keep page chrome below 50.
+
+Every frappe-ui popover (TimePicker list, DatePicker calendar, Dropdown, Combobox) is portalled to `<body>` in a `[data-reka-popper-content-wrapper]`. reka copies the content's own `z-index` (auto) **inline** onto that wrapper, so once the overlay is lifted the popovers open behind their dialog. `main.css` sets the wrapper to `z-index: 60 !important`, and the `!important` is required. `scripts/check_dialog_popovers.cjs` guards it.
+
+## Gotcha: a document-level Escape handler must skip `defaultPrevented`
+frappe-ui popovers close themselves on Escape and call `preventDefault()` (TimePicker uses `@keydown.esc.prevent`). A `document.addEventListener('keydown')` handler that closes dialogs on Escape (`onPlannerKeydown` in `useWorkstationEod.js`) therefore sees that same key too, and one Escape closes both the list and the dialog. Start every such handler with `if (e.defaultPrevented) return;`. Guarding the dialog component alone is not enough. That was the first fix tried, and it did nothing.
+
+reka's Combobox and MultiSelect are the exception: they close on Escape **without** `preventDefault`, so `defaultPrevented` is false when a bubble-phase document handler runs. Also return when `popoverOpen()` (`src/utils/popover.js`) is true. At that moment the list's content is still rendered. `_slashFocus` (`useWorkstationShortcuts.js`, which minimizes the session popup) checks both, and so does `onPlannerKeydown`, through its capture-phase `notePopoverEscape`. Test with a real key press in the browser. A synthetic `dispatchEvent` from a script does not open the list first, so it proves nothing.
+
+## Gotcha: TimePicker and Combobox attrs (frappe-ui 0.1.278)
+* `TimePicker` drops every attr (its Popover has `inheritAttrs: false`), so `aria-label`, `class` and `id` passed to it do nothing. Style its input from a wrapper (`[&_input]:h-9`).
+* `TimePicker` with `:options` shows the option's `label` in the list but formats the input itself ("1:45 pm").
+* `Combobox` accepts `variant` and `size` (they render as `data-variant`/`data-size` on its anchor). The anchor is `inline-flex`, so make it full width from a wrapper: `[&_div[data-variant]]:w-full`.
+
+## Gotcha: Raven's routes
+`/app/raven` (→ `/desk/raven`) is Raven's Desk *workspace*, a list of DocTypes. The chat app is `/raven`. The OmniTrack Desk workspace is `/desk/omnitrack`.
+
+## Activity (task_nature) is Work, Break or Away
+Planned-ness is the block's `unplanned` Check, never an activity. Every stored, remembered or emitted value goes through `to_kind` (`omnitrack/utils/activity.py`) / `toKind` (`src/utils/activity.js`). Never patch a stored live-session default (`omnitrack_active_session`); normalise on read. `scripts/check_activity_kinds.cjs` keeps py, js and the DocType options in step.
+
+## Gotcha: migrate syncs a DocType only when its JSON `modified` is newer
+Editing a DocType JSON without bumping `modified` past the database's value is silently skipped by `bench migrate`. Migrate also rewrites `dashboard_chart` JSONs on the way. A Single DocType has no table, so `frappe.db.has_column` throws on it.
+
+## Gotcha: reka popovers read blurry
+reka places `[data-reka-popper-content-wrapper]` with a fractional `translate()` and writes `will-change: transform` inline, so the list rasterises off the pixel grid. `main.css` sets `will-change: auto !important` on it; `check_dialog_popovers.cjs` guards it.
+
+## Gotcha: focus after picking from a Dropdown
+reka's DropdownMenu hands focus back to its trigger after the menu has closed, which is later than `nextTick` and later than `setTimeout(0)`. To move focus elsewhere after a pick, listen once for `focusin` on the trigger's wrapper and refocus from there (`TaskFormDialog.ask`).
+
+## Gotcha: frappe-ui Tabs has no visible keyboard focus (0.1.278)
+`Tabs` (reka TabsRoot/TabsList/TabsTrigger) gives roving focus and an animated indicator. Its default trigger, though, is a bare `<button>` with no focus style, and its list carries `p-1 px-5 gap-5`, which you cannot override from outside. Until that changes, the app's tab bars use the Material tab in `SessionLogPane.vue` (`TAB`, `INDICATOR`, `COUNT`). On a tab, a focus ring must be **inset** (`focus-visible:ring-inset`) on a padded target. An outer ring on a bare label is clipped by the bar's underline into a broken box.

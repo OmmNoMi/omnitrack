@@ -138,7 +138,7 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 			- task (str, optional): ERPNext Task ID
 			- project (str, optional): Project ID
 			- deliverable_notes (str, optional): Description of what will be produced
-			- task_nature (str, optional): "🎯 Planned", "⚠️ Unplanned", "🚫 Out-of-Office"
+			- task_nature (str, optional): the activity: "Work", "Break" or "Away"
 		work_date (str, optional): Target work date (YYYY-MM-DD). Defaults to today.
 		employee (str, optional): Target user (only managers may target others).
 
@@ -180,7 +180,7 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 		task_id = item.get("task")
 		proj_id = item.get("project")
 		notes = item.get("deliverable_notes") or item.get("work_item_label") or item.get("notes") or ""
-		nature = item.get("task_nature") or "🎯 Planned"
+		nature = item.get("task_nature") or "Work"
 
 		res = book_work_block(
 			work_date=target_date,
@@ -248,7 +248,7 @@ def log_work_session(
 		block_name (str, optional): Existing Planned Work Block name.
 		notes (str): Detailed description of work done (REQUIRED).
 		session_date (str, optional): Date of work. Defaults to today.
-		task_nature (str, optional): "🎯 Planned", "⚠️ Unplanned", "☕ Break".
+		task_nature (str, optional): the activity: "Work", "Break" or "Away".
 		auto_create_block_if_missing (bool): Auto-creates a block if none is targeted.
 		logged_via (str): Source label (e.g. "AI Assistant", "Cursor", "Claude").
 		employee (str, optional): Target employee/user (defaults to current human user, e.g. Nomeshwer).
@@ -299,7 +299,7 @@ def log_work_session(
 				except Exception:
 					end_t = "10:00:00"
 
-			nature = task_nature or ("🎯 Planned" if task else "⚠️ Unplanned")
+			nature = task_nature or "Work"
 			bk_res = book_work_block(
 				work_date=target_date,
 				start_time=start_t,
@@ -311,6 +311,8 @@ def log_work_session(
 				employee=target_user
 			)
 			target_block = bk_res.get("name")
+			# Made only to hold this logged time: no block was planned for it
+			frappe.db.set_value("Planned Work Block", target_block, "unplanned", 1, update_modified=False)
 		else:
 			frappe.throw(_("No matching Planned Work Block found. Specify block_name or allow auto_create_block_if_missing."))
 
@@ -460,7 +462,7 @@ def quick_create_task(
 			work_item_label=subject,
 			project=project,
 			deliverable_notes=subject,
-			task_nature="🎯 Planned",
+			task_nature="Work",
 			employee=user
 		)
 		booked_block = res.get("name")
@@ -486,7 +488,7 @@ def quick_timer_action(
 	project=None,
 	notes=None,
 	block_name=None,
-	nature="🎯 Planned",
+	nature="Work",
 	start_time=None,
 	start_time_epoch_ms=None,
 	work_date=None,
@@ -506,7 +508,7 @@ def quick_timer_action(
 		project (str, optional): Linked project.
 		notes (str, optional): Session notes (required for "stop").
 		block_name (str, optional): Target Planned Work Block.
-		nature (str): Work nature (default "🎯 Planned").
+		nature (str): The activity (default "Work").
 		start_time (str, optional): Scheduled/retroactive start time (e.g. "21:30:00").
 		start_time_epoch_ms (int|str, optional): Exact epoch milliseconds.
 		work_date (str, optional): Target work date (YYYY-MM-DD). Defaults to today.
@@ -574,7 +576,7 @@ def quick_timer_action(
 
 		session_data = {
 			"startTime": start_ms,
-			"selectedNature": nature or "🎯 Planned",
+			"selectedNature": nature or "Work",
 			"selectedProject": project or "",
 			"trackerNotes": raw_notes,
 			"trackerBlockName": block_name or None,
@@ -607,7 +609,7 @@ def quick_timer_action(
 
 		target_block = block_name or (active.get("trackerBlockName") if active else None)
 		target_proj = project or (active.get("selectedProject") if active else None)
-		target_nature = nature or (active.get("selectedNature") if active else "🎯 Planned")
+		target_nature = nature or (active.get("selectedNature") if active else "Work")
 
 		# Log the session with exact from_time and to_time so the Workstation renders the Logged bar
 		res = log_work_session(
@@ -666,7 +668,7 @@ def add_timer_note(note, employee=None):
 
 
 @frappe.whitelist()
-def start_timer(block_name=None, notes=None, project=None, task=None, nature="🎯 Planned", start_time=None, start_time_epoch_ms=None, employee=None):
+def start_timer(block_name=None, notes=None, project=None, task=None, nature="Work", start_time=None, start_time_epoch_ms=None, employee=None):
 	"""Starts an active live stopwatch session for the target user (defaults to human operator).
 	The live stopwatch immediately begins ticking in the OmniTrack workstation UI across all devices.
 	Supports optional retroactive start_time (HH:MM:SS) or start_time_epoch_ms for on-time alignment.
@@ -1016,7 +1018,7 @@ def omnitrack_session(
 	session_date=None,
 	session_name=None,
 	target_block=None,
-	nature="🎯 Planned",
+	nature="Work",
 	employee=None
 ):
 	"""Unified controller for live stopwatch timers and completed timesheet sessions.
@@ -1317,7 +1319,7 @@ class OmniTrackPlanWorkBlocksTool(BaseTool):
 							"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001)"},
 							"project": {"type": "string", "description": "Project ID"},
 							"deliverable_notes": {"type": "string", "description": "What will be accomplished"},
-							"task_nature": {"type": "string", "description": "'🎯 Planned', '⚠️ Unplanned', or '🚫 Out-of-Office'"}
+							"task_nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away'."}
 						}
 					}
 				},
@@ -1483,7 +1485,7 @@ class OmniTrackQuickTimerActionTool(BaseTool):
 				},
 				"nature": {
 					"type": "string",
-					"description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'."
+					"description": "The activity: 'Work', 'Break' or 'Away'."
 				},
 				"work_date": {
 					"type": "string",
@@ -1532,7 +1534,7 @@ class OmniTrackStartTimerTool(BaseTool):
 				},
 				"nature": {
 					"type": "string",
-					"description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'. Defaults to '🎯 Planned'."
+					"description": "The activity: 'Work', 'Break' or 'Away'. Defaults to 'Work'."
 				},
 				"employee": {
 					"type": "string",
@@ -1666,7 +1668,7 @@ class OmniTrackSwitchTimerTool(BaseTool):
 				"target_block": {"type": "string", "description": "Target Planned Work Block ID to switch to."},
 				"target_task": {"type": "string", "description": "Target Task ID to switch to."},
 				"target_project": {"type": "string", "description": "Target Project ID."},
-				"target_nature": {"type": "string", "description": "'🎯 Planned', '⚠️ Unplanned', or '☕ Break'."},
+				"target_nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away'."},
 				"current_session_notes": {"type": "string", "description": "Session notes to log for the block/session being closed."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
 			}
@@ -1996,7 +1998,7 @@ class OmniTrackSessionTool(BaseTool):
 				"session_date": {"type": "string", "description": "Date of work (YYYY-MM-DD)."},
 				"session_name": {"type": "string", "description": "Child session row ID (for 'adjust' or 'delete')."},
 				"target_block": {"type": "string", "description": "New target block ID (for 'switch' action)."},
-				"nature": {"type": "string", "description": "'🎯 Planned' or '⚠️ Unplanned' (default '🎯 Planned')."},
+				"nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away' (default 'Work')."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current user)."}
 			}
 		}

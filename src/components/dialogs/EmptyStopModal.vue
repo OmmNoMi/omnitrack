@@ -8,11 +8,11 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="space-y-3 py-1">
-      <p class="text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-600'">
+      <p class="text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
         You haven't added any bullet notes to this session. What would you like to do with this elapsed time?
       </p>
       <div class="block space-y-1">
-        <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+        <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
           Quick Note (used for Timesheet description):
         </label>
         <input
@@ -28,22 +28,22 @@
 
     <template #actions>
       <div class="flex items-center justify-end gap-2 w-full">
-        <f-button
+        <Button
           variant="outline"
           theme="gray"
           size="sm"
           @click="$emit('discard')"
         >
           Discard (No Timesheet)
-        </f-button>
-        <f-button
+        </Button>
+        <Button
           variant="solid"
           theme="blue"
           size="sm"
           @click="$emit('save')"
         >
           Save &amp; Log ({{ formattedHours }}h)
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>

@@ -39,7 +39,7 @@
     </div>
 
     <!-- Meta row: Time & Project -->
-    <div class="flex items-center justify-between gap-2 text-[10px]" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'">
+    <div class="flex items-center justify-between gap-2 text-[10px]" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
       <div class="font-mono font-medium flex items-center gap-1">
         <span>⏱</span>
         <span>{{ segTimeTitle(hoverCard.seg) }}</span>
@@ -61,7 +61,7 @@
       >
         TS: {{ hoverCard.seg && hoverCard.seg.timesheet ? hoverCard.seg.timesheet : hoverCard.block.timesheet }}
       </span>
-      <span v-else class="text-[9px] text-gray-400">{{ hoverCard.block.work_date }}</span>
+      <span v-else class="text-[9px] text-gray-600">{{ hoverCard.block.work_date }}</span>
 
       <button
         type="button"

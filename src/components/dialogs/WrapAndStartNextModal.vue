@@ -25,9 +25,9 @@
         <div class="font-extrabold text-sm text-gray-900 dark:text-white">
           {{ currentSessionLabel }}
         </div>
-        <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
-          <span v-if="selectedProject">📁 {{ selectedProject }}</span>
-          <span>🏷 {{ selectedNature }}</span>
+        <div class="text-[11px] text-gray-700 dark:text-gray-300 flex items-center gap-3">
+          <span v-if="selectedProject">{{ selectedProject }}</span>
+          <span>{{ selectedNature }}</span>
         </div>
 
         <!-- Session Summary Notes -->
@@ -47,7 +47,7 @@
       </div>
 
       <!-- Transition Indicator -->
-      <div class="flex items-center justify-center gap-2 text-gray-400 text-xs font-bold">
+      <div class="flex items-center justify-center gap-2 text-gray-600 text-xs font-bold">
         <span>↓</span>
         <span>Transitioning to</span>
         <span>↓</span>
@@ -66,7 +66,7 @@
         <div class="font-extrabold text-sm text-gray-900 dark:text-white">
           {{ targetItem.label }}
         </div>
-        <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-3">
+        <div class="text-[11px] text-gray-700 dark:text-gray-300 flex items-center gap-3">
           <span v-if="targetItem.sublabel">{{ targetItem.sublabel }}</span>
         </div>
       </div>
@@ -75,10 +75,10 @@
     <!-- Actions -->
     <template #actions>
       <div class="flex items-center justify-between gap-3 w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
           Cancel (Keep Current)
-        </f-button>
-        <f-button
+        </Button>
+        <Button
           variant="solid"
           theme="blue"
           size="sm"
@@ -91,7 +91,7 @@
             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
           </template>
           <span>Save &amp; Start Next Session</span>
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>
@@ -105,7 +105,7 @@ export default {
     formattedTime: { type: String, default: "00:00:00" },
     currentSessionLabel: { type: String, default: "Active Work Session" },
     selectedProject: { type: String, default: "" },
-    selectedNature: { type: String, default: "⚠️ Unplanned" },
+    selectedNature: { type: String, default: "Work" },
     wrapUpNote: { type: String, default: "" },
     targetItem: { type: Object, default: null },
     isSwitching: { type: Boolean, default: false },

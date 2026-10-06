@@ -55,7 +55,8 @@ export function useCollaborationStore({ postJSON, showToast }) {
 
   const openRavenApp = () => {
     if (typeof window !== 'undefined') {
-      window.open('/app/raven', '_blank');
+      // /app/raven is Raven's Desk workspace (a DocType list); the chat app itself is /raven
+      window.open('/raven', '_blank', 'noopener');
     }
   };
 

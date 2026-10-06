@@ -12,117 +12,50 @@
         @click="$emit('go-dashboard')"
       />
       <div class="flex items-center gap-2 min-w-0">
-        <span class="font-bold text-sm sm:text-base tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+        <span class="font-semibold text-lg sm:text-xl tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
           OmniTrack
         </span>
-        <span
-          v-if="isClient"
-          class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200 border border-blue-200 dark:border-blue-800 flex items-center gap-1 shrink-0"
-        >
-          <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-          Client Portal
-        </span>
+        <Badge v-if="isClient" theme="blue" variant="subtle">Client Portal</Badge>
       </div>
     </div>
 
     <!-- Header Controls: Stopwatch & Menu (Pure Frappe UI) -->
     <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
       <!-- Header stopwatch: click (or Shift+S) elevates to the session timesheet in full focus -->
-      <f-button
+      <Button
         v-if="!isClient"
-        :variant="isTracking ? (isSessionElevated ? 'solid' : 'subtle') : 'subtle'"
+        :variant="isTracking && isSessionElevated ? 'solid' : 'subtle'"
         :theme="isTracking ? (isSessionElevated ? 'blue' : 'red') : 'gray'"
-        size="sm"
-        class="font-mono !rounded-full !px-2.5 sm:!px-3 !py-1 text-xs font-bold transition-all cursor-pointer"
-        :aria-label="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
-        :title="isTracking ? (isSessionElevated ? 'Minimize full focus (Shift+S / Esc)' : 'Full focus (Shift+S)') : 'Start session (Shift+S)'"
+        class="font-mono tabular-nums"
+        :icon-right="isTracking && !isSessionElevated ? 'maximize-2' : undefined"
+        :label="stopwatchHint"
+        :tooltip="stopwatchTip"
         @click="$emit('toggle-focus')"
       >
         <template #prefix>
           <span
-            class="w-2 h-2 rounded-full mr-1 inline-block"
-            :class="isTracking ? (isSessionElevated ? 'bg-white animate-pulse' : 'bg-red-500 pulse-record') : 'bg-gray-400'"
+            class="w-2 h-2 rounded-full inline-block"
+            :class="isTracking ? (isSessionElevated ? 'bg-white animate-pulse' : 'bg-red-500 pulse-record') : 'bg-gray-500'"
+            aria-hidden="true"
           ></span>
         </template>
-        <span>{{ formattedTime }}</span>
-        <template #suffix>
-          <svg
-            v-if="isTracking && !isSessionElevated"
-            class="w-3 h-3 ml-1 text-red-500 dark:text-red-400"
-            view0="0"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
-          </svg>
-        </template>
-      </f-button>
+        {{ formattedTime }}
+      </Button>
 
-      <!-- Raven Team Collaboration Launcher -->
-      <f-button
-        variant="subtle"
-        theme="purple"
-        size="sm"
-        class="!rounded-full !px-2.5 sm:!px-3 !py-1 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors"
-        aria-label="Open Raven Collaboration"
-        title="Open Raven Team Chat"
-        @click="$emit('open-raven')"
-      >
-        <template #prefix>
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-        </template>
-        <span class="hidden sm:inline">Raven Chat</span>
-      </f-button>
-
-      <!-- Notification Status / Permission Button -->
-      <f-button
-        v-if="notificationPermission !== 'granted'"
-        variant="subtle"
-        :theme="notificationPermission === 'denied' ? 'red' : 'blue'"
-        size="sm"
-        class="!rounded-full !px-2.5 !py-1 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-        :title="notificationPermission === 'denied' ? 'Notifications blocked in browser settings' : 'Enable Mobile Notifications for timesheets'"
-        :aria-label="notificationPermission === 'denied' ? 'Notifications blocked' : 'Enable Mobile Notifications'"
+      <!-- Notifications: one quiet icon until the user decides; "blocked" lives in the menu -->
+      <Button
+        v-if="notificationPermission === 'default'"
+        variant="ghost"
+        icon="bell"
+        label="Enable alerts"
+        tooltip="Enable alerts"
         @click="$emit('enable-notifications')"
-      >
-        <template #prefix>
-          <span>{{ notificationPermission === 'denied' ? '🔕' : '🔔' }}</span>
-        </template>
-        <span class="hidden sm:inline">{{ notificationPermission === 'denied' ? 'Alerts Blocked' : 'Enable Alerts' }}</span>
-      </f-button>
+      />
 
-      <!-- App Menu (Pure Frappe UI FDropdownMenu) -->
-      <f-dropdown-menu
-        :items="headerMenuItems"
-        aria-label="OmniTrack Menu"
-        align="right"
-      >
-        <template #trigger="{ isOpen }">
-          <f-button
-            variant="subtle"
-            theme="gray"
-            size="sm"
-            class="!rounded-full !p-2 flex items-center justify-center cursor-pointer"
-            aria-label="Menu"
-            :aria-expanded="isOpen ? 'true' : 'false'"
-          >
-            <template #prefix>
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                <line x1="4" y1="7" x2="20" y2="7"></line>
-                <line x1="4" y1="12" x2="20" y2="12"></line>
-                <line x1="4" y1="17" x2="20" y2="17"></line>
-              </svg>
-            </template>
-          </f-button>
-        </template>
-      </f-dropdown-menu>
+      <!-- App menu -->
+      <Dropdown :options="menuItems" align="end">
+        <Button variant="ghost" icon="menu" label="Menu" />
+      </Dropdown>
     </div>
   </header>
 </template>
@@ -139,6 +72,26 @@ export default {
     notificationPermission: { type: String, default: "default" },
     headerMenuItems: { type: Array, default: () => [] }
   },
-  emits: ["go-dashboard", "toggle-focus", "open-raven", "enable-notifications"]
+  emits: ["go-dashboard", "toggle-focus", "open-raven", "enable-notifications"],
+  computed: {
+    // Raven is reached from the menu, keeping the header to the clock and the menu
+    menuItems() {
+      return [
+        { label: "Raven chat", icon: "message-circle", onClick: () => this.$emit("open-raven") },
+        // Desk is where the rest of Frappe lives; client-portal users have no Desk access
+        ...(this.isClient ? [] : [{ label: "OmniTrack Desk", icon: "grid", onClick: () => { window.location.href = "/desk/omnitrack"; } }]),
+        ...this.headerMenuItems
+      ];
+    },
+    stopwatchHint() {
+      if (!this.isTracking) return "Start session (Shift+S)";
+      return this.isSessionElevated ? "Minimize full focus (Shift+S / Esc)" : "Full focus (Shift+S)";
+    },
+    // Tooltips stay a few words: the action plus its shortcut, nothing the button already shows.
+    stopwatchTip() {
+      if (!this.isTracking) return "Start · Shift+S";
+      return this.isSessionElevated ? "Minimize · Esc" : "Full focus · Shift+S";
+    }
+  }
 };
 </script>

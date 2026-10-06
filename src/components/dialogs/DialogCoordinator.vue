@@ -3,18 +3,19 @@
     <!-- ========================================== -->
     <!-- MODULAR DIALOGS (Part 1: Session & Workflow)-->
     <!-- ========================================== -->
-    <BookWorkBlockModal
+    <!-- The only dialog that creates a work block; opened by workBlockStore.openPlanDialog() -->
+    <PlanWorkBlockDialog
       :model-value="showBookModal"
       @update:model-value="$emit('update:showBookModal', $event)"
-      :book-form="bookForm"
-      :book-form-task="bookFormTask"
+      :form="bookForm"
+      :busy="plannerBusy"
       :is-manager="isManager"
       :is-dark-mode="isDarkMode"
-      :planner-busy="plannerBusy"
-      :combobox-assignee-options="comboboxAssigneeOptions"
-      :combobox-book-task-options="comboboxBookTaskOptions"
-      :combobox-pairing-partner-options="comboboxPairingPartnerOptions"
-      @submit="$emit('submit-booking', $event)"
+      :task-options="comboboxBookTaskOptions"
+      :project-options="comboboxProjectOptions"
+      :partner-options="comboboxPairingPartnerOptions"
+      :assignee-options="comboboxAssigneeOptions"
+      @submit="$emit('submit-booking')"
     />
 
     <EmptyStopModal
@@ -69,43 +70,6 @@
     <!-- ========================================== -->
     <!-- MODULAR DIALOGS (Part 2: Planning & Lifecycles) -->
     <!-- ========================================== -->
-    <PlanFocusBlockModal
-      :model-value="showNewTaskModal"
-      @update:model-value="$emit('update:showNewTaskModal', $event)"
-      :new-task-form="newTaskForm"
-      :combobox-project-options="comboboxProjectOptions"
-      :combobox-task-options="comboboxTaskOptions"
-      :combobox-assignee-options="comboboxAssigneeOptions"
-      :team-members="teamMembers"
-      :nature-options="natureOptions"
-      :is-dark-mode="isDarkMode"
-      @submit="$emit('save-new-planned-task')"
-      @time-change="$emit('new-task-time-change', $event)"
-      @duration-preset="$emit('new-task-duration-preset', $event)"
-    />
-
-    <AdjustTimingModal
-      :model-value="showAdjustModal"
-      @update:model-value="$emit('update:showAdjustModal', $event)"
-      :adjust-mode="adjustMode"
-      @update:adjust-mode="$emit('update:adjustMode', $event)"
-      :is-tracking="isTracking"
-      :is-manager="isManager"
-      :is-dark-mode="isDarkMode"
-      :adjust-form="adjustForm"
-      :keep-running-elapsed-formatted="keepRunningElapsedFormatted"
-      :min-timesheet-date="minTimesheetDate"
-      :today-date="todayDate"
-      :original-start-time-formatted="originalStartTimeFormatted"
-      :adjust-duration-minutes="adjustDurationMinutes"
-      :adjust-duration-formatted="adjustDurationFormatted"
-      :adjust-duration-short="adjustDurationShort"
-      @nudge="$emit('nudge-adjust-time', $event)"
-      @set-end-now="$emit('set-adjust-end-now')"
-      @apply-start-time="$emit('apply-adjusted-start-time', $event)"
-      @submit-timesheet="$emit('submit-adjusted-timesheet', $event)"
-    />
-
     <RunawayTimerModal
       :model-value="showRunawayAlertModal"
       @update:model-value="$emit('update:showRunawayAlertModal', $event)"
@@ -167,14 +131,16 @@
       @confirm="$emit('submit-cancel-block', $event)"
     />
 
-    <EditSessionModal
+    <!-- The one timesheet panel: add, edit, a free window, or the running session -->
+    <TimesheetEntryDialog
       :model-value="showEditSessionModal"
       @update:model-value="$emit('update:showEditSessionModal', $event)"
-      :edit-form="editSessionForm"
-      :duration-hours="editSessionDuration"
+      :form="editSessionForm"
       :is-saving="isSavingEditSession"
       :is-dark-mode="isDarkMode"
-      @save="$emit('save-edit-session', $event)"
+      :day-offsets="entryDayOffsets"
+      @save="$emit('save-edit-session')"
+      @keep-running="$emit('keep-session-running')"
     />
   </div>
 </template>
@@ -189,12 +155,12 @@ export default {
     formattedTime: { type: String, default: "" },
     plannerBusy: { type: Boolean, default: false },
 
-    // BookWorkBlockModal
+    // PlanWorkBlockDialog
     showBookModal: { type: Boolean, default: false },
     bookForm: { type: Object, default: () => ({}) },
-    bookFormTask: { type: Object, default: null },
     comboboxAssigneeOptions: { type: Array, default: () => [] },
     comboboxBookTaskOptions: { type: Array, default: () => [] },
+    comboboxProjectOptions: { type: Array, default: () => [] },
     comboboxPairingPartnerOptions: { type: Array, default: () => [] },
 
     // EmptyStopModal
@@ -221,27 +187,6 @@ export default {
     workflowTargetTask: { type: Object, default: null },
     workflowComment: { type: String, default: "" },
     workflowBusy: { type: Boolean, default: false },
-
-    // PlanFocusBlockModal
-    showNewTaskModal: { type: Boolean, default: false },
-    newTaskForm: { type: Object, default: () => ({}) },
-    comboboxProjectOptions: { type: Array, default: () => [] },
-    comboboxTaskOptions: { type: Array, default: () => [] },
-    teamMembers: { type: Array, default: () => [] },
-    natureOptions: { type: Array, default: () => [] },
-
-    // AdjustTimingModal
-    showAdjustModal: { type: Boolean, default: false },
-    adjustMode: { type: String, default: "both" },
-    isTracking: { type: Boolean, default: false },
-    adjustForm: { type: Object, default: () => ({}) },
-    keepRunningElapsedFormatted: { type: String, default: "" },
-    minTimesheetDate: { type: String, default: "" },
-    todayDate: { type: String, default: "" },
-    originalStartTimeFormatted: { type: String, default: "" },
-    adjustDurationMinutes: { type: Number, default: 0 },
-    adjustDurationFormatted: { type: String, default: "" },
-    adjustDurationShort: { type: String, default: "" },
 
     // RunawayTimerModal
     showRunawayAlertModal: { type: Boolean, default: false },
@@ -275,11 +220,11 @@ export default {
     cancelReasons: { type: Array, default: () => [] },
     isTrackingThisBlock: { type: Boolean, default: false },
 
-    // EditSessionModal
+    // TimesheetEntryDialog
     showEditSessionModal: { type: Boolean, default: false },
     editSessionForm: { type: Object, default: () => ({}) },
-    editSessionDuration: { type: Number, default: 0 },
-    isSavingEditSession: { type: Boolean, default: false }
+    isSavingEditSession: { type: Boolean, default: false },
+    entryDayOffsets: { type: Array, default: () => [0, -1] }
   },
   emits: [
     "update:showBookModal",
@@ -299,16 +244,6 @@ export default {
     "update:showWorkflowModal",
     "update:workflowComment",
     "submit-workflow-action",
-    "update:showNewTaskModal",
-    "save-new-planned-task",
-    "new-task-time-change",
-    "new-task-duration-preset",
-    "update:showAdjustModal",
-    "update:adjustMode",
-    "nudge-adjust-time",
-    "set-adjust-end-now",
-    "apply-adjusted-start-time",
-    "submit-adjusted-timesheet",
     "update:showRunawayAlertModal",
     "select-runaway-option",
     "confirm-runaway-resolution",
@@ -325,7 +260,8 @@ export default {
     "update:showCancelModal",
     "submit-cancel-block",
     "update:showEditSessionModal",
-    "save-edit-session"
+    "save-edit-session",
+    "keep-session-running"
   ]
 };
 </script>

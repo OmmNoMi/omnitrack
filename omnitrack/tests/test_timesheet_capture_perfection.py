@@ -36,7 +36,7 @@ class TestTimesheetCapturePerfection(unittest.TestCase):
 		block.start_time = "10:00:00"
 		block.end_time = "12:00:00"
 		block.duration_hours = 2.0
-		block.task_nature = "🎯 Planned"
+		block.task_nature = "Work"
 		block.status = "Planned"
 		block.deliverable_notes = "Original planned deliverable"
 		block.insert(ignore_permissions=True)
@@ -64,7 +64,7 @@ class TestTimesheetCapturePerfection(unittest.TestCase):
 		block.start_time = "14:00:00"
 		block.end_time = "16:00:00"
 		block.duration_hours = 2.0
-		block.task_nature = "🎯 Planned"
+		block.task_nature = "Work"
 		block.status = "Planned"
 		block.deliverable_notes = "Feature sprint"
 		block.insert(ignore_permissions=True)
@@ -109,7 +109,7 @@ class TestTimesheetCapturePerfection(unittest.TestCase):
 			"to_time": "11:00:00",
 			"hours": 2.0,
 			"notes": "Session 1",
-			"task_nature": "🎯 Planned"
+			"task_nature": "Work"
 		})
 		b1.insert(ignore_permissions=True)
 		self.created_docs.append(("Planned Work Block", b1.name))
@@ -129,7 +129,7 @@ class TestTimesheetCapturePerfection(unittest.TestCase):
 			"to_time": "14:00:00",
 			"hours": 2.0,
 			"notes": "Session 2",
-			"task_nature": "🎯 Planned"
+			"task_nature": "Work"
 		})
 		b2.insert(ignore_permissions=True)
 		self.created_docs.append(("Planned Work Block", b2.name))
@@ -159,7 +159,7 @@ class TestTimesheetCapturePerfection(unittest.TestCase):
 			"to_time": "13:00:00",
 			"hours": 3.0,
 			"notes": "Sprint work",
-			"task_nature": "🎯 Planned"
+			"task_nature": "Work"
 		})
 		b.insert(ignore_permissions=True)
 		self.created_docs.append(("Planned Work Block", b.name))

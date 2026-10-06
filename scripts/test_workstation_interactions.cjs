@@ -13,12 +13,18 @@ const calVuePath = path.resolve(__dirname, '..', 'src', 'views', 'CalendarView.v
 const timeVuePath = path.resolve(__dirname, '..', 'src', 'views', 'TimesheetsView.vue');
 const attVuePath = path.resolve(__dirname, '..', 'src', 'views', 'AttendanceView.vue');
 const dashVuePath = path.resolve(__dirname, '..', 'src', 'views', 'DashboardView.vue');
+const calSectionDir = path.resolve(__dirname, '..', 'src', 'views', 'calendar');
+const calSectionPaths = fs.existsSync(calSectionDir) ? fs.readdirSync(calSectionDir).filter((f) => f.endsWith('.vue')).map((f) => path.join(calSectionDir, f)) : [];
+const dashSectionDir = path.resolve(__dirname, '..', 'src', 'views', 'dashboard');
+const dashSectionPaths = fs.existsSync(dashSectionDir) ? fs.readdirSync(dashSectionDir).filter((f) => f.endsWith('.vue')).map((f) => path.join(dashSectionDir, f)) : [];
 const blockDrawerPath = path.resolve(__dirname, '..', 'src', 'drawers', 'BlockDetailDrawer.vue');
 const ravenDrawerPath = path.resolve(__dirname, '..', 'src', 'drawers', 'RavenCollaborationDrawer.vue');
 const fMenuPath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'FDropdownMenu.vue');
 const fComboboxPath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'FCombobox.vue');
 
 const dialogsDir = path.resolve(__dirname, '..', 'src', 'components', 'dialogs');
+const sessionSplitDir = path.resolve(__dirname, '..', 'src', 'session');
+const sessionSplitPaths = fs.existsSync(sessionSplitDir) ? fs.readdirSync(sessionSplitDir).filter((f) => /\.(vue|js)$/.test(f) && f !== 'SessionBox.vue').map((f) => path.join(sessionSplitDir, f)) : [];
 const sessionBoxPath = path.resolve(__dirname, '..', 'src', 'session', 'SessionBox.vue');
 const dialogFiles = fs.existsSync(dialogsDir)
   ? fs.readdirSync(dialogsDir).filter(f => f.endsWith('.vue')).map(f => path.join(dialogsDir, f))
@@ -29,7 +35,6 @@ const bottomNavVuePath = path.resolve(__dirname, '..', 'src', 'components', 'lay
 const hoverCardVuePath = path.resolve(__dirname, '..', 'src', 'components', 'common', 'BlockHoverCard.vue');
 const sessionOverlayVuePath = path.resolve(__dirname, '..', 'src', 'components', 'layout', 'SessionOverlay.vue');
 const drawerCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'drawers', 'DrawerCoordinator.vue');
-const viewCoordinatorVuePath = path.resolve(__dirname, '..', 'src', 'views', 'ViewCoordinator.vue');
 const storesDir = path.resolve(__dirname, '..', 'src', 'stores');
 const storeFiles = fs.existsSync(storesDir)
   ? fs.readdirSync(storesDir).filter(f => f.endsWith('.js')).map(f => path.join(storesDir, f))
@@ -41,10 +46,10 @@ const composableFiles = fs.existsSync(composablesDir)
   : [composablePath];
 
 const filesToInspect = [
-  omnitrackHtmlPath, ...composableFiles, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath,
-  blockDrawerPath, ravenDrawerPath, fMenuPath, fComboboxPath, sessionBoxPath,
+  omnitrackHtmlPath, ...composableFiles, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath, ...dashSectionPaths, ...calSectionPaths,
+  blockDrawerPath, ravenDrawerPath, sessionBoxPath, ...sessionSplitPaths,
   headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath,
-  drawerCoordinatorVuePath, viewCoordinatorVuePath, ...storeFiles, ...dialogFiles
+  drawerCoordinatorVuePath, ...storeFiles, ...dialogFiles
 ];
 
 let content = '';
@@ -52,156 +57,133 @@ for (const f of filesToInspect) {
   if (fs.existsSync(f)) content += fs.readFileSync(f, 'utf8') + '\n';
 }
 
-// 1. Template Static Layout Assertions
-assert.ok(!content.includes('w-64 sm:w-72'), 'FAIL: Obsolete fixed width w-64 sm:w-72 should not be present in FDropdownMenu');
-assert.ok(content.includes('min-w-[13.5rem] sm:min-w-[18rem]') && content.includes('max-w-[calc(100vw-1.5rem)]'), 'FAIL: FDropdownMenu must use responsive min-w and max-w to prevent mobile clipping');
-assert.ok(content.includes('truncate') && content.includes(':title="item.label"'), 'FAIL: Menu item label must have truncate and title tooltip');
-assert.ok(content.includes('shrink-0 font-mono text-[10px]'), 'FAIL: Next-state badge must have shrink-0 font-mono styling');
-console.log('✓ Test 1: Spatial layout & dynamic width invariants verified.');
-
-// 2. Extract FDropdownMenu definition and test in sandbox
-let fDropdownMenuMatch = content.match(/const\s+FDropdownMenu\s*=\s*\{([\s\S]*?)\n\s*\};\n\s*const\s+FDialog/);
-if (!fDropdownMenuMatch && fs.existsSync(fMenuPath)) {
-  const fMenuStr = fs.readFileSync(fMenuPath, 'utf8');
-  const exportMatch = fMenuStr.match(/export\s+default\s*\{([\s\S]*?)\n\};\s*<\/script>/);
-  if (exportMatch) fDropdownMenuMatch = [exportMatch[0], exportMatch[1]];
-}
-assert.ok(fDropdownMenuMatch, 'FAIL: Could not extract FDropdownMenu definition from omnitrack.html or FDropdownMenu.vue');
-
-const mockItems = [
-  { action: 'Approve', label: 'Approve', next_state: 'Approved', onClick: () => {} },
-  { action: 'Reject', label: 'Reject', next_state: 'Rejected', onClick: () => {} },
-  { action: 'Send for Secondary Approval', label: 'Send for Secondary Approval', next_state: 'Approved', onClick: () => {} },
-  { action: 'Escalate to Finance Controller', label: 'Escalate to Finance Controller', next_state: 'Rejected', onClick: () => {} }
-];
-
-let triggerFocused = false;
-let focusedButtonIdx = -1;
-
-const mockButtons = mockItems.map((_, i) => ({
-  focus() { focusedButtonIdx = i; },
-  disabled: false
-}));
-
-const mockTriggerButton = {
-  focus() { triggerFocused = true; },
-  getAttribute(attr) { return attr === 'aria-expanded' ? 'true' : null; }
-};
-
-const mockEl = {
-  contains(target) { return target === mockEl || target === mockTriggerButton; },
-  querySelector(sel) {
-    if (sel.includes('button[aria-expanded]')) return mockTriggerButton;
-    return null;
-  },
-  querySelectorAll(sel) {
-    if (sel.includes('[role="menuitem"]')) return mockButtons;
-    return [];
+// 1. Menus are frappe-ui <Dropdown>: the custom FDropdownMenu is gone for good.
+const vueFiles = [];
+(function walk(dir) {
+  for (const f of fs.readdirSync(dir)) {
+    const p = path.join(dir, f);
+    if (fs.statSync(p).isDirectory()) walk(p);
+    else if (f.endsWith('.vue')) vueFiles.push(p);
   }
+})(path.resolve(__dirname, '..', 'src'));
+assert.ok(!fs.existsSync(fMenuPath), 'FAIL: FDropdownMenu.vue must stay deleted; menus use frappe-ui Dropdown');
+let dropdownCount = 0;
+let pickerCount = 0;
+// A Dropdown has no search box, so it is only for short, fixed action menus.
+// Anything that lists data (teammates, projects, activity types, tasks) grows
+// past five entries and must be a searchable Combobox instead. Adding a menu
+// here is a decision: it must stay at five options or fewer.
+const SHORT_MENUS = new Set([
+  'headerMenuItems',            // New task / timesheet / theme / alerts
+  'menuItems',                  // header: Raven chat + headerMenuItems
+  'getTaskWorkflowMenuItems(t)', // a task's workflow transitions
+  'moreActions',                // block drawer: Add timesheet entry, Cancel block
+  'taskMenu',                   // task form: Open discussion, Open full form, Remove from block
+  'statusMenu',                 // task form: the workflow moves open from one state
+  'priorityMenu',               // task form: the DocType's priorities (3 on ToDo, 4 on Task)
+  'plannerNatureMenuItems'      // multi-select toggles; ROADMAP: move to a searchable multi-select
+]);
+for (const f of vueFiles) {
+  const src = fs.readFileSync(f, 'utf8');
+  const rel = path.relative(path.resolve(__dirname, '..'), f);
+  assert.ok(!/<f-dropdown-menu|<FDropdownMenu/.test(src), `FAIL: ${rel} still uses the removed FDropdownMenu`);
+  // frappe-ui Button binds :aria-label="label" after $attrs, so a passed
+  // aria-label is silently replaced by undefined. Names go through `label`.
+  for (const b of src.matchAll(/<Button\b((?:[^>"]|"[^"]*")*)>/g)) {
+    assert.ok(!/\saria-label=|\s:aria-label=/.test(b[1]), `FAIL: ${rel} <Button aria-label> is dropped by frappe-ui; use the label prop`);
+  }
+  // With no default-slot text, Button renders `label` as visible text: an
+  // icon drawn in #prefix then shows a truncated "P…" next to it. Icon-only
+  // Buttons use the icon prop (or #icon slot).
+  for (const b of src.matchAll(/<Button\b((?:[^>"]|"[^"]*")*)>([\s\S]*?)<\/Button>/g)) {
+    if (!/(\s|:)label=/.test(b[1]) || /\s:?icon=/.test(b[1])) continue;
+    const text = b[2].replace(/<template #(prefix|suffix)>[\s\S]*?<\/template>/g, '').replace(/<!--[\s\S]*?-->/g, '').trim();
+    assert.ok(text || !/#prefix/.test(b[2]), `FAIL: ${rel} icon-only <Button> draws its icon in #prefix, so its label shows as text; use the icon prop`);
+  }
+  for (const m of src.matchAll(/<Dropdown\b((?:[^>"]|"[^"]*")*)>([\s\S]*?)<\/Dropdown>/g)) {
+    dropdownCount++;
+    assert.ok(/:options="/.test(m[1]), `FAIL: ${rel} <Dropdown> must bind :options`);
+    const opts = (m[1].match(/:options="([^"]*)"/) || [])[1];
+    assert.ok(SHORT_MENUS.has(opts), `FAIL: ${rel} <Dropdown :options="${opts}"> has no search box; data lists use a searchable <Combobox>`);
+    assert.ok(/<Button\b(?:[^>"]|"[^"]*")*\s:?label=/.test(m[2]), `FAIL: ${rel} <Dropdown> trigger Button needs a label (its accessible name)`);
+  }
+}
+// MultiSelect is frappe-ui's searchable many-pick list ("Work with" teammates)
+for (const f of vueFiles) pickerCount += (fs.readFileSync(f, 'utf8').match(/<(Combobox|MultiSelect)\b/g) || []).length;
+assert.ok(dropdownCount >= 3, `FAIL: expected >= 3 frappe-ui Dropdowns, found ${dropdownCount}`);
+// 9: the duplicate plan dialogs merged, and the plan dialog's task picker is its own
+// full-width searchable listbox (role=combobox + listbox), not a squeezed Combobox.
+assert.ok(pickerCount >= 9, `FAIL: expected >= 9 searchable Comboboxes / MultiSelects (teammate, project, activity pickers), found ${pickerCount}`);
+console.log(`✓ Test 1: ${dropdownCount} short menus are labelled frappe-ui Dropdowns, ${pickerCount} data pickers are searchable Comboboxes; FDropdownMenu removed.`);
+
+// 2. Menu option builders produce the frappe-ui option shape.
+const portalSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'composables', 'useWorkstationPortal.js'), 'utf8');
+// The action verb already names the outcome ("Approve"); a next-state pill or
+// description line only repeats it, so workflow options carry no description.
+const wfBuilder = portalSrc.match(/const getTaskWorkflowMenuItems = [\s\S]*?\n  };/);
+assert.ok(wfBuilder, 'FAIL: getTaskWorkflowMenuItems not found');
+assert.ok(!/next_state|description:/.test(wfBuilder[0]), 'FAIL: workflow options must not repeat the next state (duplicate information)');
+assert.ok(/theme:[^\n]*'red'/.test(portalSrc), 'FAIL: destructive workflow options (cancel/reject) must use theme red');
+assert.ok(!portalSrc.includes('getWorkflowActionClass'), 'FAIL: ad-hoc workflow option classes must not return');
+const layoutSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'composables', 'useWorkstationPlannerLayout.js'), 'utf8');
+assert.ok(/e\.preventDefault\(\)/.test(layoutSrc) && layoutSrc.includes('toggleNatureFilter(n)'), 'FAIL: nature multi-select must keep the menu open (event.preventDefault) while toggling');
+console.log('✓ Test 2: Workflow and nature options use the frappe-ui Dropdown option shape.');
+
+// 3-8. Attention grid roving. The rows carry three cells (task, Plan, Start Session);
+// workflow moves live only in the one task form, so the grid has no menu column.
+const gridMatch = content.match(/const onAttentionGridKey = \([\s\S]*?\n\s*\};\n/);
+assert.ok(gridMatch, 'FAIL: Could not find onAttentionGridKey');
+const lastCol = Number((content.match(/const ATTENTION_LAST_COL = (\d+);/) || [])[1]);
+assert.strictEqual(lastCol, 2, 'FAIL: attention rows have three cells (task, Plan, Start Session); ATTENTION_LAST_COL must be 2');
+const gridCtx = { moves: [], rows: [{}, {}, {}] };
+vm.createContext(gridCtx);
+const onAttentionGridKey = vm.runInContext(`
+  const ATTENTION_LAST_COL = ${lastCol};
+  const visibleAttentionTasks = { value: rows };
+  const focusAttentionCell = (r, c) => moves.push([r, c]);
+  ${gridMatch[0]}
+  onAttentionGridKey;
+`, gridCtx);
+const fakeEv = (key, attrs = {}, inMenu = false, mods = {}) => {
+  const ev = { key, ...mods, prevented: false, preventDefault() { ev.prevented = true; } };
+  ev.target = { getAttribute: (n) => (n in attrs ? attrs[n] : null), closest: (sel) => (inMenu && sel.includes('menu') ? {} : null) };
+  return ev;
 };
+let ev = fakeEv('ArrowDown', {}, true);
+onAttentionGridKey(ev, 1, 1);
+assert.strictEqual(gridCtx.moves.length, 0, 'FAIL: keys inside an open menu must not move grid rows');
+assert.strictEqual(ev.prevented, false, 'FAIL: keys inside an open menu must reach the menu');
+console.log('✓ Test 3: Keys inside an open menu never leak into grid roving.');
 
-const context = {
-  console,
-  document: {
-    activeElement: mockTriggerButton,
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  },
-  window: {
-    dispatchEvent: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  },
-  CustomEvent: class { constructor(name, detail) { this.name = name; this.detail = detail; } }
-};
+ev = fakeEv('End');
+onAttentionGridKey(ev, 1, 0);
+assert.strictEqual(JSON.stringify(gridCtx.moves.pop()), '[1,2]', 'FAIL: End must land on the last cell of the row (Start Session)');
+ev = fakeEv('End', {}, false, { ctrlKey: true });
+onAttentionGridKey(ev, 0, 0);
+assert.strictEqual(JSON.stringify(gridCtx.moves.pop()), '[2,2]', 'FAIL: Ctrl+End must land on the last cell of the last row');
+console.log('✓ Test 4: End and Ctrl+End stop at the last real cell.');
 
-vm.createContext(context);
-const evalCode = `
-  const FDropdownMenu = { ${fDropdownMenuMatch[1]} };
-  FDropdownMenu;
-`;
-const FDropdownMenu = vm.runInContext(evalCode, context);
+ev = fakeEv('ArrowDown', { 'aria-expanded': 'true' });
+onAttentionGridKey(ev, 1, 1);
+assert.strictEqual(gridCtx.moves.length, 0, 'FAIL: an expanded trigger must leave keys to its popup');
+console.log('✓ Test 5: An expanded trigger leaves navigation to its popup.');
 
-// Test Instance Setup
-const inst = {
-  items: mockItems,
-  disabled: false,
-  isOpen: false,
-  focusedIdx: -1,
-  $el: mockEl,
-  $emit: (evt, data) => {},
-  $nextTick: (fn) => fn && fn(),
-  ...FDropdownMenu.methods
-};
+ev = fakeEv('ArrowDown');
+onAttentionGridKey(ev, 1, 2);
+assert.strictEqual(JSON.stringify(gridCtx.moves.pop()), '[2,2]', 'FAIL: ArrowDown in a normal cell must move to the next row');
+assert.strictEqual(ev.prevented, true, 'FAIL: grid navigation must preventDefault to stop page scroll');
+console.log('✓ Test 6: ArrowDown in a normal cell moves one row down.');
 
-// Test 2: Open sets isOpen = true and focuses first item
-inst.open('first');
-assert.strictEqual(inst.isOpen, true, 'FAIL: open() must set isOpen = true');
-assert.strictEqual(inst.focusedIdx, 0, 'FAIL: open("first") must set focusedIdx = 0');
-assert.strictEqual(focusedButtonIdx, 0, 'FAIL: open("first") must shift DOM focus to item 0');
-console.log('✓ Test 2: Menu open transfers programmatic DOM focus to item[0].');
+ev = fakeEv('ArrowUp');
+onAttentionGridKey(ev, 1, 2);
+assert.strictEqual(JSON.stringify(gridCtx.moves.pop()), '[0,2]', 'FAIL: ArrowUp must rove up in the same column');
+console.log('✓ Test 7: ArrowUp keeps the column while roving rows.');
 
-// Test 3: ArrowDown advances focusedIdx with stopPropagation
-let prevented = false;
-let stopped = false;
-inst.onMenuKeydown({
-  key: 'ArrowDown',
-  preventDefault: () => { prevented = true; },
-  stopPropagation: () => { stopped = true; }
-});
-assert.strictEqual(prevented, true, 'FAIL: ArrowDown must preventDefault');
-assert.strictEqual(stopped, true, 'FAIL: ArrowDown must stopPropagation to prevent grid leak');
-assert.strictEqual(inst.focusedIdx, 1, 'FAIL: ArrowDown must advance focusedIdx to 1');
-assert.strictEqual(focusedButtonIdx, 1, 'FAIL: ArrowDown must shift DOM focus to item 1');
-console.log('✓ Test 3: ArrowDown inside menu advances focus and stops event propagation.');
-
-// Test 4: ArrowUp decrements focusedIdx
-inst.onMenuKeydown({
-  key: 'ArrowUp',
-  preventDefault: () => {},
-  stopPropagation: () => {}
-});
-assert.strictEqual(inst.focusedIdx, 0, 'FAIL: ArrowUp must decrement focusedIdx to 0');
-assert.strictEqual(focusedButtonIdx, 0, 'FAIL: ArrowUp must shift DOM focus to item 0');
-console.log('✓ Test 4: ArrowUp inside menu decrements focus with circular wrapping.');
-
-// Test 5: End key jumps to last item
-inst.onMenuKeydown({
-  key: 'End',
-  preventDefault: () => {},
-  stopPropagation: () => {}
-});
-assert.strictEqual(inst.focusedIdx, 3, 'FAIL: End must jump to last item');
-console.log('✓ Test 5: End key jumps to last menu item.');
-
-// Test 6: Escape key closes menu and restores trigger focus
-triggerFocused = false;
-inst.onMenuKeydown({
-  key: 'Escape',
-  preventDefault: () => {},
-  stopPropagation: () => {}
-});
-assert.strictEqual(inst.isOpen, false, 'FAIL: Escape must set isOpen = false');
-assert.strictEqual(inst.focusedIdx, -1, 'FAIL: Escape must reset focusedIdx = -1');
-assert.strictEqual(triggerFocused, true, 'FAIL: Escape must restore DOM focus to trigger');
-console.log('✓ Test 6: Escape closes menu and deterministically restores focus to trigger.');
-
-// Test 7: Trigger ArrowDown opens menu and focuses first item
-inst.onTriggerKeydown({
-  key: 'ArrowDown',
-  preventDefault: () => {},
-  stopPropagation: () => {}
-});
-assert.strictEqual(inst.isOpen, true, 'FAIL: Trigger ArrowDown must open menu');
-assert.strictEqual(inst.focusedIdx, 0, 'FAIL: Trigger ArrowDown must focus first item');
-console.log('✓ Test 7: Trigger ArrowDown opens menu and focuses first item.');
-
-// Test 8: Grid roving protection against open dropdown menus
-// When target is inside a menu, onAttentionGridKey must return early and NOT shift task rows
-const scriptMatches = content.match(/const onAttentionGridKey = \([\s\S]*?\n\s*\};\n/);
-assert.ok(scriptMatches, 'FAIL: Could not find onAttentionGridKey in omnitrack.html');
-
-console.log('✓ Test 8: onAttentionGridKey isolation shield verified.');
+ev = fakeEv('Tab');
+onAttentionGridKey(ev, 1, 2);
+assert.strictEqual(gridCtx.moves.length, 0, 'FAIL: Tab must keep native behaviour');
+assert.strictEqual(ev.prevented, false, 'FAIL: Tab must not be prevented');
+console.log('✓ Test 8: onAttentionGridKey leaves non-navigation keys alone.');
 
 // Test 9: Concluded Deliverables Show-More & Note Expansion Invariants
 assert.ok(content.includes('in visiblePastFocusBlocks"'), 'FAIL: Concluded deliverables list must iterate over visiblePastFocusBlocks');
@@ -218,107 +200,22 @@ console.log('✓ Test 9: Concluded deliverables show-more and note-expansion inv
 const rawSelectMatches = content.match(/<select[\s>]/gi);
 assert.strictEqual(rawSelectMatches, null, 'FAIL: Zero raw <select> elements must remain in omnitrack.html template');
 
-// 10.2: Extract FCombobox definition and instantiate in vm sandbox
-let fComboboxMatch = content.match(/const\s+FCombobox\s*=\s*\{([\s\S]*?)\n\s*\};\n\s*const\s+FrappeUITimesheetBox/);
-if (!fComboboxMatch && fs.existsSync(fComboboxPath)) {
-  const fComboStr = fs.readFileSync(fComboboxPath, 'utf8');
-  const exportMatch = fComboStr.match(/export\s+default\s*\{([\s\S]*?)\n\};\s*<\/script>/);
-  if (exportMatch) fComboboxMatch = [exportMatch[0], exportMatch[1]];
+// 10.2: Pickers are frappe-ui <Combobox> (reka-ui: keyboard nav, typeahead,
+// listbox ARIA). Every instance needs an accessible name and a v-model, and
+// the hand-rolled FCombobox must not come back.
+let comboboxCount = 0;
+for (const f of vueFiles) {
+  const src = fs.readFileSync(f, 'utf8');
+  assert.ok(!/<f-combobox|<FCombobox/.test(src), `FAIL: ${path.basename(f)} uses the retired FCombobox`);
+  for (const m of src.matchAll(/<Combobox\b([^>]*)>/g)) {
+    comboboxCount++;
+    assert.ok(/aria-label=/.test(m[1]), `FAIL: <Combobox> in ${path.basename(f)} needs an aria-label`);
+    assert.ok(/v-model=/.test(m[1]) || (/:model-value=/.test(m[1]) && /@update:model-value=/.test(m[1])), `FAIL: <Combobox> in ${path.basename(f)} needs a v-model (or :model-value with @update:model-value)`);
+  }
 }
-assert.ok(fComboboxMatch, 'FAIL: Could not extract FCombobox definition from omnitrack.html or FCombobox.vue');
-
-let emittedValue = null;
-let emittedEvent = null;
-let emittedChangeArg = null;
-let comboboxTriggerFocused = false;
-
-const mockTriggerEl = {
-  focus() { comboboxTriggerFocused = true; },
-  getAttribute(attr) { return attr === 'aria-expanded' ? 'false' : null; }
-};
-
-const mockSearchInput = {
-  focus() { /* focus search input */ }
-};
-
-const comboboxSandbox = {
-  console,
-  document: {
-    activeElement: mockTriggerEl,
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  },
-  window: {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => {}
-  },
-  CustomEvent: function(name, opts) { this.name = name; this.detail = opts && opts.detail; }
-};
-
-vm.createContext(comboboxSandbox);
-const comboboxCode = `
-  const def = { ${fComboboxMatch[1]} };
-  def;
-`;
-const comboboxDef = vm.runInContext(comboboxCode, comboboxSandbox);
-assert.strictEqual(typeof comboboxDef.methods.open, 'function');
-assert.strictEqual(typeof comboboxDef.methods.selectOption, 'function');
-assert.strictEqual(typeof comboboxDef.methods.clear, 'function');
-
-// Create instance
-const cInst = Object.assign({}, comboboxDef.data(), comboboxDef.methods, {
-  modelValue: '',
-  options: [
-    { value: 'TASK-001', label: 'Fix articulation agreements', kind: 'Task', project: 'OTC' },
-    { value: 'TODO-002', label: 'ClassLink enrollment validation', kind: 'ToDo', project: 'CC Tech' },
-    'General ad-hoc item'
-  ],
-  $emit(evt, val, extra) {
-    emittedEvent = evt;
-    emittedValue = val;
-    emittedChangeArg = extra;
-  },
-  $nextTick(cb) { cb(); },
-  $refs: {
-    searchInput: mockSearchInput,
-    optionsList: { children: [{ scrollIntoView: () => {} }] }
-  },
-  _triggerEl: mockTriggerEl
-});
-
-// Normalization check
-const normalized = comboboxDef.computed.normalizedOptions.call(cInst);
-assert.strictEqual(normalized.length, 3, 'FAIL: normalizedOptions must normalize all 3 items');
-assert.strictEqual(normalized[0].value, 'TASK-001');
-assert.strictEqual(normalized[0].kind, 'Task');
-assert.strictEqual(normalized[2].value, 'General ad-hoc item');
-assert.strictEqual(normalized[2].label, 'General ad-hoc item');
-
-// Filtering check
-cInst.normalizedOptions = normalized;
-cInst.searchQuery = 'classlink';
-const filtered = comboboxDef.computed.filteredOptions.call(cInst);
-assert.strictEqual(filtered.length, 1, 'FAIL: filteredOptions must filter by query');
-assert.strictEqual(filtered[0].value, 'TODO-002');
-
-// Trigger keydown open
-comboboxTriggerFocused = false;
-cInst.onTriggerKeydown({ key: 'ArrowDown', preventDefault: () => {}, stopPropagation: () => {} });
-assert.strictEqual(cInst.isOpen, true, 'FAIL: onTriggerKeydown ArrowDown must open combobox');
-
-// Selection check
-cInst.selectOption(filtered[0]);
-assert.strictEqual(emittedValue, 'TODO-002', 'FAIL: selectOption must emit selected option value');
-assert.strictEqual(cInst.isOpen, false, 'FAIL: selectOption must close popover');
-assert.strictEqual(comboboxTriggerFocused, true, 'FAIL: selectOption must restore focus to trigger');
-
-// Clear check
-cInst.clear({ stopPropagation: () => {}, preventDefault: () => {} });
-assert.strictEqual(emittedValue, '', 'FAIL: clear must emit empty string');
-assert.strictEqual(emittedEvent, 'change', 'FAIL: clear must emit change');
-
-console.log('✓ Test 10: FCombobox rendering, search filtering, keyboard nav, and anti-native-select invariants verified.');
+assert.ok(!fs.existsSync(fComboboxPath), 'FAIL: FCombobox.vue must stay deleted');
+assert.ok(comboboxCount >= 6, `FAIL: expected the dialog pickers to use <Combobox> (found ${comboboxCount})`);
+console.log('✓ Test 10: frappe-ui Combobox pickers are labelled and bound; no raw <select>, no FCombobox.');
 
 // Test 11: Day at a glance current-time indicator line invariants
 assert.ok(content.includes('v-if="selectedDashboardDate === todayDate"'), 'FAIL: Timeline must conditionally render current time line only when viewing today');
@@ -422,53 +319,15 @@ assert.ok(content.includes('prefers-reduced-motion: reduce'), 'FAIL: scrollIntoV
 
 console.log('✓ Test 12: Daily Accomplishments roving tabindex grid, arrow navigation & show more/less focus retention verified.');
 
-// Test 13: Adjust Timesheet Timing Modal Makeover & Intent Mode Invariants
-assert.ok(content.includes('adjustMode = \'keep_running\''), 'FAIL: Modal must have adjustMode toggle for keep_running');
-assert.ok(content.includes('adjustMode = \'stop_and_log\''), 'FAIL: Modal must have adjustMode toggle for stop_and_log');
-assert.ok(content.includes('Fix Start Time (Keep Running)'), 'FAIL: Modal must declare Fix Start Time option');
-assert.ok(content.includes('Stop & Log to Timesheet'), 'FAIL: Modal must declare Stop & Log to Timesheet option');
-assert.ok(content.includes('Live Stopwatch Preview'), 'FAIL: Mode A must display Live Stopwatch Preview');
-assert.ok(content.includes('keepRunningElapsedFormatted'), 'FAIL: Modal must compute keepRunningElapsedFormatted');
-assert.ok(content.includes('Update Start Time & Keep Running'), 'FAIL: Mode A primary button must be Update Start Time & Keep Running');
-
-// Validate keepRunningElapsedFormatted calculation in sandbox
-const timingSandbox = {
-  ref: (v) => ({ value: v }),
-  computed: (fn) => ({ get value() { return fn(); } }),
-  todayDate: { value: '2026-09-23' }
-};
-vm.createContext(timingSandbox);
-
-const timingCode = `
-  const adjustForm = ref({
-    work_date: '2026-09-23',
-    from_time: '10:00',
-    to_time: '11:00',
-    notes: ''
-  });
-  const keepRunningElapsedFormatted = (nowMs) => {
-    if (!adjustForm.value.from_time) return '0m 00s';
-    const [fh, fm] = adjustForm.value.from_time.split(':').map(Number);
-    const parts = adjustForm.value.work_date.split('-').map(Number);
-    const startMs = new Date(parts[0], parts[1] - 1, parts[2], fh, fm, 0).getTime();
-    const diffSecs = Math.max(0, Math.floor((nowMs - startMs) / 1000));
-    const h = Math.floor(diffSecs / 3600);
-    const m = Math.floor((diffSecs % 3600) / 60);
-    const s = diffSecs % 60;
-    const dec = (diffSecs / 3600).toFixed(2);
-    if (h > 0) return \`\${h}h \${String(m).padStart(2, '0')}m \${String(s).padStart(2, '0')}s (\${dec} hrs)\`;
-    return \`\${m}m \${String(s).padStart(2, '0')}s (\${dec} hrs)\`;
-  };
-  ({ adjustForm, keepRunningElapsedFormatted });
-`;
-const timingInst = vm.runInContext(timingCode, timingSandbox);
-
-// Suppose now is 10:25:30 on same day
-const fakeNow = new Date(2026, 8, 23, 10, 25, 30).getTime();
-const elapsedStr = timingInst.keepRunningElapsedFormatted(fakeNow);
-assert.strictEqual(elapsedStr.includes('25m 30s'), true, 'FAIL: keepRunningElapsedFormatted must calculate 25m 30s');
-
-console.log('✓ Test 13: Adjust Timesheet Timing Frappe UI makeover & intent mode invariants verified.');
+// Test 13: The running session is corrected in the one timesheet panel (TimesheetEntryDialog,
+// mode 'live'): Keep running moves its start, Stop and log ends it through the stop path.
+const entryPanel = fs.readFileSync(path.join(dialogsDir, 'TimesheetEntryDialog.vue'), 'utf8');
+assert.ok(/if \(this\.isLive\) return "Running session";/.test(entryPanel), 'FAIL: the live panel is titled Running session');
+assert.ok(entryPanel.includes('v-if="isLive"') && entryPanel.includes("@click=\"$emit('keep-running')\""), 'FAIL: only the live panel offers Keep running');
+assert.ok(entryPanel.includes('`Stop and log ${durationLabel(this.mins)}`'), 'FAIL: the live primary says how much it will log');
+assert.ok(/this\.isLive && f\.lines > 0/.test(entryPanel), 'FAIL: a running session with lines may be logged without extra notes');
+assert.ok(!/-30m|-15m|Live Stopwatch Preview/.test(entryPanel), 'FAIL: no nudge chips or stopwatch preview; DayTimeFields owns the times');
+console.log('✓ Test 13: the running session is corrected in the one timesheet panel.');
 
 // --- TEST 14: Midnight continuation inclusion in dayFocusBlocks & show-more threshold ---
 assert.strictEqual(content.includes('_blockEffectiveStartMins'), true, 'FAIL: _blockEffectiveStartMins helper missing from omnitrack.html');
@@ -1074,7 +933,7 @@ assert.ok(!content.includes('watch([showInactivityModal, showBookModal, showAdju
 
 // 4. Inactivity modal discard button and prolonged inactivity warning
 assert.ok(content.includes('discardInactivitySession'), 'FAIL: Inactivity modal must support discardInactivitySession action');
-assert.ok(content.includes('Prolonged Inactivity Detected'), 'FAIL: Inactivity modal must display prolonged inactivity alert when >=60m');
+assert.ok(content.includes("long() { return this.inactivityMinutes >= 60; }") && /v-if="long"\s+variant="ghost"\s+theme="red"[\s\S]{0,300}\$emit\('discard'\)/.test(content), 'FAIL: Inactivity modal must offer Discard once a session has gone 60m without a note');
 
 // 5. WorkBlocks lookup for past-day completed blocks in restoreActiveSession
 assert.ok(content.includes('(workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName)'), 'FAIL: restoreActiveSession must look up workBlocks to catch completed blocks from past dates');
@@ -1089,15 +948,16 @@ assert.ok(!content.includes('trackerElapsedSecs'), 'FAIL: Undeclared variable tr
 assert.ok(!content.includes('trackerElapsedFormatted'), 'FAIL: Undeclared variable trackerElapsedFormatted must be replaced with formattedTime');
 
 // 2. Global hoisting of nowMinute and todayISO at the top of setup to avoid TDZ errors
-const targetScope = content.includes('useOmniTrackWorkstation() {') ? 'useOmniTrackWorkstation() {' : 'setup() {';
-const setupIdx = content.indexOf(targetScope);
-const nowMinIdx = content.indexOf('const nowMinute = ref');
-const todayIsoIdx = content.indexOf('const todayISO = () => getLocalTodayISO()');
-assert.ok(setupIdx > 0 && nowMinIdx > setupIdx && nowMinIdx < setupIdx + 4500, 'FAIL: nowMinute must be declared at the top of setup() or composable');
-assert.ok(setupIdx > 0 && todayIsoIdx > setupIdx && todayIsoIdx < setupIdx + 4500, 'FAIL: todayISO must be declared at the top of setup() or composable');
+// The facade runs the first module (Shell) before any other, so a declaration there is hoisted above every consumer.
+const shellSrc = fs.readFileSync(path.join(composablesDir, 'useWorkstationShell.js'), 'utf8');
+const setupIdx = shellSrc.indexOf('export function useWorkstationShell');
+const nowMinIdx = shellSrc.indexOf('const nowMinute = ref');
+const todayIsoIdx = shellSrc.indexOf('const todayISO = () => getLocalTodayISO()');
+assert.ok(setupIdx >= 0 && nowMinIdx > setupIdx, 'FAIL: nowMinute must be declared in the first workstation module (useWorkstationShell)');
+assert.ok(setupIdx >= 0 && todayIsoIdx > setupIdx, 'FAIL: todayISO must be declared in the first workstation module (useWorkstationShell)');
 
 // 3. Export of startTime in setup return
-assert.ok(content.includes('startTime,\n        trackerSeconds,'), 'FAIL: startTime must be exported in setup() return');
+assert.ok(/startTime,\s+trackerSeconds,/.test(content), 'FAIL: startTime must be exported in setup() return');
 
 console.log('✓ Test 24: Calendar active session rendering & variable hoisting invariants verified.');
 
@@ -1154,14 +1014,14 @@ console.log('✓ Test 25: Mobile notification architecture, Service Worker & blo
 // ---------------------------------------------------------------------------
 // 1. openAdjustModal minimizes isSessionElevated so dialog is never occluded
 assert.ok(
-  content.includes('if (isSessionElevated.value) {\n          isSessionElevated.value = false;\n        }'),
-  'FAIL: openAdjustModal must de-elevate isSessionElevated to prevent dialog occlusion'
+  /if \(isSessionElevated\.value\) \{\s+isSessionElevated\.value = false;\s+\}/.test(content),
+  'FAIL: the timesheet panel (openPanel) must de-elevate isSessionElevated to prevent dialog occlusion'
 );
 
 // 2. Adjust modal specifies z-index="z-[75]" above elevated session popup (z-[70])
 assert.ok(
   content.includes('z-index="z-[75]"'),
-  'FAIL: showAdjustModal dialog must specify z-index="z-[75]"'
+  'FAIL: TimesheetEntryDialog must specify z-index="z-[75]"'
 );
 
 console.log('✓ Test 26: Adjust dialog stacking & de-elevation invariants verified.');
@@ -1169,21 +1029,9 @@ console.log('✓ Test 26: Adjust dialog stacking & de-elevation invariants verif
 // ---------------------------------------------------------------------------
 // TEST 27: Mobile Dropdown Viewport Clamping & Reflow (Issue #6)
 // ---------------------------------------------------------------------------
-// 1. FDropdownMenu defines adjustPosition method
-assert.ok(
-  content.includes('adjustPosition() {') &&
-  content.includes('menu.style.left = \'0px\';') &&
-  content.includes('menu.style.right = \'auto\';'),
-  'FAIL: FDropdownMenu must implement adjustPosition to clamp menu within viewport'
-);
-
-// 2. Responsive min-width and max-width classes on dropdown menu
-assert.ok(
-  content.includes('min-w-[13.5rem] sm:min-w-[18rem]') &&
-  content.includes('max-w-[calc(100vw-1.5rem)]'),
-  'FAIL: FDropdownMenu must use responsive min-w-[13.5rem] and max-w-[calc(100vw-1.5rem)] to prevent mobile clipping'
-);
-
+// Menus are frappe-ui Dropdowns (reka-ui popper): collision handling is the
+// library's job, so no hand-rolled positioning code may come back.
+assert.ok(!content.includes('adjustPosition() {'), 'FAIL: hand-rolled menu positioning must not return; Dropdown handles collisions');
 console.log('✓ Test 27: Mobile dropdown viewport clamping & reflow verified.');
 
 // ---------------------------------------------------------------------------
@@ -1433,7 +1281,7 @@ assert.ok(
   'FAIL: Obsolete r.top - 8 positioning which occludes the hovered card must be eliminated'
 );
 assert.ok(
-  content.includes('const openBlockDrawer = (b) => {\n        hideBlockHover();'),
+  /const openBlockDrawer = \(b\) => \{\s+hideBlockHover\(\);/.test(content),
   'FAIL: openBlockDrawer must immediately invoke hideBlockHover() to clear tooltip'
 );
 assert.ok(
@@ -1622,7 +1470,8 @@ assert.ok(
 );
 
 // Verify SessionBox.vue also has correct tab name ('notes' not 'log')
-const sessionBoxContent = fs.readFileSync(path.resolve(__dirname, '../src/session/SessionBox.vue'), 'utf8');
+const sessionDir = path.resolve(__dirname, '../src/session');
+const sessionBoxContent = fs.readdirSync(sessionDir).filter((f) => /\.(vue|js)$/.test(f)).map((f) => fs.readFileSync(path.join(sessionDir, f), 'utf8')).join('\n');
 assert.ok(
   sessionBoxContent.includes("activePaneTab.value = 'notes'") &&
   !sessionBoxContent.includes("activePaneTab.value = 'log'"),
@@ -1643,9 +1492,17 @@ assert.ok(
   'FAIL: SessionBox.vue must watch props.isElevated and reset activePaneTab to notes'
 );
 assert.ok(
-  sessionBoxContent.includes("v-if=\"activePaneTab !== 'chat'\"") &&
-  sessionBoxContent.includes(":class=\"activePaneTab !== 'chat' ?"),
-  'FAIL: SessionBox.vue must use activePaneTab !== chat to prevent blank tab state'
+  sessionBoxContent.includes("const paneTab = computed(() => (paneTabs.value.includes(activePaneTab.value) ? activePaneTab.value : 'notes'));") &&
+  sessionBoxContent.includes("v-if=\"paneTab === 'notes'\"") &&
+  !/v-(?:else-)?if="activePaneTab/.test(sessionBoxContent),
+  'FAIL: the session pane shows paneTab, which falls back to the Log, so an unknown tab never leaves it blank'
+);
+// The Details tab is the block drawer itself, inline: one component shows a block's details
+assert.ok(
+  /<BlockDetailDrawer\s+v-if="trackerBoundBlock"\s+inline\b/.test(sessionBoxContent) &&
+  sessionBoxContent.includes(":can-log-timesheet=\"() => false\"") &&
+  sessionBoxContent.includes("paneTabs = computed(() => ['notes', 'details',"),
+  'FAIL: the session Details tab renders BlockDetailDrawer inline (read-only), between Log and Task chat'
 );
 assert.ok(
   sessionBoxContent.includes("mt-auto") &&
@@ -1721,7 +1578,36 @@ assert.ok(
 
 console.log('✓ Test 44: Desktop viewport height freeze & internal component scrolling invariants verified.');
 
-console.log('\nSUCCESS: All 44 Tier 3 Workstation Interaction tests passed cleanly.\n');
+// Test 45: A mouse drag on the planner must never lose to the browser's native drag.
+// A 200 ms hold for mouse cancelled itself when the mouse moved 8 px first, so the
+// native text-drag ghost appeared and the range/reschedule "worked sometimes".
+{
+  const comp = (f) => fs.readFileSync(path.resolve(__dirname, '..', 'src', 'composables', f), 'utf8');
+  const fnBody = (src, name) => {
+    const i = src.indexOf('const ' + name + ' = ');
+    assert.ok(i >= 0, 'FAIL: ' + name + ' not found');
+    return src.slice(i, src.indexOf('\n  };', i));
+  };
+  for (const [file, fn] of [['useWorkstationPlannerSelect.js', 'startSlotSelect'], ['useWorkstationPlannerDrag.js', 'startBlockDrag']]) {
+    const body = fnBody(comp(file), fn);
+    const mouse = body.indexOf("ev.pointerType === 'mouse'");
+    const hold = body.indexOf('_armOnHold(');
+    assert.ok(mouse >= 0 && hold > mouse && /preventDefault\(\)/.test(body.slice(mouse, hold)),
+      `FAIL: ${fn} must start a mouse drag immediately (preventDefault, no hold); only touch waits for a hold`);
+  }
+  const grid = fs.readFileSync(path.resolve(calSectionDir, 'CalendarPlannerGrid.vue'), 'utf8');
+  for (const handler of ['startSlotSelect($event, d)', "startBlockDrag($event, seg.block, 'move')"]) {
+    const at = grid.indexOf('@pointerdown="' + handler + '"');
+    const tagStart = grid.lastIndexOf('<div', at);
+    const tag = grid.slice(tagStart, grid.indexOf('>', at));
+    assert.ok(/draggable="false"/.test(tag) && /@dragstart\.prevent/.test(tag) && /select-none/.test(tag),
+      `FAIL: the planner element calling ${handler} needs draggable="false", @dragstart.prevent and select-none so no native drag ghost appears`);
+  }
+}
+
+console.log('✓ Test 45: planner mouse drags start at once and never show a native drag ghost.');
+
+console.log('\nSUCCESS: All 45 Tier 3 Workstation Interaction tests passed cleanly.\n');
 process.exit(0);
 
 

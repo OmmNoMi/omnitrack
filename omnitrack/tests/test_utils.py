@@ -83,12 +83,12 @@ class TestOmniTrackUtils(FrappeTestCase):
 		self.assertEqual(time_str(timedelta(seconds=3665)), "01:01:05")
 		self.assertEqual(time_str(None), "")
 
-	def test_parse_block_tasks(self):
-		from omnitrack.utils.validators import parse_block_tasks
-		self.assertEqual(parse_block_tasks(None), [])
-		self.assertEqual(parse_block_tasks(""), [])
-		self.assertEqual(parse_block_tasks('[{"id": "1", "subject": "Test"}]'), [{"id": "1", "subject": "Test"}])
-		lines_parsed = parse_block_tasks("• First task\n• Second task")
+	def test_parse_legacy_block_tasks(self):
+		from omnitrack.utils.block_tasks import parse_legacy
+		self.assertEqual(parse_legacy(None), [])
+		self.assertEqual(parse_legacy(""), [])
+		self.assertEqual(parse_legacy('[{"id": "1", "subject": "Test"}]'), [{"id": "1", "subject": "Test"}])
+		lines_parsed = parse_legacy("• First task\n• Second task")
 		self.assertEqual(len(lines_parsed), 2)
 		self.assertEqual(lines_parsed[0]["subject"], "First task")
 

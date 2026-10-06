@@ -2,3 +2,6 @@
 
 [post_model_sync]
 omnitrack.patches.v1_3.backfill_pairing_partner_links
+omnitrack.patches.v1_4.connected_tasks_to_child_table
+omnitrack.patches.v1_5.split_activity_from_planned
+omnitrack.patches.v1_5.merge_activity_into_work_break_away

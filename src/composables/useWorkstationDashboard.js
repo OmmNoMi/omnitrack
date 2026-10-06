@@ -1,5 +1,8 @@
-import * as Vue from "vue";
-const { ref, computed, watch, nextTick } = Vue;
+import { ref, computed, watch, nextTick } from "vue";
+import { useDashboardDayNav } from "./useDashboardDayNav.js";
+import { toKind } from "../utils/activity.js";
+import { useDashboardKpis } from "./useDashboardKpis.js";
+import { useDashboardConcludedGrid } from "./useDashboardConcludedGrid.js";
 
 export function useWorkstationDashboard({
   todayDate,
@@ -257,8 +260,8 @@ export function useWorkstationDashboard({
     const st = (b.status || '').toLowerCase();
     if (st === 'cancelled') return 'red';
     if (st === 'completed' || st === 'logged (full)') return 'green';
-    if (st === 'logged (partial)') return 'amber';
-    if (st === 'logged (over)') return 'purple';
+    if (st === 'logged (partial)') return 'orange';
+    if (st === 'logged (over)') return 'blue';
     if (st === 'in progress') return 'blue';
     if (st === 'missed') return 'red';
     return 'blue';
@@ -274,10 +277,10 @@ export function useWorkstationDashboard({
     }
     if (diff < 0) {
       const mins = Math.round(Math.abs(diff) * 60);
-      return { label: `Concluded ${mins}m early (${diff.toFixed(1)}h)`, theme: 'amber' };
+      return { label: `Concluded ${mins}m early (${diff.toFixed(1)}h)`, theme: 'orange' };
     }
     const mins = Math.round(diff * 60);
-    return { label: `Overrun +${mins}m (+${diff.toFixed(1)}h)`, theme: 'purple' };
+    return { label: `Overrun +${mins}m (+${diff.toFixed(1)}h)`, theme: 'blue' };
   };
 
   const focusBlocksHeading = computed(() => {
@@ -302,7 +305,8 @@ export function useWorkstationDashboard({
     const planned = blocks.reduce((t, b) => t + (Number(b.duration_hours) || 0), 0);
     const logged = blocks.reduce((t, b) => t + (Number(b.actual_hours) || 0), 0);
     const date = selectedDashboardDateLabel.value;
-    if (!blocks.length) return date + ' · nothing planned yet — plan a focus block to fill it';
+    // The empty state below already says nothing is planned; the subtitle only names the day.
+    if (!blocks.length) return date;
     const n = blocks.length + (blocks.length === 1 ? ' block' : ' blocks');
     return date + ' · ' + n + ' · ' + planned.toFixed(1) + 'h planned · ' + logged.toFixed(1) + 'h logged';
   });
@@ -317,62 +321,8 @@ export function useWorkstationDashboard({
     return '';
   });
 
-  const shiftDashboardWeek = (delta) => {
-    dashboardWeekOffset.value += delta;
-    const cur = selectedDashboardDate.value;
-    if (cur) {
-      const [y, m, d] = cur.split('-').map(Number);
-      const dt = new Date(y, m - 1, d);
-      dt.setDate(dt.getDate() + delta * 7);
-      const pad = (n) => String(n).padStart(2, '0');
-      selectedDashboardDate.value = dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
-    }
-    nextTick(() => {
-      const day = document.querySelector('[data-day-strip] [data-day-btn][aria-checked="true"]');
-      if (day && document.activeElement && document.activeElement.closest && document.activeElement.closest('[data-day-strip]')) day.focus({ preventScroll: true });
-    });
-  };
-
-  const selectDashboardDate = (dt) => {
-    selectedDashboardDate.value = dt;
-  };
-
-  const _focusSelectedDay = () => {
-    nextTick(() => {
-      const el = document.querySelector('[data-day-strip] [data-day-btn][aria-checked="true"]');
-      if (el) el.focus();
-    });
-  };
-
-  const onDashboardDayKey = (ev) => {
-    const k = ev.key;
-    if (k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
-    if (!ev.target.closest || !ev.target.closest('[data-day-btn]')) return;
-    ev.preventDefault();
-    const days = dashboardWeekDays.value || [];
-    if (!days.length) return;
-    if (k === 'Home') { selectDashboardDate(days[0].dateStr); _focusSelectedDay(); return; }
-    if (k === 'End') { selectDashboardDate(days[days.length - 1].dateStr); _focusSelectedDay(); return; }
-    const idx = days.findIndex((d) => d.isSelected);
-    const next = (idx < 0 ? 0 : idx) + (k === 'ArrowRight' ? 1 : -1);
-    if (next < 0) {
-      shiftDashboardWeek(-1);
-      nextTick(() => { const ds = dashboardWeekDays.value; selectDashboardDate(ds[ds.length - 1].dateStr); _focusSelectedDay(); });
-      return;
-    }
-    if (next >= days.length) {
-      shiftDashboardWeek(1);
-      nextTick(() => { selectDashboardDate(dashboardWeekDays.value[0].dateStr); _focusSelectedDay(); });
-      return;
-    }
-    selectDashboardDate(days[next].dateStr);
-    _focusSelectedDay();
-  };
-
-  const resetDashboardToToday = () => {
-    dashboardWeekOffset.value = 0;
-    selectedDashboardDate.value = todayDate.value || getLocalTodayISO();
-  };
+  const { shiftDashboardWeek, selectDashboardDate, onDashboardDayKey, resetDashboardToToday } =
+    useDashboardDayNav({ selectedDashboardDate, dashboardWeekOffset, dashboardWeekDays, todayDate, getLocalTodayISO });
 
   const formatAmPm = (timeStr) => {
     if (!timeStr) return '';
@@ -412,13 +362,7 @@ export function useWorkstationDashboard({
     if (status === 'in progress') return pill('In Progress', 'bg-blue-50 text-blue-700', 'bg-blue-950/70 text-blue-300');
     if (status === 'missed') return pill('Missed', 'bg-red-50 text-red-600 border border-red-200', 'bg-red-950/70 text-red-400 border border-red-800');
     if (b.is_away) {
-      const natureStr = (b.task_nature || '').toLowerCase();
-      let awayLabel = 'Non-Paid';
-      if (natureStr.includes('break')) awayLabel = 'Break (Non-Paid)';
-      else if (natureStr.includes('leave')) awayLabel = 'Leave (Non-Paid)';
-      else if (natureStr.includes('absent')) awayLabel = 'Absent (Non-Paid)';
-      else if (natureStr.includes('out-of-office') || natureStr.includes('out of office')) awayLabel = 'OOO (Non-Paid)';
-      return pill(awayLabel, 'bg-rose-50 text-rose-700 border border-rose-200', 'bg-rose-950/70 text-rose-300 border border-rose-800/60');
+      return pill(toKind(b.task_nature), 'bg-rose-50 text-rose-700 border border-rose-200', 'bg-rose-950/70 text-rose-300 border border-rose-800/60');
     }
 
     const date = b.work_date || '';
@@ -433,183 +377,15 @@ export function useWorkstationDashboard({
     return pill('Today', 'bg-gray-100 text-gray-600', 'bg-gray-800 text-gray-300');
   };
 
-  const DEFAULT_KPIS = {
-    today: { target_hours: 8, planned_hours: 0, actual_hours: 0, variance_hours: 0, away_count: 0, block_count: 0, completed_count: 0, todo_completed_pct: 0, non_working_hours: 0 },
-    week: { target_hours: 40, planned_hours: 0, actual_hours: 0, variance_hours: 0, adherence_pct: 0, away_count: 0, block_count: 0, non_working_hours: 0 },
-    month: { target_hours: 160, planned_hours: 0, actual_hours: 0, capacity_hours: 160, capacity_pct: 0, away_count: 0, block_count: 0, non_working_hours: 0 }
-  };
+  const { dashboardKPIs, updateDashboardKPIs, paciPlannedHours, paciUnplannedHours, paciNonWorkingHours, paciRatio, totalFilteredHours } =
+    useDashboardKpis({ filteredWorkBlocks, isNonWorkingNature });
 
-  const dashboardKPIs = ref(JSON.parse(JSON.stringify(DEFAULT_KPIS)));
+  const {
+    concludedRovingRow, concludedRovingCol, canBlockReopen, hasBlockExpandableNotes, getConcludedNotesCol, getMaxConcludedCol,
+    setConcludedRoving, concludedTabindex, focusConcludedCell, onConcludedGridKey, toggleShowAllPastBlocks,
+    expandedBlockNotes, isBlockNotesExpanded, toggleBlockNotes, isLongNote
+  } = useDashboardConcludedGrid({ selectedDashboardDate, showAllPastBlocks, visiblePastFocusBlocks });
 
-  const updateDashboardKPIs = (incoming) => {
-    if (!incoming || typeof incoming !== 'object') return;
-    const base = JSON.parse(JSON.stringify(DEFAULT_KPIS));
-    ['today', 'week', 'month'].forEach(section => {
-      base[section] = Object.assign(
-        {},
-        base[section],
-        dashboardKPIs.value && dashboardKPIs.value[section] ? dashboardKPIs.value[section] : {},
-        incoming[section] && typeof incoming[section] === 'object' ? incoming[section] : {}
-      );
-    });
-    dashboardKPIs.value = base;
-  };
-
-  // PACI Computeds
-  const paciPlannedHours = computed(() => {
-    const list = filteredWorkBlocks.value;
-    const total = list.filter(b => !isNonWorkingNature(b.task_nature) && (!b.task_nature || !b.task_nature.includes('Unplanned')))
-                      .reduce((acc, b) => acc + (parseFloat(b.duration_hours) || 0), 0);
-    return (total || 11.5).toFixed(1);
-  });
-
-  const paciUnplannedHours = computed(() => {
-    const list = filteredWorkBlocks.value;
-    const total = list.filter(b => !isNonWorkingNature(b.task_nature) && b.task_nature && b.task_nature.includes('Unplanned'))
-                      .reduce((acc, b) => acc + (parseFloat(b.duration_hours) || 0), 0);
-    return (total || 2.0).toFixed(1);
-  });
-
-  const paciNonWorkingHours = computed(() => {
-    const list = filteredWorkBlocks.value;
-    const total = list.filter(b => isNonWorkingNature(b.task_nature))
-                      .reduce((acc, b) => acc + (parseFloat(b.actual_hours || b.duration_hours) || 0), 0);
-    return (total || 0).toFixed(1);
-  });
-
-  const paciRatio = computed(() => {
-    const p = parseFloat(paciPlannedHours.value) || 0;
-    const u = parseFloat(paciUnplannedHours.value) || 0;
-    const total = p + u;
-    if (total === 0) return 85.0;
-    return Math.round((p / total) * 100);
-  });
-
-  const totalFilteredHours = computed(() => {
-    return (parseFloat(paciPlannedHours.value) + parseFloat(paciUnplannedHours.value)).toFixed(1);
-  });
-
-  const capacityLeads = computed(() => [
-    { name: 'Hardik Sharma', expected: '8.0', target: '160', percent: 5, openTasks: 2 },
-    { name: 'Alex Vance', expected: '7.0', target: '160', percent: 4, openTasks: 1 },
-    { name: 'Nomeshwer Sharma', expected: '6.5', target: '140', percent: 5, openTasks: 2 },
-    { name: 'Meenaxi Maxi', expected: '5.5', target: '140', percent: 4, openTasks: 1 },
-    { name: 'Tariq Nomi', expected: '4.5', target: '120', percent: 4, openTasks: 1 },
-    { name: 'Elena Rostova', expected: '4.0', target: '160', percent: 3, openTasks: 1 },
-    { name: 'Amara Okafor', expected: '3.5', target: '140', percent: 3, openTasks: 1 }
-  ]);
-
-  // Roving Tabindex for Concluded Deliverables Grid (WCAG 2.2 AA)
-  const concludedRovingRow = ref(0);
-  const concludedRovingCol = ref(0);
-
-  const canBlockReopen = (b) => b && b.status !== 'Cancelled' && b.status !== 'Rescheduled';
-  const hasBlockExpandableNotes = (b) => b && (isLongNote(b.deliverable_notes) || (b.sessions && b.sessions.length > 1));
-
-  const getConcludedNotesCol = (b) => canBlockReopen(b) ? 3 : 2;
-
-  const getMaxConcludedCol = (b) => {
-    if (!b) return 1;
-    const hasReopen = canBlockReopen(b);
-    const hasNotes = hasBlockExpandableNotes(b);
-    if (hasReopen && hasNotes) return 3;
-    if (hasReopen || hasNotes) return 2;
-    return 1;
-  };
-
-  const setConcludedRoving = (r, c) => {
-    concludedRovingRow.value = r;
-    concludedRovingCol.value = c;
-  };
-
-  const concludedTabindex = (r, c) => (concludedRovingRow.value === r && concludedRovingCol.value === c) ? 0 : -1;
-
-  const focusConcludedCell = (targetRow, targetCol) => {
-    const rows = visiblePastFocusBlocks.value || [];
-    if (!rows.length) return;
-    const r = Math.max(0, Math.min(targetRow, rows.length - 1));
-    const b = rows[r];
-    const maxCol = getMaxConcludedCol(b);
-    const c = Math.max(0, Math.min(targetCol, maxCol));
-
-    setConcludedRoving(r, c);
-    nextTick(() => {
-      let el = document.querySelector(`[data-concluded-row="${r}"][data-concluded-col="${c}"]`);
-      if (!el) {
-        el = document.querySelector(`[data-concluded-row="${r}"][data-concluded-col="0"]`);
-        if (el) setConcludedRoving(r, 0);
-      }
-      if (el) {
-        el.focus();
-        if (el.scrollIntoView) {
-          const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          el.scrollIntoView({ block: 'nearest', behavior: prefersReduced ? 'auto' : 'smooth' });
-        }
-      }
-    });
-  };
-
-  const onConcludedGridKey = (ev, r, c) => {
-    if (ev.target && (ev.target.closest('[role="menu"]') || ev.target.closest('[role="dialog"]'))) return;
-    const k = ev.key;
-    if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
-
-    ev.preventDefault();
-    ev.stopPropagation();
-
-    const rows = visiblePastFocusBlocks.value || [];
-    if (!rows.length) return;
-
-    if (k === 'ArrowDown') {
-      focusConcludedCell(r + 1, c);
-    } else if (k === 'ArrowUp') {
-      focusConcludedCell(r - 1, c);
-    } else if (k === 'ArrowRight') {
-      focusConcludedCell(r, c + 1);
-    } else if (k === 'ArrowLeft') {
-      focusConcludedCell(r, c - 1);
-    } else if (k === 'Home') {
-      if (ev.ctrlKey || ev.metaKey) focusConcludedCell(0, 0);
-      else focusConcludedCell(r, 0);
-    } else if (k === 'End') {
-      if (ev.ctrlKey || ev.metaKey) {
-        const lastRow = rows.length - 1;
-        focusConcludedCell(lastRow, getMaxConcludedCol(rows[lastRow]));
-      } else {
-        focusConcludedCell(r, getMaxConcludedCol(rows[r]));
-      }
-    }
-  };
-
-  const toggleShowAllPastBlocks = () => {
-    showAllPastBlocks.value = !showAllPastBlocks.value;
-    nextTick(() => {
-      const rows = visiblePastFocusBlocks.value || [];
-      if (!rows.length) return;
-      const targetIndex = Math.min(1, rows.length - 1);
-      focusConcludedCell(Math.max(0, targetIndex), 0);
-    });
-  };
-
-  const expandedBlockNotes = ref(new Set());
-  const isBlockNotesExpanded = (name) => expandedBlockNotes.value.has(name);
-  const toggleBlockNotes = (name) => {
-    const next = new Set(expandedBlockNotes.value);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    expandedBlockNotes.value = next;
-  };
-  const isLongNote = (notes) => {
-    if (!notes) return false;
-    return notes.length > 110 || notes.includes('\n');
-  };
-
-  watch(selectedDashboardDate, () => {
-    showAllPastBlocks.value = false;
-    expandedBlockNotes.value = new Set();
-    concludedRovingRow.value = 0;
-    concludedRovingCol.value = 0;
-  });
 
   return {
     selectedDashboardDate,
@@ -670,7 +446,6 @@ export function useWorkstationDashboard({
     paciNonWorkingHours,
     paciRatio,
     totalFilteredHours,
-    capacityLeads,
     _minsOf,
     _blockEffectiveStartMins,
     _byTimeDesc,

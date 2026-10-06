@@ -6,7 +6,7 @@
  * Validates:
  * 1. OmniTrack HTML Document-level WCAG rules (language, meta-viewport zoom, landmarks)
  * 2. Workstation Modal & Dialog ARIA Accessibility (role="dialog", aria-modal, aria-labelledby)
- * 3. FDropdownMenu ARIA standards (role="menu", role="menuitem", aria-expanded)
+ * 3. Dropdown (frappe-ui) menu ARIA standards (role="menu", role="menuitem", aria-expanded)
  * 4. Combobox & Autocomplete standards (role="combobox", aria-autocomplete, role="listbox", role="option")
  * 5. Screen reader visually hidden announcements (<span class="sr-only"> / cv-sr-only)
  */
@@ -136,10 +136,10 @@ async function main() {
   const menuDom = new JSDOM(menuHtml, { virtualConsole, pretendToBeVisual: true });
   const menuResults = await runAxe(menuDom.window.document.documentElement);
   if (menuResults.violations.length > 0) {
-    printViolations('FDropdownMenu Component', menuResults.violations);
+    printViolations('Dropdown Component', menuResults.violations);
     totalViolations += menuResults.violations.length;
   } else {
-    console.log('  ✓ Test 3: FDropdownMenu accessibility hierarchy conforms to WAI-ARIA 1.2.');
+    console.log('  ✓ Test 3: Dropdown menu accessibility hierarchy conforms to WAI-ARIA 1.2.');
   }
 
   // Test Suite 4: Searchable Combobox & Live Autocomplete ARIA
@@ -172,7 +172,7 @@ async function main() {
   const comboboxDom = new JSDOM(comboboxHtml, { virtualConsole, pretendToBeVisual: true });
   const comboboxResults = await runAxe(comboboxDom.window.document.documentElement);
   if (comboboxResults.violations.length > 0) {
-    printViolations('FCombobox Component', comboboxResults.violations);
+    printViolations('Combobox Component', comboboxResults.violations);
     totalViolations += comboboxResults.violations.length;
   } else {
     console.log('  ✓ Test 4: Searchable Combobox meets WCAG 2.2 AA pattern requirements.');

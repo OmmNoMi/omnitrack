@@ -1,4 +1,5 @@
 import * as Vue from "vue";
+import { WORK, toKind } from "../utils/activity.js";
 const { ref, computed } = Vue;
 
 export function useWorkSessionStore({
@@ -18,7 +19,7 @@ export function useWorkSessionStore({
   const trackerSeconds = ref(0);
   const trackerTimer = ref(null);
   const trackerNotes = ref('');
-  const selectedNature = ref('🎯 Planned');
+  const selectedNature = ref(WORK);
   const selectedProject = ref('');
   const trackerProject = selectedProject;
   const trackerNature = selectedNature;
@@ -26,7 +27,6 @@ export function useWorkSessionStore({
   const startTime = ref(null);
   const sessionNotesList = ref([]);
   const discardConfirm = ref(false);
-  const sessionCardFlash = ref(false);
   const isSessionElevated = ref(false);
   const lastActivityTime = ref(Date.now());
   const lastInactivityAlertTime = ref(0);
@@ -246,7 +246,7 @@ export function useWorkSessionStore({
       isTracking.value = true;
       startTime.value = startMs;
       trackerSeconds.value = elapsed;
-      selectedNature.value = sessionData.selectedNature || '🎯 Planned';
+      selectedNature.value = toKind(sessionData.selectedNature);
       selectedProject.value = sessionData.selectedProject || '';
       let rawN = sessionData.trackerNotes || '';
       if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
@@ -462,7 +462,6 @@ export function useWorkSessionStore({
     startTime,
     sessionNotesList,
     discardConfirm,
-    sessionCardFlash,
     isSessionElevated,
     lastActivityTime,
     lastInactivityAlertTime,

@@ -21,11 +21,11 @@
         <div class="min-w-0 flex-1">
           <div class="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <span>{{ targetAction ? targetAction.action : '' }}</span>
-            <f-badge v-if="targetAction && targetAction.next_state" theme="blue" variant="subtle" size="xs">
+            <Badge v-if="targetAction && targetAction.next_state" theme="blue" variant="subtle" size="sm">
               Target: {{ targetAction.next_state }}
-            </f-badge>
+            </Badge>
           </div>
-          <p class="text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-gray-700 dark:text-gray-300 mt-1">
             Apply workflow transition to <strong class="text-gray-800 dark:text-gray-200">{{ targetTask ? (targetTask.doctype || 'Task') : 'Task' }}</strong>:
             <code class="font-mono text-[11px] px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">{{ targetTask ? (targetTask.docname || targetTask.id) : '' }}</code>
           </p>
@@ -36,23 +36,23 @@
         <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
           Handoff / Transition Comment (optional)
         </label>
-        <f-input
+        <TextInput
           :model-value="comment"
           @update:model-value="$emit('update:comment', $event)"
           placeholder="Add any context, completion notes, or reason for this status change..."
           size="md"
-        ></f-input>
+        ></TextInput>
       </div>
     </div>
 
     <template #actions>
       <div class="flex justify-end gap-2 w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)" :disabled="busy">
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)" :disabled="busy">
           Cancel
-        </f-button>
-        <f-button variant="solid" theme="blue" size="sm" @click="$emit('confirm')" :disabled="busy">
+        </Button>
+        <Button variant="solid" theme="blue" size="sm" @click="$emit('confirm')" :disabled="busy">
           Confirm {{ targetAction ? targetAction.action : 'Action' }}
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>

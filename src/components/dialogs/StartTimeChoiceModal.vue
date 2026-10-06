@@ -9,7 +9,7 @@
     @close="$emit('cancel')"
   >
     <div class="space-y-3 py-2">
-      <div class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+      <div class="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
         You are starting work on
         <span class="font-bold text-gray-900 dark:text-white">{{ pendingBlockLabel }}</span>,
         which was scheduled earlier today. How would you like to anchor your session start?
@@ -28,10 +28,9 @@
         >
           <div
             class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-            :class="opt.isOntime ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+            :class="opt.isOntime ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
           >
-            <span v-if="opt.isOntime" class="text-sm">🎯</span>
-            <span v-else class="text-sm">⏱️</span>
+            <FeatherIcon :name="opt.isOntime ? 'target' : 'clock'" class="w-4 h-4" aria-hidden="true" />
           </div>
           <div class="flex-1 min-w-0">
             <div
@@ -40,7 +39,7 @@
             >
               {{ opt.label }}
             </div>
-            <div class="text-[11px] mt-0.5 text-gray-500 dark:text-gray-400">
+            <div class="text-[11px] mt-0.5 text-gray-700 dark:text-gray-300">
               {{ opt.sublabel }}
             </div>
           </div>
@@ -50,7 +49,7 @@
 
     <template #actions>
       <div class="flex justify-end gap-2 w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('cancel')">Cancel</f-button>
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('cancel')">Cancel</Button>
       </div>
     </template>
   </f-dialog>

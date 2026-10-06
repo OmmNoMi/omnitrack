@@ -17,11 +17,11 @@
     <div v-if="targetBlock" class="space-y-4 text-xs">
       <!-- Target Block Summary Card -->
       <div class="p-3 rounded-2xl border" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
-        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-400">Target Block</div>
+        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-600">Target Block</div>
         <div class="font-extrabold text-sm text-gray-900 dark:text-white mt-0.5">
           {{ targetBlock.task_subject || targetBlock.work_item_label || targetBlock.deliverable_notes || 'Work block' }}
         </div>
-        <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2">
+        <div class="text-[11px] text-gray-700 dark:text-gray-300 mt-1 flex items-center gap-2">
           <span>📅 {{ targetBlock.work_date }}</span>
           <span>⏱ {{ formatHHMM(targetBlock.start_time) }}–{{ formatHHMM(targetBlock.end_time) }} ({{ formatDuration(targetBlock.duration_hours) }}h planned)</span>
         </div>
@@ -30,13 +30,12 @@
       <!-- Structured Reason Dropdown -->
       <div>
         <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Cancellation Reason *</label>
-        <f-combobox
+        <Combobox open-on-click
           v-model="cancelForm.reason"
           :options="reasons"
           placeholder="Select cancellation reason..."
-          search-placeholder="Filter cancellation reason..."
           aria-label="Cancellation reason"
-        ></f-combobox>
+         />
       </div>
 
       <!-- Notes / Context -->
@@ -75,10 +74,10 @@
     <!-- Footer Actions -->
     <template #actions>
       <div class="flex items-center justify-between gap-2 w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
           Keep Block
-        </f-button>
-        <f-button
+        </Button>
+        <Button
           variant="solid"
           theme="red"
           size="sm"
@@ -87,7 +86,7 @@
           @click="$emit('confirm')"
         >
           Confirm Cancellation
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>

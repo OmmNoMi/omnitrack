@@ -55,27 +55,27 @@ assert.ok(
 console.log('✓ Test 2: omnitrack.bundle.css contains compiled rose background utility classes.');
 
 const dashboardViewPath = path.resolve(omnitrackDir, 'src', 'views', 'DashboardView.vue');
-const dashboardViewContent = fs.existsSync(dashboardViewPath) ? fs.readFileSync(dashboardViewPath, 'utf8') : '';
+const dashboardViewContent = (() => { const d = path.resolve(omnitrackDir, 'src', 'views', 'dashboard'); return [dashboardViewPath, ...(fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.vue')).map((f) => path.join(d, f)) : [])].filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, 'utf8')).join('\n'); })();
 const targetTemplateContent = dashboardViewContent || htmlContent;
 
 // Test 3: Attention tab buttons have accessible contrast definitions
 const overdueIdx = targetTemplateContent.indexOf("setAttentionFilter('overdue')");
 assert.ok(overdueIdx !== -1, 'FAIL: Overdue attention filter button not found');
 const startBtn = Math.max(
-  targetTemplateContent.lastIndexOf('<f-button', overdueIdx),
+  targetTemplateContent.lastIndexOf('<Button', overdueIdx),
   targetTemplateContent.lastIndexOf('<button', overdueIdx)
 );
 const endBtn = targetTemplateContent.indexOf('>', overdueIdx) + 1;
 const overdueBtnHtml = targetTemplateContent.slice(startBtn, endBtn);
 
-const isFrappeUIOverdue = overdueBtnHtml.includes('<f-button') &&
+const isFrappeUIOverdue = overdueBtnHtml.includes('<Button') &&
   overdueBtnHtml.includes('theme="red"');
 const isCustomOverdue = (overdueBtnHtml.includes('bg-rose-600') || overdueBtnHtml.includes('bg-rose-700')) &&
   overdueBtnHtml.includes('text-white');
 
 assert.ok(
   isFrappeUIOverdue || isCustomOverdue,
-  'FAIL: Active overdue button must use genuine Frappe UI <f-button theme="red"> or solid high-contrast background'
+  'FAIL: Active overdue button must use genuine Frappe UI <Button theme="red"> or solid high-contrast background'
 );
 console.log('✓ Test 3: Active and inactive overdue button classes are properly configured for contrast.');
 

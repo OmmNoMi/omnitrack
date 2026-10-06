@@ -6,12 +6,23 @@ from frappe.utils import flt
 
 class PlannedWorkBlock(Document):
 	def validate(self):
+		self.normalize_activity()
 		self.validate_past_plan_immutability()
 		self.validate_timesheet_session_horizons()
 		self.resolve_project_from_task()
+		self.sync_primary_task()
 		self.calculate_duration()
 		self.roll_up_sessions()
 		self.generate_cryptographic_hash()
+
+	def normalize_activity(self):
+		"""Every activity, from any caller and in any older spelling, is stored as one plain kind.
+		First, so the past-plan lock compares like with like."""
+		from omnitrack.utils.activity import to_kind
+
+		self.task_nature = to_kind(self.task_nature)
+		for row in self.get("sessions") or []:
+			row.task_nature = to_kind(row.task_nature or self.task_nature)
 
 	def validate_past_plan_immutability(self):
 		"""Rule: Work blocks older than the configured Past Lock Grace Period (Hours)
@@ -101,6 +112,33 @@ class PlannedWorkBlock(Document):
 			task_project = frappe.db.get_value("Task", self.task, "project")
 			if task_project:
 				self.project = task_project
+
+	def sync_primary_task(self):
+		"""A block can be for several tasks (the `tasks` child table). Its main task,
+		`work_item`, is always the first row, so either side can be the one that was set."""
+		from omnitrack.utils.block_tasks import resolve_ref
+
+		rows = [r for r in (self.get("tasks") or []) if r.work_item]
+		ref = str(self.work_item or self.task or "").strip()
+		primary = None
+		if ref:
+			primary = next((r for r in rows if r.work_item == ref), None)
+			if not primary:
+				data = resolve_ref(ref) or {"work_item": ref, "subject": self.work_item_label or ref}
+				primary = self.append("tasks", data)
+				rows.append(primary)
+			if not self.work_item:
+				self.work_item = ref
+		elif rows:
+			primary = next((r for r in rows if r.reference_doctype), None)
+			if primary:
+				self.work_item = primary.work_item
+		if primary:
+			self.work_item_label = self.work_item_label or primary.subject
+			rows = [primary] + [r for r in rows if r is not primary]
+		for i, r in enumerate(rows, 1):
+			r.idx = i
+		self.set("tasks", rows)
 
 	def calculate_duration(self):
 		if self.start_time and self.end_time:

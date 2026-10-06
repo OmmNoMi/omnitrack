@@ -195,6 +195,13 @@
       "description": "Minimum word count required for work session accomplishments and deliverable notes across all industries (default: 15 words)."
     },
     {
+      "fieldname": "min_log_line_chars",
+      "fieldtype": "Int",
+      "label": "Minimum Characters per Session Log Line",
+      "default": 10,
+      "description": "A line added to a running session's log must be at least this long, so each one says what was done (default: 10 characters)."
+    },
+    {
       "fieldname": "allow_session_deletion",
       "fieldtype": "Check",
       "label": "Allow Standard Users to Delete Work Sessions",

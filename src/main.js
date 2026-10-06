@@ -1,16 +1,15 @@
 import * as Vue from "vue";
 import { createApp, reactive, h } from "vue";
 import { FrappeUI } from "frappe-ui";
+import { registerFrappeUIComponents } from "./frappeUiComponents.js";
 import { io } from "socket.io-client";
 import "frappe-ui/style.css";
 import "./styles/main.css";
 import App from "./App.vue";
 import SessionBox from "./session/SessionBox.vue";
-import FDropdownMenu from "./components/common/FDropdownMenu.vue";
-import FCombobox from "./components/common/FCombobox.vue";
-import BookWorkBlockModal from "./components/dialogs/BookWorkBlockModal.vue";
+import FDialog from "./components/common/FDialog.vue";
+import PlanWorkBlockDialog from "./components/dialogs/PlanWorkBlockDialog.vue";
 import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
-import AdjustTimingModal from "./components/dialogs/AdjustTimingModal.vue";
 import EmptyStopModal from "./components/dialogs/EmptyStopModal.vue";
 import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
 import RunawayTimerModal from "./components/dialogs/RunawayTimerModal.vue";
@@ -18,9 +17,9 @@ import EODWrapUpModal from "./components/dialogs/EODWrapUpModal.vue";
 import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
-import EditSessionModal from "./components/dialogs/EditSessionModal.vue";
+import TimesheetEntryDialog from "./components/dialogs/TimesheetEntryDialog.vue";
 import TaskWorkflowModal from "./components/dialogs/TaskWorkflowModal.vue";
-import PlanFocusBlockModal from "./components/dialogs/PlanFocusBlockModal.vue";
+import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
 import RavenCollaborationDrawer from "./drawers/RavenCollaborationDrawer.vue";
 import DashboardView from "./views/DashboardView.vue";
@@ -34,7 +33,6 @@ import BlockHoverCard from "./components/common/BlockHoverCard.vue";
 import SessionOverlay from "./components/layout/SessionOverlay.vue";
 import DialogCoordinator from "./components/dialogs/DialogCoordinator.vue";
 import DrawerCoordinator from "./drawers/DrawerCoordinator.vue";
-import ViewCoordinator from "./views/ViewCoordinator.vue";
 import router from "./router/index.js";
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
@@ -50,13 +48,10 @@ if (typeof window !== "undefined") {
 		SessionOverlay,
 		DialogCoordinator,
 		DrawerCoordinator,
-		ViewCoordinator,
 		SessionBox,
-		FDropdownMenu,
-		FCombobox,
-		BookWorkBlockModal,
+		FDialog,
+		PlanWorkBlockDialog,
 		InactivityGovernorModal,
-		AdjustTimingModal,
 		EmptyStopModal,
 		StartTimeChoiceModal,
 		RunawayTimerModal,
@@ -64,9 +59,8 @@ if (typeof window !== "undefined") {
 		SwitchTaskModal,
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
-		EditSessionModal,
+		TimesheetEntryDialog,
 		TaskWorkflowModal,
-		PlanFocusBlockModal,
 		BlockDetailDrawer,
 		RavenCollaborationDrawer,
 		DashboardView,
@@ -94,15 +88,13 @@ function mountApp(target = "#app") {
 	container.innerHTML = "";
 	const app = createApp(App);
 	app.use(FrappeUI);
+	registerFrappeUIComponents(app);
 	app.use(router);
-	app.component("FDropdownMenu", FDropdownMenu);
-	app.component("f-dropdown-menu", FDropdownMenu);
-	app.component("FCombobox", FCombobox);
-	app.component("f-combobox", FCombobox);
+	app.component("FDialog", FDialog);
+	app.component("f-dialog", FDialog);
 	app.component("SessionBox", SessionBox);
-	app.component("BookWorkBlockModal", BookWorkBlockModal);
+	app.component("PlanWorkBlockDialog", PlanWorkBlockDialog);
 	app.component("InactivityGovernorModal", InactivityGovernorModal);
-	app.component("AdjustTimingModal", AdjustTimingModal);
 	app.component("EmptyStopModal", EmptyStopModal);
 	app.component("StartTimeChoiceModal", StartTimeChoiceModal);
 	app.component("RunawayTimerModal", RunawayTimerModal);
@@ -110,9 +102,9 @@ function mountApp(target = "#app") {
 	app.component("SwitchTaskModal", SwitchTaskModal);
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
-	app.component("EditSessionModal", EditSessionModal);
+	app.component("TimesheetEntryDialog", TimesheetEntryDialog);
 	app.component("TaskWorkflowModal", TaskWorkflowModal);
-	app.component("PlanFocusBlockModal", PlanFocusBlockModal);
+	app.component("TaskFormDialog", TaskFormDialog);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
 	app.component("WorkstationHeader", WorkstationHeader);
@@ -121,13 +113,13 @@ function mountApp(target = "#app") {
 	app.component("SessionOverlay", SessionOverlay);
 	app.component("DialogCoordinator", DialogCoordinator);
 	app.component("DrawerCoordinator", DrawerCoordinator);
-	app.component("ViewCoordinator", ViewCoordinator);
 	app.component("DashboardView", DashboardView);
 	app.component("CalendarView", CalendarView);
 	app.component("TimesheetsView", TimesheetsView);
 	app.component("AttendanceView", AttendanceView);
 
-	app.mount(container);
+	// The root proxy is exposed so the smoke test can drive tabs and dialogs.
+	app.rootProxy = app.mount(container);
 	spaAppInstance = app;
 	return app;
 }
@@ -170,6 +162,7 @@ function mountSessionBox(target, props = {}) {
 	});
 
 	app.use(FrappeUI);
+	registerFrappeUIComponents(app);
 	app.mount(root);
 	sessionBoxInstance = app;
 
@@ -204,9 +197,7 @@ if (typeof window !== "undefined") {
 	window.OmniTrack = {
 		mountApp,
 		App,
-		SessionBox,
-		FDropdownMenu,
-		FCombobox
+		SessionBox
 	};
 
 	// Auto-mount SPA if empty shell container #app is detected
@@ -226,5 +217,5 @@ if (typeof window !== "undefined") {
 	}
 }
 
-export { Vue, FrappeUI, io, OmniTrackSessionBox, SessionBox, App, FDropdownMenu, FCombobox, mountApp };
+export { Vue, FrappeUI, io, OmniTrackSessionBox, SessionBox, App, mountApp };
 export default OmniTrackSessionBox;

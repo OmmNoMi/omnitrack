@@ -52,18 +52,18 @@
           >
             <div>
               <div class="font-bold">{{ b.task_subject || b.deliverable_notes || 'Focus Block' }}</div>
-              <div class="text-[11px] text-gray-500">
+              <div class="text-[11px] text-gray-700">
                 {{ b.start_time }}–{{ b.end_time }} ({{ formatDuration(b.duration_hours) }}h)
               </div>
             </div>
-            <f-button
-              size="xs"
+            <Button
+              size="sm"
               variant="solid"
               theme="green"
               @click="$emit('convert-block', b)"
             >
               Convert ({{ formatDuration(b.duration_hours) }}h)
-            </f-button>
+            </Button>
           </div>
         </div>
       </div>
@@ -76,12 +76,12 @@
     </div>
     <template #actions>
       <div class="flex items-center justify-between w-full">
-        <f-button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
+        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
           Close
-        </f-button>
-        <f-button variant="solid" theme="blue" size="sm" @click="$emit('complete')">
+        </Button>
+        <Button variant="solid" theme="blue" size="sm" @click="$emit('complete')">
           Complete EOD Ritual ✓
-        </f-button>
+        </Button>
       </div>
     </template>
   </f-dialog>

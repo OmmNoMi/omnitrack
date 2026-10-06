@@ -8,27 +8,23 @@
       :is-tracking="isTracking"
       :tracker-block-name="trackerBlockName"
       :planner-busy="plannerBusy"
-      :show-reschedule-form="showRescheduleForm"
-      :reschedule-form="rescheduleForm"
-      :show-block-manual-log="showBlockManualLog"
-      :session-form="sessionForm"
       :drawer-chat-messages="drawerChatMessages"
-      :hhmm="hhmm"
       :is-block-completed="isBlockCompleted"
       :is-block-reschedulable="isBlockReschedulable"
       :is-block-cancellable="isBlockCancellable"
       :can-log-timesheet="canLogTimesheet"
+      :can-review="canReview"
       @close="$emit('close-block-drawer')"
       @start-session="$emit('start-session', $event)"
       @stop-session="$emit('stop-session')"
-      @toggle-reschedule="$emit('toggle-reschedule')"
       @open-cancel-modal="$emit('open-cancel-modal', $event)"
-      @toggle-manual-log="$emit('toggle-manual-log')"
+      @log-session="$emit('log-session', $event)"
       @open-raven="$emit('open-raven', $event)"
-      @edit-session="$emit('edit-session', $event)"
-      @delete-session="$emit('delete-session', $event)"
+      @edit-session="(session, block) => $emit('edit-session', session, block)"
+      @delete-session="(session, block) => $emit('delete-session', session, block)"
       @submit-reschedule="$emit('submit-reschedule', $event)"
-      @submit-session="$emit('submit-session', $event)"
+      @approve="$emit('approve-block', $event)"
+      @flag="(block, reason) => $emit('flag-block', block, reason)"
     />
 
     <!-- Raven Collaboration Drawer -->
@@ -60,16 +56,12 @@ export default {
     isTracking: { type: Boolean, default: false },
     trackerBlockName: { type: String, default: null },
     plannerBusy: { type: Boolean, default: false },
-    showRescheduleForm: { type: Boolean, default: false },
-    rescheduleForm: { type: Object, default: () => ({}) },
-    showBlockManualLog: { type: Boolean, default: false },
-    sessionForm: { type: Object, default: () => ({}) },
     drawerChatMessages: { type: Array, default: () => [] },
-    hhmm: { type: Function, default: () => "" },
     isBlockCompleted: { type: Function, default: () => false },
     isBlockReschedulable: { type: Function, default: () => false },
     isBlockCancellable: { type: Function, default: () => false },
     canLogTimesheet: { type: Function, default: () => true },
+    canReview: { type: Boolean, default: false },
 
     // Raven Collaboration Drawer props
     showTaskRavenDrawer: { type: Boolean, default: false },
@@ -83,14 +75,14 @@ export default {
     "close-block-drawer",
     "start-session",
     "stop-session",
-    "toggle-reschedule",
     "open-cancel-modal",
-    "toggle-manual-log",
+    "log-session",
     "open-raven",
     "edit-session",
     "delete-session",
     "submit-reschedule",
-    "submit-session",
+    "approve-block",
+    "flag-block",
     "close-raven-drawer",
     "start-task-immediately",
     "plan-attention-task",

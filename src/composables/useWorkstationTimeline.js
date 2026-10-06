@@ -1,4 +1,5 @@
 import * as Vue from "vue";
+import { toKind } from "../utils/activity.js";
 const { ref, computed, watch, nextTick, onMounted } = Vue;
 
 export function useWorkstationTimeline({
@@ -70,7 +71,8 @@ export function useWorkstationTimeline({
     const blocks = workFocusBlocks.value || [];
     const planned = [], logged = [];
     blocks.forEach((bk) => {
-      const isUnplanned = bk.task_nature && bk.task_nature.includes('Unplanned');
+      // Unplanned time has no plan to draw, so it shows in the logged lane only
+      const isUnplanned = !!bk.unplanned;
       if (!isUnplanned) {
         const s = _minsOf(bk.start_time), e = _minsOf(bk.end_time);
         const dt = selectedDashboardDate.value;
@@ -110,7 +112,7 @@ export function useWorkstationTimeline({
           work_item_label: trackerNotes.value || 'Active Work Session',
           task_subject: trackerNotes.value || 'Active Work Session',
           project: selectedProject.value || '',
-          task_nature: selectedNature.value || '🎯 Planned'
+          task_nature: toKind(selectedNature.value)
         };
         logged.push({
           s: ss,

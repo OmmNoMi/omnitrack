@@ -547,6 +547,7 @@ four-layer "for whom / what / when / did" framing is codified there.
 - **Solution:** Apply independent `overflow-y-auto` to both the left "Assigned Work" column and the 24-hour Calendar hour grid. Remove whole-page scroll lock so evening hours (3 PM - 11:59 PM) are fully accessible.
 
 ### 2. Issue #17: Simplified Work Nature Architecture (Work, Break, Leave)
+- **Done 2026-10-06:** the activity is Work, Break or Away (Away is the owner's word for leave, absence and out-of-office). Planned-ness moved to the block's `unplanned` flag. See "Activity is Work, Break or Away" below.
 - **Problem:** Cluttered work nature options (Planned, Virtual Meeting, Unplanned Ops, Review & Sync, Break, Leave, Absent).
 - **Solution:** Consolidate into 3 canonical project planning modes:
   1. `Work` (Active execution & delivery)
@@ -594,3 +595,152 @@ four-layer "for whom / what / when / did" framing is codified there.
   3. Maintain lightweight Jinja entry shell (<100 lines) with pure Vite bundle loading (`omnitrack.bundle.js`).
 
 
+
+---
+
+## 🛠️ Production-Readiness Plan: SPA Maintainability (October 2026)
+
+Supersedes the M3b–M7 composable-slimming list. Goal: Helpdesk/CRM-style structure, OmniQuery-grade test discipline, nothing ships unverified in a browser.
+
+**Found 2026-10-05 (fixed, now guarded):** const-TDZ from by-value `opts` bags; undefined helpers (`flt`, `_livePollTimer`, `stopSessionRemote`…); `<f-dialog>` never registered; four views used ~170 template names they never declared (blank Dashboard). Guards: `npm run test:static` (`check_undefined_refs.cjs`, `check_sfc_ctx.cjs`).
+
+### Phase 0 — Safety net (DONE except Cypress login on a test site)
+1. ✅ Runtime smoke test `scripts/test_spa_smoke.cjs` (jsdom, no new deps; `npm run test:smoke`): boots the real bundle + `omnitrack.html`, visits all 4 tabs, opens/closes every dialog flag, fails on console errors, unresolved custom elements, blank tabs.
+2. ✅ `test:static` (undefined refs, SFC view contexts, **component registry**, file size) is in `npm test`, `run_quality_gate.cjs` and `.git/hooks/pre-commit`. Registry check mutation-verified (removing `FButton` registration fails 21 templates). The smoke test alone does NOT catch an unregistered component its fixtures never render, hence the static check.
+3. 🟡 Cypress golden path `cypress/integration/golden_path.js` + `cypress.config.js` (runs via `bench --site <site> run-ui-tests omnitrack --headless`). Boots and reaches the login step; blocked because `ommnomi.local` has no `admin_password` in its site config. Run it on a dedicated test site (set `admin_password`). Covers: tabs render, book block, log session (API), approve. Not covered yet: clicking Start/Stop in the UI.
+4. ✅ File-size gate `scripts/check_file_size.cjs` (500 lines, ceilings in `scripts/file_size_allowlist.json`, `--ratchet` lowers them). Current offenders: facade 4587, DashboardView 1949, SessionBox 1308, useWorkstationDashboard 680, CalendarView 664.
+
+### Found during Phase 0 (fix in Phase 1)
+- ✅ Fixed: App.vue wired the block and Raven drawers (and EOD "complete") to ~12 functions that never existed (`startSessionFromBlock`, `openRavenFromBlock`, `deleteSessionRow`, `submitBlockSession`, `showToast`, ...), so those actions were silent no-ops; arg order for edit/delete session was also wrong and DrawerCoordinator dropped the second arg. Now adapters in App.vue; `scripts/check_app_bindings.cjs` fails on any undefined template name. Block drawer actions verified statically only (no blocks today in the live site); Raven drawer → Plan verified in the browser.
+- ✅ Fixed: the 25 props nobody passed (`attendanceLogs`, `displayDays`, `managerTimesheets`, timeline/adherence values, ...) were also unused in the templates, so they were dead and are deleted. All remaining view props moved to `useWorkstationContext`, the never-emitted `emits` were removed, and `ViewCoordinator.vue` is deleted (App.vue renders the four views directly). Browser: all 4 tabs render, no console errors.
+
+### Phase 1 — Kill the bag-passing (Helpdesk pattern)
+1. Replace the 480-name facade return with domain composables/stores used directly: `useSession`, `usePlanner`, `useTimesheets`, `useAttendance`, `useDashboard`, `useAssignments`, `useCollaboration`, `useTheme`. Each imports what it needs; no `opts` objects of 30 functions, no `typeof x === 'function'` guards.
+2. Components call their composable (or `useWorkstationContext` as a stopgap), never prop-drill. ✅ Views done (ViewCoordinator deleted); DrawerCoordinator/dialogs still prop/emit.
+3. Rule: composable deps are passed as functions or imported singletons, never as values declared later (no TDZ class).
+
+### Phase 2 — Folder structure (feature-first, ≤500 lines/file)
+```
+src/
+  features/{dashboard,calendar,timesheets,attendance,session,planner}/
+     components/  composables/  api.js  index.js
+  shared/{components,composables,utils}   (FDialog, FCombobox, …)
+  app/{App.vue,router.js,providers.js}
+```
+- Split order: `useOmniTrackWorkstation.js` (4.6K) → per-feature composables; `DashboardView.vue` (1.9K) → ~10 section components (Hero/NowBlock, ClientMetrics, Timeline, Accomplishments, …); `SessionBox.vue` (1.3K) → header/timer/notes/binding parts; `CalendarView.vue` (663).
+- One move per PR/commit-sized step, browser-verified each time.
+
+### Phase 3 — Data layer on Frappe v16 idioms
+1. Replace hand-rolled `postJSON` with frappe-ui `createResource`/`createListResource` (caching, loading/error state, dedupe).
+2. Realtime via `frappe.realtime` wrapped in one `useRealtime` composable with cleanup.
+3. Server: `services/query.py` hermetic ORM/`frappe.qb` layer + TTL cache + invalidation hooks (Track B); whitelisted APIs thin, permission-checked, `frappe.has_permission`/`get_list` scoped.
+4. DocType naming/field governance migration (Track A) — only after Phase 0 tests exist.
+
+### Phase 4 — OmniQuery/OmmNoMi product parity
+- Same stack conventions as OmniQuery: Vitest + happy-dom `*.spec.js` beside source, `@/` alias, shared `FDialog/FCombobox/BaseModal` taken from one place (extract to a shared package or copy-with-sync, decide once), Dexie WAL for offline session start/stop, error-beacon telemetry, mutation tests in CI.
+- Reporting: expose OmniTrack hours/adherence as OmniQuery data sources via the Track B service layer.
+- A11y stays a gate (axe + keyboard/Esc/focus-trap invariants), dark mode tokens, mobile 375px check.
+
+### Phase 5 — Release hygiene
+- Build produces hashed assets (no stale-bundle surprises), `omnitrack.html` shell <100 lines, bundle-size budget, CHANGELOG, AGENTS.md updated with the gotchas above. Commit/push only on request.
+
+### Order of work
+Phase 0 → Phase 1 (dashboard first, as proof) → Phase 2 splits → Phase 3 → Phase 4/5. Each step ends with: `npm test`, mutation check for any new invariant, browser run of all tabs + dialogs with a clean console.
+
+## Phase 2 progress: DashboardView split
+- `DashboardView.vue` 1949 → 142 lines; ten section components in `src/views/dashboard/` (ClientPortal, HeroAgenda, AttentionTasks, DateSelector, Timeline, HappeningNow, UpcomingBlocks, PastBlocks, EodBanner, StatCards), each with its own `useWorkstationContext` list. Size ceiling ratcheted.
+- Found: the Timeline's `ref="timelineScroller"` was never exposed to the view after the refactor (edge-shadow scrolling dead); now in the section's context list.
+- `CalendarView.vue` 636 → 33 lines; `src/views/calendar/{AssignedTasks,PlannerGrid,WeekStats}`. Source-reading tests and the mutation target now follow the split files. Found: `plannerGridScroll` ref likewise had to be added to the grid section's context list.
+- `SessionBox.vue` 1308 → 125 lines: `useSessionChat/Display/TodoPicker/Notes.js` composables + `SessionLogPane.vue` / `SessionControlsPane.vue`, wired by `provide`/`useSessionContext` (same explicit-names pattern as the workstation). Smoke test now starts a timer and renders the HUD (it was never rendered by any test); `check_sfc_ctx` understands `useSessionContext` (mutation-verified).
+- Found: `blockTitle()` called an undefined `shortTime()` for untitled planned blocks (ReferenceError in the todo picker); now uses a local time formatter.
+- **Facade split done:** `useOmniTrackWorkstation.js` (4587 lines) is now a 41-line composer over 15 `useWorkstation*` modules (all < 450 lines). Modules share one `w` bag (`Object.assign(w, {...})`); forward references use `lazy(w, name)` from `workstationBag.js`. `check_app_bindings` reads the `Object.assign` surface.
+- Found: `session` falls back to a hardcoded personal email/name in `useWorkstationIdentity.js` when `window.OMNITRACK_SESSION` is missing. Remove before release.
+- Next: useWorkstationDashboard.js (680), then UI/contrast pass, Phase 3-5.
+
+## Progress — UI nativisation (this session)
+- Done: Button/Badge/Card → frappe-ui + `.omni-card`; `FDialog` now an adapter over frappe-ui `Dialog` (reka-ui focus trap/Esc/scroll lock/return focus; safe initial focus kept). `check_contrast_tokens` guards low-contrast gray text.
+- Done: UpcomingBlocks de-duplicated; secondary facts moved to hover `title`.
+- Open: replace `FInput`/`FCombobox`/`FDropdownMenu` with frappe-ui `TextInput`/`Combobox`/`Dropdown`; extend de-duplication + hover details to PastBlocks, Hero, Calendar cards; Material-style polish (surface tokens, elevation, rounded-xl); migrate dialog bodies off the adapter to bare `Dialog`; remove hardcoded fallback email in `useWorkstationIdentity.js`.
+- Done (2026-10-06): `FInput`/`FCombobox`/`FDropdownMenu` are gone. Every data list (teammate pickers in the planner rail, Timesheets and Attendance; the session's project and activity pickers) is now a searchable `Combobox`. `Dropdown` is kept only for short, fixed menus (the `SHORT_MENUS` allow-list in test 1; mutants 9 and 10 cover it).
+- Fixed: planner prev/next drew their chevron in `#prefix` with no `icon` prop, so frappe-ui showed the label as text ("P…"/"N…"). A static guard and mutant 9 now cover this.
+- Fixed: the planner rail filter tabs (emoji chips) overflowed the narrow rail. They are now plain text tabs that wrap. The card shows subject, project, and only an Urgent/High badge or an "Xh short" badge; planned/logged/expected hours and the id moved to the hover tooltip; Details and Discuss became icon Buttons.
+- Fixed: the teammate Combobox can emit its display text ("Administrator (You)"), which went to `get_planner_data` as `employee` and blanked the calendar. `setSelectedEmployee` now accepts only known options, mapping a label back to its value.
+- Fixed: opening `#/planner` directly (reload, bookmark) never fetched planner data, because `watch(activeTab)` only fires on change. It now also fetches in `onMounted`.
+- Fixed: header tooltips were long sentences that repeated the button text. Tooltips are now a few words plus the shortcut, and "Alerts blocked" moved into the app menu.
+
+### Dummy / test data on ommnomi.local (open — needs the owner's go-ahead)
+- About 100 Planned Work Blocks on ommnomi.local come from test runs:
+  - employees `test_partner@ommnomi.local` and `test1@example.com`
+  - labels such as "TDD Immutability Test Deliverables…", "Test block for sync mode Never" and "Collaborative Sprint"
+  - Administrator blocks with notes like "Ad-hoc debug punch"
+- About 255 test ToDos ("test doctype", "sanity check from console", "Draft Q4 logistics SOP", "Review cold-chain telemetry API").
+- A backup was taken before any cleanup: `sites/ommnomi.local/private/backups/20261006_013326-ommnomi_local-database.sql.gz`. The cleanup has NOT run.
+- Root cause to fix: these tests still write to the shared site and leave data behind. `tests/test_fac.py`, `test_collaborative_pairing.py`, and tests using `test1@example.com` (`test_timesheet_capture_perfection`, `test_block_notifications`, `test_temporal_governance`, `test_planned_work_block`) need tearDown cleanup with no commits, and should run on a throwaway site.
+- Duplicate real ToDos, probably a double import ("invite all users of otc", "review data mapping sheet", "create the articulation A12345"). Owner to decide.
+- Hardcoded fake people in code:
+  - `api/workstation.py` adds a `standard_members` list (Alex Vance, Elena Rostova …) to the team, and its team query includes Guest and Website Users.
+  - `useWorkstationIdentity.js` has a fake `teamMembers`/`hourlyPresence`, and falls back to "Hardik Sharma" as the current user.
+  - `stores/collaborationStore.js` has a fake team list.
+  - `useWorkstationShortcuts.js` has a fake team schedule.
+  - Fix: query enabled System Users only.
+- Open: the planner "All types" nature filter is multi-select, so it is still a `Dropdown`. Move it to a searchable multi-select.
+- Open: re-verify every view at 375px (mobile) after this pass. Rail cards, the Combobox popover and the session pane pickers have not been checked on a phone yet.
+
+### UI pass — overnight (2026-10-06)
+- Fixed: **an active session vanished on reload if it started after local midnight but before the UTC offset (00:00–05:30 in IST) and had run 6h or more.** `restoreActiveSession`'s "prior-day zombie" check compared the session's start date in UTC (`toISOString`) with today's local date, so it read as yesterday and the session was evicted on both client and server (`sync_active_session(null)`). Both sides now use local dates. It killed one real 7h20m session with no log lines during this pass.
+- Fixed (2026-10-06, by the activity split): the server default for `selectedNature` was still `"🎯 Planned"` (`api/stopwatch.py` `sync_active_session`, `useWorkstationSessionSync.js` restore). The current nature labels have no emoji ("Planned Work"), so this default matches no option. Normalise it to "Planned Work" (and migrate stored values).
+- Open: zombie eviction on reload is silent: no toast and no "recover?" prompt. A session dropped for being stale should tell the user and offer to save it with an end time.
+- Fixed: "Raven chat" opened `/app/raven`, which v16 redirects to Raven's **Desk workspace** (a DocType list), not the chat. It now opens `/raven`.
+- Done: Raven moved off the header into the ☰ menu (owner's call; the header is now clock + menu). Added "OmniTrack Desk" (`/desk/omnitrack`) to the menu, hidden for client-portal users. Brand name enlarged to match the logo. Guarded by `test_mobile_navbar` test 2.
+- Done: session HUD redesign. One frame, a clock card with a soft gradient, the log first on mobile, one-line "Logging to" binding, sentence-case labels, no emojis. Fixed a `<button>` nested inside the ToDo picker `<button>` (invalid HTML).
+- Done: Timesheets rows open the block drawer (approve/flag inside it); the list shows a status badge only.
+- Done: a frappe-ui `.dialog-overlay` has no z-index, so the sticky header (z-40) and the planner now-line painted over open dialogs. Fixed globally in `src/styles/main.css`.
+- Open: `npm test`'s SPA smoke test runs against the existing `dist`, so it passes on a stale build. A Vite compile error (duplicate attribute in App.vue) went unnoticed this way. Make the smoke step build first, or fail if `dist` is older than `src`.
+- Open (a11y): every planner hour slot is `tabindex=0`, which is 168 tab stops per week. It needs a roving grid (one tab stop, arrow keys move).
+- Open: the `useWorkstationShell.js` fallback session (no `window.OMNITRACK_SESSION`) defaults `is_manager: true` with a real person's email. It should default to a non-manager with empty values.
+
+### Plan dialog: time pickers and Google-style restyle (2026-10-06)
+- Done: the plan dialog uses frappe-ui `TimePicker` for both ends. The End list starts 15 min after Start and shows each time with its length ("2:30 pm (1.5 hrs)"), like Google Calendar. Picking an end time lights the matching length chip. Guarded by `check_dialog_popovers.cjs` (mutant 18).
+- Done: the gray `TabButtons` in the dialog became `ChoiceChips` (`src/components/common/ChoiceChips.vue`), a radio-group row of outline frappe-ui Buttons. Work is blue, Break green, Away amber. It has one tab stop, and the arrow keys and Home/End move the choice (mutant 17). Fields are outlined white and Save is solid blue.
+- Fixed: every frappe-ui popover (the TimePicker list, DatePicker calendar, Combobox) opened **behind** its dialog once `.dialog-overlay` was lifted to z-50. reka writes `z-index: auto` inline on `[data-reka-popper-content-wrapper]`, so the fix in `main.css` needs `!important` (mutant 15).
+- Fixed: Escape in an open TimePicker list closed the whole dialog. The cause was the document Escape handler `onPlannerKeydown` (`useWorkstationEod.js`), which now skips `e.defaultPrevented` (mutant 16). `FDialog` also ignores a close while a popover owns the Escape.
+- Open (upstream candidate): `TimePicker` drops every attr (its Popover has `inheritAttrs: false`), so its input cannot get an `aria-label`. For now the visible placeholder ("Start"/"End") is its only name.
+- Open (upstream candidate): after a TimePicker option is picked, focus falls to `<body>` instead of returning to the input. Keyboard users lose their place.
+- Seen once, not reproduced: Start jumped to 3:30 after an End time was picked with a coordinate click. It did not happen again, including on mobile. Watch for it.
+- Open: picking several tasks for one block (click the row's checkbox to multi-select, click the row body to pick just one). Proposal: a child table on Planned Work Block, with the first task kept as `work_item`. Waiting for the owner's view.
+
+### Session popup: task list instead of "Working on" (2026-10-06)
+- Done: the session popup's "Working on" Combobox is gone. It now shows the same `BlockTasksSection` a block shows. Bound to a block, it lists that block's tasks. Unbound, it lists the session's own tasks (`sessionTasks`, synced across devices), and Stop puts them on the new block (`quick_timer_punch` → `attach_session_tasks`). A session task opens the one `TaskFormDialog` (`onRemove` / `onChange`), so it moves through its workflow the same way everywhere. Guarded by `check_dialog_popovers.cjs` sections 13–15, with mutants.
+- Fixed: on phones the three session tools (Discard / Adjust / Stop) were off centre. frappe-ui keeps the hidden label's wrapper and its 8px gap. Under 480px they are squared to 28×28 (`TOOL_SQUARE`).
+- Fixed: one Escape closed both the Add tasks dialog and the session popup under it. `FDialog.keepEscape` stops the Escape at its panel and closes the dialog itself (reka's own close listens on the bubble path, so it never sees it).
+- Open: `sessionTasks` are dropped when an unbound session is bound to a block mid-session, and when a bound session stops. `switch_active_session` does not carry them either, and nor does `writeEntry`'s `quick_timer_punch`.
+- Open: ticking a session task does not close its ToDo until Stop.
+- Open: `src/session/useSessionTodoPicker.js` is now unused. Delete it (waiting on the owner's OK). `SessionBox`'s `assignedTasks` / `workBlocks` props and the workstation-level ToDo picker (`assignmentStore`, `useWorkstationIdentity`) may be dead too.
+- Open: in nested FDialogs, the outer dialog's `noteEscape` still fires `escBack` for the inner dialog's Escape.
+- Done (Issue #17): **"Planned" is no longer an activity.** See the next section.
+
+### Activity is Work, Break or Away (2026-10-06)
+- Done: `task_nature` holds one plain kind: **Work, Break or Away**. Meeting and Review were work under another name. Leave and Absent were both time away; the owner asked for "only break and away". Planned-ness is the block's read-only `unplanned` Check. `quick_timer_punch`, its pairing partner and `log_work_session`'s auto-created block set it; a block made in the planner is a plan. The KPIs, the day timeline, analytics PAI and the workstation PACI all read the flag.
+- Done: one mapping in `omnitrack/utils/activity.py` and `src/utils/activity.js` (`to_kind` / `toKind`). Every stored, remembered or emitted value goes through it, so a stale browser or a live session's stored default never needs patching. Patches `v1_5.split_activity_from_planned` and `v1_5.merge_activity_into_work_break_away` rewrote stored rows. On ommnomi.local that left 280 blocks and 305 sessions, all Work; 20 blocks carry `unplanned=1`. The 6 Meeting rows became Work.
+- Done: the session picker shows "Break" / "Away" without the "(Non-Paid)" suffix. The block pill, the calendar away band and the card colour no longer tell Absent apart from Leave. The plan dialog's second Activity chip row is gone, because its Work / Break / Away chips already are the activity.
+- Guarded by `scripts/check_activity_kinds.cjs` (kind parity across py/js/DocTypes, to_kind vectors, the flag being set, the readers using it, no legacy literal, both patches registered), plus 13 mutants. There was no guard before, which is how "🎯 Planned" outlived its option.
+- Open: the Desk chart is still named "OmniTrack Work Nature Distribution". Rename it "Activity" (it is a fixture, so the rename needs a re-export).
+- Open: `omnitrack/doctype/` is a stale copy of `omnitrack/omnitrack/doctype/` with the old emoji options. Nothing loads it; delete it (waiting on the owner's OK).
+- Fixed: in the session popup, Escape on an open Combobox (Activity, Project) closed the list **and** minimized the popup. `_slashFocus` (`useWorkstationShortcuts.js`) now returns on `ev.defaultPrevented || popoverOpen()`. `defaultPrevented` alone did nothing here: reka's Combobox closes without `preventDefault`. Verified live: the first Escape closes the list and the popup stays, the second minimizes it. Guard 16 in `check_dialog_popovers.cjs`, plus a mutant.
+- Fixed: Combobox / Dropdown / TimePicker lists looked blurry. reka places the portalled wrapper with a half-pixel `translate()` and writes `will-change: transform` inline, so the list was a raster layer resampled off the pixel grid. `main.css` sets `will-change: auto !important` on the wrapper; `check_dialog_popovers.cjs` guards it, with a mutant.
+- Fixed: the planner's activity filter was announced as "Filter calendar events by nature".
+
+### Task form and idle prompt, redone (2026-10-06)
+- Done: the To-do / Task form follows Frappe CRM's task modal. Name, then one row: status (a menu of the workflow moves open to you), due day, priority. The grey status panel, the wall of outlined move buttons, the separate "Open" status text (now on hover), the left icon gutter and the resizable textarea are gone. A move still asks first, with an optional comment. From the keyboard, focus lands in the comment box, Escape steps back to the status button, and a second Escape closes the form. Checked at 375 px.
+- Done: "Are you still working?" is one question and one sentence: "No note since 15:23, 47 min ago. The timer has run 3 h 34 min." The answers are Stop now / Stop at 15:38 / Still working. Discard appears only after 60 minutes, on the left in red. The tinted alert box, the key-value card and the "(+15m)" suffix are gone; the suffix is now a tooltip. It names the block's task, never the session notes (it used to print the notes, check marks included).
+- Open: the prompt's subtitle is empty for a session that has no block. Name the session's first task once the session tasks list is the source of truth.
+
+
+### Session popup: Details tab and Material tabs (2026-10-06)
+- Done: a Details tab beside Log and Task chat. It is the block drawer itself (`BlockDetailDrawer` with `inline`), not a second component: facts only, with no sheet, title, actions, task list or discussion, because the popup already has those. Open block minimizes the popup and opens the full drawer. Unplanned sessions show one line, not the clock again. Left/Right wrap and Home/End move between the three tabs, and an unknown tab falls back to the Log. Guard 17 plus two mutants.
+- Fixed: the tab focus ring was an outer ring on an unpadded label, and the bar's underline clipped it into a broken box round "Log 5". The tabs are now Material primary tabs: a padded target, a hover tint, an inset focus ring, and a shared 3px indicator under the active tab. The Log count is blue only while its tab is active. Guard 18 plus a mutant.
+- Fixed: opening the session drew a blue ring round the popup's contents. That was `sessionCardFlash`, a "here it is" pulse from before the popup existed. Opening the popup already marks the moment, so the flash is removed everywhere (SessionBox, SessionOverlay, App, the pickers, the store). Guard 19 plus a mutant.
+- Open: three other hand-rolled tab bars (`WorkstationBottomNav.vue`, `CalendarAssignedTasks.vue`, `DashboardAttentionTasks.vue`) should share this one Material tab look. Move all four to frappe-ui `Tabs` once its trigger has a visible keyboard focus. In 0.1.278 its default trigger has none, and its list pads 20px from the edge (see AGENTS.md).
+- Open: `BlockHoverCard.vue` still shows emojis (🔴 ✓ 🔒 ⏱ 📁) and `text-[9px]` low-contrast text. Replace them with FeatherIcons and readable sizes.
+- Open: the demo `timelineMembers` in `useWorkstationShortcuts.js` carry emojis.
+- Open: `src/stores/workSessionStore.js` is not imported anywhere. Either wire it in or remove it (removal needs the owner's go-ahead).

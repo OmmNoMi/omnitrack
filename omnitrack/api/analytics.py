@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 import frappe
+from omnitrack.utils.activity import is_away
 from frappe import _
 from frappe.utils import (
 	flt,
@@ -119,7 +120,7 @@ def calculate_plan_adherence_index(employee=None, from_date=None, to_date=None):
 	blocks = frappe.get_all(
 		"Planned Work Block",
 		filters=filters,
-		fields=["task_nature", "duration_hours", "status", "project"]
+		fields=["task_nature", "unplanned", "duration_hours", "status", "project"]
 	)
 
 	if not blocks:
@@ -133,9 +134,11 @@ def calculate_plan_adherence_index(employee=None, from_date=None, to_date=None):
 			"status": "No Work Blocks Logged"
 		}
 
-	planned_hours = sum(flt(b.duration_hours) for b in blocks if "Planned" in (b.task_nature or ""))
-	unplanned_hours = sum(flt(b.duration_hours) for b in blocks if "Unplanned" in (b.task_nature or ""))
-	ooo_hours = sum(flt(b.duration_hours) for b in blocks if "Out-of-Office" in (b.task_nature or "") or "OOO" in (b.task_nature or ""))
+	# Planned or not is the block's own fact (`unplanned`), never its activity
+	work = [b for b in blocks if not is_away(b.task_nature)]
+	planned_hours = sum(flt(b.duration_hours) for b in work if not b.unplanned)
+	unplanned_hours = sum(flt(b.duration_hours) for b in work if b.unplanned)
+	ooo_hours = sum(flt(b.duration_hours) for b in blocks if is_away(b.task_nature))
 	total_hours = planned_hours + unplanned_hours
 
 	pai = (planned_hours / total_hours * 100.0) if total_hours > 0 else 100.0
@@ -323,10 +326,8 @@ def get_dashboard_kpis(employee=None):
 			limit=1000
 		) if frappe.db.exists("DocType", "Planned Work Block") else []
 
-	away_markers = ("leave", "absent", "out-of-office", "out of office", "break")
 	for b in blocks_month:
-		nature = (b.get("task_nature") or "").lower()
-		b["is_away"] = any(m in nature for m in away_markers)
+		b["is_away"] = is_away(b.get("task_nature"))
 		b["is_working"] = not b["is_away"]
 		b["is_paid"] = not b["is_away"]
 

@@ -54,7 +54,8 @@ class PairingEngine:
 				partner_doc.task = getattr(source_doc, "task", None)
 				partner_doc.work_item = getattr(source_doc, "work_item", None)
 				partner_doc.work_item_label = getattr(source_doc, "work_item_label", None)
-				partner_doc.task_nature = getattr(source_doc, "task_nature", "🎯 Planned")
+				partner_doc.task_nature = getattr(source_doc, "task_nature", None)
+				partner_doc.unplanned = getattr(source_doc, "unplanned", 0)
 				partner_doc.deliverable_notes = f"[Pairing with {source_doc.employee}]\n{getattr(source_doc, 'deliverable_notes', '')}"
 				partner_doc.status = source_doc.status or "Planned"
 

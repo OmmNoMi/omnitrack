@@ -41,8 +41,8 @@ export function useWorkstationCardStyles(opts) {
 
   const blockClass = (b) => {
     const st = blockVisualState(b);
-    if (st === 'cancelled') return 'border-dotted line-through ' + (isDarkMode.value ? 'text-gray-500' : 'text-gray-400');
-    if (st === 'rescheduled') return 'border-dashed ' + (isDarkMode.value ? 'text-gray-400 opacity-75' : 'text-gray-600 opacity-80');
+    if (st === 'cancelled') return 'border-dotted line-through ' + (isDarkMode.value ? 'text-gray-700' : 'text-gray-600');
+    if (st === 'rescheduled') return 'border-dashed ' + (isDarkMode.value ? 'text-gray-600 opacity-75' : 'text-gray-700 opacity-80');
     if (st === 'away') return 'border-dotted border-2';
     if (st === 'recording') return 'border-solid text-white ring-2 ring-red-500 ring-offset-1 z-20 shadow-md';
     if (st === 'logged' || st === 'over' || st === 'partial') return 'border-solid text-white';
@@ -101,7 +101,7 @@ export function useWorkstationCardStyles(opts) {
         : { background: `hsl(270 55% 38%)`, borderColor: '#9333ea', color: '#fff' };
     }
     if (st === 'away') {
-      const hue = String(b.task_nature || '').includes('Absent') ? 0 : 38;
+      const hue = 38;
       return dark
         ? { background: `hsl(${hue} 60% 14% / .55)`, borderColor: `hsl(${hue} 50% 40%)`, color: `hsl(${hue} 80% 80%)` }
         : { background: `hsl(${hue} 90% 96%)`, borderColor: `hsl(${hue} 70% 70%)`, color: `hsl(${hue} 60% 30%)` };

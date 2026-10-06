@@ -10,6 +10,7 @@
  */
 
 import * as Vue from "vue";
+import { toKind } from "../utils/activity.js";
 const { ref, nextTick } = Vue;
 
 export function useWorkstationSessionSync({
@@ -26,6 +27,7 @@ export function useWorkstationSessionSync({
   trackerProject,
   trackerBlockName,
   sessionNotesList,
+  sessionTasks,
   sessionNotesScroll,
   workBlocks,
   workFocusBlocks,
@@ -170,6 +172,7 @@ export function useWorkstationSessionSync({
       trackerNotes: trackerNotes.value,
       trackerBlockName: trackerBlockName.value,
       sessionNotesList: sessionNotesList.value,
+      sessionTasks: sessionTasks.value,
       lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
       lastUpdated: _lastLocalUpdate,
       status: 'active'
@@ -224,8 +227,11 @@ export function useWorkstationSessionSync({
     }
 
     // Zombie timer eviction: if session started on a prior calendar day and has run >= 6 hours
-    const sessionStartDate = new Date(startMs).toISOString().split('T')[0];
-    const todayStr = typeof getLocalTodayISO === 'function' ? getLocalTodayISO() : new Date().toISOString().split('T')[0];
+    // Both sides in LOCAL dates: toISOString() is UTC, so a session started after local
+    // midnight but before the UTC offset (00:00-05:30 in IST) read as "yesterday" and got evicted.
+    const localISO = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const sessionStartDate = localISO(new Date(startMs));
+    const todayStr = localISO(new Date());
     if (sessionStartDate !== todayStr && elapsed >= 6 * 3600) {
       markSessionEnded();
       localStorage.removeItem('omnitrack_active_session');
@@ -253,8 +259,8 @@ export function useWorkstationSessionSync({
       isTracking.value = true;
       startTime.value = startMs;
       trackerSeconds.value = elapsed;
-      selectedNature.value = sessionData.selectedNature || '🎯 Planned';
-      trackerNature.value = sessionData.selectedNature || '🎯 Planned';
+      selectedNature.value = toKind(sessionData.selectedNature);
+      trackerNature.value = toKind(sessionData.selectedNature);
       selectedProject.value = sessionData.selectedProject || '';
       trackerProject.value = sessionData.selectedProject || '';
       let rawN = sessionData.trackerNotes || '';
@@ -266,6 +272,7 @@ export function useWorkstationSessionSync({
         trackerNotes.value = rawN;
         sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
       }
+      sessionTasks.value = Array.isArray(sessionData.sessionTasks) ? sessionData.sessionTasks : [];
       trackerBlockName.value = sessionData.trackerBlockName || null;
       const sLastAct = Number(sessionData.lastActivityTime) || 0;
       const sLastUpd = Number(sessionData.lastUpdated) || 0;
@@ -301,6 +308,7 @@ export function useWorkstationSessionSync({
     }
     trackerSeconds.value = 0;
     sessionNotesList.value = [];
+    sessionTasks.value = [];
     trackerNotes.value = '';
     trackerBlockName.value = null;
     markSessionEnded();
@@ -363,6 +371,11 @@ export function useWorkstationSessionSync({
       });
     }
 
+    const remoteTasks = Array.isArray(remote.sessionTasks) ? remote.sessionTasks : [];
+    if (JSON.stringify(remoteTasks) !== JSON.stringify(sessionTasks.value || [])) {
+      sessionTasks.value = [...remoteTasks];
+    }
+
     if (remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
       const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
       const isNotesFocused = activeEl && (
@@ -378,9 +391,9 @@ export function useWorkstationSessionSync({
       selectedProject.value = remote.selectedProject || '';
       trackerProject.value = remote.selectedProject || '';
     }
-    if (remote.selectedNature !== undefined && remote.selectedNature !== selectedNature.value) {
-      selectedNature.value = remote.selectedNature || '🎯 Planned';
-      trackerNature.value = remote.selectedNature || '🎯 Planned';
+    if (remote.selectedNature !== undefined && toKind(remote.selectedNature) !== selectedNature.value) {
+      selectedNature.value = toKind(remote.selectedNature);
+      trackerNature.value = toKind(remote.selectedNature);
     }
 
     if (remote.trackerBlockName !== undefined && remote.trackerBlockName !== trackerBlockName.value) {

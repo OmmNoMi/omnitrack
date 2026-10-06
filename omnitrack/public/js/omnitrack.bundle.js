@@ -356,14 +356,15 @@ omnitrack.toggle_timer = function() {
 		let saved = false;
 
 		const d = new frappe.ui.Dialog({
-			title: __('⏱️ Save Work Block (' + formatted + ')'),
+			title: __('Save Work Block (' + formatted + ')'),
 			fields: [
 				{
-					label: __('Work Nature'),
+					// The activity only: Save makes a new block, so this time is unplanned by definition
+					label: __('Activity'),
 					fieldname: 'work_nature',
 					fieldtype: 'Select',
-					options: ['🎯 Planned', '⚠️ Unplanned', '👥 Review', '☕ Break'],
-					default: '🎯 Planned',
+					options: ['Work', 'Meeting', 'Review', 'Break'],
+					default: 'Work',
 					reqd: 1
 				},
 				{

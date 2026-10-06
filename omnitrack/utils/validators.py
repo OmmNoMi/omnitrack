@@ -6,21 +6,28 @@ from frappe import _
 from frappe.utils import getdate, nowdate
 
 
-def get_min_session_words():
-	"""Returns the configured minimum word count for work session notes (default: 15)."""
-	min_words = 15
+def _positive_setting(fieldname, default):
+	"""A positive Int from OmniTrack Settings, or the default when unset or not migrated yet."""
 	try:
 		if frappe.db.exists("DocType", "OmniTrack Settings"):
 			meta = frappe.get_meta("OmniTrack Settings")
-			if meta.has_field("min_session_words"):
-				val = frappe.db.get_single_value("OmniTrack Settings", "min_session_words")
-				if val is not None and str(val).strip() != "":
-					val_int = int(val)
-					if val_int >= 1:
-						min_words = val_int
+			if meta.has_field(fieldname):
+				val = frappe.db.get_single_value("OmniTrack Settings", fieldname)
+				if val is not None and str(val).strip() != "" and int(val) >= 1:
+					return int(val)
 	except Exception:
 		pass
-	return min_words
+	return default
+
+
+def get_min_session_words():
+	"""Returns the configured minimum word count for work session notes (default: 15)."""
+	return _positive_setting("min_session_words", 15)
+
+
+def get_min_log_line_chars():
+	"""Returns the configured minimum length of one session log line (default: 10)."""
+	return _positive_setting("min_log_line_chars", 10)
 
 
 def require_session_notes(notes):
@@ -48,25 +55,4 @@ def validate_not_in_past(work_date):
 	"""Historical plan commitments in the past (work_date < today) cannot be created or moved."""
 	if work_date and getdate(work_date) < getdate(nowdate()):
 		frappe.throw(_("Cannot plan or book work blocks in the past."), frappe.ValidationError)
-
-
-def parse_block_tasks(val):
-	"""Safely parses connected_tasks field from JSON, list, or newline-separated string."""
-	import json
-	if not val:
-		return []
-	if isinstance(val, list):
-		return val
-	if isinstance(val, str):
-		val = val.strip()
-		if not val:
-			return []
-		try:
-			parsed = json.loads(val)
-			if isinstance(parsed, list):
-				return parsed
-		except Exception:
-			lines = [line.strip("- •* \t") for line in val.split("\n") if line.strip("- •* \t")]
-			return [{"id": f"item:{idx}", "ref": f"item:{idx}", "doctype": "Item", "subject": line, "status": "Open"} for idx, line in enumerate(lines)]
-	return []
 

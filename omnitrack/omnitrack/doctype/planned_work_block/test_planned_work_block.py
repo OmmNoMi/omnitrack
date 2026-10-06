@@ -24,6 +24,10 @@ def _block(**kw):
 
 class TestPlannedWorkBlock(FrappeTestCase):
 	def setUp(self):
+		# Redis is outside the rollback. Administrator's active session may be someone's real,
+		# running one: put it back exactly as it was, or tests that tick tasks write into its notes.
+		live = frappe.cache.hget("omnitrack:active_session", "Administrator")
+		self.addCleanup(lambda: frappe.cache.hset("omnitrack:active_session", "Administrator", live) if live else frappe.cache.hdel("omnitrack:active_session", "Administrator"))
 		frappe.cache.hdel("omnitrack:active_session", "Administrator")
 		frappe.db.delete("DefaultValue", {"defkey": "omnitrack_active_session", "parent": "Administrator"})
 		# quick_timer_punch ends its stop branch in sync_active_session(), which calls
@@ -109,7 +113,9 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		block_name = res["block"]
 		blk = frappe.get_doc("Planned Work Block", block_name)
 		self.assertEqual(blk.duration_hours, 1.5)
-		self.assertEqual(blk.task_nature, "⚠️ Unplanned")
+		# A legacy value is read as its kind; a punch's block is unplanned because no block was planned
+		self.assertEqual(blk.task_nature, "Work")
+		self.assertEqual(blk.unplanned, 1)
 		self.assertIn(blk.status, ("Completed", "Logged (Full)"))
 
 	def test_quick_timer_punch_in(self):
@@ -125,8 +131,8 @@ class TestPlannedWorkBlock(FrappeTestCase):
 	def test_planner_data_away_count(self):
 		from omnitrack.api import get_planner_data
 		# 2026-09-07 is Monday, 2026-09-13 is Sunday
-		_block(work_date="2026-09-08", task_nature="🎯 Planned", duration_hours=4.0).insert()
-		_block(work_date="2026-09-09", task_nature="🌴 Leave", duration_hours=8.0).insert()
+		_block(work_date="2026-09-08", task_nature="Work", duration_hours=4.0).insert()
+		_block(work_date="2026-09-09", task_nature="Away", duration_hours=8.0).insert()
 		data = get_planner_data(employee="Administrator", week_start="2026-09-07")
 		totals = data["totals"]
 		self.assertGreaterEqual(totals["away_count"], 1)
@@ -200,11 +206,13 @@ class TestPlannedWorkBlock(FrappeTestCase):
 
 	def test_break_leave_absent_are_non_working_non_paid(self):
 		from omnitrack.api import get_planner_data, create_timesheet_from_work_block
-		# Create blocks for Break, Leave, and Absent in an isolated week
-		b_break = _block(work_date="2027-01-05", start_time="13:00:00", end_time="14:00:00", task_nature="☕ Break").insert()
-		b_leave = _block(work_date="2027-01-06", start_time="09:00:00", end_time="17:00:00", task_nature="🌴 Leave").insert()
-		b_absent = _block(work_date="2027-01-07", start_time="09:00:00", end_time="17:00:00", task_nature="🤒 Absent").insert()
-		b_work = _block(work_date="2027-01-05", start_time="09:00:00", end_time="13:00:00", task_nature="🎯 Planned").insert()
+		# Create Break and Away blocks in an isolated week
+		b_break = _block(work_date="2027-01-05", start_time="13:00:00", end_time="14:00:00", task_nature="Break").insert()
+		b_leave = _block(work_date="2027-01-06", start_time="09:00:00", end_time="17:00:00", task_nature="Away").insert()
+		# A legacy value is stored as its kind: Absent is Away
+		b_absent = _block(work_date="2027-01-07", start_time="09:00:00", end_time="17:00:00", task_nature="Absent").insert()
+		self.assertEqual(b_absent.task_nature, "Away")
+		b_work = _block(work_date="2027-01-05", start_time="09:00:00", end_time="13:00:00", task_nature="Work").insert()
 
 		data = get_planner_data(employee="Administrator", week_start="2027-01-04")
 		totals = data["totals"]
@@ -295,11 +303,11 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		from omnitrack.api import get_dashboard_kpis
 
 		today_str = frappe.utils.nowdate()
-		b1 = _block(work_date=today_str, duration_hours=4.0, task_nature="🎯 Planned")
+		b1 = _block(work_date=today_str, duration_hours=4.0, task_nature="Work")
 		b1.status = "Completed"
 		b1.insert()
 
-		b2 = _block(work_date=today_str, duration_hours=2.0, task_nature="🎯 Planned")
+		b2 = _block(work_date=today_str, duration_hours=2.0, task_nature="Work")
 		b2.status = "In Progress"
 		b2.insert()
 
@@ -745,7 +753,8 @@ console.log('SUCCESS');
 			get_active_session
 		)
 
-		doc = _block(work_date="2026-09-10", start_time="10:00:00", end_time="12:00:00").insert()
+		# Ahead of today: a past block's tasks can't be added or taken off
+		doc = _block(work_date=frappe.utils.add_days(frappe.utils.nowdate(), 7), start_time="10:00:00", end_time="12:00:00").insert()
 
 		# Attach multiple action items
 		res = attach_tasks_to_block(
@@ -772,7 +781,7 @@ console.log('SUCCESS');
 		# Complete task 1
 		comp_res = complete_block_task(doc.name, task1_ref, completed=True)
 		self.assertEqual(comp_res["status"], "success")
-		self.assertIn(comp_res["task"]["status"], ("Completed", "Closed"))
+		self.assertEqual(comp_res["task"]["status"], "Completed")
 
 		# Check active session has accomplishment recorded
 		sess = get_active_session(user="Administrator")
@@ -786,36 +795,202 @@ console.log('SUCCESS');
 		"""Unfinished connected tasks are carried forward into a newly created planned work block."""
 		from omnitrack.api import attach_tasks_to_block, complete_block_task, reschedule_unfinished_tasks
 
-		doc = _block(work_date="2026-09-10", start_time="10:00:00", end_time="12:00:00").insert()
+		day = frappe.utils.add_days(frappe.utils.nowdate(), 7)
+		next_day = frappe.utils.add_days(day, 1)
+		doc = _block(work_date=day, start_time="10:00:00", end_time="12:00:00").insert()
 		attach_tasks_to_block(
 			block_name=doc.name,
 			new_task_subjects="Completed item\nUnfinished item 1\nUnfinished item 2"
 		)
 
-		tasks = doc.reload().get("connected_tasks")
-		import json
-		parsed = json.loads(tasks)
-		complete_block_task(doc.name, parsed[0]["ref"], completed=True)
+		doc.reload()
+		complete_block_task(doc.name, doc.tasks[0].work_item, completed=True)
 
 		# Reschedule unfinished items
-		resched = reschedule_unfinished_tasks(doc.name, target_date="2026-09-11")
+		resched = reschedule_unfinished_tasks(doc.name, target_date=next_day)
 		self.assertEqual(resched["status"], "success")
 		self.assertEqual(resched["rescheduled_count"], 2)
-		self.assertEqual(str(resched["target_date"]), "2026-09-11")
+		self.assertEqual(str(resched["target_date"]), str(next_day))
 
 		# Original block items marked as Rescheduled
 		doc.reload()
-		orig_parsed = json.loads(doc.connected_tasks)
-		self.assertEqual(orig_parsed[0]["status"], "Closed")
-		self.assertEqual(orig_parsed[1]["status"], "Rescheduled")
-		self.assertEqual(orig_parsed[2]["status"], "Rescheduled")
+		self.assertEqual([r.status for r in doc.tasks], ["Completed", "Rescheduled", "Rescheduled"])
+		self.assertEqual({r.rescheduled_to for r in doc.tasks[1:]}, {resched["new_block"]})
 
-		# New block has the 2 carried forward items in Open state
+		# New block has the 2 carried forward items in Open state, the first one as its main task
 		new_block = frappe.get_doc("Planned Work Block", resched["new_block"])
-		new_parsed = json.loads(new_block.connected_tasks)
-		self.assertEqual(len(new_parsed), 2)
-		self.assertEqual(new_parsed[0]["status"], "Open")
-		self.assertEqual(new_parsed[1]["status"], "Open")
+		self.assertEqual([r.status for r in new_block.tasks], ["Open", "Open"])
+		self.assertEqual(new_block.work_item, new_block.tasks[0].work_item)
+
+	"""Multi-task blocks: the `tasks` child table and its main task (`work_item`).
+	Invariants: work_item is always row 1; hours are never counted twice across tasks."""
+
+	def _todos(self, *subjects):
+		refs = []
+		for subj in subjects:
+			td = frappe.get_doc({"doctype": "ToDo", "description": subj, "allocated_to": "Administrator"})
+			td.flags.ignore_permissions = True
+			td.insert()
+			refs.append(f"todo:{td.name}")
+		return refs
+
+	def test_work_item_is_always_the_first_task_row(self):
+		a, b = self._todos("Main task", "Side task")
+		doc = _block(work_item=a)
+		doc.append("tasks", {"work_item": b, "subject": "Side task"})
+		doc.insert()
+		self.assertEqual([r.work_item for r in doc.tasks], [a, b])
+		self.assertEqual(doc.tasks[0].reference_doctype, "ToDo")
+		self.assertEqual(doc.work_item_label, "Main task")
+
+		# Rows set without a work_item: the first linked row becomes the main task
+		doc2 = _block()
+		doc2.append("tasks", {"work_item": "item:plain0001", "subject": "Plain note"})
+		doc2.append("tasks", {"work_item": b, "subject": "Side task", "reference_doctype": "ToDo",
+			"reference_name": b.split(":", 1)[1]})
+		doc2.insert()
+		self.assertEqual(doc2.work_item, b)
+		self.assertEqual(doc2.tasks[0].work_item, b)
+		self.assertEqual([r.idx for r in doc2.tasks], [1, 2])
+
+	def test_edit_and_remove_a_blocks_task(self):
+		"""The drawer edits a task where it lives and can take it off the block.
+		Removing the main task promotes the next row; the ToDo itself stays."""
+		from omnitrack.api import get_block_task, update_block_task, remove_block_task
+
+		a, b = self._todos("Main task", "Side task")
+		doc = _block(work_item=a, work_date=frappe.utils.add_days(frappe.utils.nowdate(), 7))
+		doc.append("tasks", {"work_item": b, "subject": "Side task"})
+		doc.insert()
+
+		info = get_block_task(doc.name, a)
+		self.assertEqual(info["subject"], "Main task")
+		self.assertIn("High", info["priorities"])
+
+		res = update_block_task(doc.name, a, subject="Main task, renamed", due_date="2026-09-12", priority="High")
+		self.assertEqual(res["task"]["subject"], "Main task, renamed")
+		todo = frappe.get_doc("ToDo", a.split(":", 1)[1])
+		self.assertEqual((todo.description, str(todo.date), todo.priority), ("Main task, renamed", "2026-09-12", "High"))
+		doc.reload()
+		self.assertEqual(doc.work_item_label, "Main task, renamed")
+
+		with self.assertRaises(frappe.ValidationError):
+			update_block_task(doc.name, a, subject="  ")
+		with self.assertRaises(frappe.ValidationError):
+			update_block_task(doc.name, a, priority="Urgent-ish")
+
+		remove_block_task(doc.name, a)
+		doc.reload()
+		self.assertEqual([r.work_item for r in doc.tasks], [b])
+		self.assertEqual(doc.work_item, b)
+		self.assertEqual(doc.work_item_label, "Side task")
+		self.assertTrue(frappe.db.exists("ToDo", a.split(":", 1)[1]))
+
+		# A past block's plan is history: its tasks can't be added or taken off
+		past = _block(work_item=b, work_date=frappe.utils.add_days(frappe.utils.nowdate(), -10)).insert()
+		with self.assertRaises(frappe.ValidationError):
+			remove_block_task(past.name, b)
+
+	def test_one_task_form_and_block_titles(self):
+		"""The task form edits a ToDo wherever it was opened from. Every block holding it
+		shows the new name; a title someone gave a block stays theirs."""
+		from omnitrack.api import get_task, update_task, update_block_task, remove_block_task
+		from omnitrack.api.planner import update_work_block
+
+		a, b = self._todos("Shared task", "Other task")
+		name = a.split(":", 1)[1]
+		day = frappe.utils.add_days(frappe.utils.nowdate(), 7)
+		follows = _block(work_item=a, work_item_label="Shared task", work_date=day).insert()
+		titled = _block(work_item=a, work_item_label="Shared task", work_date=day, start_time="13:00:00", end_time="14:00:00")
+		titled.append("tasks", {"work_item": b, "subject": "Other task"})
+		titled.insert()
+
+		form = get_task("ToDo", name)
+		self.assertEqual((form["doctype"], form["subject"]), ("ToDo", "Shared task"))
+		self.assertIn("state", form)
+		self.assertIsInstance(form["actions"], list)
+
+		# The block's own title: set in the drawer, never blank
+		update_work_block(titled.name, work_item_label="  Sprint review  ")
+		self.assertEqual(frappe.db.get_value("Planned Work Block", titled.name, "work_item_label"), "Sprint review")
+		with self.assertRaises(frappe.ValidationError):
+			update_work_block(titled.name, work_item_label="   ")
+
+		update_task("ToDo", name, subject="Shared task, renamed")
+		follows.reload()
+		titled.reload()
+		self.assertEqual(follows.work_item_label, "Shared task, renamed")
+		self.assertEqual(titled.work_item_label, "Sprint review")
+		self.assertEqual({r.subject for r in titled.tasks if r.work_item == a}, {"Shared task, renamed"})
+
+		update_block_task(titled.name, a, subject="Renamed from the block")
+		self.assertEqual(frappe.db.get_value("Planned Work Block", titled.name, "work_item_label"), "Sprint review")
+		self.assertEqual(frappe.db.get_value("Planned Work Block", follows.name, "work_item_label"), "Renamed from the block")
+		with self.assertRaises(frappe.ValidationError):
+			update_task("ToDo", name, subject="  ")
+
+		remove_block_task(titled.name, a)
+		self.assertEqual(frappe.db.get_value("Planned Work Block", titled.name, "work_item_label"), "Sprint review")
+
+	def test_only_the_blocks_people_change_its_tasks(self):
+		"""Someone outside the block (not its person, creator, partner or a manager)
+		can't add, tick, edit or remove its tasks."""
+		from omnitrack.api import attach_tasks_to_block, complete_block_task, update_block_task, remove_block_task
+
+		(a,) = self._todos("Main task")
+		doc = _block(work_item=a, work_date=frappe.utils.add_days(frappe.utils.nowdate(), 7)).insert()
+		calls = [
+			lambda: attach_tasks_to_block(doc.name, new_task_subjects="Sneaky"),
+			lambda: complete_block_task(doc.name, a, completed=True),
+			lambda: update_block_task(doc.name, a, subject="Hijacked"),
+			lambda: remove_block_task(doc.name, a),
+		]
+		frappe.set_user("test1@example.com")
+		try:
+			with patch("omnitrack.permissions.is_omnitrack_manager", return_value=False):
+				for call in calls:
+					with self.assertRaises(frappe.PermissionError):
+						call()
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_book_work_block_with_several_tasks(self):
+		from omnitrack.api.planner import book_work_block
+		a, b, c = self._todos("Write SOP", "Review API", "Ship build")
+		day = frappe.utils.add_days(frappe.utils.nowdate(), 1)
+		res = book_work_block(day, "10:00:00", "12:00:00", work_items=frappe.as_json([a, b, c, b]))
+		doc = frappe.get_doc("Planned Work Block", res["name"])
+		self.assertEqual(doc.work_item, a)
+		self.assertEqual(doc.work_item_label, "Write SOP")
+		self.assertEqual([r.work_item for r in doc.tasks], [a, b, c])  # duplicates dropped
+
+		# A single ToDo booking gets the ToDo's text as its label (the old code dropped it)
+		res2 = book_work_block(day, "13:00:00", "14:00:00", work_item=c)
+		self.assertEqual(frappe.db.get_value("Planned Work Block", res2["name"], "work_item_label"), "Ship build")
+
+	def test_team_booking_copies_every_task(self):
+		from omnitrack.api.planner import book_work_block
+		a, b = self._todos("Pair task A", "Pair task B")
+		mate = frappe.db.get_value("User", {"name": ["not in", ["Administrator", "Guest"]], "enabled": 1}, "name")
+		if not mate:
+			self.skipTest("needs a second enabled user")
+		day = frappe.utils.add_days(frappe.utils.nowdate(), 1)
+		res = book_work_block(day, "15:00:00", "16:00:00", work_items=[a, b], assignees=[mate])
+		self.assertEqual(len(res["created_blocks"]), 2)
+		team = frappe.get_doc("Planned Work Block", res["created_blocks"][1])
+		self.assertEqual(team.employee, mate)
+		self.assertEqual([r.work_item for r in team.tasks], [a, b])
+
+	def test_booked_hours_split_across_a_blocks_tasks(self):
+		from omnitrack.api.tasks import get_assigned_tasks
+		a, b = self._todos("Split hours A", "Split hours B")
+		doc = _block(work_date=frappe.utils.add_days(frappe.utils.nowdate(), 1),
+			start_time="09:00:00", end_time="11:00:00", work_item=a)
+		doc.append("tasks", {"work_item": b, "subject": "Split hours B"})
+		doc.insert()
+		rows = {t["ref"]: t for t in get_assigned_tasks()["tasks"]}
+		self.assertEqual(rows[a]["booked_hours"], 1.0)
+		self.assertEqual(rows[b]["booked_hours"], 1.0)
 
 	def test_reschedule_work_block_non_destructive_lineage(self):
 		from omnitrack.api import reschedule_work_block
@@ -1272,7 +1447,7 @@ console.log('SUCCESS');
 		future_start = now_ms + (300 * 1000) # 5 minutes in future due to device clock skew or on-time start
 		session_data = {
 			"startTime": future_start,
-			"selectedNature": "🎯 Planned",
+			"selectedNature": "Work",
 			"selectedProject": "PROJ-TEST",
 			"trackerNotes": "Clock skew resilience test",
 			"trackerBlockName": None,
@@ -1299,7 +1474,7 @@ console.log('SUCCESS');
 			end_time="18:30:00",
 			work_item_label="OmniTrack Application Continuous Improvement",
 			deliverable_notes="Continuous improvement and multi-device session hardening",
-			task_nature="🎯 Planned",
+			task_nature="Work",
 			employee="Administrator"
 		)
 		b_name = res["name"]
@@ -1349,6 +1524,57 @@ console.log('SUCCESS');
 	def tearDown(self):
 		frappe.db.rollback()
 
+	def test_a_block_with_a_live_session_is_never_approved(self):
+		"""Invariant: a session still running on a block is not a timesheet yet, so
+		approve_work_blocks refuses the block until the session stops. Uses its own user:
+		Administrator's active session may be someone's real, running one."""
+		from datetime import datetime
+		from omnitrack.api.timesheet import approve_work_blocks
+		owner = "recording-invariant@example.com"
+		if not frappe.db.exists("User", owner):
+			frappe.get_doc({"doctype": "User", "email": owner, "first_name": "Recording", "send_welcome_email": 0}).insert(ignore_permissions=True)
+		block = _block(employee=owner, work_date=frappe.utils.nowdate(), status="In Progress")
+		block.insert()
+		live = {"startTime": int(datetime.now().timestamp() * 1000), "trackerBlockName": block.name, "status": "active"}
+		frappe.cache.hset("omnitrack:active_session", owner, live)
+		try:
+			with self.assertRaises(frappe.ValidationError):
+				approve_work_blocks(block_names=[block.name])
+			self.assertNotEqual(frappe.db.get_value("Planned Work Block", block.name, "approval_status"), "Approved")
+		finally:
+			frappe.cache.hdel("omnitrack:active_session", owner)
+		# Once the session stops, the same block can be approved
+		res = approve_work_blocks(block_names=[block.name])
+		self.assertEqual([r["block_name"] for r in res["approved_blocks"]], [block.name])
+		self.assertEqual(res["still_recording"], [])
+
+	def test_rescheduling_a_recording_block_moves_the_plan_not_the_session(self):
+		"""Invariant: rescheduling a block while its session runs moves the plan to the new
+		slot; the session keeps recording on the original, which takes the time it logs."""
+		from datetime import datetime
+		from frappe.utils import add_days, nowdate
+		from omnitrack.api.planner import reschedule_work_block
+		from omnitrack.api.stopwatch import get_active_session
+		owner = "recording-invariant@example.com"
+		if not frappe.db.exists("User", owner):
+			frappe.get_doc({"doctype": "User", "email": owner, "first_name": "Recording", "send_welcome_email": 0}).insert(ignore_permissions=True)
+		block = _block(employee=owner, work_date=nowdate(), status="In Progress")
+		block.insert()
+		live = {"startTime": int(datetime.now().timestamp() * 1000), "trackerBlockName": block.name, "status": "active"}
+		frappe.cache.hset("omnitrack:active_session", owner, live)
+		try:
+			res = reschedule_work_block(block.name, new_date=add_days(nowdate(), 1), new_start_time="14:00:00", new_end_time="15:00:00")
+			self.assertEqual(get_active_session(user=owner)["trackerBlockName"], block.name)
+		finally:
+			frappe.cache.hdel("omnitrack:active_session", owner)
+		moved = frappe.get_doc("Planned Work Block", res["rescheduled_to"])
+		self.assertEqual((moved.status, moved.rescheduled_from, len(moved.sessions)), ("Planned", block.name, 0))
+		# The session stops and logs on the original, which stays marked Rescheduled
+		block.reload()
+		block.append("sessions", {"session_date": nowdate(), "from_time": "09:00:00", "to_time": "09:30:00", "hours": 0.5, "notes": "Started before the plan moved"})
+		block.save()
+		self.assertEqual((block.status, block.rescheduled_to, block.actual_hours), ("Rescheduled", moved.name, 0.5))
+
 
 def run_test_workflow_actions():
 	"""Standalone runner for workflow action tests."""
@@ -1360,4 +1586,3 @@ def run_test_workflow_actions():
 		print("SUCCESS: all workflow action tests passed!")
 	finally:
 		test_case.tearDown()
-

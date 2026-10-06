@@ -370,7 +370,7 @@ def import_timelogs(timelog_csv_path, project_map, task_map, dry_run=False, batc
 				bulk_rows.append((
 					row_name, now_str, now_str, admin_user, admin_user, 0, 0,
 					emp_user, str(w_date), str(s_time), str(e_time), duration,
-					"Office", "🎯 Planned", proj_link, task_link, "Completed",
+					"Office", "Work", proj_link, task_link, "Completed",
 					c_hash, desc, app_id,
 					act_id, dd_proj, assoc,
 					b_status, cost_amt, bill_amt

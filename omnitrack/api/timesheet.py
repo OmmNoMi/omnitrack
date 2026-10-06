@@ -5,6 +5,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 import frappe
+from omnitrack.utils.activity import AWAY, to_kind
 from frappe import _
 from frappe.utils import (
 	flt,
@@ -29,7 +30,6 @@ from omnitrack.utils import (
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
 	is_planner_manager as _is_planner_manager,
-	parse_block_tasks as _parse_block_tasks,
 )
 from omnitrack.api.tasks import update_task_kpi_progress
 
@@ -130,8 +130,8 @@ def create_timesheet_from_work_block(block_name, force=False):
 			if cust:
 				ts.customer = cust
 
-	is_away = any(m in (block.task_nature or "").lower() for m in ("leave", "absent", "out-of-office", "out of office", "break"))
-	desired_activity = "Break" if "break" in (block.task_nature or "").lower() else ("Leave / Absence" if is_away else "Execution")
+	kind = to_kind(block.task_nature)
+	desired_activity = "Break" if kind == "Break" else ("Leave / Absence" if kind in AWAY else "Execution")
 	activity = desired_activity
 	if frappe.db.exists("DocType", "Activity Type"):
 		if not frappe.db.exists("Activity Type", desired_activity):
@@ -140,12 +140,9 @@ def create_timesheet_from_work_block(block_name, force=False):
 
 	# Build completed deliverables / tasks summary
 	completed_deliverables = []
-	if hasattr(block, "connected_tasks") and block.connected_tasks:
-		for item in _parse_block_tasks(block.connected_tasks):
-			if isinstance(item, dict) and item.get("status") in ("Closed", "Completed", "Done"):
-				subj = item.get("subject") or item.get("title") or item.get("task")
-				if subj:
-					completed_deliverables.append(subj)
+	for row in block.get("tasks") or []:
+		if row.status == "Completed" and row.subject:
+			completed_deliverables.append(row.subject)
 
 	accomplished_text = ""
 	if completed_deliverables:
@@ -435,6 +432,8 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		"planned_hours": doc.duration_hours,
 		"variance_hours": doc.variance_hours,
 		"block_status": doc.status,
+		# The drawer that logged it shows the new row without a second fetch
+		"sessions": doc.sessions,
 	}
 
 
@@ -584,6 +583,13 @@ def delete_work_session(session_name, block_name=None):
 	}
 
 
+def _is_recording(block):
+	"""Whether the block's owner has a live session running on it right now."""
+	from omnitrack.api.stopwatch import get_active_session
+	live = get_active_session(user=block.employee) or {}
+	return live.get("trackerBlockName") == block.name
+
+
 @frappe.whitelist()
 def approve_work_blocks(block_names=None, employee=None, work_date=None, comments=None):
 	"""Approves Planned Work Blocks for an employee or specific block list.
@@ -641,6 +647,7 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		frappe.throw(_("Specify block_names or employee to approve timesheets."))
 
 	approved_list = []
+	still_recording = []
 	total_hours = 0.0
 	sync_mode = get_timesheet_sync_mode()
 
@@ -648,6 +655,10 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		if not frappe.db.exists("Planned Work Block", b_name):
 			continue
 		b_doc = frappe.get_doc("Planned Work Block", b_name)
+		# A session still running on the block is not a timesheet yet
+		if _is_recording(b_doc):
+			still_recording.append(b_name)
+			continue
 		b_doc.approval_status = "Approved"
 		b_doc.approved_by = approver
 		b_doc.approval_date = now_datetime()
@@ -673,9 +684,13 @@ def approve_work_blocks(block_names=None, employee=None, work_date=None, comment
 		})
 		total_hours += flt(b_doc.actual_hours)
 
+	if still_recording and not approved_list:
+		frappe.throw(_("A session is still running on this block. Approve it once the session is stopped."), frappe.ValidationError)
+
 	return {
 		"status": "success",
 		"message": f"Successfully approved {len(approved_list)} work block(s) ({round(total_hours, 2)} hrs).",
+		"still_recording": still_recording,
 		"approved_by": approver,
 		"sync_mode": sync_mode,
 		"total_approved_hours": round(total_hours, 2),
@@ -757,8 +772,8 @@ def get_pending_team_approvals(work_date=None, employee=None):
 			"name", "employee", "associate_name", "work_date",
 			"start_time", "end_time", "duration_hours", "actual_hours",
 			"variance_hours", "work_item_label", "project", "task",
-			"task_nature", "status", "approval_status", "pairing_partner", "paired_block",
-			"deliverable_notes", "connected_tasks"
+			"task_nature", "unplanned", "status", "approval_status", "pairing_partner", "paired_block",
+			"deliverable_notes"
 		],
 		order_by="work_date desc, start_time desc",
 		limit=100
@@ -792,13 +807,15 @@ def get_pending_team_approvals(work_date=None, employee=None):
 			m["quantity"] = flt(m.get("quantity") or 0.0)
 			metrics_by_block.setdefault(m.parent, []).append(m)
 
-	from omnitrack.utils import parse_block_tasks as _parse_block_tasks
+	from omnitrack.utils.block_tasks import tasks_by_block
+
+	tasks_of_block = tasks_by_block(block_names)
 
 	for b in blocks:
 		b["start_time"] = _time_str(b.get("start_time"))
 		b["end_time"] = _time_str(b.get("end_time"))
 		b["work_date"] = str(b.get("work_date") or "")
-		b["connected_tasks"] = _parse_block_tasks(b.get("connected_tasks"))
+		b["tasks"] = tasks_of_block.get(b.name, [])
 		b["sessions"] = sessions_by_block.get(b.name, [])
 		b["output_metrics"] = metrics_by_block.get(b.name, [])
 		if b.get("pairing_partner"):
@@ -857,7 +874,7 @@ def convert_plan_to_actual(block_name, actual_hours=None, session_notes=None):
 		"hours": act_dur,
 		"notes": notes,
 		"logged_via": "Manual",
-		"task_nature": block.task_nature or "🎯 Planned",
+		"task_nature": block.task_nature,
 	})
 
 	block.actual_hours = act_dur

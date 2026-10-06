@@ -4,7 +4,6 @@
 from omnitrack.utils.validators import (
 	require_session_notes,
 	validate_not_in_past,
-	parse_block_tasks,
 )
 from omnitrack.utils.time_math import (
 	duration_hours,

@@ -12,7 +12,7 @@
         <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       </span>
       <span class="flex-1">{{ toast.message }}</span>
-      <button @click="toast.show = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 ml-1 font-bold cursor-pointer flex items-center justify-center">✕</button>
+      <button @click="toast.show = false" class="text-gray-600 hover:text-gray-600 dark:hover:text-gray-200 ml-1 font-bold cursor-pointer flex items-center justify-center">✕</button>
     </div>
   </transition>
 
@@ -57,18 +57,18 @@
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <f-button
+        <Button
           variant="solid"
           size="sm"
           class="!bg-blue-600 hover:!bg-blue-700 !text-white text-xs font-semibold cursor-pointer"
           @click="enableNotificationsUserGesture"
         >
           Enable Alerts
-        </f-button>
+        </Button>
         <button
           type="button"
           @click="showNotificationBanner = false"
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 cursor-pointer"
+          class="text-gray-600 hover:text-gray-600 dark:hover:text-gray-300 p-1 cursor-pointer"
           aria-label="Dismiss banner"
         >
           ✕
@@ -87,13 +87,13 @@
       :tracker-nature="trackerNature"
       :tracker-bound-block="trackerBoundBlock"
       :session-notes-list="sessionNotesList"
+      :min-line-chars="minLogLineChars"
       :projects="projects"
       :nature-options="natureOptions"
       :assigned-tasks="assignedTasks"
       :work-blocks="workBlocks"
       :mod-key="modKey"
       :is-dark-mode="isDarkMode"
-      :session-card-flash="sessionCardFlash"
       :discard-confirm="discardConfirm"
       @trap-tab="trapSessionPopupTab"
       @stop="toggleTrack"
@@ -109,97 +109,13 @@
       @update:nature="trackerNature = $event; syncActiveSession();"
     />
 
-    <!-- ======================================== -->
-    <!-- MODULAR SUB-VIEWS COORDINATOR            -->
-    <!-- ======================================== -->
-    <ViewCoordinator
-      :active-tab="activeTab"
-      :is-dark-mode="isDarkMode"
-      :is-manager="isManager"
-      :is-client="isClient"
-      :today-date="todayDate"
-      :selected-dashboard-date="selectedDashboardDate"
-      :client-delivered-hours="clientDeliveredHours"
-      :client-in-progress-count="clientInProgressCount"
-      :client-total-planned-hours="clientTotalPlannedHours"
-      :client-reliability-rate="clientReliabilityRate"
-      :client-tasks="clientTasks"
-      :client-sessions="clientSessions"
-      :client-upcoming-blocks="clientUpcomingBlocks"
-      :team-members="teamMembers"
-      :selected-employee="selectedEmployee"
-      :employee-menu-items="employeeMenuItems"
-      :dashboard-date-display="dashboardDateDisplay"
-      :is-today-timeline="isTodayTimeline"
-      :timeline-zoom-mode="timelineZoomMode"
-      :timeline-members="timelineMembers"
-      :red-line-left-pct="redLineLeftPct"
-      :current-timeline-time-formatted="currentTimelineTimeFormatted"
-      :adherence-theme="adherenceTheme"
-      :adherence-emoji="adherenceEmoji"
-      :total-count="totalCount"
-      :completed-count="completedCount"
-      :cancelled-count="cancelledCount"
-      :total-logged="totalLogged"
-      :total-planned="totalPlanned"
-      :adherence-pct="adherencePct"
-      :paginated-blocks="paginatedBlocks"
-      :all-blocks-expanded="allBlocksExpanded"
-      :fmt-hrs="fmtHrs"
-      :hhmm="hhmm"
-      :is-block-completed="isBlockCompleted"
-      :is-block-locked="isBlockLocked"
-      :timesheet-horizon="timesheetHorizon"
-      :total-filtered-hours="totalFilteredHours"
-      :filtered-work-blocks="filteredWorkBlocks"
-      :pending-approvals="pendingApprovals"
-      :loading-approvals="loadingApprovals"
-      :attendance-presence="attendancePresence"
-      :synthesizer-logs="synthesizerLogs"
-      :hourly-presence="hourlyPresence"
-      :filtered-planner-tasks="filteredPlannerTasks"
-      :planner-busy="plannerBusy"
-      :planner-task-search="plannerTaskSearch"
-      :planner-task-filter="plannerTaskFilter"
-      :calendar-view-mode="calendarViewMode"
-      :planner-date="plannerDate"
-      :planner-date-display="plannerDateDisplay"
-      :planner-data="plannerData"
-      :calendar-days="calendarDays"
-      :active-session="activeSession"
-      :is-tracking="isTracking"
-      :now-line-top="nowLineTop"
-      :hover-card="hoverCard"
-      @open-block-drawer="openBlockDrawer"
-      @open-task-raven-drawer="openTaskRavenDrawer"
-      @open-book-modal="openBookModal"
-      @open-eod-modal="openEODWrapUpDrawer"
-      @start-session="startSessionFromBlock"
-      @stop-session="toggleTrack"
-      @switch-task="promptSwitchSession"
-      @toggle-all-blocks="toggleAllBlocksExpanded"
-      @set-timeline-zoom="setTimelineZoom"
-      @navigate-timeline-day="navigateTimelineDay"
-      @approve-timesheet="approveTimesheetBlock"
-      @fetch-pending-approvals="fetchPendingApprovals"
-      @approve-all-pending="approveAllPending"
-      @approve-block="approveTimesheetBlock"
-      @open-task-details="openTaskDetails"
-      @start-task-immediately="startSessionFromTask"
-      @plan-attention-task="planAttentionTask"
-      @start-focus-session="startSessionFromBlock"
-      @stop-focus-session="toggleTrack"
-      @toggle-task-expansion="toggleTaskExpansion"
-      @cell-drag-over="onCalendarDragOver"
-      @cell-drop="onCalendarDrop"
-      @drag-start="onCalendarBlockDragStart"
-      @navigate-day="navigateCalendarDay"
-      @navigate-today="navigateCalendarToday"
-      @navigate-date="navigateCalendarDate"
-      @set-view-mode="setCalendarViewMode"
-      @show-block-hover="showBlockHover"
-      @hide-block-hover="hideBlockHover"
-    />
+    <!-- Views take everything from the workstation via useWorkstationContext. -->
+    <div class="omnitrack-view-coordinator flex-1 flex flex-col min-h-0">
+      <DashboardView v-if="activeTab === 'dashboard'" />
+      <TimesheetsView v-else-if="activeTab === 'timesheets'" />
+      <AttendanceView v-else-if="activeTab === 'attendance'" />
+      <CalendarView v-else-if="activeTab === 'planner'" />
+    </div>
   </main>
 
   <!-- hover card: short, simple, informative preview with view details link -->
@@ -224,16 +140,12 @@
     :is-tracking="isTracking"
     :tracker-block-name="trackerBlockName"
     :planner-busy="plannerBusy"
-    :show-reschedule-form="showRescheduleForm"
-    :reschedule-form="rescheduleForm"
-    :show-block-manual-log="showBlockManualLog"
-    :session-form="sessionForm"
     :drawer-chat-messages="drawerChatMessages"
-    :hhmm="hhmm"
     :is-block-completed="isBlockCompleted"
     :is-block-reschedulable="isBlockReschedulable"
     :is-block-cancellable="isBlockCancellable"
     :can-log-timesheet="canLogTimesheet"
+    :can-review="isManager"
     :show-task-raven-drawer="showTaskRavenDrawer"
     :raven-task="ravenTask"
     :raven-messages="ravenMessages"
@@ -241,21 +153,21 @@
     :raven-sprint-recaps="ravenSprintRecaps"
     :raven-loading="ravenLoading"
     @close-block-drawer="showBlockDrawer = false"
-    @start-session="startSessionFromBlock"
+    @start-session="startFocusBlock"
     @stop-session="toggleTrack"
-    @toggle-reschedule="toggleRescheduleForm"
     @open-cancel-modal="openCancelModal"
-    @toggle-manual-log="showBlockManualLog = !showBlockManualLog"
-    @open-raven="openRavenFromBlock"
-    @edit-session="openEditSessionModal"
+    @log-session="logSessionFor"
+    @open-raven="openRavenApp"
+    @edit-session="editSessionRow"
     @delete-session="deleteSessionRow"
     @submit-reschedule="submitReschedule"
-    @submit-session="submitBlockSession"
+    @approve-block="quickApproveBlock"
+    @flag-block="quickFlagBlock"
     @close-raven-drawer="closeTaskRavenDrawer"
-    @start-task-immediately="startSessionFromTask"
+    @start-task-immediately="startTaskImmediately"
     @plan-attention-task="planAttentionTask"
     @open-block-drawer="openBlockDrawer"
-    @send-raven-message="sendRavenChatMessage"
+    @send-raven-message="sendRavenMessage"
   />
   <!-- ========================================== -->
   <!-- 5. WORKSPACE BOTTOM NAVIGATION DOCK        -->
@@ -282,9 +194,9 @@
 
     v-model:show-book-modal="showBookModal"
     :book-form="bookForm"
-    :book-form-task="bookFormTask"
     :combobox-assignee-options="comboboxAssigneeOptions"
     :combobox-book-task-options="comboboxBookTaskOptions"
+    :combobox-project-options="comboboxProjectOptions"
     :combobox-pairing-partner-options="comboboxPairingPartnerOptions"
     @submit-booking="submitBooking"
 
@@ -302,7 +214,7 @@
 
     v-model:show-inactivity-modal="showInactivityModal"
     :inactivity-minutes="inactivityMinutes"
-    :active-task-label="trackerNotes || (trackerBoundBlock ? (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label) : 'Active Work')"
+    :active-task-label="trackerBoundBlock ? (trackerBoundBlock.task_subject || trackerBoundBlock.work_item_label || '') : ''"
     :session-start="sessionStart"
     :last-activity-time-h-h-m-m="lastActivityTimeHHMM"
     :suggested-stop-h-h-m-m="suggestedStopHHMM"
@@ -317,32 +229,6 @@
     v-model:workflow-comment="workflowComment"
     :workflow-busy="workflowBusy"
     @submit-workflow-action="submitWorkflowAction"
-
-    v-model:show-new-task-modal="showNewTaskModal"
-    :new-task-form="newTaskForm"
-    :combobox-project-options="comboboxProjectOptions"
-    :combobox-task-options="comboboxTaskOptions"
-    :team-members="teamMembers"
-    :nature-options="natureOptions"
-    @save-new-planned-task="saveNewPlannedTask"
-    @new-task-time-change="onNewTaskTimeChange"
-    @new-task-duration-preset="setNewTaskDurationPreset"
-
-    v-model:show-adjust-modal="showAdjustModal"
-    v-model:adjust-mode="adjustMode"
-    :is-tracking="isTracking"
-    :adjust-form="adjustForm"
-    :keep-running-elapsed-formatted="keepRunningElapsedFormatted"
-    :min-timesheet-date="minTimesheetDate"
-    :today-date="todayDate"
-    :original-start-time-formatted="originalStartTimeFormatted"
-    :adjust-duration-minutes="adjustDurationMinutes"
-    :adjust-duration-formatted="adjustDurationFormatted"
-    :adjust-duration-short="adjustDurationShort"
-    @nudge-adjust-time="nudgeAdjustTime"
-    @set-adjust-end-now="setAdjustEndNow"
-    @apply-adjusted-start-time="applyAdjustedStartTime"
-    @submit-adjusted-timesheet="submitAdjustedTimesheet"
 
     v-model:show-runaway-alert-modal="showRunawayAlertModal"
     :runaway-guard-data="runawayGuardData"
@@ -381,21 +267,62 @@
 
     v-model:show-edit-session-modal="showEditSessionModal"
     :edit-session-form="editSessionForm"
-    :edit-session-duration="editSessionDuration"
+    :entry-day-offsets="entryDayOffsets"
     :is-saving-edit-session="isSavingEditSession"
     @save-edit-session="saveEditSession"
+    @keep-session-running="applyAdjustedStartTime"
   />
+
+  <!-- The one task form: block task rows, assigned work and the dashboard all open it -->
+  <TaskFormDialog />
 
 </div>
 </template>
 
 <script>
+import { provide, computed } from 'vue';
+import { entryDayOffsets as dayOffsetsFor } from './utils/timesheetEntry.js';
 import { useOmniTrackWorkstation } from './composables/useOmniTrackWorkstation.js';
+import { WORKSTATION_KEY } from './composables/useWorkstationContext.js';
 
 export default {
   name: 'OmniTrackApp',
   setup() {
-    return useOmniTrackWorkstation();
+    const workstation = useOmniTrackWorkstation();
+    provide(WORKSTATION_KEY, workstation);
+
+    // The drawers are prop/emit components; these adapt their events to the
+    // workstation's real signatures (the earlier wiring named functions that
+    // never existed, so every drawer action was a silent no-op).
+    const { isBlockCompleted, isPastBlock, isTracking, trackerBlockName, timesheetHorizonHours, isManager } = workstation;
+    const isOpenPlan = (b) => !!b && !isBlockCompleted(b) && !isPastBlock(b) && !['Rescheduled', 'Cancelled'].includes(b.status);
+    const isRecordingOn = (b) => isTracking.value && trackerBlockName.value === b.name;
+    // A running session does not hold the plan where it is: rescheduling moves the plan and
+    // the session keeps recording on this block until it is stopped. A session with no block
+    // of its own (is_live_active) has no plan to move.
+    const isBlockReschedulable = (b) => isOpenPlan(b) && !b.is_live_active;
+    // Cancelling a block while its session runs would throw away the work being recorded
+    const isBlockCancellable = (b) => isOpenPlan(b) && !b.is_live_active && !isRecordingOn(b);
+    // Timesheet entry day chips reach back as far as the server's horizon allows
+    const entryDayOffsets = computed(() => dayOffsetsFor(timesheetHorizonHours.value, isManager.value));
+    const editSessionRow = (session, block) => workstation.openEditSessionModal(block, session);
+    // Adding a timesheet entry by hand opens the same dialog as editing one
+    const logSessionFor = (block) => workstation.openEditSessionModal(block, {});
+    const deleteSessionRow = (session, block) => workstation.confirmDeleteSession(block, session);
+    const sendRavenMessage = ({ content }) => {
+      workstation.ravenChatInput.value = content;
+      return workstation.sendRavenChatMessage();
+    };
+    return {
+      ...workstation,
+      isBlockReschedulable,
+      isBlockCancellable,
+      entryDayOffsets,
+      editSessionRow,
+      logSessionFor,
+      deleteSessionRow,
+      sendRavenMessage
+    };
   }
 };
 </script>

@@ -49,3 +49,44 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.6); }
+
+/* Card surface shared by dashboard and calendar panels (replaces the old f-card wrapper). */
+.omni-card {
+  border-radius: 1.25rem;
+  border: 1px solid theme('colors.gray.200');
+  background: #fff;
+  color: theme('colors.gray.900');
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.omni-card--flush { padding: 0; }
+.omni-card--green { border-left: 3px solid theme('colors.emerald.500'); }
+.omni-card--amber { border-left: 3px solid theme('colors.amber.500'); }
+.omni-card--red { border-left: 3px solid theme('colors.rose.500'); }
+.omni-card--purple { border-left: 3px solid theme('colors.blue.500'); }
+.omni-card--blue { border-left: 3px solid theme('colors.blue.500'); }
+.dark .omni-card { background: #1e1f22; border-color: theme('colors.gray.800'); color: #fff; }
+
+/* frappe-ui 0.1.278 dialogs stack only by DOM order, so the sticky header (z-40),
+   the planner's now-line and hovered blocks (z-20) painted over an open dialog.
+   Lift the overlay above the page chrome. */
+.dialog-overlay { z-index: 50; }
+/* …and every frappe-ui popover (TimePicker list, DatePicker calendar, Dropdown) is
+   portalled to <body> at z-index auto, so once the overlay was lifted they opened
+   *behind* the dialog that owns them. Popovers sit above dialogs. reka writes the
+   content's own z-index (auto) inline on this wrapper, hence !important. */
+[data-reka-popper-content-wrapper] { z-index: 60 !important; }
+/* reka places the wrapper with a fractional translate() and also writes will-change:
+   transform inline. That raster layer is resampled at the half-pixel offset, so every
+   list (Activity, Project, tasks) read blurry. Without the hint the text paints on the
+   page's own pixel grid. */
+[data-reka-popper-content-wrapper] { will-change: auto !important; }
+/* A Combobox list sizes itself to its longest option (reka writes min-width: max-content
+   on the wrapper), so one long ToDo or note made it wider than the screen. Keep it between
+   the trigger's width and what fits on screen, and let long options wrap. */
+[data-reka-popper-content-wrapper]:has(> [role="listbox"]) { min-width: 0 !important; }
+[data-reka-popper-content-wrapper] > [role="listbox"] {
+  max-width: min(32rem, calc(100vw - 1.5rem));
+}
+[data-reka-popper-content-wrapper] > [role="listbox"] [role="option"] { overflow-wrap: anywhere; }

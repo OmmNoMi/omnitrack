@@ -4,7 +4,7 @@
  *
  * Invariants:
  * 1. The redundant 'Production' / 'Local Dev' badge is completely removed from <header>.
- * 2. Raven Chat button text collapses on mobile with `hidden sm:inline`.
+ * 2. Raven is an app-menu item, not a header button.
  * 3. Brand group and header controls accommodate narrow viewports (< 480px / 360px-412px)
  *    without overflowing or forcing horizontal scrollbars.
  */
@@ -37,17 +37,15 @@ assert.strictEqual(
 );
 console.log('✓ Test 1: Redundant isProductionEnv badge is completely removed from header.');
 
-// Test 2: Raven Chat text MUST have `hidden sm:inline` so mobile devices show only the icon
-const ravenChatMatch = headerHtml.match(/<f-button[^>]*@click="openRavenApp"[^>]*>([\s\S]*?)<\/f-button>/);
-assert.ok(ravenChatMatch, 'FAIL: Raven Chat launcher button not found in header');
-const ravenButtonHtml = ravenChatMatch[0];
-
-assert.ok(
-  ravenButtonHtml.includes('class="hidden sm:inline">Raven Chat</span>') ||
-  ravenButtonHtml.includes('class="hidden sm:inline select-none">Raven Chat</span>'),
-  'FAIL: Raven Chat text must be hidden on mobile (<640px) with `class="hidden sm:inline"` to prevent horizontal overflow'
-);
-console.log('✓ Test 2: Raven Chat text collapsed on mobile viewports (<640px) with hidden sm:inline.');
+// Test 2: Raven lives in the app menu, never as a header button (owner's call: keep the 375px header to clock + menu)
+assert.ok(!/<Button[^>]*>\s*Raven\s*<\/Button>/.test(headerHtml), 'FAIL: Raven must not be a header button; it belongs in the app menu');
+assert.ok(/label:\s*"Raven chat"[^}]*\$emit\("open-raven"\)/.test(htmlContent), 'FAIL: app menu must carry a "Raven chat" item that emits open-raven');
+assert.ok(/<Dropdown :options="menuItems"/.test(headerHtml), 'FAIL: header Dropdown must use menuItems (Raven + shared menu)');
+assert.ok(/label:\s*"OmniTrack Desk"[^}]*\/desk\/omnitrack/.test(htmlContent), 'FAIL: app menu must offer "OmniTrack Desk" (/desk/omnitrack) for moving to the Desk interface');
+assert.ok(/this\.isClient \? \[\]/.test(htmlContent), 'FAIL: the Desk link must be hidden from client-portal users');
+const collab = fs.readFileSync(path.resolve(omnitrackDir, 'src', 'stores', 'collaborationStore.js'), 'utf8');
+assert.ok(!/window\.open\('\/app\/raven'/.test(collab), 'FAIL: /app/raven is the Raven Desk workspace, not the chat; open /raven');
+console.log('✓ Test 2: Raven and OmniTrack Desk are reached from the app menu, not the header.');
 
 // Test 3: Header and its containers do not prevent fluid shrinking
 // Brand group container (containing the logo and OmniTrack title)

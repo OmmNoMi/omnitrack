@@ -30,6 +30,8 @@ from omnitrack.utils import (
 	resolve_planner_user as _resolve_planner_user,
 	is_planner_manager as _is_planner_manager,
 )
+from omnitrack.utils.block_tasks import attach_session_tasks, clean_session_tasks
+from omnitrack.utils.activity import to_kind
 from omnitrack.api.timesheet import (
 	get_timesheet_sync_mode,
 	create_timesheet_from_work_block,
@@ -42,7 +44,7 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 					  deliverable_notes=None, work_nature=None,
 					  duration_hours=None, notes=None, task_nature=None,
 					  from_time=None, to_time=None, work_date=None,
-					  output_metrics=None, pairing_partner=None):
+					  output_metrics=None, pairing_partner=None, session_tasks=None):
 	"""
 	Quick Stopwatch Punch API from Desktop / Mobile HUD / Workstation.
 	Creates/Completes a Planned Work Block and triggers attendance synthesis.
@@ -57,23 +59,7 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 	check_timesheet_date_permission(target_date, user)
 
 	deliverable_notes = deliverable_notes or notes
-	work_nature = work_nature or task_nature
-	if work_nature:
-		wn_lower = str(work_nature).lower()
-		if "unplanned" in wn_lower:
-			work_nature = "⚠️ Unplanned"
-		elif "break" in wn_lower:
-			work_nature = "☕ Break"
-		elif "leave" in wn_lower:
-			work_nature = "🌴 Leave"
-		elif "absent" in wn_lower:
-			work_nature = "🤒 Absent"
-		elif "out-of-office" in wn_lower or "out of office" in wn_lower:
-			work_nature = "🚫 Out-of-Office"
-		elif "review" in wn_lower or "sync" in wn_lower:
-			work_nature = "🔄 Review & Sync"
-		elif "planned" in wn_lower:
-			work_nature = "🎯 Planned"
+	work_nature = to_kind(work_nature or task_nature)
 
 	dur_secs = flt(duration_seconds)
 	if dur_secs <= 0 and duration_hours is not None:
@@ -107,7 +93,9 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		block.task = task
 		block.deliverable_notes = _require_session_notes(deliverable_notes)
 		block.status = "Completed"
-		block.task_nature = work_nature or "🎯 Planned"
+		block.task_nature = work_nature
+		# A punch always makes a new block: no block was planned for this time
+		block.unplanned = 1
 		block.append("sessions", {
 			"session_date": target_date,
 			"from_time": start_t,
@@ -135,6 +123,9 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 							"reference_id": m.get("reference_id") or "",
 							"notes": m.get("notes") or ""
 						})
+
+		# The tasks picked during the session, with the ones ticked done
+		attach_session_tasks(block, session_tasks)
 
 		block.flags.ignore_permissions = True
 		block.insert()
@@ -165,6 +156,7 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 				p_doc.deliverable_notes = f"[Pairing with {user}]\n{block.deliverable_notes}"
 				p_doc.status = "Completed"
 				p_doc.task_nature = block.task_nature
+				p_doc.unplanned = 1
 				p_doc.append("sessions", {
 					"session_date": target_date,
 					"from_time": start_t,
@@ -293,11 +285,13 @@ def sync_active_session(session_data=None, user=None):
 
 	clean_data = {
 		"startTime": start_time,
-		"selectedNature": session_data.get("selectedNature") or "🎯 Planned",
+		"selectedNature": to_kind(session_data.get("selectedNature")),
 		"selectedProject": session_data.get("selectedProject") or "",
 		"trackerNotes": (session_data.get("trackerNotes") or "").strip(),
 		"trackerBlockName": session_data.get("trackerBlockName") or None,
 		"sessionNotesList": session_data.get("sessionNotesList") if isinstance(session_data.get("sessionNotesList"), list) else [],
+		# Tasks of a session with no block yet; Stop puts them on the block it becomes
+		"sessionTasks": clean_session_tasks(session_data.get("sessionTasks")),
 		"lastActivityTime": resolved_last_act,
 		"lastUpdated": now_ms,
 		"status": "active"
@@ -378,18 +372,18 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 	if target_block and frappe.db.exists("Planned Work Block", target_block):
 		b_doc = frappe.get_doc("Planned Work Block", target_block)
 		target_project = getattr(b_doc, "project", None) or target_project
-		target_nature = getattr(b_doc, "task_nature", None) or target_nature or "🎯 Planned"
+		target_nature = getattr(b_doc, "task_nature", None) or target_nature
 		target_notes = b_doc.get("task_subject") or b_doc.get("deliverable_notes") or b_doc.get("work_item_label") or ""
 	elif target_task and frappe.db.exists("Task", target_task):
 		t_doc = frappe.get_doc("Task", target_task)
 		target_project = getattr(t_doc, "project", None) or target_project
-		target_nature = getattr(t_doc, "task_nature", None) or target_nature or "🎯 Planned"
+		target_nature = getattr(t_doc, "task_nature", None) or target_nature
 		target_notes = t_doc.get("subject") or t_doc.get("title") or t_doc.name or ""
 
 	# 3. Start fresh session for target block
 	new_session_data = {
 		"startTime": now_ms,
-		"selectedNature": target_nature or "🎯 Planned",
+		"selectedNature": to_kind(target_nature),
 		"selectedProject": target_project or "",
 		"trackerNotes": target_notes or "",
 		"trackerBlockName": target_block if target_block else None,
@@ -510,7 +504,7 @@ def log_catch_up_session(work_date=None, from_time=None, to_time=None, duration_
 			project=project,
 			task=task,
 			deliverable_notes=deliverable_notes,
-			work_nature=task_nature or "🎯 Planned",
+			work_nature=task_nature,
 			output_metrics=output_metrics,
 			pairing_partner=pairing_partner
 		)
