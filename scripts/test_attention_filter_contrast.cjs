@@ -58,25 +58,15 @@ const dashboardViewPath = path.resolve(omnitrackDir, 'src', 'views', 'DashboardV
 const dashboardViewContent = (() => { const d = path.resolve(omnitrackDir, 'src', 'views', 'dashboard'); return [dashboardViewPath, ...(fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.vue')).map((f) => path.join(d, f)) : [])].filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, 'utf8')).join('\n'); })();
 const targetTemplateContent = dashboardViewContent || htmlContent;
 
-// Test 3: Attention tab buttons have accessible contrast definitions
-const overdueIdx = targetTemplateContent.indexOf("setAttentionFilter('overdue')");
-assert.ok(overdueIdx !== -1, 'FAIL: Overdue attention filter button not found');
-const startBtn = Math.max(
-  targetTemplateContent.lastIndexOf('<Button', overdueIdx),
-  targetTemplateContent.lastIndexOf('<button', overdueIdx)
-);
-const endBtn = targetTemplateContent.indexOf('>', overdueIdx) + 1;
-const overdueBtnHtml = targetTemplateContent.slice(startBtn, endBtn);
-
-const isFrappeUIOverdue = overdueBtnHtml.includes('<Button') &&
-  overdueBtnHtml.includes('theme="red"');
-const isCustomOverdue = (overdueBtnHtml.includes('bg-rose-600') || overdueBtnHtml.includes('bg-rose-700')) &&
-  overdueBtnHtml.includes('text-white');
-
+// Test 3: the Overdue chip is one of the grey chips. frappe-ui's red chip kept its light-mode red
+// text on the dark page (2.6:1); the rows below say which tasks are overdue, in red Badges.
+const chipStart = targetTemplateContent.indexOf('v-for="f in attentionFilters"');
+assert.ok(chipStart !== -1 && /\{ key: 'overdue', label: 'Overdue'/.test(targetTemplateContent), 'FAIL: Overdue attention filter chip not found');
+const chipTag = targetTemplateContent.slice(targetTemplateContent.lastIndexOf('<Button', chipStart), targetTemplateContent.indexOf('>', chipStart) + 1);
 assert.ok(
-  isFrappeUIOverdue || isCustomOverdue,
-  'FAIL: Active overdue button must use genuine Frappe UI <Button theme="red"> or solid high-contrast background'
+  /\stheme="gray"/.test(chipTag) && chipTag.includes("dark:!bg-gray-700 dark:!text-white") && !/theme="red"|:theme=/.test(chipTag),
+  'FAIL: the Overdue chip is grey like the others; a red chip reads 2.6:1 in dark mode'
 );
-console.log('✓ Test 3: Active and inactive overdue button classes are properly configured for contrast.');
+console.log('✓ Test 3: the Overdue chip is grey, its selected state gray-700 with white text in dark mode.');
 
 console.log('\nSUCCESS: All Attention Filter Contrast Invariants passed cleanly!\n');

@@ -71,7 +71,7 @@
               :disabled="!form.from_time"
               @click="$emit('keep-running')"
             >Keep running</Button>
-            <Button type="submit" variant="solid" theme="blue" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800" :label="saveLabel" :loading="isSaving" :disabled="!canSave">
+            <Button type="submit" variant="solid" theme="blue" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" :label="saveLabel" :loading="isSaving" :disabled="!canSave">
               {{ saveLabel }}
             </Button>
           </div>

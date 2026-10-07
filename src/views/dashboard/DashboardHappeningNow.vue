@@ -33,6 +33,7 @@
           <Button
             :variant="stopConfirm ? 'solid' : 'subtle'"
             theme="red"
+            :class="stopConfirm ? '' : 'dark:!text-red-300'"
             icon-left="square"
             :label="stopConfirm ? 'Stop and save without any log lines' : 'Stop and save the session'"
             @click.stop="requestStopFocusBlock(block)">

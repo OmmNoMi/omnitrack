@@ -30,7 +30,7 @@
           size="md"
           label="Discard session"
           tooltip="Nothing is logged"
-          class="sm:mr-auto"
+          class="sm:mr-auto !text-red-700 dark:!text-red-300"
           data-destructive
           @click="$emit('discard')"
         >Discard session</Button>

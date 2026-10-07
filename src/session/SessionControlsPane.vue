@@ -34,7 +34,7 @@
             :tabindex="activeToolIndex === 1 ? 0 : -1"
             variant="solid"
             theme="blue"
-            :class="[DISABLED_SOLID, 'enabled:!bg-blue-700 enabled:hover:!bg-blue-800']"
+            :class="[DISABLED_SOLID, 'enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white']"
             :label="entrySaveLabel"
             :tooltip="(modKey || '⌘') + 'Enter'"
             aria-keyshortcuts="Control+Enter Meta+Enter"

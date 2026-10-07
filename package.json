@@ -8,7 +8,7 @@
     "build": "vite build",
     "test:bundle": "node scripts/test_bundle_and_components.cjs",
     "test:interactions": "node scripts/test_workstation_interactions.cjs",
-    "test:fixtures": "python3 -m unittest omnitrack.tests.test_workspace_fixtures -v",
+    "test:fixtures": "../../env/bin/python -m unittest omnitrack.tests.test_workspace_fixtures omnitrack.tests.test_block_slot -v",
     "test:mutation": "node scripts/run_mutation_tests.cjs",
     "test:axe": "node scripts/test_axe_wcag.cjs",
     "test:js": "node scripts/check_www_js.cjs",

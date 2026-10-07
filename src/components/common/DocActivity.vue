@@ -23,7 +23,7 @@
       />
       <p v-if="error" class="text-sm" :class="lateText" role="alert">{{ error }}</p>
       <div class="flex justify-end">
-        <Button type="submit" variant="solid" size="md" theme="blue" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800" label="Post comment" :loading="posting" :disabled="!draft.trim()">Comment</Button>
+        <Button type="submit" variant="solid" size="md" theme="blue" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" label="Post comment" :loading="posting" :disabled="!draft.trim()">Comment</Button>
       </div>
     </form>
 

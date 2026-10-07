@@ -53,7 +53,7 @@
             placeholder="Search today's planned blocks or assigned tasks..."
             autocomplete="off"
           />
-          <svg class="w-4 h-4 absolute left-3 top-3 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <svg class="w-4 h-4 absolute left-3 top-3 text-gray-600 dark:text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -62,7 +62,7 @@
 
       <!-- Candidate Selection List -->
       <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
-        <div v-if="candidates.length === 0" class="py-6 text-center text-gray-600 italic">
+        <div v-if="candidates.length === 0" class="py-6 text-center text-gray-600 dark:text-gray-300 italic">
           No matching work blocks or tasks found for today.
         </div>
         <button

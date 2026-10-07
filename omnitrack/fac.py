@@ -33,6 +33,7 @@ from omnitrack.permissions import (
 	check_timesheet_date_permission,
 	is_omnitrack_manager,
 )
+from omnitrack.utils.block_slot import block_slot, split_stamp
 from omnitrack.utils.time_math import pad_time as _time_str
 
 
@@ -155,7 +156,21 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 		frappe.throw(_("Please provide a list of blocks to plan."))
 
 	target_user = _resolve_planner_user(employee)
-	target_date = work_date or nowdate()
+
+	# Each block's day and times. A date written into start_time used to be dropped: the block
+	# landed on today, 0.0 hrs long. Now it sets the day, or is refused when it disagrees.
+	slots = []
+	for item in blocks:
+		if not item.get("start_time") or not item.get("end_time"):
+			frappe.throw(_("Each block must specify start_time and end_time."))
+		try:
+			slots.append(block_slot(item.get("start_time"), item.get("end_time"), work_date))
+		except ValueError as e:
+			frappe.throw(_("Block {0}: {1}").format(len(slots) + 1, str(e)), frappe.ValidationError)
+	days = {d for d, _s, _e in slots if d}
+	if len(days) > 1:
+		frappe.throw(_("These blocks are on different days ({0}); plan one day per call.").format(", ".join(sorted(days))), frappe.ValidationError)
+	target_date = work_date or (days.pop() if days else nowdate())
 
 	# Temporal lock check
 	if getdate(target_date) < getdate(nowdate()):
@@ -165,18 +180,7 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 		)
 
 	booked_blocks = []
-	for item in blocks:
-		s_time = item.get("start_time")
-		e_time = item.get("end_time")
-		if not s_time or not e_time:
-			frappe.throw(_("Each block must specify start_time and end_time."))
-
-		# Normalize time strings (e.g. "9:00" -> "09:00:00")
-		if len(s_time.split(":")) == 2:
-			s_time = f"{s_time}:00"
-		if len(e_time.split(":")) == 2:
-			e_time = f"{e_time}:00"
-
+	for item, (_day, s_time, e_time) in zip(blocks, slots):
 		task_id = item.get("task")
 		proj_id = item.get("project")
 		notes = item.get("deliverable_notes") or item.get("work_item_label") or item.get("notes") or ""
@@ -408,6 +412,24 @@ def quick_create_task(
 	if not subject or not str(subject).strip():
 		frappe.throw(_("Task subject cannot be empty."))
 
+	# The block's day and times are checked before the task exists, so a bad time creates (and
+	# assigns, which can notify) nothing. A dated block_start sets the day, as when planning.
+	if book_block:
+		try:
+			start_day, block_start = split_stamp(block_start or "10:00:00")
+		except ValueError as e:
+			frappe.throw(_("block_start: {0}").format(str(e)), frappe.ValidationError)
+		if start_day and work_date and str(work_date) != start_day:
+			frappe.throw(_("block_start is on {0} but work_date is {1}; send one date, or the same date in both").format(start_day, work_date), frappe.ValidationError)
+		target_date = work_date or start_day or nowdate()
+		if not block_end:
+			est_hours = flt(expected_time) if flt(expected_time) > 0 else 1.0
+			block_end = (datetime.strptime(block_start, "%H:%M:%S") + timedelta(hours=est_hours)).strftime("%H:%M:%S")
+		try:
+			_d, block_start, block_end = block_slot(f"{target_date} {block_start}", block_end, target_date)
+		except ValueError as e:
+			frappe.throw(_("block_end: {0}").format(str(e)), frappe.ValidationError)
+
 	user = _resolve_planner_user(employee)
 	has_task_doctype = frappe.db.exists("DocType", "Task")
 	task_name = None
@@ -443,16 +465,6 @@ def quick_create_task(
 
 	booked_block = None
 	if book_block:
-		target_date = work_date or nowdate()
-		est_hours = flt(expected_time) if flt(expected_time) > 0 else 1.0
-		if not block_end:
-			try:
-				st_dt = datetime.strptime(block_start, "%H:%M:%S" if len(block_start.split(":")) == 3 else "%H:%M")
-				end_dt = st_dt + timedelta(hours=est_hours)
-				block_end = end_dt.strftime("%H:%M:%S")
-			except Exception:
-				block_end = "12:00:00"
-
 		res = book_work_block(
 			work_date=target_date,
 			start_time=block_start,
@@ -1314,8 +1326,8 @@ class OmniTrackPlanWorkBlocksTool(BaseTool):
 						"type": "object",
 						"required": ["start_time", "end_time"],
 						"properties": {
-							"start_time": {"type": "string", "description": "e.g. '09:00:00'"},
-							"end_time": {"type": "string", "description": "e.g. '11:00:00'"},
+							"start_time": {"type": "string", "description": "A time, e.g. '09:00', or a date and time, e.g. '2026-10-08 09:00'. A date here sets the day when work_date is omitted, and must match work_date when it is given."},
+							"end_time": {"type": "string", "description": "e.g. '11:00'. A date here must be start_time's day (or the next day, for a block past midnight)."},
 							"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001)"},
 							"project": {"type": "string", "description": "Project ID"},
 							"deliverable_notes": {"type": "string", "description": "What will be accomplished"},
@@ -1325,7 +1337,7 @@ class OmniTrackPlanWorkBlocksTool(BaseTool):
 				},
 				"work_date": {
 					"type": "string",
-					"description": "Work date (YYYY-MM-DD). Defaults to today."
+					"description": "Work date (YYYY-MM-DD). Defaults to the date in start_time, else today."
 				},
 				"employee": {
 					"type": "string",

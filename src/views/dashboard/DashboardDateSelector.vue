@@ -11,7 +11,7 @@
           {{ dashboardDaySummary }}
         </p>
       </div>
-      <Button variant="solid" theme="blue" icon-left="plus" label="Plan" tooltip="Plan a focus block" class="shrink-0 enabled:!bg-blue-700 enabled:hover:!bg-blue-800" @click="openNewTaskModal">Plan</Button>
+      <Button variant="solid" theme="blue" icon-left="plus" label="Plan" tooltip="Plan a focus block" class="shrink-0 enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" @click="openNewTaskModal">Plan</Button>
     </div>
 
     <!-- 7-day strip: the day chips are a roving radiogroup; Today and the arrows are plain buttons -->

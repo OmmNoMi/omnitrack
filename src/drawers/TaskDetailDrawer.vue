@@ -49,7 +49,7 @@
           <!-- Actions: the next workflow steps first, then Edit; the rest under More. Every step
                opens the one task form at its confirm step. -->
           <div v-if="d || failed" class="flex items-center gap-2 flex-wrap" role="group" aria-label="Task actions">
-            <Button v-for="(m, i) in shownMoves" :key="m.label" size="md" :variant="i === 0 && !m.danger ? 'solid' : 'subtle'" :theme="m.danger ? 'red' : (i === 0 ? 'blue' : 'gray')" :class="i === 0 && !m.danger ? 'enabled:!bg-blue-700 enabled:hover:!bg-blue-800' : ''" :icon-left="m.icon" :label="m.label" @click="m.onClick">{{ m.label }}</Button>
+            <Button v-for="(m, i) in shownMoves" :key="m.label" size="md" :variant="i === 0 && !m.danger ? 'solid' : 'subtle'" :theme="m.danger ? 'red' : (i === 0 ? 'blue' : 'gray')" :class="m.danger ? '!text-red-700 dark:!text-red-300' : (i === 0 ? 'enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white' : '')" :icon-left="m.icon" :label="m.label" @click="m.onClick">{{ m.label }}</Button>
             <Button variant="subtle" size="md" icon-left="edit-2" label="Edit task" :disabled="!d" @click="edit()">Edit</Button>
             <Dropdown :options="moreMenu" placement="right">
               <Button variant="outline" size="md" icon-right="chevron-down" label="More" aria-haspopup="menu">More</Button>

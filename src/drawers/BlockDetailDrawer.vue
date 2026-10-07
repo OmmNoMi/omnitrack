@@ -40,7 +40,7 @@
 
           <!-- Actions: the session and the plan up front; the rarer ones behind More -->
           <div v-if="!inline" class="flex items-center gap-2">
-            <Button v-if="canStart" variant="solid" icon-left="play" label="Start session" class="flex-1 enabled:!bg-blue-700 enabled:hover:!bg-blue-800 !text-white" @click="$emit('start-session', block)" />
+            <Button v-if="canStart" variant="solid" icon-left="play" label="Start session" class="flex-1 enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white !text-white" @click="$emit('start-session', block)" />
             <Button v-if="isRecording" variant="solid" theme="red" icon-left="square" label="Stop live session" class="flex-1 !bg-red-700 hover:!bg-red-800 !text-white" @click="$emit('stop-session', block)">Stop live session</Button>
             <Button v-if="isBlockReschedulable(block)" variant="outline" icon-left="calendar" label="Reschedule" aria-haspopup="dialog" @click="showReschedule = true">Reschedule</Button>
             <Dropdown v-if="moreActions.length" :options="moreActions" placement="right">

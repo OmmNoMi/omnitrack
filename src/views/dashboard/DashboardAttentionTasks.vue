@@ -11,7 +11,7 @@
           Needs your attention
         </h3>
       </div>
-      <Button variant="ghost" theme="blue" icon-right="arrow-right"
+      <Button variant="ghost" theme="blue" icon-right="arrow-right" class="!text-blue-700 dark:!text-blue-300"
         label="Open planner calendar to allocate time"
         @click="openPlannerWithFilter(attentionFilter)">
         Open planner
@@ -21,71 +21,26 @@
     <!-- Real-world Quick Filter Bar & Search -->
     <div class="flex items-center justify-between gap-2.5 flex-wrap pt-2.5 pb-1 mb-2 border-t border-amber-200/60 dark:border-amber-900/40">
       <div class="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Filter action required tasks" @keydown="onAttentionTabKeydown">
+        <!-- Filter chips are grey: the colour of a fact is on its row's badge, and frappe-ui's red
+             and blue subtle Buttons keep light-mode text on the dark page. Selected is solid, and
+             lighter than the card in dark mode rather than near-white. -->
         <Button
+          v-for="f in attentionFilters"
+          :key="f.key"
           type="button"
           role="tab"
           size="sm"
-          :variant="attentionFilter === 'all' ? 'solid' : 'subtle'"
+          :variant="attentionFilter === f.key ? 'solid' : 'subtle'"
           theme="gray"
-          :aria-selected="attentionFilter === 'all'"
-          :tabindex="attentionFilter === 'all' ? 0 : -1"
-          data-attention-tab="all"
-          @click="setAttentionFilter('all')"
+          :class="attentionFilter === f.key ? 'dark:!bg-gray-700 dark:!text-white' : ''"
+          :aria-selected="attentionFilter === f.key"
+          :tabindex="attentionFilter === f.key ? 0 : -1"
+          :data-attention-tab="f.key"
+          @click="setAttentionFilter(f.key)"
         >
-          <span>All</span>
+          <span>{{ f.label }}</span>
           <template #suffix>
-            <span class="text-[10px] font-mono opacity-80">({{ attentionTasks.length }})</span>
-          </template>
-        </Button>
-        <Button
-          v-if="overdueTasksCount > 0"
-          type="button"
-          role="tab"
-          size="sm"
-          :variant="attentionFilter === 'overdue' ? 'solid' : 'subtle'"
-          theme="red"
-          :aria-selected="attentionFilter === 'overdue'"
-          :tabindex="attentionFilter === 'overdue' ? 0 : -1"
-          data-attention-tab="overdue"
-          @click="setAttentionFilter('overdue')"
-        >
-          <span>Overdue</span>
-          <template #suffix>
-            <span class="text-[10px] font-mono opacity-80">({{ overdueTasksCount }})</span>
-          </template>
-        </Button>
-        <Button
-          v-if="underplannedTasksCount > 0"
-          type="button"
-          role="tab"
-          size="sm"
-          :variant="attentionFilter === 'underplanned' ? 'solid' : 'subtle'"
-          theme="gray"
-          :aria-selected="attentionFilter === 'underplanned'"
-          :tabindex="attentionFilter === 'underplanned' ? 0 : -1"
-          data-attention-tab="underplanned"
-          @click="setAttentionFilter('underplanned')"
-        >
-          <span>Underplanned</span>
-          <template #suffix>
-            <span class="text-[10px] font-mono opacity-80">({{ underplannedTasksCount }})</span>
-          </template>
-        </Button>
-        <Button
-          v-if="dueSoonTasksCount > 0"
-          type="button"
-          role="tab"
-          size="sm"
-          :variant="attentionFilter === 'due_soon' ? 'solid' : 'subtle'"
-          theme="blue"
-          :aria-selected="attentionFilter === 'due_soon'"
-          :tabindex="attentionFilter === 'due_soon' ? 0 : -1"
-          data-attention-tab="due_soon"
-          @click="setAttentionFilter('due_soon')"
-        >
-          <span>Due Soon</span>
-          <template #suffix>
-            <span class="text-[10px] font-mono opacity-80">({{ dueSoonTasksCount }})</span>
+            <span class="tabular-nums">{{ f.count }}</span>
           </template>
         </Button>
       </div>
@@ -112,7 +67,7 @@
     <div v-if="visibleAttentionTasks.length === 0" class="text-center py-6 border border-dashed rounded-2xl"
       :class="isDarkMode ? 'border-gray-700 text-gray-300' : 'border-amber-200 text-gray-700'">
       <span>No tasks match this filter.</span>
-      <Button variant="ghost" theme="blue" class="ml-1" @click="attentionFilter = 'all'; attentionSearch = ''">Clear filter</Button>
+      <Button variant="ghost" theme="blue" class="ml-1 !text-blue-700 dark:!text-blue-300" @click="attentionFilter = 'all'; attentionSearch = ''">Clear filter</Button>
     </div>
     <ul v-else role="grid" class="space-y-2.5" :aria-rowcount="visibleAttentionTasks.length" aria-colcount="3" aria-label="Action required overdue and underplanned task table. Use arrow keys to navigate rows and actions.">
       <li 
@@ -191,7 +146,7 @@
               variant="solid"
               theme="blue"
               size="sm"
-              class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800"
+              class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"
               @click.stop="startTaskImmediately(t)"
               :tabindex="attentionTabindex(rIdx, 2)"
               :data-attention-row="rIdx"
@@ -230,6 +185,17 @@ import { useWorkstationContext } from '../../composables/useWorkstationContext.j
 
 export default {
   name: 'DashboardAttentionTasks',
+  computed: {
+    // All, then each kind that has tasks, in the order the rows are worried about
+    attentionFilters() {
+      return [
+        { key: 'all', label: 'All', count: this.attentionTasks.length },
+        { key: 'overdue', label: 'Overdue', count: this.overdueTasksCount },
+        { key: 'underplanned', label: 'Underplanned', count: this.underplannedTasksCount },
+        { key: 'due_soon', label: 'Due soon', count: this.dueSoonTasksCount },
+      ].filter((f) => f.key === 'all' || f.count > 0);
+    },
+  },
   methods: {
     // Secondary facts surface on hover instead of as extra chips on every row.
     taskDetails(t) {

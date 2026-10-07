@@ -12,7 +12,7 @@
         You haven't added any bullet notes to this session. What would you like to do with this elapsed time?
       </p>
       <div class="block space-y-1">
-        <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
+        <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
           Note for this session
         </label>
         <input

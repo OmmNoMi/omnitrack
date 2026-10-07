@@ -37,6 +37,12 @@ const view = read("src/views/dashboard/DashboardTimeline.vue");
 if (!/v-for="z in timelineZoomOptions"/.test(view)) problems.push("DashboardTimeline.vue: the radiogroup must list timelineZoomOptions");
 const group = view.slice(view.indexOf('role="radiogroup"'), view.indexOf('role="radiogroup"') + 1200);
 if (/text-\[(9|10|11)px\]/.test(group)) problems.push("DashboardTimeline.vue: zoom chips must be at least text-xs");
+// The selected zoom on the dark page: gray-600 under white text read 4.2:1, and the old #1E1F22 was
+// darker than its #2B2D30 track, so the choice looked like a hole. gray-700 is lighter than the
+// track and holds white text at 7:1.
+// The now badge's 9px time holds 4.5:1 only on red-600; on red-500 it read 4.4:1
+if (!/rounded bg-red-600 text-white shadow-xs whitespace-nowrap">\s*\{\{ nowLineLabel \}\}/.test(view)) problems.push("DashboardTimeline.vue: the now badge is red-600 under white text");
+if (!/timelineZoom === z \? \(isDarkMode \? 'bg-gray-700 text-white/.test(view)) problems.push("DashboardTimeline.vue: the selected zoom chip in dark mode is bg-gray-700 with white text");
 
 // The day's planned and logged hours are stated once, in the timeline legend. The header
 // subtitle summed planned blocks only and said "0.0h logged" over a legend's "Logged 5.7h".

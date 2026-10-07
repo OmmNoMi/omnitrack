@@ -26,7 +26,7 @@
             :class="choice === 'keep' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 text-blue-600' : 'border-gray-200 dark:border-gray-700'"
           >
             <div>Keep Full</div>
-            <div class="text-[10px] text-gray-700 font-normal mt-0.5">{{ guardData.elapsed_hours }}h elapsed</div>
+            <div class="text-[10px] text-gray-700 dark:text-gray-300 font-normal mt-0.5">{{ guardData.elapsed_hours }}h elapsed</div>
           </button>
           <button
             type="button"
@@ -35,7 +35,7 @@
             :class="choice === 'cap' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600' : 'border-gray-200 dark:border-gray-700'"
           >
             <div>Cap at Schedule</div>
-            <div class="text-[10px] text-gray-700 font-normal mt-0.5">{{ guardData.suggested_cap_hours }}h planned</div>
+            <div class="text-[10px] text-gray-700 dark:text-gray-300 font-normal mt-0.5">{{ guardData.suggested_cap_hours }}h planned</div>
           </button>
           <button
             type="button"
@@ -44,7 +44,7 @@
             :class="choice === 'custom' ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/50 text-purple-600' : 'border-gray-200 dark:border-gray-700'"
           >
             <div>Adjust &amp; Stop</div>
-            <div class="text-[10px] text-gray-700 font-normal mt-0.5">Open Slider</div>
+            <div class="text-[10px] text-gray-700 dark:text-gray-300 font-normal mt-0.5">Open Slider</div>
           </button>
         </div>
       </div>

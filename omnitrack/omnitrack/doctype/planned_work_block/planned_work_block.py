@@ -159,25 +159,31 @@ class PlannedWorkBlock(OptionalLinks, Document):
 		self.set("tasks", rows)
 
 	def calculate_duration(self):
-		if self.start_time and self.end_time:
-			def _to_secs(t):
-				if hasattr(t, "total_seconds"):
-					return t.total_seconds()
-				parts = str(t).split(":")
-				h = int(parts[0]) if len(parts) > 0 else 0
-				m = int(parts[1]) if len(parts) > 1 else 0
-				s = int(float(parts[2])) if len(parts) > 2 else 0
-				return h * 3600 + m * 60 + s
+		"""The block's length from its times (past midnight wraps to the next day). A date and
+		time in a Time field kept only its time, and the length came back 0.0 with no error: a
+		time that cannot be read, or a date that is not the block's own day, is refused."""
+		if not (self.start_time and self.end_time):
+			return
+		from frappe.utils import add_days, getdate
+		from omnitrack.utils.block_slot import split_stamp
+		from omnitrack.utils.time_math import duration_hours
 
-			try:
-				s1 = _to_secs(self.start_time)
-				s2 = _to_secs(self.end_time)
-				diff = (s2 - s1) / 3600.0
-				if diff < 0:
-					diff += 24.0  # Split over midnight
-				self.duration_hours = round(diff, 2)
-			except Exception:
-				self.duration_hours = 0.0
+		try:
+			start_day, start = split_stamp(self.start_time)
+			end_day, end = split_stamp(self.end_time)
+		except ValueError as e:
+			frappe.throw(str(e), frappe.ValidationError)
+		if not self.work_date and start_day:
+			self.work_date = start_day
+		day = getdate(self.work_date) if self.work_date else None
+		if day and ((start_day and getdate(start_day) != day) or (end_day and getdate(end_day) not in (day, getdate(add_days(day, 1))))):
+			frappe.throw(frappe._("The block is on {0} but its times are dated {1} to {2}.").format(day, start_day or day, end_day or day), frappe.ValidationError)
+		# Only a dated time is rewritten; a plain one is left as stored, so a re-save changes nothing
+		if start_day:
+			self.start_time = start
+		if end_day:
+			self.end_time = end
+		self.duration_hours = round(duration_hours(start, end), 2)
 
 	def roll_up_sessions(self):
 		"""Actual hours = sum of logged work sessions; variance = actual - planned.

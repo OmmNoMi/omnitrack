@@ -17,7 +17,7 @@
     <div v-if="targetBlock" class="space-y-4 text-xs">
       <!-- Target Block Summary Card -->
       <div class="p-3 rounded-2xl border" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
-        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-600">Target Block</div>
+        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-600 dark:text-gray-300">Target Block</div>
         <div class="font-extrabold text-sm text-gray-900 dark:text-white mt-0.5">
           {{ blockTitle(targetBlock) }}
         </div>

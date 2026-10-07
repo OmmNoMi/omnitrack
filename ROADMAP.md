@@ -1072,9 +1072,30 @@ Owner: "on dark mode the whole app looks very bad … this x button is not at al
 
 - Fixed: the app set only `.dark`. frappe-ui's colour tokens switch on `data-theme="dark"`, so every frappe-ui Button, close x and input stayed on light tokens over the dark page. `applyTheme` and the first-paint script now set both. `check_contrast_tokens.cjs` plus 2 mutants.
 
+- Fixed (pills and faint labels): 66 greys in 9 files had no dark colour, or named a dark grey in the `isDarkMode` dark branch, and stayed gray-600 on the #1E1F22 page (the timeline's hour and lane labels, the week's Overview, attendance, the client portal, the cancel, runaway, switch and empty-stop popups, Raven). The selected zoom chip ("6h") was #1E1F22 on a #2B2D30 track, so it read as a hole: now gray-700 under white (7:1). The now badge's 9px time moved to red-600 (it read 4.4:1). frappe-ui's solid Button turns its text near-black in dark mode, because its own background turns light; ours stays blue-700, so Plan and Start session read 3.8:1. Every blue-700 Button now keeps `enabled:!text-white`.
+- Guards: `check_contrast_tokens.cjs` now flags a grey with no dark colour, a dark grey in the dark branch, and a blue-700 Button without white text. `check_timeline_zoom.mjs` holds the zoom chip and the now badge. 6 mutants.
+- Fixed: "Needs your attention". Its filter chips were frappe-ui red, orange and blue, and kept light-mode text on the dark page (Overdue 6 read 2.6:1). Now one grey v-for, the selected chip white on gray-700, and a kind with no tasks drops out. Start session keeps white text, and Open planner and Clear filter name their blue. The planner rail's chips in Calendar follow the same pattern.
+- Fixed: every coloured ghost or subtle Button names its own text colour: Clear and Cancel in the planner, the activity filter, the inactivity popup's Discard, Happening now's Stop, the header's live stopwatch and a task's danger step. A Button whose theme only turns coloured with solid (a selected tab, a confirm press) needs nothing more.
+- Guards: `check_contrast_tokens.cjs` now flags a ghost or subtle Button in a colour with no text colour of its own; `test_attention_filter_contrast.cjs` Test 3 used to *require* the red Overdue chip and now requires grey. 9 new or retargeted mutants.
+- Done: "Day at a glance" got more room (owner: "a little bit more space in height … not too congested"). The lanes went from 28 and 24px to 36 and 32px, with 12px between them and more room for the now badge. The card is 216px, up from 174.
+
 Open:
-- In dark mode, check the "All" filter pill in "Needs your attention" (looked too bright in a screenshot), the "3h" range pill, and the faint "Day at a glance" hour labels (6p, 7p).
+- Light mode, frappe-ui defaults that fail AA: a solid blue Button without our blue-700 (Review day 3.5:1, Happening now's Log 3.5:1, and RunawayTimerModal, PlanWorkBlockDialog), and the amber Badge ("Unplanned", "Not logged", 3.0:1). This wants one fix in one place, not a class on every Button.
 - Walk every page in dark mode (Calendar, Tasks, Team, Projects, Logged time, each drawer).
+
+## A planned block's date in start_time was dropped (fixed 2026-10-07)
+
+Reported: `omnitrack_plan_work_blocks` with `start_time: "2026-10-08 10:45:00"` and no `work_date` answered `success: true`, `duration_hours: 0.0`, and the block drew on today as a past event. `pad_time` splits on ":", so the timestamp became an "hour" of "2026-10-08 10".
+
+- Fixed: `omnitrack/utils/block_slot.py` reads a time or a date and time. A date in start_time sets the day when work_date is omitted, and is refused (ValidationError) when it disagrees with work_date; a block ending on another day (other than past midnight), with no length, or with no readable time is refused too. All blocks are checked before the first is booked; blocks on different days are refused, one day per call. `quick_create_task` checks its block the same way before it creates the task, so a bad time creates and assigns nothing.
+- Every other way in reads the slot the same way, before anything is written: `book_work_block` (the SPA's own endpoint) checks it before the past-date lock and before it creates a typed new task; `update_work_block` and `reschedule_work_block` check new times before the past lock, so a dated new start moves the block to that day; and the Planned Work Block itself (`calculate_duration`) refuses a time it cannot read or one dated another day, where it used to write 0.0 hrs without a word. It strips a date only when it is the block's own day (or the next day for an end past midnight), and leaves a plain stored time untouched, so roll-up re-saves log no Version change.
+- Frappe's own helpers, no hand parser: `block_slot.py` reads with `frappe.utils` `get_time`, `get_datetime`, `getdate` and `add_days`; the controller's `_to_secs` is gone, and its length comes from `time_math.duration_hours` (`time_diff_in_hours`). A stored `24:00:00` (read back as a one-day timedelta) is read as midnight.
+- Guards: `omnitrack/tests/test_block_slot.py` (no site; `npm test` runs it on the bench's Python, `../../env/bin/python`, since it needs `frappe.utils`) plus 14 mutants. The two fac refusals were checked against the real endpoint and book nothing. The planner and controller refusals were not run on the site (the bench console probe was declined); they are covered by the source tests and mutants. No success path was run here, because it books a real block.
+
+Open:
+- `_duration_hours("11:00", "10:00")` is 23.0, read as overnight. A block planned backwards by mistake is booked as a 23-hour block. The SPA refuses it; the API does not.
+- `time_math.pad_time` and `mins_of` are hand-written time parsers too (split on ":"). Their callers format stored times for reads, so nothing is lost today, but they should become `get_time(value).strftime(...)` and drop the copy.
+- Run the planner refusal paths (`book_work_block` with a mismatched date, a garbage time) against a site once one may be probed; they throw before any write.
 
 ## The bottom bar holds only the daily pages (2026-10-07, evening)
 

@@ -1,7 +1,7 @@
 <template>
   <div class="rounded-2xl p-4 sm:p-5 border shadow-xs"
     :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'">
-    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
       <h4 class="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Day at a glance</h4>
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0 text-[11px] font-semibold">
         <span class="inline-flex items-center gap-1.5"><span class="w-3 h-2 rounded-sm border border-gray-400 bg-gray-400/20" aria-hidden="true"></span><span class="text-gray-700 dark:text-gray-300">Planned {{ dayTimeline.plannedH.toFixed(1) }}h</span></span>
@@ -22,7 +22,7 @@
             :tabindex="timelineZoom === z ? 0 : -1"
             @click="timelineZoom = z"
             class="min-h-6 px-2.5 py-0.5 rounded-full text-xs font-semibold tabular-nums cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            :class="timelineZoom === z ? (isDarkMode ? 'bg-[#1E1F22] text-white' : 'bg-white text-gray-900 shadow-xs') : (isDarkMode ? 'text-gray-600' : 'text-gray-700')">{{ z }}h</button>
+            :class="timelineZoom === z ? (isDarkMode ? 'bg-gray-700 text-white shadow-xs' : 'bg-white text-gray-900 shadow-xs') : (isDarkMode ? 'text-gray-300 hover:text-white' : 'text-gray-700 hover:text-gray-900')">{{ z }}h</button>
         </div>
       </div>
     </div>
@@ -30,11 +30,11 @@
          actually logged. The gutter sits outside the scroller so the labels
          stay put while the day scrolls. -->
     <div class="flex gap-2">
-    <div class="shrink-0 w-[52px] select-none text-[9px] font-bold uppercase tracking-wider pt-3.5"
-      :class="isDarkMode ? 'text-gray-700' : 'text-gray-600'" aria-hidden="true">
-      <div class="h-7 leading-7">Planned</div>
-      <div class="h-6 leading-6 mt-1.5">Logged</div>
-      <div class="h-4 mt-0.5"></div>
+    <div class="shrink-0 w-[52px] select-none text-[9px] font-bold uppercase tracking-wider pt-6"
+      :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'" aria-hidden="true">
+      <div class="h-9 leading-9">Planned</div>
+      <div class="h-8 leading-8 mt-3">Logged</div>
+      <div class="h-4 mt-2"></div>
     </div>
     <!-- The day is wider than the card, and a hidden scrollbar gives no hint
          of that. Show a real button on each side that can still be scrolled,
@@ -52,23 +52,23 @@
       :class="isDarkMode ? 'bg-[#1E1F22]/90 border-gray-700 text-gray-300 hover:bg-gray-800' : 'bg-white/90 border-gray-200 text-gray-600 hover:bg-gray-50'">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
-    <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1 pt-3.5">
+    <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1 pt-6">
     <div class="relative" role="img" :style="{ width: timelineTrackWidth }"
       :aria-label="dayTimeline.plannedH.toFixed(1) + ' hours planned and ' + dayTimeline.loggedH.toFixed(1) + ' hours logged on ' + selectedDashboardDateLabel">
       <!-- hour grid -->
       <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div v-for="t in dayTimeline.ticks" :key="'t' + t.m" class="absolute top-0 bottom-4 w-px"
+        <div v-for="t in dayTimeline.ticks" :key="'t' + t.m" class="absolute top-0 bottom-6 w-px"
           :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'" :style="{ left: t.left }"></div>
       </div>
 
       <!-- Current Time Red Line (When viewing today) -->
       <div v-if="selectedDashboardDate === todayDate"
-        class="absolute top-0 bottom-4 pointer-events-none z-20"
+        class="absolute top-0 bottom-6 pointer-events-none z-20"
         :style="{ left: ((nowMinute / 1440) * 100) + '%' }"
         aria-hidden="true">
         <div class="relative h-full flex flex-col items-center">
           <!-- Time badge on top -->
-          <span class="absolute -top-3.5 -translate-x-1/2 text-[9px] font-bold font-mono px-1 py-0.5 rounded bg-red-500 text-white shadow-xs whitespace-nowrap">
+          <span class="absolute -top-3.5 -translate-x-1/2 text-[9px] font-bold font-mono px-1 py-0.5 rounded bg-red-600 text-white shadow-xs whitespace-nowrap">
             {{ nowLineLabel }}
           </span>
           <!-- Red dot at top of vertical line -->
@@ -78,9 +78,9 @@
         </div>
       </div>
       <!-- planned lane -->
-      <div class="relative h-7">
+      <div class="relative h-9">
         <div v-for="(r, i) in dayTimeline.planned" :key="'p' + i"
-          class="absolute top-0 h-7 rounded-md border text-[10px] font-bold px-1.5 leading-7 truncate cursor-pointer hover:brightness-95"
+          class="absolute top-0 h-9 rounded-md border text-[10px] font-bold px-1.5 leading-9 truncate cursor-pointer hover:brightness-95"
           :style="Object.assign({ left: r.left, width: r.width }, timelinePlannedStyle(r.block))"
           tabindex="0"
           :aria-label="blockTitle(r.block) + ' ' + formatBlockRange(r.block)"
@@ -92,9 +92,9 @@
           @click="openBlockDrawer(r.block)">{{ blockTitle(r.block, 'Block') }}</div>
       </div>
       <!-- logged lane -->
-      <div class="relative h-6 mt-1.5">
+      <div class="relative h-8 mt-3">
         <div v-for="(r, i) in dayTimeline.logged" :key="'l' + i"
-          class="absolute top-0 h-6 rounded-md text-[10px] font-bold text-white px-2 leading-6 truncate cursor-pointer hover:brightness-110 shadow-xs flex items-center select-none"
+          class="absolute top-0 h-8 rounded-md text-[10px] font-bold text-white px-2 leading-8 truncate cursor-pointer hover:brightness-110 shadow-xs flex items-center select-none"
           :class="r.is_live_active ? 'rounded-r-none z-10' : ''"
           :style="Object.assign({ left: r.left, width: r.width }, timelineLoggedStyle(r))"
           tabindex="0"
@@ -110,7 +110,7 @@
         </div>
         <!-- Interactive 1-Click Gap Booking Pills -->
         <div v-for="(g, gi) in (dayTimeline.gaps || [])" :key="'gap' + gi"
-          class="absolute top-0 h-6 rounded-md border border-dashed text-[9px] font-bold px-1.5 leading-6 truncate cursor-pointer hover:scale-102 transition-transform flex items-center justify-center select-none z-10"
+          class="absolute top-0 h-8 rounded-md border border-dashed text-[9px] font-bold px-1.5 leading-8 truncate cursor-pointer hover:scale-102 transition-transform flex items-center justify-center select-none z-10"
           :class="isDarkMode ? 'border-amber-700/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60' : 'border-amber-300 bg-amber-50/90 text-amber-800 hover:bg-amber-100'"
           :style="{ left: g.left, width: g.width }"
           tabindex="0"
@@ -125,9 +125,9 @@
           :class="isDarkMode ? 'border-amber-800 text-amber-400' : 'border-amber-300 text-amber-600'">No sessions logged</div>
       </div>
       <!-- hour labels -->
-      <div class="relative h-4 mt-0.5" aria-hidden="true">
+      <div class="relative h-4 mt-2" aria-hidden="true">
         <span v-for="t in dayTimeline.ticks" :key="'lb' + t.m"
-          class="absolute -translate-x-1/2 text-[9px] font-mono text-gray-600" :style="{ left: t.left }">{{ t.label }}</span>
+          class="absolute -translate-x-1/2 text-[9px] font-mono text-gray-700 dark:text-gray-300" :style="{ left: t.left }">{{ t.label }}</span>
       </div>
     </div>
     </div>

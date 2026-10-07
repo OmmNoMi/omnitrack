@@ -43,7 +43,8 @@
           role="tab"
           size="sm"
           :variant="plannerTaskFilter === tab.id ? 'solid' : 'ghost'"
-          :theme="tab.theme"
+          theme="gray"
+          :class="plannerTaskFilter === tab.id ? 'dark:!bg-gray-700 dark:!text-white' : ''"
           :aria-selected="plannerTaskFilter === tab.id"
           :tabindex="plannerTaskFilter === tab.id ? 0 : -1"
           :data-planner-tab="tab.id"
@@ -58,6 +59,7 @@
         v-if="plannerTaskFilter !== 'all' || plannerTaskSearch"
         variant="ghost"
         theme="blue"
+        class="!text-blue-700 dark:!text-blue-300"
         size="sm"
         @click="setPlannerTaskFilter('all'); plannerTaskSearch = ''"
       >Clear filters</Button>
@@ -114,10 +116,10 @@ export default {
   data() {
     return {
       taskTabs: [
-        { id: 'all', label: 'All', theme: 'gray' },
-        { id: 'underplanned', label: 'Underplanned', theme: 'gray' },
-        { id: 'overdue', label: 'Overdue', theme: 'red' },
-        { id: 'high', label: 'High', theme: 'blue' }
+        { id: 'all', label: 'All' },
+        { id: 'underplanned', label: 'Underplanned' },
+        { id: 'overdue', label: 'Overdue' },
+        { id: 'high', label: 'High' }
       ]
     };
   },

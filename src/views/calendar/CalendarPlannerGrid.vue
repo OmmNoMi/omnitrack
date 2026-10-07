@@ -46,6 +46,7 @@
             size="sm"
             icon-right="chevron-down"
             class="max-w-[200px]"
+            :class="natureFilter.length ? '!text-blue-700 dark:!text-blue-300' : ''"
             :label="'Filter calendar events by activity. Current filter: ' + natureFilterLabel"
           >
             <span class="truncate">{{ natureFilterLabel }}</span>
@@ -108,7 +109,7 @@
         <FeatherIcon name="map-pin" class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
         <span><b>{{ pickedTask.subject }}</b>: pick a time slot to place it.</span>
       </div>
-      <Button variant="ghost" theme="blue" size="sm" label="Stop placing this task" @click="pickedTask = null">Cancel</Button>
+      <Button variant="ghost" theme="blue" size="sm" class="!text-blue-700 dark:!text-blue-300" label="Stop placing this task" @click="pickedTask = null">Cancel</Button>
     </div>
 
     <!-- grid -->

@@ -53,7 +53,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs sm:text-sm">
             <thead>
-              <tr class="font-bold text-xs border-b" :class="isDarkMode ? 'bg-[#252528] text-gray-600 border-gray-800' : 'bg-gray-100/70 text-gray-700 border-gray-200'">
+              <tr class="font-bold text-xs border-b" :class="isDarkMode ? 'bg-[#252528] text-gray-300 border-gray-800' : 'bg-gray-100/70 text-gray-700 border-gray-200'">
                 <th class="py-3.5 px-4">Teammate</th>
                 <th class="py-3.5 px-4">Date &amp; Time Window</th>
                 <th class="py-3.5 px-4">Work Item &amp; Project</th>
@@ -71,26 +71,26 @@
                     </div>
                     <div>
                       <div class="leading-tight">{{ b.associate_name || b.employee }}</div>
-                      <div class="text-[10px] text-gray-600 font-mono">{{ b.employee }}</div>
+                      <div class="text-[10px] text-gray-600 dark:text-gray-300 font-mono">{{ b.employee }}</div>
                     </div>
                   </div>
                 </td>
                 <td class="py-3.5 px-4" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
                   <div class="font-semibold">{{ b.work_date }}</div>
-                  <div class="text-[11px] text-gray-600 font-mono">{{ hhmm(b.start_time) }} – {{ hhmm(b.end_time) }}</div>
+                  <div class="text-[11px] text-gray-600 dark:text-gray-300 font-mono">{{ hhmm(b.start_time) }} – {{ hhmm(b.end_time) }}</div>
                 </td>
                 <td class="py-3.5 px-4">
                   <div class="font-bold leading-snug line-clamp-1" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">
                     {{ blockTitle(b, b.name) }}
                   </div>
-                  <div class="text-[11px] text-gray-600 flex items-center gap-1.5 mt-0.5">
+                  <div class="text-[11px] text-gray-600 dark:text-gray-300 flex items-center gap-1.5 mt-0.5">
                     <span v-if="b.project">{{ b.project }} ·</span>
                     <span>{{ b.task_nature || 'Work' }}</span>
                   </div>
                 </td>
                 <td class="py-3.5 px-4 font-mono">
                   <div class="font-extrabold text-emerald-500">{{ fmtHrs(b.actual_hours) }} hrs</div>
-                  <div class="text-[10px] text-gray-600">plan: {{ fmtHrs(b.duration_hours) }}h</div>
+                  <div class="text-[10px] text-gray-600 dark:text-gray-300">plan: {{ fmtHrs(b.duration_hours) }}h</div>
                 </td>
                 <td class="py-3.5 px-4">
                   <span v-if="b.pairing_partner" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
@@ -111,7 +111,7 @@
                 </td>
               </tr>
               <tr v-if="pendingApprovals.length === 0">
-                <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
+                <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
                   Nothing is waiting for your approval.
                 </td>
               </tr>
@@ -135,7 +135,7 @@
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs sm:text-sm">
             <thead>
-              <tr class="font-bold text-xs border-b" :class="isDarkMode ? 'bg-[#252528] text-gray-600 border-gray-800' : 'bg-gray-100/70 text-gray-700 border-gray-200'">
+              <tr class="font-bold text-xs border-b" :class="isDarkMode ? 'bg-[#252528] text-gray-300 border-gray-800' : 'bg-gray-100/70 text-gray-700 border-gray-200'">
                 <th class="py-3.5 px-4">Log ID</th>
                 <th class="py-3.5 px-4">Employee</th>
                 <th class="py-3.5 px-4">Attendance Date</th>
@@ -158,7 +158,7 @@
                 <td class="py-3.5 px-4 font-mono" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">{{ log.effective_sessions_completed || '2' }} Sessions</td>
               </tr>
               <tr v-if="synthesizerLogs.length === 0">
-                <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
+                <td colspan="6" class="py-12 text-center text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
                   No split-shift synthesizer logs recorded.
                 </td>
               </tr>

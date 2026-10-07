@@ -63,7 +63,10 @@ assert.ok(
 for (const id of ['all', 'underplanned', 'overdue', 'high']) {
   assert.ok(new RegExp(`\\{ id: '${id}', label: '[^']+'`).test(calendarSrc), `FAIL: planner tab "${id}" is missing from taskTabs`);
 }
-assert.ok(/\{ id: 'overdue', label: 'Overdue', theme: 'red' \}/.test(calendarSrc), 'FAIL: the Overdue tab must use theme red');
+// Filter chips are grey. frappe-ui's red and blue ghost and subtle Buttons keep light-mode text on
+// the dark page (Overdue read 2.6:1), and the row's badge already carries the colour. Selected is
+// solid, and in dark mode gray-700 under white rather than frappe-ui's near-white fill.
+assert.ok(/theme="gray"\s+:class="plannerTaskFilter === tab\.id \? 'dark:!bg-gray-700 dark:!text-white' : ''"/.test(filterSection) && !/theme: '/.test((calendarSrc.match(/taskTabs: \[[\s\S]*?\]/) || [''])[0]), 'FAIL: planner filter chips are grey, and the selected one is gray-700 in dark mode');
 // Tabs wrap rather than scroll sideways: the rail is narrow (overflow bug).
 assert.ok(/flex-wrap[^"]*" role="tablist" aria-label="Filter assigned work tasks"/.test(calendarSrc), 'FAIL: planner tabs must wrap, not overflow the rail');
 console.log('✓ Test 2: Planner left rail filter tabs use genuine Frappe UI <Button> components with design system themes.');
@@ -76,14 +79,15 @@ const attentionFilterSection = dashboardSrc || (html.includes('aria-label="Filte
 
 assert.ok(attentionFilterSection, 'FAIL: Attention task filter tablist not found');
 assert.ok(
-  attentionFilterSection.includes('<Button') && attentionFilterSection.includes('data-attention-tab="overdue"'),
+  attentionFilterSection.includes('<Button') && attentionFilterSection.includes(':data-attention-tab="f.key"'),
   'FAIL: Attention section "Overdue" tab must use <Button>.'
 );
 assert.ok(
-  attentionFilterSection.includes('theme="red"') && attentionFilterSection.includes("attentionFilter === 'overdue' ? 'solid' : 'subtle'"),
-  'FAIL: Attention "Overdue" <Button> must use theme="red" and solid/subtle variant toggle.'
+  /v-for="f in attentionFilters"[\s\S]*?:variant="attentionFilter === f\.key \? 'solid' : 'subtle'"\s+theme="gray"\s+:class="attentionFilter === f\.key \? 'dark:!bg-gray-700 dark:!text-white' : ''"/.test(attentionFilterSection),
+  'FAIL: attention filter chips are grey, and the selected one is gray-700 in dark mode'
 );
-console.log('✓ Test 3: Attention section filter tabs use genuine Frappe UI <Button> with theme="red".');
+assert.ok(/\{ key: 'overdue', label: 'Overdue', count: this\.overdueTasksCount \}/.test(attentionFilterSection) && /\.filter\(\(f\) => f\.key === 'all' \|\| f\.count > 0\)/.test(attentionFilterSection), 'FAIL: attention chips list All, then each kind that has tasks');
+console.log('✓ Test 3: Attention filter chips are grey frappe-ui Buttons, readable in dark mode.');
 
 // 4. The hand-rolled FInput is retired: search fields are frappe-ui <TextInput>.
 assert.ok(!fs.existsSync(fInputPath), 'FAIL: FInput.vue must stay deleted; use frappe-ui <TextInput>.');

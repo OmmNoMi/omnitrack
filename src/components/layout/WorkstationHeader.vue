@@ -27,6 +27,7 @@
         :variant="isTracking && isSessionElevated ? 'solid' : 'subtle'"
         :theme="isTracking ? (isSessionElevated ? 'blue' : 'red') : 'gray'"
         class="font-mono tabular-nums"
+        :class="isTracking && !isSessionElevated ? '!text-red-700 dark:!text-red-300' : ''"
         :icon-right="isTracking && !isSessionElevated ? 'maximize-2' : undefined"
         :label="stopwatchHint"
         :tooltip="stopwatchTip"

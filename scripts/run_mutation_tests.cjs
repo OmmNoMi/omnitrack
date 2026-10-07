@@ -150,13 +150,13 @@ runMutationTest(
   'FAIL: tailwind.config.cjs does not include rose color palette'
 );
 
-// Mutant 8: Planner overdue filter tab stripped of Frappe UI theme="red"
+// Mutant 8: a planner filter chip goes back to its own colour, unreadable in dark mode
 runMutationTest(
-  'Planner overdue filter tab stripped of Frappe UI theme="red"',
+  'Planner filter chips lose their grey dark-mode selection',
   calendarViewPath,
-  (code) => code.replace("{ id: 'overdue', label: 'Overdue', theme: 'red' }", "{ id: 'overdue', label: 'Overdue', theme: 'invalid_theme' }"),
+  (code) => code.replace(`:class="plannerTaskFilter === tab.id ? 'dark:!bg-gray-700 dark:!text-white' : ''"`, ''),
   'node scripts/test_frappe_ui_planner_tabs.cjs',
-  'FAIL: the Overdue tab must use theme red'
+  'planner filter chips are grey'
 );
 
 // Mutant 9: an icon-only Button draws its icon in #prefix, so its label renders as "P…"
@@ -592,10 +592,71 @@ runMutationTest("Dark mode leaves frappe-ui's tokens light", path.resolve(omnitr
   (code) => code.replace("document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');", ''), 'node scripts/check_contrast_tokens.cjs', 'applyTheme sets data-theme');
 runMutationTest("The first paint leaves frappe-ui's tokens light", path.resolve(omnitrackDir,'omnitrack/www/omnitrack.html'),
   (code) => code.replace("document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');", ''), 'node scripts/check_contrast_tokens.cjs', 'first-paint script sets data-theme');
+// A grey that reads on white went faint on the dark page
+const DTL = path.resolve(omnitrackDir,'src/views/dashboard/DashboardTimeline.vue');
+runMutationTest("The timeline's hour labels stay dark on the dark page", DTL,
+  (code) => code.replace('font-mono text-gray-700 dark:text-gray-300"', 'font-mono text-gray-700"'), 'node scripts/check_contrast_tokens.cjs', 'no dark: colour');
+runMutationTest("The zoom pill's labels go faint in dark mode", DTL,
+  (code) => code.replace("(isDarkMode ? 'text-gray-300 hover:text-white'", "(isDarkMode ? 'text-gray-600 hover:text-white'"), 'node scripts/check_contrast_tokens.cjs', 'dark branch');
+runMutationTest("The week's Overview label goes faint in dark mode", path.resolve(omnitrackDir,'src/views/calendar/CalendarWeekStats.vue'),
+  (code) => code.replace(":class=\"isDarkMode ? 'text-gray-300' : 'text-gray-700'\"", ":class=\"isDarkMode ? 'text-gray-700' : 'text-gray-700'\""), 'node scripts/check_contrast_tokens.cjs', 'dark branch');
+runMutationTest("Plan's label goes dark on its blue in dark mode", path.resolve(omnitrackDir,'src/views/dashboard/DashboardDateSelector.vue'),
+  (code) => code.replace('enabled:hover:!bg-blue-800 enabled:!text-white', 'enabled:hover:!bg-blue-800'), 'node scripts/check_contrast_tokens.cjs', 'keeps enabled:!text-white');
+runMutationTest("The selected zoom pill fades into its track on the dark page", DTL,
+  (code) => code.replace("(isDarkMode ? 'bg-gray-700 text-white shadow-xs'", "(isDarkMode ? 'bg-gray-600 text-white shadow-xs'"), 'node scripts/check_timeline_zoom.mjs', 'selected zoom');
+runMutationTest("The now badge's time goes faint on lighter red", DTL,
+  (code) => code.replace('rounded bg-red-600 text-white shadow-xs whitespace-nowrap', 'rounded bg-red-500 text-white shadow-xs whitespace-nowrap'), 'node scripts/check_timeline_zoom.mjs', 'now badge');
+const DAT = path.resolve(omnitrackDir,'src/views/dashboard/DashboardAttentionTasks.vue');
+runMutationTest('The attention chips turn red again', DAT,
+  (code) => code.replace(`theme="gray"\n          :class="attentionFilter === f.key`, `theme="red"\n          :class="attentionFilter === f.key`), 'node scripts/test_frappe_ui_planner_tabs.cjs', 'attention filter chips are grey');
+runMutationTest("Start session's label goes dark on its blue in dark mode", DAT,
+  (code) => code.replace('enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white', 'enabled:!bg-blue-700 enabled:hover:!bg-blue-800'), 'node scripts/check_contrast_tokens.cjs', 'keeps enabled:!text-white');
+runMutationTest('Open planner reads 4.1:1 in frappe-ui blue', DAT,
+  (code) => code.replace('class="!text-blue-700 dark:!text-blue-300"', ''), 'node scripts/check_contrast_tokens.cjs', 'blue Button needs !text-blue-700');
+runMutationTest('The stop button keeps light red text on the dark page', path.resolve(omnitrackDir,'src/views/dashboard/DashboardHappeningNow.vue'),
+  (code) => code.replace(`:class="stopConfirm ? '' : 'dark:!text-red-300'"`, ''), 'node scripts/check_contrast_tokens.cjs', 'needs a dark:!text- colour');
+runMutationTest('The live stopwatch keeps light red text on the dark page', path.resolve(omnitrackDir,'src/components/layout/WorkstationHeader.vue'),
+  (code) => code.replace(`:class="isTracking && !isSessionElevated ? '!text-red-700 dark:!text-red-300' : ''"`, ''), 'node scripts/check_contrast_tokens.cjs', 'names its own !text- colour');
+runMutationTest('The Overdue chip loses its dark selected colour', DAT,
+  (code) => code.replace(`:class="attentionFilter === f.key ? 'dark:!bg-gray-700 dark:!text-white' : ''"`, `:class="attentionFilter === f.key ? 'dark:!bg-gray-600' : ''"`), 'node scripts/test_attention_filter_contrast.cjs', 'Overdue chip is grey');
+const BS = path.resolve(omnitrackDir,'omnitrack/utils/block_slot.py');
+const FACPY = path.resolve(omnitrackDir,'omnitrack/fac.py');
+// block_slot.py reads times with frappe.utils, so these run on the bench's own Python
+const BST = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_block_slot`;
+runMutationTest("A block's dated start no longer sets its day", BS,
+  (code) => code.replace('return day or (str(getdate(work_date)) if work_date else None), start, end', 'return (str(getdate(work_date)) if work_date else None), start, end'), BST, 'test_a_dated_start_sets_the_day');
+runMutationTest('A start dated tomorrow is booked on the work_date given', BS,
+  (code) => code.replace('if day and work_date and getdate(work_date) != getdate(day):', 'if False:'), BST, 'test_a_date_that_disagrees_with_work_date_is_refused');
+runMutationTest('A block runs across two days', BS,
+  (code) => code.replace('getdate(add_days(start_day, 1)) and end <= start)', 'getdate(add_days(start_day, 1)))'), BST, 'test_a_block_sits_on_one_day');
+runMutationTest('A block with no length is booked', BS,
+  (code) => code.replace('if start == end:', 'if False:'), BST, 'test_no_length_and_no_time_are_refused');
+runMutationTest('Planning drops the date in start_time again', FACPY,
+  (code) => code.replace('target_date = work_date or (days.pop() if days else nowdate())', 'target_date = work_date or nowdate()'), BST, 'test_plan_work_blocks_books_the_resolved_slot');
+runMutationTest("A quick task's block drops the date in block_start", FACPY,
+  (code) => code.replace('target_date = work_date or start_day or nowdate()', 'target_date = work_date or nowdate()'), BST, 'test_quick_create_task_checks_the_block_before_the_task');
+runMutationTest('A stored 24:00 end is not read', BS,
+  (code) => code.replace('\t\tif isinstance(value, timedelta):\n\t\t\treturn None, get_time(value).strftime("%H:%M:%S")\n', ''), BST, 'test_times_from_the_database_are_read_too');
+const PLP = path.resolve(omnitrackDir,'omnitrack/api/planner.py');
+runMutationTest('Booking drops the date in start_time again', PLP,
+  (code) => code.replace('\twork_date, start_time, end_time = _slot(start_time, end_time, work_date)\n', ''), BST, 'test_book_work_block_resolves_the_slot_before_anything_else');
+runMutationTest('A bad slot reaches the database as a server error', PLP,
+  (code) => code.replace('frappe.throw(str(e), frappe.ValidationError)', 'raise'), BST, 'test_book_work_block_resolves_the_slot_before_anything_else');
+runMutationTest('Moving a block checks the past lock against its old day', PLP,
+  (code) => code.replace('\t\twork_date = day\n', ''), BST, 'test_moving_a_block_resolves_the_slot_before_the_past_lock');
+runMutationTest('Rescheduling drops the date in new_start_time', PLP,
+  (code) => code.replace('\t\tnew_date = day\n', ''), BST, 'test_moving_a_block_resolves_the_slot_before_the_past_lock');
+const PWB = path.resolve(omnitrackDir,'omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py');
+runMutationTest('A block writes 0.0 for a time it cannot read', PWB,
+  (code) => code.replace('except ValueError as e:\n\t\t\tfrappe.throw(str(e), frappe.ValidationError)', 'except ValueError:\n\t\t\tself.duration_hours = 0.0\n\t\t\treturn'), BST, 'test_the_block_refuses_a_time_it_cannot_read');
+runMutationTest('A block keeps a time dated another day', PWB,
+  (code) => code.replace('if day and ((start_day', 'if False and ((start_day'), BST, 'test_the_block_refuses_a_time_it_cannot_read');
+runMutationTest('Every re-save rewrites the stored times', PWB,
+  (code) => code.replace('\t\tif start_day:\n\t\t\tself.start_time = start\n', '\t\tself.start_time = start\n'), BST, 'test_the_block_refuses_a_time_it_cannot_read');
 runMutationTest('A menu item stands in for its button', path.resolve(omnitrackDir,'src/utils/popover.js'),
   (code) => code.replace('return (id && document.getElementById(id)) || el;', 'return el;'), EW, 'menuTrigger finds');
 runMutationTest('A disabled Add session looks ready', ES,
-  (code) => code.replace('class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800"', 'class="!bg-blue-700 hover:!bg-blue-800"'), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
+  (code) => code.replace('class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"', 'class="!bg-blue-700 hover:!bg-blue-800 enabled:!text-white"'), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
 runMutationTest('An empty comment looks ready to post', path.resolve(omnitrackDir,'src/components/common/DocActivity.vue'),
   (code) => code.replace('enabled:!bg-blue-700 enabled:hover:!bg-blue-800', 'enabled:!bg-blue-700 hover:!bg-blue-800'), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
 runMutationTest('An overnight entry ends on its start day', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),

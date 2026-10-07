@@ -14,10 +14,10 @@
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 Raven Collaboration
               </span>
-              <span v-if="task.project_name || task.project" class="text-[10px] font-semibold text-gray-600">
+              <span v-if="task.project_name || task.project" class="text-[10px] font-semibold text-gray-600 dark:text-gray-300">
                 {{ task.project_name || task.project }}
               </span>
-              <span class="text-[10px] font-mono text-gray-600">#{{ task.name || task.ref }}</span>
+              <span class="text-[10px] font-mono text-gray-600 dark:text-gray-300">#{{ task.name || task.ref }}</span>
             </div>
             <h3 class="font-extrabold text-base leading-snug truncate" :title="task.subject">{{ task.subject }}</h3>
           </div>
@@ -46,7 +46,7 @@
 
           <div class="flex items-center gap-1.5 shrink-0">
             <Button variant="outline" size="sm" icon-left="calendar" label="Plan" @click="$emit('plan-attention-task', task); $emit('close')" />
-            <Button variant="solid" theme="blue" size="sm" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800" icon-left="play" label="Start session" @click="$emit('start-task-immediately', task); $emit('close')" />
+            <Button variant="solid" theme="blue" size="sm" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" icon-left="play" label="Start session" @click="$emit('start-task-immediately', task); $emit('close')" />
           </div>
         </div>
 
@@ -89,10 +89,10 @@
         <!-- Tab Content: Live Chat / Discussion -->
         <div v-show="activeTab === 'chat'" class="flex-1 flex flex-col min-h-0">
           <div class="flex-1 p-4 overflow-y-auto space-y-3" ref="chatScrollContainer">
-            <div v-if="loadingMessages" class="text-xs text-gray-600 py-8 text-center animate-pulse">
+            <div v-if="loadingMessages" class="text-xs text-gray-600 dark:text-gray-300 py-8 text-center animate-pulse">
               Connecting to Raven thread...
             </div>
-            <div v-else-if="!messages || !messages.length" class="text-xs text-gray-600 py-8 text-center">
+            <div v-else-if="!messages || !messages.length" class="text-xs text-gray-600 dark:text-gray-300 py-8 text-center">
               No messages yet in this task discussion. Send the first message below.
             </div>
             <div v-else v-for="msg in messages" :key="msg.name || msg.creation" class="flex gap-2.5 items-start text-xs">
@@ -102,7 +102,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">
                   <span class="font-bold text-[11px]" :class="isDarkMode ? 'text-gray-200' : 'text-gray-800'">{{ msg.sender_name || msg.sender }}</span>
-                  <span class="text-[10px] text-gray-600 font-mono">{{ (msg.creation || '').slice(11, 16) }}</span>
+                  <span class="text-[10px] text-gray-600 dark:text-gray-300 font-mono">{{ (msg.creation || '').slice(11, 16) }}</span>
                 </div>
                 <div class="p-2.5 rounded-xl rounded-tl-sm whitespace-pre-wrap leading-relaxed" :class="isDarkMode ? 'bg-[#2B2D30] text-gray-100' : 'bg-gray-100 text-gray-800'">
                   {{ msg.content || msg.text }}
@@ -133,20 +133,20 @@
 
         <!-- Tab Content: Living Specs -->
         <div v-show="activeTab === 'specs'" class="flex-1 p-4 overflow-y-auto space-y-4">
-          <div class="text-xs text-gray-700">Living specifications, user stories, and acceptance criteria linked to this task.</div>
+          <div class="text-xs text-gray-700 dark:text-gray-300">Living specifications, user stories, and acceptance criteria linked to this task.</div>
           
           <div v-if="task.description" class="p-3.5 rounded-xl border text-xs" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="font-bold text-[11px] uppercase tracking-wider text-gray-600 mb-1.5">Task Description / Spec</div>
+            <div class="font-bold text-[11px] uppercase tracking-wider text-gray-600 dark:text-gray-300 mb-1.5">Task Description / Spec</div>
             <div class="whitespace-pre-wrap leading-relaxed prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-200" v-html="task.description"></div>
           </div>
 
           <div class="p-3.5 rounded-xl border text-xs space-y-2" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="font-bold text-[11px] uppercase tracking-wider text-gray-600">Context & Scope</div>
+            <div class="font-bold text-[11px] uppercase tracking-wider text-gray-600 dark:text-gray-300">Context & Scope</div>
             <div class="grid grid-cols-2 gap-2 text-[11px]">
-              <div><span class="text-gray-600">Project:</span> <span class="font-bold">{{ task.project_name || task.project || 'General' }}</span></div>
-              <div><span class="text-gray-600">Task Type:</span> <span class="font-bold">{{ task.type || 'Standard' }}</span></div>
-              <div><span class="text-gray-600">Priority:</span> <span class="font-bold">{{ task.priority || 'Medium' }}</span></div>
-              <div><span class="text-gray-600">Status:</span> <span class="font-bold">{{ task.status || 'Open' }}</span></div>
+              <div><span class="text-gray-600 dark:text-gray-300">Project:</span> <span class="font-bold">{{ task.project_name || task.project || 'General' }}</span></div>
+              <div><span class="text-gray-600 dark:text-gray-300">Task Type:</span> <span class="font-bold">{{ task.type || 'Standard' }}</span></div>
+              <div><span class="text-gray-600 dark:text-gray-300">Priority:</span> <span class="font-bold">{{ task.priority || 'Medium' }}</span></div>
+              <div><span class="text-gray-600 dark:text-gray-300">Status:</span> <span class="font-bold">{{ task.status || 'Open' }}</span></div>
             </div>
           </div>
         </div>
@@ -154,18 +154,18 @@
         <!-- Tab Content: Linked Planned Blocks -->
         <div v-show="activeTab === 'blocks'" class="flex-1 p-4 overflow-y-auto space-y-3">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-700">Work blocks committed to this task.</span>
+            <span class="text-xs text-gray-700 dark:text-gray-300">Work blocks committed to this task.</span>
             <button type="button" @click="$emit('plan-attention-task', task); $emit('close')" class="text-xs text-blue-600 dark:text-blue-400 font-bold hover:underline">
               + Plan another block
             </button>
           </div>
-          <div v-if="!blocks || !blocks.length" class="text-xs text-gray-600 py-8 text-center">
+          <div v-if="!blocks || !blocks.length" class="text-xs text-gray-600 dark:text-gray-300 py-8 text-center">
             No work blocks booked for this task yet.
           </div>
           <div v-else v-for="b in blocks" :key="b.name" class="p-3 rounded-xl border flex items-center justify-between gap-3 text-xs" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
             <div>
               <div class="font-bold text-gray-800 dark:text-gray-100">{{ b.work_date }} · {{ (b.start_time || '').slice(0, 5) }}–{{ (b.end_time || '').slice(0, 5) }}</div>
-              <div class="text-[11px] text-gray-600 mt-0.5">{{ b.duration_hours }}h planned · {{ Number(b.actual_hours || 0).toFixed(2) }}h logged</div>
+              <div class="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">{{ b.duration_hours }}h planned · {{ Number(b.actual_hours || 0).toFixed(2) }}h logged</div>
             </div>
             <div class="flex items-center gap-1.5">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="b.status === 'Completed' || b.status === 'Logged (Full)' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'">
@@ -178,14 +178,14 @@
 
         <!-- Tab Content: Sprint Recaps -->
         <div v-show="activeTab === 'activity'" class="flex-1 p-4 overflow-y-auto space-y-3">
-          <div class="text-xs text-gray-700 mb-2">Automated focus session recaps & accomplishments captured by OmniTrack stopwatch on this task.</div>
-          <div v-if="!recaps || !recaps.length" class="text-xs text-gray-600 py-8 text-center">
+          <div class="text-xs text-gray-700 dark:text-gray-300 mb-2">Automated focus session recaps & accomplishments captured by OmniTrack stopwatch on this task.</div>
+          <div v-if="!recaps || !recaps.length" class="text-xs text-gray-600 dark:text-gray-300 py-8 text-center">
             No focus session recaps yet for this task.
           </div>
           <div v-else v-for="r in recaps" :key="r.name" class="p-3 rounded-xl border text-xs" :class="isDarkMode ? 'bg-[#2B2D30] border-gray-700' : 'bg-gray-50 border-gray-200'">
-            <div class="flex items-center justify-between font-bold text-[11px] text-gray-700 mb-1">
+            <div class="flex items-center justify-between font-bold text-[11px] text-gray-700 dark:text-gray-300 mb-1">
               <span>{{ r.sender_name }}</span>
-              <span class="font-mono text-gray-600">{{ (r.creation || '').slice(0, 16) }}</span>
+              <span class="font-mono text-gray-600 dark:text-gray-300">{{ (r.creation || '').slice(0, 16) }}</span>
             </div>
             <div class="whitespace-pre-line text-gray-800 dark:text-gray-200">{{ r.content || r.text }}</div>
           </div>

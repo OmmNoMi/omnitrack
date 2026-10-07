@@ -30,6 +30,7 @@ from omnitrack.utils import (
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
 )
+from omnitrack.utils.block_slot import block_slot
 from omnitrack.utils.block_tasks import resolve_ref, tasks_by_block, todo_subject
 from omnitrack.api.tasks import update_task_kpi_progress
 from omnitrack.utils.session_time import counted_hours
@@ -339,6 +340,15 @@ def _copy_tasks(src, dst):
 		})
 
 
+def _slot(start_time, end_time, work_date=None):
+	"""The day and times a block sits on (block_slot), checked before anything is written. A
+	date in start_time sets the day; one that disagrees with work_date is refused, not dropped."""
+	try:
+		return block_slot(start_time, end_time, work_date)
+	except ValueError as e:
+		frappe.throw(str(e), frappe.ValidationError)
+
+
 @frappe.whitelist()
 def book_work_block(work_date, start_time, end_time, work_item=None, work_item_label=None,
 					task=None, project=None, deliverable_notes=None,
@@ -359,6 +369,8 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	if not frappe.db.exists("DocType", "Planned Work Block"):
 		frappe.throw(_("Planned Work Block DocType is not available."))
 
+	# "2026-10-08 10:45:00" with no work_date once landed on today, 0.0 hrs long
+	work_date, start_time, end_time = _slot(start_time, end_time, work_date)
 	if work_date and getdate(work_date) < getdate(nowdate()):
 		frappe.throw(_("Cannot plan or book work blocks in the past."), frappe.ValidationError)
 
@@ -505,6 +517,10 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to edit this work block."), frappe.PermissionError)
 
+	if start_time or end_time:
+		day, start_time, end_time = _slot(start_time or doc.start_time, end_time or doc.end_time, work_date)
+		work_date = day
+
 	from omnitrack.permissions import check_planned_block_past_lock
 	# In the past, NO ONE changes planned work blocks
 	check_planned_block_past_lock(doc, new_work_date=work_date)
@@ -614,6 +630,10 @@ def reschedule_work_block(block_name, new_date=None, new_start_time=None, new_en
 
 	if doc.status in ("Rescheduled", "Cancelled"):
 		frappe.throw(_("This block was already {0}.").format(_(doc.status).lower()))
+
+	if new_start_time or new_end_time:
+		day, new_start_time, new_end_time = _slot(new_start_time or doc.start_time, new_end_time or doc.end_time, new_date)
+		new_date = day
 
 	from omnitrack.permissions import check_planned_block_past_lock
 	if flt(doc.actual_hours) > 0:

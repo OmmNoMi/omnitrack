@@ -64,6 +64,7 @@ FAC exposes six purpose-built domain tools for OmniTrack. Each tool enforces str
 ### 2. `omnitrack_plan_work_blocks`
 * **Purpose**: Batch schedules planned work blocks for a day (`09:00 - 11:00`, `11:00 - 13:00`, etc.).
 * **Temporal Rule**: **Past dates (`work_date < today`) are strictly locked.** The assistant cannot book or alter historical commitments.
+* **Dates in times**: `start_time` may be a time (`"10:45"`) or a date and time (`"2026-10-08 10:45"`). A date there sets the day when `work_date` is omitted, and must match `work_date` when it is given, or the call is refused. One call plans one day; a block that ends the next day only works past midnight (`23:00` to `01:00`). `omnitrack_reschedule_block` reads its new times the same way: a dated `new_start_time` moves the block to that day.
 * **Example Agent Query**: *"Plan my day: 2 hrs on Gaonhae invoice bug starting at 9:30 AM, 1 hr team sync, and 3 hrs on CardView accessibility."*
 
 ### 3. `omnitrack_log_work_session`
