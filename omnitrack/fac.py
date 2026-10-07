@@ -203,7 +203,8 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 			"duration_hours": res.get("duration_hours"),
 			"task": task_id,
 			"project": proj_id,
-			"deliverable_notes": notes
+			"deliverable_notes": notes,
+			"added_to_tasks": res.get("added_to_tasks") or [],
 		})
 
 	total_hours = sum(flt(b["duration_hours"]) for b in booked_blocks)
@@ -1328,7 +1329,7 @@ class OmniTrackPlanWorkBlocksTool(BaseTool):
 						"properties": {
 							"start_time": {"type": "string", "description": "A time, e.g. '09:00', or a date and time, e.g. '2026-10-08 09:00'. A date here sets the day when work_date is omitted, and must match work_date when it is given."},
 							"end_time": {"type": "string", "description": "e.g. '11:00'. A date here must be start_time's day (or the next day, for a block past midnight)."},
-							"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001)"},
+							"task": {"type": "string", "description": "ERPNext Task ID (e.g. TASK-2026-001). The block's employee is added to the task's assignees if they are not on it yet (its other assignees stay); added_to_tasks in the result lists them."},
 							"project": {"type": "string", "description": "Project ID"},
 							"deliverable_notes": {"type": "string", "description": "What will be accomplished"},
 							"task_nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away'."}

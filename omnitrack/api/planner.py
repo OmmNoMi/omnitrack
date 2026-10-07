@@ -25,7 +25,7 @@ from omnitrack.services import (
 )
 from omnitrack.utils import (
 	duration_hours as _duration_hours,
-	pad_time as _time_str,
+	time_str as _time_str,
 	mins_of,
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
@@ -124,29 +124,6 @@ def _week_bounds(week_start=None):
 	base = getdate(week_start) if week_start else getdate(nowdate())
 	monday = base - timedelta(days=base.weekday())
 	return monday, monday + timedelta(days=6)
-
-
-def _time_str(val):
-	"""Serialize a Frappe Time field as zero-padded HH:MM:SS.
-
-	Time fields come back as ``datetime.timedelta``, whose ``str()`` drops the
-	leading zero on single-digit hours ("7:30:55"), which breaks any consumer
-	that slices the first five characters. Always emit "07:30:55".
-	"""
-	if val in (None, ""):
-		return ""
-	if isinstance(val, timedelta):
-		total = int(val.total_seconds())
-		h, rem = divmod(total, 3600)
-		m, sec = divmod(rem, 60)
-		return f"{h:02d}:{m:02d}:{sec:02d}"
-	if isinstance(val, str):
-		parts = val.split(":")
-		if parts and parts[0].isdigit():
-			parts[0] = parts[0].zfill(2)
-			return ":".join(parts)
-		return val
-	return str(val)
 
 
 @frappe.whitelist()
@@ -503,7 +480,9 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 		"name": doc.name,
 		"duration_hours": doc.duration_hours,
 		"paired_block": getattr(doc, "paired_block", None),
-		"created_blocks": created_blocks
+		"created_blocks": created_blocks,
+		# Tasks the block's person was not on, and now is (see put_person_on_tasks)
+		"added_to_tasks": doc.flags.added_to_tasks or [],
 	}
 
 

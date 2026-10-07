@@ -14,6 +14,7 @@ class PlannedWorkBlock(OptionalLinks, Document):
 		self.validate_no_future_sessions()
 		self.resolve_project_from_task()
 		self.sync_primary_task()
+		self.put_person_on_tasks()
 		self.calculate_duration()
 		self.roll_up_sessions()
 		self.generate_cryptographic_hash()
@@ -157,6 +158,54 @@ class PlannedWorkBlock(OptionalLinks, Document):
 		for i, r in enumerate(rows, 1):
 			r.idx = i
 		self.set("tasks", rows)
+
+	def put_person_on_tasks(self):
+		"""The block's person is on every open task it covers. A block booked for Neha on
+		Nomeshwer's task sat on her calendar, never in her assigned work, and she could not
+		finish it. She is now added to the task, as Frappe's Assign To adds her (whoever books
+		must be able to read it, and Nomeshwer stays on it); a block on someone else's to-do is
+		refused. Only rows new to the block are checked, or all when its person changed, so an
+		unrelated save never undoes a later reassignment."""
+		import json
+
+		from frappe import _
+
+		from omnitrack.utils.task_parity import parity_gaps
+
+		if not self.employee or not frappe.db.exists("User", self.employee):
+			return
+		before = None if self.is_new() else self.get_doc_before_save()
+		known = set() if before is None or before.employee != self.employee else {r.work_item for r in before.get("tasks") or []}
+		new_rows = [r for r in self.get("tasks") or [] if r.work_item not in known and r.reference_doctype in ("Task", "ToDo")]
+		if not new_rows:
+			return
+		rows = [(r.reference_doctype, r.reference_name, r.status) for r in new_rows]
+		tasks = [n for d, n, _s in rows if d == "Task"]
+		todos = [n for d, n, _s in rows if d == "ToDo"]
+		task_assignees = {}
+		if tasks and frappe.db.exists("DocType", "Task"):
+			for t in frappe.get_all("Task", filters={"name": ["in", tasks]}, fields=["name", "_assign"]):
+				task_assignees[t.name] = set(json.loads(t._assign or "[]"))
+			for td in frappe.get_all("ToDo", filters={"reference_type": "Task", "reference_name": ["in", list(task_assignees)], "status": "Open"}, fields=["reference_name", "allocated_to"]):
+				task_assignees[td.reference_name].add(td.allocated_to)
+		todo_owners = dict(frappe.get_all("ToDo", filters={"name": ["in", todos]}, fields=["name", "allocated_to"], as_list=True)) if todos else {}
+
+		assign, refuse = parity_gaps(self.employee, rows, task_assignees, todo_owners, is_copy=bool(self.paired_block))
+		if refuse:
+			name, owner = refuse[0]
+			subject = next((r.subject for r in new_rows if r.reference_name == name), None) or name
+			frappe.throw(
+				_("{0} is on {1}'s to-do list, so it can't be planned for {2}. Plan it for {1}, or make it a task and assign {2} to it.").format(
+					subject, frappe.utils.get_fullname(owner), frappe.utils.get_fullname(self.employee)
+				),
+				frappe.ValidationError,
+			)
+		if assign:
+			from frappe.desk.form.assign_to import add as add_assignment
+
+			for name in assign:
+				add_assignment({"doctype": "Task", "name": name, "assign_to": [self.employee]})
+			self.flags.added_to_tasks = assign
 
 	def calculate_duration(self):
 		"""The block's length from its times (past midnight wraps to the next day). A date and

@@ -1,7 +1,9 @@
 # Copyright (c) 2026, OmmNoMi Automation LLP and contributors
 # For license information, please see license.txt
 
-from frappe.utils import time_diff_in_hours
+from datetime import timedelta
+
+from frappe.utils import get_time, time_diff_in_hours
 
 
 def duration_hours(start_time, end_time):
@@ -15,12 +17,15 @@ def duration_hours(start_time, end_time):
 		return 0.0
 
 
-def mins_of(time_str):
-	"""Converts 'HH:MM' or 'HH:MM:SS' string to integer minutes from 00:00."""
-	if not time_str:
+def mins_of(value):
+	"""Minutes from 00:00 of a time ('9:00', '09:00:00', a datetime), read by Frappe's get_time.
+	A Time field's timedelta is counted as it is, so an end stored as 24:00:00 stays 1440, not 0."""
+	if not value:
 		return 0
-	parts = [int(p) for p in str(time_str).split(":")[:2]]
-	return parts[0] * 60 + parts[1]
+	if isinstance(value, timedelta):
+		return int(value.total_seconds() // 60)
+	t = get_time(value)
+	return t.hour * 60 + t.minute
 
 
 def split_over_midnight(start_time, end_time):
@@ -35,15 +40,12 @@ def split_over_midnight(start_time, end_time):
 	]
 
 
-def pad_time(time_str):
-	"""Normalizes '9:00' -> '09:00:00'."""
-	if not time_str:
+def pad_time(value):
+	"""A time as 'HH:MM:SS' ('9:00' -> '09:00:00'), read by Frappe's get_time: a Time field's
+	timedelta and a date and time work too. Empty is '00:00:00'."""
+	if not value:
 		return "00:00:00"
-	parts = str(time_str).split(":")
-	h = parts[0].zfill(2)
-	m = parts[1].zfill(2) if len(parts) > 1 else "00"
-	s = parts[2].zfill(2) if len(parts) > 2 else "00"
-	return f"{h}:{m}:{s}"
+	return get_time(value).strftime("%H:%M:%S")
 
 
 def week_bounds(week_start=None):
@@ -56,16 +58,9 @@ def week_bounds(week_start=None):
 
 
 def time_str(val):
-	"""Serialize a Frappe Time field as zero-padded HH:MM:SS."""
-	from datetime import timedelta
+	"""Serialize a Frappe Time field as zero-padded HH:MM:SS (str() of its timedelta drops the
+	leading zero, "7:30:55", which breaks anything that slices five characters). Empty is ''."""
 	if val in (None, ""):
 		return ""
-	if isinstance(val, timedelta):
-		total = int(val.total_seconds())
-		h, rem = divmod(total, 3600)
-		m, sec = divmod(rem, 60)
-		return f"{h:02d}:{m:02d}:{sec:02d}"
-	if isinstance(val, str):
-		return pad_time(val)
-	return str(val)
+	return pad_time(val)
 

@@ -635,6 +635,39 @@ runMutationTest('Planning drops the date in start_time again', FACPY,
   (code) => code.replace('target_date = work_date or (days.pop() if days else nowdate())', 'target_date = work_date or nowdate()'), BST, 'test_plan_work_blocks_books_the_resolved_slot');
 runMutationTest("A quick task's block drops the date in block_start", FACPY,
   (code) => code.replace('target_date = work_date or start_day or nowdate()', 'target_date = work_date or nowdate()'), BST, 'test_quick_create_task_checks_the_block_before_the_task');
+const TM = path.resolve(omnitrackDir,'omnitrack/utils/time_math.py');
+const TMT = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_time_math`;
+runMutationTest('pad_time splits on ":" again', TM,
+  (code) => code.replace('\treturn get_time(value).strftime("%H:%M:%S")\n', '\tp = str(value).split(":")\n\treturn f"{p[0].zfill(2)}:{p[1]}:{p[2] if len(p) > 2 else \'00\'}"\n'), TMT, 'test_pad_time_reads_any_time');
+runMutationTest('mins_of splits on ":" again', TM,
+  (code) => code.replace('\tt = get_time(value)\n\treturn t.hour * 60 + t.minute\n', '\tp = [int(x) for x in str(value).split(":")[:2]]\n\treturn p[0] * 60 + p[1]\n'), TMT, 'test_mins_of_reads_any_time');
+runMutationTest('A stored 24:00 end counts as 00:00', TM,
+  (code) => code.replace('\tif isinstance(value, timedelta):\n\t\treturn int(value.total_seconds() // 60)\n', ''), TMT, 'test_mins_of_reads_any_time');
+runMutationTest('An empty Time field is sent as 00:00:00', TM,
+  (code) => code.replace('\tif val in (None, ""):\n\t\treturn ""\n', ''), TMT, 'test_time_str_keeps_empty_empty');
+runMutationTest('Planner serialises empty times as 00:00:00 again', path.resolve(omnitrackDir,'omnitrack/api/planner.py'),
+  (code) => code.replace('\ttime_str as _time_str,\n', '\tpad_time as _time_str,\n'), TMT, 'test_no_hand_parser_is_left');
+const TP = path.resolve(omnitrackDir,'omnitrack/utils/task_parity.py');
+const TPT = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_task_parity`;
+const PWBC = path.resolve(omnitrackDir,'omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py');
+runMutationTest("A block on someone else's task leaves its person off it", TP,
+  (code) => code.replace('and name in task_assignees and person not in task_assignees[name]:', 'and name in task_assignees and not task_assignees[name]:'), TPT, 'test_someone_elses_task_gets_the_blocks_person_added');
+runMutationTest('A deleted task is assigned anyway', TP,
+  (code) => code.replace('and name in task_assignees and person not in', 'and person not in task_assignees.get(name, set()) and person not in'), TPT, 'test_finished_missing_and_repeated_tasks');
+runMutationTest('A finished task gets a new assignee', TP,
+  (code) => code.replace('\t\tif not name or status == "Completed":\n', '\t\tif not name:\n'), TPT, 'test_finished_missing_and_repeated_tasks');
+runMutationTest("A block on someone else's to-do is booked", TP,
+  (code) => code.replace('\t\t\tif owner and owner != person:\n\t\t\t\trefuse.append((name, owner))\n', ''), TPT, 'test_someone_elses_todo_is_refused');
+runMutationTest("A colleague's copy is refused its owner's to-do", TP,
+  (code) => code.replace('elif doctype == "ToDo" and not is_copy:', 'elif doctype == "ToDo":'), TPT, 'test_her_own_todo_and_a_copys_todo_pass');
+runMutationTest('Saving a block no longer checks its tasks', PWBC,
+  (code) => code.replace('\t\tself.sync_primary_task()\n\t\tself.put_person_on_tasks()\n', '\t\tself.sync_primary_task()\n'), TPT, 'test_every_saved_block_is_checked');
+runMutationTest('Assignees in open ToDos are ignored', PWBC,
+  (code) => code.replace('\t\t\t\ttask_assignees[td.reference_name].add(td.allocated_to)\n', '\t\t\t\tpass\n'), TPT, 'test_every_saved_block_is_checked');
+runMutationTest('Every save re-checks old rows', PWBC,
+  (code) => code.replace('if r.work_item not in known and', 'if'), TPT, 'test_only_new_rows_are_checked');
+runMutationTest('Booking no longer says who was added', path.resolve(omnitrackDir,'omnitrack/api/planner.py'),
+  (code) => code.replace('\t\t"added_to_tasks": doc.flags.added_to_tasks or [],\n', ''), TPT, 'test_the_result_says_who_was_added');
 runMutationTest('A stored 24:00 end is not read', BS,
   (code) => code.replace('\t\tif isinstance(value, timedelta):\n\t\t\treturn None, get_time(value).strftime("%H:%M:%S")\n', ''), BST, 'test_times_from_the_database_are_read_too');
 const PLP = path.resolve(omnitrackDir,'omnitrack/api/planner.py');

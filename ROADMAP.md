@@ -1090,11 +1090,12 @@ Reported: `omnitrack_plan_work_blocks` with `start_time: "2026-10-08 10:45:00"` 
 - Fixed: `omnitrack/utils/block_slot.py` reads a time or a date and time. A date in start_time sets the day when work_date is omitted, and is refused (ValidationError) when it disagrees with work_date; a block ending on another day (other than past midnight), with no length, or with no readable time is refused too. All blocks are checked before the first is booked; blocks on different days are refused, one day per call. `quick_create_task` checks its block the same way before it creates the task, so a bad time creates and assigns nothing.
 - Every other way in reads the slot the same way, before anything is written: `book_work_block` (the SPA's own endpoint) checks it before the past-date lock and before it creates a typed new task; `update_work_block` and `reschedule_work_block` check new times before the past lock, so a dated new start moves the block to that day; and the Planned Work Block itself (`calculate_duration`) refuses a time it cannot read or one dated another day, where it used to write 0.0 hrs without a word. It strips a date only when it is the block's own day (or the next day for an end past midnight), and leaves a plain stored time untouched, so roll-up re-saves log no Version change.
 - Frappe's own helpers, no hand parser: `block_slot.py` reads with `frappe.utils` `get_time`, `get_datetime`, `getdate` and `add_days`; the controller's `_to_secs` is gone, and its length comes from `time_math.duration_hours` (`time_diff_in_hours`). A stored `24:00:00` (read back as a one-day timedelta) is read as midnight.
+- `time_math`'s own parsers are gone too (2026-10-07, late): `pad_time` and `mins_of` read with `get_time` instead of splitting on ":", and `time_str` is `pad_time` with empty kept empty. `api/planner.py`'s private `_time_str` copy is deleted; it imports `time_str`. A Time field's timedelta is still counted as it is in `mins_of`, so an end stored as 24:00:00 stays 1440 minutes (get_time would make it 0, and the midnight splitter would split it). Checked: the calendar endpoint returns every block and session time as HH:MM:SS (hours-only sessions stay empty, as before). Guard: `omnitrack/tests/test_time_math.py` plus 5 mutants.
 - Guards: `omnitrack/tests/test_block_slot.py` (no site; `npm test` runs it on the bench's Python, `../../env/bin/python`, since it needs `frappe.utils`) plus 14 mutants. The two fac refusals were checked against the real endpoint and book nothing. The planner and controller refusals were not run on the site (the bench console probe was declined); they are covered by the source tests and mutants. No success path was run here, because it books a real block.
 
 Open:
 - `_duration_hours("11:00", "10:00")` is 23.0, read as overnight. A block planned backwards by mistake is booked as a 23-hour block. The SPA refuses it; the API does not.
-- `time_math.pad_time` and `mins_of` are hand-written time parsers too (split on ":"). Their callers format stored times for reads, so nothing is lost today, but they should become `get_time(value).strftime(...)` and drop the copy.
+- Duplicates in `api/planner.py` that shadow the shared helpers it imports (ruff F811): `_resolve_planner_user`, `_duration_hours`, and `_week_bounds` copying `time_math.week_bounds`. Delete the copies and use the shared ones.
 - Run the planner refusal paths (`book_work_block` with a mismatched date, a garbage time) against a site once one may be probed; they throw before any write.
 
 ## The bottom bar holds only the daily pages (2026-10-07, evening)
@@ -1106,3 +1107,17 @@ Owner: "adding the Project and Logged option to the bottom bar has cluttered the
 
 Open:
 - The header does not say which page is open once it is a menu page (Projects, Logged time). Show the page's name, or mark the current item in the menu.
+
+## A block's person was not on its task (fixed 2026-10-08)
+
+Reported: `omnitrack_plan_work_blocks` booked a block for Neha on a task assigned to Nomeshwer and answered `success: true`. The block sat on her calendar, the task never showed in her assigned work, and she could not finish it. "Plan with people" (pairing partner and team copies) did the same to every colleague on the block.
+
+- Fixed in the Planned Work Block controller (`put_person_on_tasks`, after `sync_primary_task`), so the SPA, FAC, attach-tasks, edit and desk paths all pass through it. The decision is the site-free `omnitrack/utils/task_parity.py`.
+- A Task can have many assignees, so the block's person is added to it with Frappe's own `assign_to.add`: whoever books must be able to read the task, the other assignees stay, and Frappe notifies the person as for any assignment. Reassigning instead would orphan Nomeshwer's own blocks the same way. `book_work_block` and each FAC planned block return `added_to_tasks`.
+- A to-do is one person's list item, so a block on someone else's to-do is refused (ValidationError, naming the owner). Paired and team copies may show their owner's to-do.
+- Only rows new to the block are checked, or all of them when its person changes, so an unrelated save never puts back someone a task was later taken off. Finished tasks are skipped.
+- Checked: no existing block on ommnomi.local has a person missing from its open task (read-only SQL). The save path was not run on the site: it would assign and notify real people. Guards: `omnitrack/tests/test_task_parity.py` plus 9 mutants.
+
+Open:
+- `block_tasks.set_row_done` sets the Task's status with `frappe.db.set_value`, with no permission check, so anyone allowed to change a block can complete any task on it. Parity makes them an assignee now, but ticking should still go through the Task's own permission (and workflow, where one is set).
+- Run the parity save path (the add and the to-do refusal) against a test site, never ommnomi.local: it creates ToDos and notifications.
