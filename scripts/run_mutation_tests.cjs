@@ -959,7 +959,7 @@ runMutationTest('The pair partner is not split at midnight', SRC('omnitrack/api/
 runMutationTest('A failed Timesheet is swallowed again', SRC('omnitrack/api/stopwatch.py'),
   (code) => code.replace(/except Exception:\n(\t+)# Kept on record[^\n]*\n\t+frappe\.log_error\(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=block\.name\)/, 'except Exception:\n$1pass'), ON, 'swallowed');
 runMutationTest('A failed stop says it was saved', SRC('src/composables/useWorkstationApi.js'),
-  (code) => code.replace("showToast('Could not save this session: ' + (err && err.message || err) + '. Add it again from Log.', 'danger');", "showToast('Timer punch recorded locally.', 'success');"), ON, 'reported as saved');
+  (code) => code.replace("showToast('Not saved, the session is still running. ' + _errText(err), 'danger');", "showToast('Timer punch recorded locally.', 'success');"), ON, 'reported as saved');
 runMutationTest('An end before the start is refused again', SRC('src/utils/clockTime.js'),
   (code) => code.replace('  return d < 0 ? d + 24 * 60 : d;', '  return d < 0 ? 0 : d;'), ON, 'spanMins(23:00, 04:00)');
 runMutationTest('The Timesheet dialog stops measuring past midnight', SRC('src/components/dialogs/TimesheetEntryDialog.vue'),
@@ -1269,6 +1269,52 @@ runMutationTest('The task panel is blank while it loads', SRC('src/drawers/TaskD
   (code) => code.replace('<p v-if="!d && !failed"', '<p v-if="false"'), DK, 'say it is loading');
 runMutationTest('The task steps jump in after the panel opens', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<div v-if="d || failed" class="flex items-center gap-2 flex-wrap"', '<div v-if="true" class="flex items-center gap-2 flex-wrap"'), DK, 'say it is loading');
+
+// A refused Stop never loses a session, and an older copy of its log never replaces a newer one
+const SLN = 'node scripts/check_session_lines.mjs';
+const SLT = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_session_lines`;
+const WAPI = SRC('src/composables/useWorkstationApi.js');
+const WSYNC = SRC('src/composables/useWorkstationSessionSync.js');
+runMutationTest('The page counts a hyphen as part of a word', SRC('src/utils/sessionWords.js'),
+  (code) => code.replace("replace(/[•\\-*\\n\\r\\t,;:.]/g, ' ')", "replace(/[•*\\n\\r\\t,;:.]/g, ' ')"), SLN, 'as the server counts');
+runMutationTest('The page ignores the Minimum Words setting', SRC('src/utils/sessionWords.js'),
+  (code) => code.replace('return n > 0 ? n : 15;', 'return 15;'), SLN, 'follows OmniTrack Settings');
+runMutationTest('An older copy of the log wins', SRC('src/utils/sessionLines.js'),
+  (code) => code.replace('return (Number(remoteRev) || 0) >= (Number(localRev) || 0);', 'return true;'), SLN, 'must not replace a newer one');
+runMutationTest('Stop tears the clock down before counting words', WAPI,
+  (code) => code.replace('countSessionWords(notesNow) < minSessionWords(window.OMNITRACK_SESSION)) { refuseEmptySession(); return; }', 'false) { refuseEmptySession(); return; }'), SLN, 'before the clock is torn down');
+runMutationTest('Stop drops the line typed but not added', WAPI,
+  (code) => code.replace("if (draft) { sessionNotesList.value.push(draft); newSessionPoint.value = ''; syncActiveSession(true); }", ''), SLN, 'unsent line joins the log');
+runMutationTest('Stop clears the server copy before saving', WAPI,
+  (code) => code.replace('const notesNow = composeWrapNote(', "postJSON('/api/method/omnitrack.api.stopwatch.sync_active_session', { session_data: null });\n      const notesNow = composeWrapNote("), SLN, 'must not clear the server copy');
+runMutationTest('A refused block save loses the session', WAPI,
+  (code) => code.replace(/\} catch \(err\) \{\s*keepSession\(err\);/, '} catch (err) { showToast(_errText(err), \'danger\');'), SLN, 'puts the session back');
+runMutationTest('keepSession leaves the session ended', WAPI,
+  (code) => code.replace('restoreActiveSession(keptSession);', ''), SLN, 'restores the session');
+runMutationTest('An edit does not stamp the log', WSYNC,
+  (code) => code.replace('if (!_applyingRemote) _linesRev = Date.now();', ''), SLN, 'stamps the log');
+runMutationTest('The sync leaves out the log revision', WSYNC,
+  (code) => code.replace('linesRev: _linesRev,', ''), SLN, "carries the log's revision");
+runMutationTest('A restore takes an older log', WSYNC,
+  (code) => code.replace('const keepLocalLines = sameSession && !remoteLinesWin(sessionData.linesRev, _linesRev);', 'const keepLocalLines = false;'), SLN, 'keeps a newer log');
+runMutationTest('A poll takes an older log', WSYNC,
+  (code) => code.replace('const keptLocal = !remoteLinesWin(remote.linesRev, _linesRev);', 'const keptLocal = false;'), SLN, 'keeps a newer log');
+runMutationTest('The short-session dialog fills in a note', WSM,
+  (code) => code.replace("emptyStopQuickNote.value = '';", "emptyStopQuickNote.value = 'Focus work session';"), SLN, 'no invented note');
+runMutationTest('The short-session dialog saves too few words', WSM,
+  (code) => code.replace('if (emptyStopLoggedWords.value + countSessionWords(note) < sessionMinWords) return;', ''), SLN, 'needs enough words');
+runMutationTest('Save in the short-session dialog never waits', SRC('src/components/dialogs/EmptyStopModal.vue'),
+  (code) => code.replace(':disabled="!enough"', ''), SLN, 'Save waits for enough words');
+runMutationTest('A session with a log can be discarded', SRC('src/components/dialogs/EmptyStopModal.vue'),
+  (code) => code.replace('<Button v-if="!loggedWords"', '<Button'), SLN, 'can be discarded');
+runMutationTest('The server counts a hyphen as part of a word', SRC('omnitrack/utils/validators.py'),
+  (code) => code.replace('("\\u2022", "-", "*",', '("\\u2022", "*",'), SLT, 'test_counted_as_the_page_counts_them');
+runMutationTest('The server lets an older copy replace the log', SRC('omnitrack/utils/session_lines.py'),
+  (code) => code.replace('if int(stored.get("linesRev") or 0) <= int(incoming.get("linesRev") or 0):', 'if True:'), SLT, 'test_an_older_copy_keeps_the_stored_log');
+runMutationTest('The server keeps an old log for a new session', SRC('omnitrack/utils/session_lines.py'),
+  (code) => code.replace(' or int(stored.get("startTime") or 0) != int(incoming.get("startTime") or 0):', ':'), SLT, 'test_a_different_session_or_none_stored_is_stored');
+runMutationTest('The sync skips the newer-log check', SRC('omnitrack/api/stopwatch.py'),
+  (code) => code.replace('\tclean_data = keep_newer_lines(get_active_session(user=target_user), clean_data)\n', ''), SLT, 'test_every_sync_goes_through_it');
 
 // Summary Report
 console.log('\n===========================================================');

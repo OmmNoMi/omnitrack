@@ -353,5 +353,8 @@ In dark mode frappe-ui's solid Button flips to a light background with `text-ink
 ## Gotcha: a name missing from the workstation context renders nothing in production
 `useWorkstationContext([...])` throws in `setup` when App.vue does not expose a name. In development that is a loud error; in the production bundle Vue swallows it and the component renders empty, with nothing in the console a person would notice. When a component asks for a new name, add it to App.vue's provide in the same change and open that component in the browser.
 
+## Gotcha: a poll that copies the server's state over the page loses edits
+The active session is kept in three places (the page, localStorage, the server) and every tab, plus the Desk page that loads the bundle, polls and pushes it. Copying whatever the server holds over the page, with no check of which copy is newer, let an older copy wipe lines written since; a session lost its log that way. Every copy carries `linesRev` (stamped on each local edit), the newer one wins on the page and on the server (`omnitrack/utils/session_lines.py`), and a page that kept the newer copy sends it back up. Any new shared state needs the same rule. Also: never clear the server copy before the save that ends it has succeeded.
+
 ## Gotcha: `npm test` reads the built bundle
 `test_spa_smoke.cjs` checks `omnitrack/public/dist/omnitrack.bundle.js`, so a source change tested without `npm run build` first is tested against the old bundle. Build, then test.

@@ -24,6 +24,8 @@
       :quick-note="emptyStopQuickNote"
       @update:quick-note="$emit('update:emptyStopQuickNote', $event)"
       :elapsed-hours="emptyStopElapsedHrs"
+      :logged-words="emptyStopLoggedWords"
+      :min-words="sessionMinWords"
       :is-dark-mode="isDarkMode"
       @save="$emit('confirm-empty-stop-save')"
       @discard="$emit('confirm-empty-stop-discard')"
@@ -164,6 +166,8 @@ export default {
     showEmptyStopModal: { type: Boolean, default: false },
     emptyStopQuickNote: { type: String, default: "" },
     emptyStopElapsedHrs: { type: [Number, String], default: 0 },
+    emptyStopLoggedWords: { type: Number, default: 0 },
+    sessionMinWords: { type: Number, default: 15 },
 
     // StartTimeChoiceModal
     showStartTimeChoiceModal: { type: Boolean, default: false },

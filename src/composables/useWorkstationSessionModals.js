@@ -9,6 +9,7 @@ import { whenLine, spanMins } from "../utils/clockTime.js";
 import { newEntryTimes, entryEndMs } from "../utils/timesheetEntry.js";
 import { composeWrapNote, logLines } from "../utils/wrapNote.js";
 import { blockTitle } from '../utils/blockTitle.js';
+import { countSessionWords, minSessionWords } from '../utils/sessionWords.js';
 const { ref, computed } = Vue;
 
 export function useWorkstationSessionModals(opts) {
@@ -28,14 +29,16 @@ export function useWorkstationSessionModals(opts) {
   const showEmptyStopModal = ref(false);
   const emptyStopQuickNote = ref('');
   const emptyStopElapsedHrs = ref(0);
+  // Words the session's title and log already hold, and how many a saved session needs
+  const emptyStopLoggedWords = ref(0);
+  const sessionMinWords = minSessionWords(typeof window !== 'undefined' ? window.OMNITRACK_SESSION : null);
 
   const openEmptyStopModal = () => {
     const elapsedSecs = trackerSeconds.value;
     emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
-    const defaultNote = String(trackerNotes.value || '').trim() ||
-      (trackerBoundBlock.value ? blockTitle(trackerBoundBlock.value, trackerBoundBlock.value.name) : '') ||
-      'Focus work session';
-    emptyStopQuickNote.value = defaultNote;
+    emptyStopLoggedWords.value = countSessionWords(composeWrapNote(trackerNotes.value, sessionNotesList.value));
+    // Never an invented note: the person says what they did
+    emptyStopQuickNote.value = '';
     showEmptyStopModal.value = true;
   };
 
@@ -46,7 +49,8 @@ export function useWorkstationSessionModals(opts) {
   };
 
   const confirmEmptyStopSave = () => {
-    const note = String(emptyStopQuickNote.value || '').trim() || 'Focus work session';
+    const note = String(emptyStopQuickNote.value || '').trim();
+    if (emptyStopLoggedWords.value + countSessionWords(note) < sessionMinWords) return;
     showEmptyStopModal.value = false;
     appendSessionLine(note);
     toggleTrack();
@@ -343,6 +347,8 @@ export function useWorkstationSessionModals(opts) {
     showEmptyStopModal,
     emptyStopQuickNote,
     emptyStopElapsedHrs,
+    emptyStopLoggedWords,
+    sessionMinWords,
     openEmptyStopModal,
     confirmEmptyStopDiscard,
     confirmEmptyStopSave,

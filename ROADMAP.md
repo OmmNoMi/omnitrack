@@ -1121,3 +1121,25 @@ Reported: `omnitrack_plan_work_blocks` booked a block for Neha on a task assigne
 Open:
 - `block_tasks.set_row_done` sets the Task's status with `frappe.db.set_value`, with no permission check, so anyone allowed to change a block can complete any task on it. Parity makes them an assignee now, but ticking should still go through the Task's own permission (and workflow, where one is set).
 - Run the parity save path (the add and the to-do refusal) against a test site, never ommnomi.local: it creates ToDos and notifications.
+
+## A refused Stop lost a session (fixed 2026-10-08)
+
+Reported: a session from 23:45 (Oct 7) to 00:35 was lost. Stop said "Session notes must contain at least 15 words … (found 6 words) … Add it again from Log", and nothing was on the timeline. The owner had written about three lines; only the 6-word title reached the save.
+
+Why it was lost:
+- Stop cleared the session on the server, told other tabs it had ended, and only then saved. When the save was refused, nothing was left to go back to.
+- The lines were gone before the save. The 2-second poll, a realtime push and a restore each replaced the log with whatever copy the server held, with no check of which copy was newer. A tab, or the Desk page (the bundle loads there too), holding an older copy could send it up and wipe the newer lines. A line typed but not added yet was also dropped on Stop.
+
+Fixed:
+- Stop adds a typed line to the log, then counts words the way the server does (`src/utils/sessionWords.js`, the same cases as `validators.count_session_words`). If there are too few, it asks for more before the clock stops: "Describe this session" with a live word count, and Save waits until there are enough. Keep running closes the dialog. A session with nothing written can be discarded; one with a log cannot, from there.
+- The server copy stays until a save succeeds; both saves (`quick_timer_punch`, `log_work_session`) clear it themselves. A refused save puts the session back as it was and says "Not saved, the session is still running."
+- Every edit to the title, log or tasks stamps `linesRev`. An older copy never replaces a newer one: not in the poll, the realtime push or a restore on the page (it sends the newer copy back up instead), and not on the server (`omnitrack/utils/session_lines.keep_newer_lines`).
+- No more invented notes ("Focus session (…)", "Focus work session"): the page asks the person.
+- The server's message is one short sentence: "Describe what you did in at least 15 words (you wrote 6)."
+- Guards: `scripts/check_session_lines.mjs`, `omnitrack/tests/test_session_lines.py`, 20 mutants.
+- The lost session was not recreated: it is the owner's own record to add from Log.
+
+Open:
+- `linesRev` is the device's clock. Two devices with clocks far apart could still pick the wrong copy. A server-issued counter would not.
+- Switching to another block (`switch_active_session`) is refused by the same word rule, and when the person wrote nothing the server invents "Session completed before switching to …". The switch is atomic, so nothing is lost, but it should ask for words first, as Stop now does, and never invent a note.
+- `src/stores/workSessionStore.js` repeats the session sync with none of this (no `linesRev`, and it clears the server copy before saving). Nothing imports it; it is on the list to delete.

@@ -194,6 +194,8 @@
     v-model:show-empty-stop-modal="showEmptyStopModal"
     v-model:empty-stop-quick-note="emptyStopQuickNote"
     :empty-stop-elapsed-hrs="emptyStopElapsedHrs"
+    :empty-stop-logged-words="emptyStopLoggedWords"
+    :session-min-words="sessionMinWords"
     @confirm-empty-stop-save="confirmEmptyStopSave"
     @confirm-empty-stop-discard="confirmEmptyStopDiscard"
 

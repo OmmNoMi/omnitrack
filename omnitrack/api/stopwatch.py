@@ -302,10 +302,15 @@ def sync_active_session(session_data=None, user=None):
 		"sessionNotesList": session_data.get("sessionNotesList") if isinstance(session_data.get("sessionNotesList"), list) else [],
 		# Tasks of a session with no block yet; Stop puts them on the block it becomes
 		"sessionTasks": clean_session_tasks(session_data.get("sessionTasks")),
+		"linesRev": int(flt(session_data.get("linesRev") or 0)),
 		"lastActivityTime": resolved_last_act,
 		"lastUpdated": now_ms,
 		"status": "active"
 	}
+
+	# A tab or device holding an older copy of the log never overwrites a newer one
+	from omnitrack.utils.session_lines import keep_newer_lines
+	clean_data = keep_newer_lines(get_active_session(user=target_user), clean_data)
 
 	# 1. High-speed cache
 	frappe.cache.hset("omnitrack:active_session", target_user, clean_data)

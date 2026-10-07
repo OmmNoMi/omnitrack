@@ -1,0 +1,8 @@
+[
+  ["", 0],
+  ["testing the overlap of the timesheet", 6],
+  ["Fix the export\n\n• Found the bad row\n• Shipped the fix", 10],
+  ["a-b,c;d:e.f*g", 7],
+  ["  •   •  ", 0],
+  ["Reviewed PR #42 with Neha\ttabs\rand returns", 8]
+]

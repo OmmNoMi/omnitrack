@@ -88,6 +88,7 @@
       is_client: {{ 'true' if is_client else 'false' }},
       has_projects: {{ 'true' if has_projects else 'false' }},
       min_log_line_chars: {{ min_log_line_chars | int }},
+      min_session_words: {{ min_session_words | int }},
       site: "{{ site_name }}",
       socketio_port: {{ socketio_port | int }},
       csrf_token: "{{ csrf_token }}",

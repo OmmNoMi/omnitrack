@@ -30,24 +30,24 @@ def get_min_log_line_chars():
 	return _positive_setting("min_log_line_chars", 10)
 
 
+def count_session_words(notes):
+	"""Words in a session's notes: bullets and punctuation count as spaces. The page counts the
+	same way (src/utils/sessionWords.js) so Stop can ask before the clock stops."""
+	text = str(notes or "")
+	for ch in ("\u2022", "-", "*", "\n", "\r", "\t", ",", ";", ":", "."):
+		text = text.replace(ch, " ")
+	return len(text.split())
+
+
 def require_session_notes(notes):
 	"""A timesheet with no description is not a record of anything — it is an hour
 	with nothing attached to it. Refuse the write rather than inventing a
 	placeholder, so the record has authentic, verifiable work behind it."""
-	text = str(notes or "")
-	for ch in ("\u2022", "-", "*", "\n", "\r", "\t", ",", ";", ":", "."):
-		text = text.replace(ch, " ")
-	words = [w for w in text.split() if len(w) > 0]
+	words = count_session_words(notes)
 	min_words = get_min_session_words()
 
-	if len(words) < min_words:
-		frappe.throw(
-			_("Session notes must contain at least {0} words describing what was accomplished (found {1} word{2}). "
-			  "A manager, auditor, or client reviews these records. Concise, meaningful details ensure accurate billing, "
-			  "payroll compliance, and operational traceability across all industries.").format(
-				min_words, len(words), "" if len(words) == 1 else "s"
-			)
-		)
+	if words < min_words:
+		frappe.throw(_("Describe what you did in at least {0} words (you wrote {1}).").format(min_words, words))
 	return str(notes).strip()
 
 

@@ -12,7 +12,8 @@
 
 import * as Vue from "vue";
 import { toKind } from "../utils/activity.js";
-const { ref, nextTick } = Vue;
+import { remoteLinesWin } from "../utils/sessionLines.js";
+const { ref, nextTick, watch } = Vue;
 
 export function useWorkstationSessionSync({
   postJSON,
@@ -47,6 +48,18 @@ export function useWorkstationSessionSync({
   let _lastLocalStop = 0;
   let _isStoppingSession = false;
   let _isCheckingActiveSession = false;
+  // When this copy's title, log or tasks were last edited here (or adopted from a newer copy)
+  let _linesRev = 0;
+  let _applyingRemote = false;
+  watch([sessionNotesList, trackerNotes, sessionTasks], () => {
+    if (!_applyingRemote) _linesRev = Date.now();
+  }, { deep: true, flush: 'sync' });
+  // Puts a remote copy's lines in place without counting it as an edit made here
+  const adoptRemoteLines = (fn, rev) => {
+    _applyingRemote = true;
+    try { fn(); } finally { _applyingRemote = false; }
+    _linesRev = Number(rev) || 0;
+  };
   let _isRestoring = false;
 
   // Phase 4: Instant Cross-Tab Broadcast Channel Sync
@@ -174,6 +187,7 @@ export function useWorkstationSessionSync({
       trackerBlockName: trackerBlockName.value,
       sessionNotesList: sessionNotesList.value,
       sessionTasks: sessionTasks.value,
+      linesRev: _linesRev,
       lastActivityTime: lastActivityTime.value || _lastLocalUpdate,
       lastUpdated: _lastLocalUpdate,
       status: 'active'
@@ -237,6 +251,8 @@ export function useWorkstationSessionSync({
       }
     }
 
+    const wasTracking = isTracking.value;
+    const prevStart = startTime.value;
     _isRestoring = true;
     try {
       isTracking.value = true;
@@ -246,16 +262,21 @@ export function useWorkstationSessionSync({
       trackerNature.value = toKind(sessionData.selectedNature);
       selectedProject.value = sessionData.selectedProject || '';
       trackerProject.value = sessionData.selectedProject || '';
-      let rawN = sessionData.trackerNotes || '';
-      if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
-        const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
-        trackerNotes.value = parts[0] || '';
-        sessionNotesList.value = parts.slice(1);
-      } else {
-        trackerNotes.value = rawN;
-        sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
-      }
-      sessionTasks.value = Array.isArray(sessionData.sessionTasks) ? sessionData.sessionTasks : [];
+      // The same session, with a newer log here: keep it, and send it back up
+      const sameSession = wasTracking && Math.abs(startMs - (Number(prevStart) || 0)) <= 60000;
+      const keepLocalLines = sameSession && !remoteLinesWin(sessionData.linesRev, _linesRev);
+      if (!keepLocalLines) adoptRemoteLines(() => {
+        let rawN = sessionData.trackerNotes || '';
+        if (rawN.includes('•') && (!sessionData.sessionNotesList || sessionData.sessionNotesList.length === 0)) {
+          const parts = rawN.split('•').map(s => s.trim()).filter(Boolean);
+          trackerNotes.value = parts[0] || '';
+          sessionNotesList.value = parts.slice(1);
+        } else {
+          trackerNotes.value = rawN;
+          sessionNotesList.value = Array.isArray(sessionData.sessionNotesList) ? sessionData.sessionNotesList : [];
+        }
+        sessionTasks.value = Array.isArray(sessionData.sessionTasks) ? sessionData.sessionTasks : [];
+      }, sessionData.linesRev);
       trackerBlockName.value = sessionData.trackerBlockName || null;
       const sLastAct = Number(sessionData.lastActivityTime) || 0;
       const sLastUpd = Number(sessionData.lastUpdated) || 0;
@@ -270,7 +291,8 @@ export function useWorkstationSessionSync({
         if (typeof checkBlockOverrun === 'function') checkBlockOverrun();
       }, 1000);
 
-      localStorage.setItem('omnitrack_active_session',
+      if (keepLocalLines) syncActiveSession(true);
+      else localStorage.setItem('omnitrack_active_session',
         JSON.stringify(Object.assign({}, sessionData, { status: 'active' })));
       return true;
     } finally {
@@ -343,20 +365,24 @@ export function useWorkstationSessionSync({
 
     if (Date.now() - _lastLocalUpdate < 1200) return;
 
-    const remoteLines = Array.isArray(remote.sessionNotesList) ? remote.sessionNotesList : [];
-    const localLines = sessionNotesList.value || [];
-    if (JSON.stringify(remoteLines) !== JSON.stringify(localLines)) {
-      sessionNotesList.value = [...remoteLines];
-      nextTick(() => {
-        if (sessionNotesScroll && sessionNotesScroll.value) {
-          sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight;
-        }
-      });
-    }
-
-    const remoteTasks = Array.isArray(remote.sessionTasks) ? remote.sessionTasks : [];
-    if (JSON.stringify(remoteTasks) !== JSON.stringify(sessionTasks.value || [])) {
-      sessionTasks.value = [...remoteTasks];
+    // An older copy of the log (a poll that left before the last line landed, another tab)
+    // never replaces this one: this one goes back up instead
+    const keptLocal = !remoteLinesWin(remote.linesRev, _linesRev);
+    if (!keptLocal) {
+      const remoteLines = Array.isArray(remote.sessionNotesList) ? remote.sessionNotesList : [];
+      const remoteTasks = Array.isArray(remote.sessionTasks) ? remote.sessionTasks : [];
+      const linesChanged = JSON.stringify(remoteLines) !== JSON.stringify(sessionNotesList.value || []);
+      adoptRemoteLines(() => {
+        if (linesChanged) sessionNotesList.value = [...remoteLines];
+        if (JSON.stringify(remoteTasks) !== JSON.stringify(sessionTasks.value || [])) sessionTasks.value = [...remoteTasks];
+      }, remote.linesRev);
+      if (linesChanged) {
+        nextTick(() => {
+          if (sessionNotesScroll && sessionNotesScroll.value) {
+            sessionNotesScroll.value.scrollTop = sessionNotesScroll.value.scrollHeight;
+          }
+        });
+      }
     }
 
     if (remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
@@ -383,7 +409,8 @@ export function useWorkstationSessionSync({
       trackerBlockName.value = remote.trackerBlockName || null;
     }
 
-    localStorage.setItem('omnitrack_active_session', JSON.stringify(Object.assign({}, remote, { status: 'active' })));
+    if (keptLocal) syncActiveSession(true);
+    else localStorage.setItem('omnitrack_active_session', JSON.stringify(Object.assign({}, remote, { status: 'active' })));
   };
 
   const checkRemoteActiveSession = async () => {

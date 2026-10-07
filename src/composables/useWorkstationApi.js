@@ -1,12 +1,14 @@
 import { ref, computed } from "vue";
 import { blockTitle } from '../utils/blockTitle.js';
+import { composeWrapNote } from '../utils/wrapNote.js';
+import { countSessionWords, minSessionWords } from '../utils/sessionWords.js';
 
 /**
  * Workstation API methods.
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationApi(w) {
-  const { _explicitBoundBlock, activeBlock, activeTab, assignedTasks, attentionTasks, broadcastSessionCleared, cancelSyncDebounce, checkBlockOverrun, checkInactivity, currentUser, discardConfirm, getIsStoppingSession, getLastLocalStop, getLastLocalUpdate, getLocalTodayISO, getNatureBadge, isSessionElevated, isTracking, lastActivityTime, lastInactivityAlertTime, markSessionEnded, newSessionPoint, notificationPermission, openSessionCard, plannerData, postJSON, projects, refuseEmptySession, restoreActiveSession, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionHasLines, sessionNotesList, setLastLocalStop, setLastLocalUpdate, setStoppingSession, showToast, startTime, stopConfirmName, syncActiveSession, synthesizerLogs, tasks, teamMembers, todayDate, trackerBlockName, trackerBoundBlock, trackerNature, trackerNotes, trackerProject, trackerSeconds, trackerTimer, triggerHaptic, unmarkSessionEnded, updateDashboardKPIs, wasEndedHere, workBlocks } = w;
+  const { _errText, _explicitBoundBlock, activeBlock, activeTab, assignedTasks, attentionTasks, broadcastSessionCleared, cancelSyncDebounce, checkBlockOverrun, checkInactivity, currentUser, discardConfirm, getIsStoppingSession, getLastLocalStop, getLastLocalUpdate, getLocalTodayISO, getNatureBadge, isSessionElevated, isTracking, lastActivityTime, lastInactivityAlertTime, markSessionEnded, newSessionPoint, notificationPermission, openSessionCard, plannerData, postJSON, projects, refuseEmptySession, restoreActiveSession, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionHasLines, sessionNotesList, setLastLocalStop, setLastLocalUpdate, setStoppingSession, showToast, startTime, stopConfirmName, syncActiveSession, synthesizerLogs, tasks, teamMembers, todayDate, trackerBlockName, trackerBoundBlock, trackerNature, trackerNotes, trackerProject, trackerSeconds, trackerTimer, triggerHaptic, unmarkSessionEnded, updateDashboardKPIs, wasEndedHere, workBlocks } = w;
   const fetchAttendancePresence = (...args) => w.fetchAttendancePresence(...args);
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
 
@@ -233,15 +235,43 @@ export function useWorkstationApi(w) {
       }, 1000);
       showToast(`Focus timer started for ${selectedNature.value}`, 'info');
     } else {
-      // Checked before the clock is torn down, so a refused stop leaves the
-      // session exactly as it was and nothing is lost.
-      if (!sessionHasLines.value) { refuseEmptySession(); return; }
+      // A line typed but not added yet is part of the log: Stop saves it, never drops it
+      const draft = String((newSessionPoint && newSessionPoint.value) || '').trim();
+      if (draft) { sessionNotesList.value.push(draft); newSessionPoint.value = ''; syncActiveSession(true); }
+      // Checked before the clock is torn down, so a refused stop leaves the session exactly
+      // as it was and nothing is lost. The words are counted as the server counts them: a
+      // session refused there for being short was once already cleared, and an hour was lost.
+      const notesNow = composeWrapNote(trackerNotes.value, sessionNotesList.value);
+      if (!sessionHasLines.value || countSessionWords(notesNow) < minSessionWords(window.OMNITRACK_SESSION)) { refuseEmptySession(); return; }
       triggerHaptic([40, 50, 40]);
       let sTime = null;
       try {
         const p = JSON.parse(localStorage.getItem('omnitrack_active_session') || 'null');
         if (p && p.startTime) sTime = Number(p.startTime);
       } catch (e) {}
+      // The session as it stands, put back if the save is refused
+      const keptSession = {
+        startTime: sTime || Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000),
+        selectedNature: selectedNature.value,
+        selectedProject: selectedProject.value,
+        trackerNotes: trackerNotes.value,
+        trackerBlockName: trackerBlockName.value,
+        sessionNotesList: [...(sessionNotesList.value || [])],
+        sessionTasks: [...(w.sessionTasks.value || [])],
+        // The newest copy there is: the server keeps it over anything older
+        linesRev: Date.now(),
+        lastActivityTime: lastActivityTime.value || Date.now(),
+        lastUpdated: Date.now(),
+        status: 'active'
+      };
+      const keepSession = (err) => {
+        setStoppingSession(false);
+        setLastLocalStop(0);
+        unmarkSessionEnded(keptSession.startTime);
+        restoreActiveSession(keptSession);
+        syncActiveSession(true);
+        showToast('Not saved, the session is still running. ' + _errText(err), 'danger');
+      };
       setLastLocalStop(Date.now());
       setStoppingSession(true, 8000);
       isTracking.value = false;
@@ -250,11 +280,10 @@ export function useWorkstationApi(w) {
       trackerTimer.value = null;
       markSessionEnded(sTime);
       localStorage.removeItem('omnitrack_active_session');
-      // A sync debounced 500ms ago still holds the live payload; cancel it
-      // so it cannot overwrite the server clear.
+      // A sync debounced 500ms ago still holds the live payload; cancel it. The server copy
+      // stays until the save succeeds: both saves clear it themselves, so a refused save
+      // leaves the session on the server, on other devices, and here.
       cancelSyncDebounce();
-      postJSON('sync_active_session', { session_data: null }).catch(() => {});
-      broadcastSessionCleared();
       // snapshot, then zero the clock: a standby HUD showing the last
       // session's elapsed time reads like a session that is still open
       let elapsedSecs = trackerSeconds.value;
@@ -272,9 +301,7 @@ export function useWorkstationApi(w) {
       const hrs = Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100;
       const boundBlock = trackerBlockName.value;
       trackerBlockName.value = null;
-      const rawTitle = (trackerNotes.value || '').trim();
-      const bullets = sessionNotesList.value.filter(p => p.trim()).map(p => `• ${p.trim()}`).join('\n');
-      const finalNotes = (rawTitle && bullets) ? `${rawTitle}\n\n${bullets}` : (rawTitle || bullets || `Focus session (${selectedNature.value})`);
+      const finalNotes = notesNow;
       sessionNotesList.value = [];
       // Taken now: the session is over, and these become the new block's task rows
       const doneTasks = w.sessionTasks.value || [];
@@ -294,9 +321,10 @@ export function useWorkstationApi(w) {
             from_time: pad(from.getHours()) + ':' + pad(from.getMinutes()),
             to_time: pad(now.getHours()) + ':' + pad(now.getMinutes()),
             hours: hrs,
-            notes: finalNotes || `Focus session (${selectedNature.value})`,
+            notes: finalNotes,
             logged_via: 'Stopwatch'
           });
+          broadcastSessionCleared();
           showToast(`Logged ${hrs.toFixed(2)}h against focus block`, 'success');
           trackerNotes.value = '';
           fetchWorkstationData(selectedEmployee.value);
@@ -304,7 +332,7 @@ export function useWorkstationApi(w) {
           const refreshed = (plannerData.value.blocks || []).find(x => x.name === boundBlock);
           if (refreshed && showBlockDrawer.value) activeBlock.value = refreshed;
         } catch (err) {
-          showToast('Could not log session: ' + (err && err.message || err), 'danger');
+          keepSession(err);
         } finally {
           setStoppingSession(false);
         }
@@ -321,18 +349,18 @@ export function useWorkstationApi(w) {
           work_date: sessionDate,
           work_nature: selectedNature.value,
           task_nature: selectedNature.value,
-          deliverable_notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
-          notes: finalNotes || `Tracked Focus (${selectedNature.value})`,
+          deliverable_notes: finalNotes,
+          notes: finalNotes,
           project: selectedProject.value,
           session_tasks: JSON.stringify(doneTasks)
         });
+        broadcastSessionCleared();
         showToast(`Logged ${hrs.toFixed(2)} hrs successfully!`, 'success');
         trackerNotes.value = '';
         fetchWorkstationData(selectedEmployee.value);
         if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') fetchPlannerData();
       } catch (err) {
-        // Nothing was kept: say so, so the time is added again rather than assumed saved
-        showToast('Could not save this session: ' + (err && err.message || err) + '. Add it again from Log.', 'danger');
+        keepSession(err);
       } finally {
         setStoppingSession(false);
       }

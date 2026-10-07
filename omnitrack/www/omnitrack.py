@@ -22,8 +22,9 @@ def get_context(context):
 	ctx.is_manager = 1 if is_omnitrack_manager(user) else 0
 	user_roles = frappe.get_roles(user)
 	ctx.is_client = 1 if ("OmniTrack Client" in user_roles and not ctx.is_manager) else 0
-	from omnitrack.utils.validators import get_min_log_line_chars
+	from omnitrack.utils.validators import get_min_log_line_chars, get_min_session_words
 	ctx.min_log_line_chars = get_min_log_line_chars()
+	ctx.min_session_words = get_min_session_words()
 	# Bundle URLs carried a hard-coded version, so a rebuilt HUD bundle never
 	# reached the browser. Key the query on the built file's mtime instead:
 	# changes bust the cache, unchanged builds keep it.
