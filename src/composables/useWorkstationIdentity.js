@@ -44,6 +44,8 @@ export function useWorkstationIdentity(w) {
   const currentUser = ref(session.user || 'hardiksharma80912@gmail.com');
   const currentUserFullName = ref(session.user_fullname || 'Hardik Sharma');
   const isClient = ref(session.is_client || false);
+  // The site has ERPNext's Projects module, so the Projects page has something to show
+  const hasProjects = ref(!!session.has_projects);
   const csrfToken = session.csrf_token || (window.OMNITRACK_SESSION && window.OMNITRACK_SESSION.csrf_token) || '';
   // Frappe hides the real reason inside _server_messages, a JSON array of JSON.
   const _errText = (err) => {
@@ -330,6 +332,7 @@ const attentionTasks = ref([]);
     currentUser,
     currentUserFullName,
     isClient,
+    hasProjects,
     csrfToken,
     _errText,
     flt,

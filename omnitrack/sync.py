@@ -57,7 +57,11 @@ def send_payload_to_remote(connection_name, task_name, event_type):
 
 	data_str = json.dumps(payload, sort_keys=True)
 	payload_hash = hashlib.sha256(data_str.encode()).hexdigest()
-	secret = conn.get_password("hmac_secret") or "default_secret"
+	# No shared secret, no sync: an unsigned payload would be refused anyway
+	secret = conn.get_password("hmac_secret", raise_exception=False)
+	if not secret:
+		conn.db_set("sync_error_log", "Set the HMAC secret on this connection before syncing.")
+		return
 	signature = hmac.new(secret.encode(), data_str.encode(), hashlib.sha256).hexdigest()
 
 	# Create Task Sync Queue Log
@@ -108,13 +112,34 @@ def send_payload_to_remote(connection_name, task_name, event_type):
 				"error_log": err_msg
 			})
 
-@frappe.whitelist(allow_guest=True)
+def _signed_by_a_connection(data_str, signature):
+	"""True when an Active Remote Connection's HMAC secret produced this signature."""
+	if not signature or not frappe.db.exists("DocType", "OmniTrack Remote Connection"):
+		return False
+	for name in frappe.get_all("OmniTrack Remote Connection", filters={"status": "Active"}, pluck="name"):
+		secret = frappe.get_doc("OmniTrack Remote Connection", name).get_password("hmac_secret", raise_exception=False)
+		if secret and hmac.compare_digest(
+			hmac.new(secret.encode(), data_str.encode(), hashlib.sha256).hexdigest(), signature):
+			return True
+	return False
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 def receive_sync_event():
-	"""Receives and merges sync payloads from remote OmniTrack instances."""
+	"""Receives and merges sync payloads from remote OmniTrack instances.
+
+	Open to guests because the caller is another site, so the payload must carry an HMAC
+	signature from a connection's shared secret. Without one nothing is read or written.
+	"""
 	data_str = frappe.request.get_data(as_text=True)
 	if not data_str:
 		frappe.throw(_("Empty payload"), frappe.ValidationError)
-	
+	if not _signed_by_a_connection(data_str, frappe.get_request_header("X-OmniTrack-Signature")):
+		frappe.throw(_("This sync payload is not signed by a connected site."), frappe.AuthenticationError)
+	# A site without ERPNext has no Tasks to merge into
+	if not frappe.db.exists("DocType", "Task"):
+		return {"status": "ignored", "message": "This site has no Tasks"}
+
 	payload = json.loads(data_str)
 	event_type = payload.get("event_type")
 	remote_id = payload.get("remote_task_id")

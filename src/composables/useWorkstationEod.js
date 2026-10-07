@@ -3,13 +3,14 @@ import { popoverOpen, dialogTookEscape } from "../utils/popover.js";
 import { dueReminders, reminderKey } from "../utils/blockReminders.js";
 import { blockTitle } from "../utils/blockTitle.js";
 import { clock, toMin, localISO } from "../utils/clockTime.js";
+import { setScrollLock } from "../utils/scrollLock.js";
 
 /**
  * End-of-day wrap-up and lifecycle effects.
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchDrawerChat, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showEmptyStopModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -66,7 +67,7 @@ export function useWorkstationEod(w) {
     }
   };
   const approveWorkBlockSingle = (b) => approveOne(b, `Approved for ${b && (b.associate_name || b.employee)}`);
-  const quickApproveBlock = (b) => approveOne(b, 'Entry approved');
+  const quickApproveBlock = (b) => approveOne(b, 'Logged time approved');
   // The drawer passes the reason it collected; other callers fall back to a prompt.
   const quickFlagBlock = async (b, givenReason) => {
     if (!b || !b.name) return;
@@ -149,17 +150,12 @@ export function useWorkstationEod(w) {
     if (anyOpen) {
       document.addEventListener('keydown', notePopoverEscape, true);
       document.addEventListener('keydown', onPlannerKeydown);
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
     } else {
       document.removeEventListener('keydown', notePopoverEscape, true);
       document.removeEventListener('keydown', onPlannerKeydown);
       window.__omnitrackDialogDepth = 0;
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
-      document.documentElement.style.removeProperty('overflow');
-      document.body.style.removeProperty('overflow');
     }
+    setScrollLock('workstation-dialogs', anyOpen);
   });
   watch(activeTab, (t) => {
     if (t === 'planner') {
@@ -202,12 +198,6 @@ export function useWorkstationEod(w) {
           const currentTaskId = ravenTask.value.name || ravenTask.value.ref || ravenTask.value.id;
           if (data && (data.link_document === currentTaskId || (ravenChannel.value && data.channel_id === ravenChannel.value.name))) {
             fetchTaskRavenDetails(currentTaskId);
-          }
-        }
-        if (showBlockDrawer.value && activeBlock.value) {
-          const currentTaskId = activeBlock.value.task || activeBlock.value.name;
-          if (data && data.link_document === currentTaskId) {
-            fetchDrawerChat(currentTaskId);
           }
         }
       });

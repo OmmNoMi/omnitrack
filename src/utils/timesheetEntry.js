@@ -25,3 +25,11 @@ export function newEntryTimes(block, now = new Date()) {
   const length = planned ? e - s : 60;
   return { date: today, from: toHHMM(Math.max(0, nowMin - length)), to: toHHMM(nowMin) };
 }
+
+// When an entry ends, as a moment: its day and start, plus its length (past midnight included).
+// An entry may not end after now; time still ahead is logged by running a session.
+export function entryEndMs(date, from, mins) {
+  const [y, m, d] = String(date || "").split("-").map(Number);
+  if (!y || !m || !d || !from) return null;
+  return new Date(y, m - 1, d, 0, 0, 0).getTime() + (toMin(from) + mins) * 60000;
+}

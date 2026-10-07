@@ -1,4 +1,6 @@
 from frappe.model.document import Document
 
-class OmniTrackWorkspace(Document):
+from omnitrack.utils.optional_links import OptionalLinks
+
+class OmniTrackWorkspace(OptionalLinks, Document):
 	pass

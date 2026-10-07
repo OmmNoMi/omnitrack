@@ -1,4 +1,5 @@
 import { ref, computed, watch, nextTick } from "vue";
+import { setScrollLock } from "../utils/scrollLock.js";
 
 /**
  * Custom dropdowns and the session popup focus handling.
@@ -33,8 +34,8 @@ export function useWorkstationPickers(w) {
     return list;
   });
   const headerMenuItems = computed(() => [
-    { label: 'New Task', icon: 'plus', onClick: () => openNewTaskModal() },
-    { label: 'Session Timesheet', icon: 'file-text', onClick: () => openSessionCard() },
+    { label: 'Plan a block', icon: 'calendar', onClick: () => openNewTaskModal() },
+    { label: 'Current session', icon: 'file-text', onClick: () => openSessionCard() },
     { label: isDarkMode.value ? 'Light Mode' : 'Dark Mode', icon: isDarkMode.value ? 'sun' : 'moon', onClick: () => toggleTheme() },
     // A blocked permission can't be fixed from a header button, so it lives here
     // instead of as a permanent red chip; clicking explains how to unblock it.
@@ -148,10 +149,9 @@ export function useWorkstationPickers(w) {
     }
   };
   watch(isSessionElevated, (open) => {
+    setScrollLock('session-popup', open);
     if (open) {
       _sessionPopupReturnFocus = document.activeElement;
-      document.documentElement.style.overflow = 'hidden';
-      document.body.style.overflow = 'hidden';
       nextTick(() => {
         // "/" has already put focus in the log input; only an opening from elsewhere needs a target.
         const root = _sessionPopupCard();
@@ -160,10 +160,6 @@ export function useWorkstationPickers(w) {
         if (target) target.focus();
       });
     } else {
-      document.documentElement.style.overflow = '';
-      document.body.style.overflow = '';
-      document.documentElement.style.removeProperty('overflow');
-      document.body.style.removeProperty('overflow');
       if (_sessionPopupReturnFocus && _sessionPopupReturnFocus.focus) {
         _sessionPopupReturnFocus.focus();
       }

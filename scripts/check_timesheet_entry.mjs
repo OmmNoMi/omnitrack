@@ -35,7 +35,7 @@ eq(newEntryTimes(null, at(6, 10, 7)), { date: "2026-10-06", from: "09:00", to: "
 // Adding against a block now hands log_work_session's result straight to afterSave.
 const modals = read("src/composables/useWorkstationSessionModals.js");
 const writeEntry = (modals.match(/const writeEntry = async[\s\S]*?\n  };/) || [""])[0];
-if (!/afterSave\('Timesheet entry added', await postJSON\('log_work_session'/.test(writeEntry)) problems.push("useWorkstationSessionModals.js: adding an entry must use log_work_session's result (afterSave(..., await postJSON(...)))");
+if (!/afterSave\('Work session added', await postJSON\('log_work_session'/.test(writeEntry)) problems.push("useWorkstationSessionModals.js: adding an entry must use log_work_session's result (afterSave(..., await postJSON(...)))");
 if (!/newEntryTimes\(block\)/.test(modals)) problems.push("useWorkstationSessionModals.js: a new entry takes its times from newEntryTimes");
 if (/minTimesheetDate/.test(modals)) problems.push("useWorkstationSessionModals.js: the day limit is the server's horizon, not a client minTimesheetDate");
 

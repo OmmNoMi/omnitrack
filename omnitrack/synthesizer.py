@@ -12,6 +12,14 @@ def get_midnight_cutoff():
 
 @frappe.whitelist()
 def synthesize_employee_attendance(employee, attendance_date=None):
+	"""Rebuild one person's attendance for a day. It writes Attendance, so only managers may ask."""
+	from omnitrack.permissions import is_omnitrack_manager
+	if not is_omnitrack_manager():
+		frappe.throw(_("Only an OmniTrack Manager can rebuild attendance."), frappe.PermissionError)
+	return _synthesize(employee, attendance_date)
+
+
+def _synthesize(employee, attendance_date=None):
 	"""
 	Core Split-Shift & Midnight Spanning Attendance Synthesizer.
 	Correlates multi-session IN/OUT punches across midnight boundaries,
@@ -48,7 +56,7 @@ def synthesize_employee_attendance(employee, attendance_date=None):
 	# If no Employee Checkin found, check Planned Work Block
 	work_blocks = []
 	if not checkins and frappe.db.exists("DocType", "Planned Work Block"):
-		user_id = frappe.db.get_value("Employee", employee, "user_id") or employee
+		user_id = (frappe.db.get_value("Employee", employee, "user_id") if frappe.db.exists("DocType", "Employee") else None) or employee
 		work_blocks = frappe.get_all(
 			"Planned Work Block",
 			filters={
@@ -214,7 +222,8 @@ def synthesize_employee_attendance(employee, attendance_date=None):
 
 	# Create or Update Synthesizer Log
 	log_name = None
-	if frappe.db.exists("DocType", "OmniTrack Attendance Synthesizer Log"):
+	# The log names an Employee, so it is kept only where Frappe HR or ERPNext provides one
+	if frappe.db.exists("DocType", "OmniTrack Attendance Synthesizer Log") and frappe.db.exists("DocType", "Employee"):
 		existing_log = frappe.get_all("OmniTrack Attendance Synthesizer Log", filters={"employee": employee, "attendance_date": attendance_date}, limit=1)
 		if existing_log:
 			syn_log = frappe.get_doc("OmniTrack Attendance Synthesizer Log", existing_log[0].name)
@@ -256,7 +265,7 @@ def synthesize_all_active_employees(attendance_date=None):
 	employees = frappe.get_all("Employee", filters={"status": "Active"}, pluck="name") if frappe.db.exists("DocType", "Employee") else []
 	results = []
 	for emp in employees:
-		res = synthesize_employee_attendance(emp, attendance_date)
+		res = _synthesize(emp, attendance_date)
 		results.append(res)
 	return {"date": attendance_date, "total_processed": len(results), "results": results}
 
@@ -274,5 +283,5 @@ def on_checkin_event(doc, method=None):
 			# Punches before 04:00 AM belong to yesterday's shift
 			target_date = target_date - timedelta(days=1)
 
-		synthesize_employee_attendance(doc.employee, str(target_date))
+		_synthesize(doc.employee, str(target_date))
 

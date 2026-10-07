@@ -6,9 +6,6 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-              CampusCredit CATMA
-            </span>
             <span class="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               Active Operations
@@ -16,7 +13,7 @@
           </div>
           <h2 class="text-xl sm:text-2xl font-black mt-2 tracking-tight">Executive Project Pulse</h2>
           <p class="text-xs text-gray-700 dark:text-gray-300 mt-1">
-            Real-time delivery status, engineering sprints, and support sessions managed by <strong class="text-gray-700 dark:text-gray-300">OmmNoMi Automation LLP</strong>.
+            Delivery status and work sessions on the projects shared with you.
           </p>
         </div>
         <div class="flex items-center gap-3">

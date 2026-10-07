@@ -46,7 +46,7 @@
 
           <div class="flex items-center gap-1.5 shrink-0">
             <Button variant="outline" size="sm" icon-left="calendar" label="Plan" @click="$emit('plan-attention-task', task); $emit('close')" />
-            <Button variant="solid" theme="blue" size="sm" class="!bg-blue-700 hover:!bg-blue-800" icon-left="play" label="Start session" @click="$emit('start-task-immediately', task); $emit('close')" />
+            <Button variant="solid" theme="blue" size="sm" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800" icon-left="play" label="Start session" @click="$emit('start-task-immediately', task); $emit('close')" />
           </div>
         </div>
 

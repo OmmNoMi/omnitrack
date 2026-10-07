@@ -3,7 +3,8 @@
  * Encapsulates:
  * 1. BroadcastChannel instant cross-tab sync (`omnitrack_workstation_channel`).
  * 2. Active stopwatch synchronization to local storage and backend (`sync_active_session`).
- * 3. Session restore logic with clock-skew resilience, 10h zombie timer eviction, and status reconciliation.
+ * 3. Session restore logic with clock-skew resilience and status reconciliation. A long session is
+ *    restored and asked about (InactivityGovernorModal), never evicted on load.
  * 4. Ended session tombstone tracking (`_ENDED_KEY`, `markSessionEnded`, `wasEndedHere`, `unmarkSessionEnded`).
  * 5. Multi-device remote session reconciliation (`reconcileActiveSession`, `handleRemoteSessionCleared`).
  * 6. Background polling & phone-wake synchronization (`checkRemoteActiveSession`).
@@ -216,28 +217,10 @@ export function useWorkstationSessionSync({
     const serverElapsed = (serverHeartbeat > startMs) ? Math.floor((serverHeartbeat - startMs) / 1000) : 0;
     const localElapsed = Math.floor((Date.now() - startMs) / 1000);
     const elapsed = Math.max(0, Math.max(serverElapsed, localElapsed));
-    if (elapsed >= 86400) return false; // expired past 24h
-
-    // Zombie timer eviction: if running for > 10 hours, evict immediately
-    if (elapsed >= 10 * 3600) {
-      markSessionEnded();
-      localStorage.removeItem('omnitrack_active_session');
-      postJSON('sync_active_session', { session_data: null }).catch(() => {});
-      return false;
-    }
-
-    // Zombie timer eviction: if session started on a prior calendar day and has run >= 6 hours
-    // Both sides in LOCAL dates: toISOString() is UTC, so a session started after local
-    // midnight but before the UTC offset (00:00-05:30 in IST) read as "yesterday" and got evicted.
-    const localISO = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    const sessionStartDate = localISO(new Date(startMs));
-    const todayStr = localISO(new Date());
-    if (sessionStartDate !== todayStr && elapsed >= 6 * 3600) {
-      markSessionEnded();
-      localStorage.removeItem('omnitrack_active_session');
-      postJSON('sync_active_session', { session_data: null }).catch(() => {});
-      return false;
-    }
+    // A long or overnight session is never thrown away here. Loading a page is not a choice the
+    // person made, and the server copy is the only one other devices have. It is restored as it
+    // was; its last activity is old, so the first tick of checkInactivity opens the "still
+    // working?" dialog, which offers stop at the last note, keep running, or discard.
 
     // If bound to a work block, handle status reconciliation gracefully
     if (sessionData.trackerBlockName) {
@@ -321,7 +304,7 @@ export function useWorkstationSessionSync({
     }
     if (!(opts && opts.silent) && Date.now() - _lastClearedToast > 30000) {
       _lastClearedToast = Date.now();
-      showToast('Timesheet session saved on other device', 'info');
+      showToast('Session saved on another device', 'info');
     }
   };
 

@@ -77,9 +77,9 @@ const SHORT_MENUS = new Set([
   'headerMenuItems',            // New task / timesheet / theme / alerts
   'menuItems',                  // header: Raven chat + headerMenuItems
   'moreActions',                // block drawer: Add timesheet entry, Cancel block
-  'taskMenu',                   // task form: Open discussion, Open full form, Remove from block
+  'taskMenu',                   // task form: Raven chat (Tasks only), Open full form, Remove from block
   'statusMenu',                 // task form: the workflow moves open from one state
-  'taskMoves(t)',               // entry sheet: a task's workflow moves, each opening the task form
+  'moreMenu',                   // task details: workflow steps past the first two, then Open in Desk; entry sheet: Delete entry
   'priorityMenu',               // task form: the DocType's priorities (3 on ToDo, 4 on Task)
   'plannerNatureMenuItems'      // multi-select toggles; ROADMAP: move to a searchable multi-select
 ]);
@@ -117,12 +117,12 @@ assert.ok(pickerCount >= 9, `FAIL: expected >= 9 searchable Comboboxes / MultiSe
 console.log(`✓ Test 1: ${dropdownCount} short menus are labelled frappe-ui Dropdowns, ${pickerCount} data pickers are searchable Comboboxes; FDropdownMenu removed.`);
 
 // 2. Menu option builders produce the frappe-ui option shape.
-// Workflow moves are built in two places: the task form's state menu and the entry
-// sheet's per-task menu. The action verb already names the outcome ("Approve"); a
+// Workflow moves are built in two places: the task form's state menu and the task
+// details panel's action bar (the entry sheet's tasks open that panel). The action verb already names the outcome ("Approve"); a
 // next-state pill or description line only repeats it, so options carry no description.
 const formSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'components', 'dialogs', 'TaskFormDialog.vue'), 'utf8');
-const sheetSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'drawers', 'SessionDetailDrawer.vue'), 'utf8');
-for (const [name, src, re] of [['TaskFormDialog statusMenu', formSrc, /statusMenu\(\) \{[\s\S]*?\n    \},/], ['SessionDetailDrawer taskMoves', sheetSrc, /taskMoves\(t\) \{[\s\S]*?\n    \},/]]) {
+const detailSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'drawers', 'TaskDetailDrawer.vue'), 'utf8');
+for (const [name, src, re] of [['TaskFormDialog statusMenu', formSrc, /statusMenu\(\) \{[\s\S]*?\n    \},/], ['TaskDetailDrawer stateMoves', detailSrc, /stateMoves\(\) \{[\s\S]*?\n    \},/]]) {
   const wfBuilder = src.match(re);
   assert.ok(wfBuilder, `FAIL: ${name} not found`);
   assert.ok(!/next_state|description:/.test(wfBuilder[0]), `FAIL: ${name} options must not repeat the next state (duplicate information)`);
@@ -913,9 +913,10 @@ console.log('✓ Test 22: Overnight session date & notification gesture governan
 // ---------------------------------------------------------------------------
 // TEST 23: Modal Scroll Release & Zombie Session Eviction Invariants
 // ---------------------------------------------------------------------------
-// 1. F-dialog release overflow cleanup on both html and body
-assert.ok(content.includes('document.documentElement.style.removeProperty(\'overflow\')'), 'FAIL: f-dialog or watcher must removeProperty overflow on documentElement');
-assert.ok(content.includes('document.body.style.removeProperty(\'overflow\')'), 'FAIL: f-dialog or watcher must removeProperty overflow on body');
+// 1. Page scroll lock goes through src/utils/scrollLock.js on <html> only; reka owns <body>
+//    (writing body overflow froze the page after Stop in the 30-minute reminder). See check_scroll_lock.mjs.
+assert.ok(content.includes("setScrollLock('workstation-dialogs', anyOpen)"), 'FAIL: the dialog watcher must lock the page through setScrollLock');
+assert.ok(!content.includes('document.body.style.overflow'), 'FAIL: never write body overflow; frappe-ui dialogs restore it and freeze the page');
 
 // 2. Dialog depth reset in root watcher when all modals are closed
 assert.ok(content.includes('window.__omnitrackDialogDepth = 0'), 'FAIL: Root watcher must reset __omnitrackDialogDepth to 0 when all modals close');
@@ -1010,11 +1011,15 @@ assert.ok(
   'FAIL: the timesheet panel (openPanel) must de-elevate isSessionElevated to prevent dialog occlusion'
 );
 
-// 2. Adjust modal specifies z-index="z-[75]" above elevated session popup (z-[70])
-assert.ok(
-  content.includes('z-index="z-[75]"'),
-  'FAIL: TimesheetEntryDialog must specify z-index="z-[75]"'
-);
+// 2. The timesheet panel is the Work Session sheet: above the block, session and task sheets
+//    (z-45..47), below the date and time lists it opens (popper z-60, main.css), or they open
+//    behind it. The elevated session card (z-70) is lowered by openPanel above.
+const entrySheet = fs.readFileSync(path.join(dialogsDir, 'TimesheetEntryDialog.vue'), 'utf8');
+const sheetZ = Number((entrySheet.match(/ref="sheet" class="fixed inset-y-0 right-0 z-\[(\d+)\]/) || [])[1]);
+const popperZ = Number((fs.readFileSync(path.join(__dirname, '..', 'src/styles/main.css'), 'utf8').match(/\[data-reka-popper-content-wrapper\] \{ z-index: (\d+) !important; \}/) || [])[1]);
+assert.ok(sheetZ > 47 && popperZ > sheetZ, `FAIL: the timesheet sheet (z-${sheetZ}) sits above the other sheets (z-47) and below popovers (z-${popperZ})`);
+assert.ok(/<DetailKind id="entry-sheet-kind" kind="session"/.test(entrySheet), 'FAIL: the timesheet panel opens as the Work Session sheet (DetailKind session)');
+assert.ok(!/<f-dialog|<Dialog\b/.test(entrySheet), 'FAIL: the timesheet panel is a side sheet, not a centred dialog');
 
 console.log('✓ Test 26: Adjust dialog stacking & de-elevation invariants verified.');
 
@@ -1283,15 +1288,29 @@ assert.ok(
 );
 assert.ok(
   content.includes('pointer-events-auto'),
-  'FAIL: HoverCard must have pointer-events-auto so user can interact with the details link'
+  'FAIL: HoverCard must have pointer-events-auto so the pointer can rest on it without it vanishing (WCAG 1.4.13)'
+);
+{
+  // A plain tooltip: nothing in it takes focus (it closes on blur, so a keyboard could never reach it).
+  // The block it describes opens the details; the tooltip only describes.
+  const card = fs.readFileSync(hoverCardVuePath, 'utf8');
+  const tpl = card.slice(0, card.indexOf('<script>'));
+  assert.ok(!/<button|<Button|<a\b|tabindex|@click/.test(tpl) && !/view-details/.test(card + content),
+    'FAIL: HoverCard is a plain tooltip: no button, link or click target inside it, and no view-details event');
+  assert.ok(/id="block-hover-card"/.test(card) && /role="tooltip"/.test(card),
+    'FAIL: HoverCard is role=tooltip with id block-hover-card, so the block it describes can point at it');
+}
+assert.ok(
+  content.includes("_hoverTrigger.setAttribute('aria-describedby', 'block-hover-card');") && content.includes("if (_hoverTrigger) _hoverTrigger.removeAttribute('aria-describedby');"),
+  'FAIL: the block a hover card describes points at it with aria-describedby while it shows, and only then'
 );
 assert.ok(
-  content.includes('openBlockDrawer(hoverCard.block)') || (content.includes('@view-details="openBlockDrawer($event)') && content.includes("$emit('view-details', hoverCard.block)")),
-  'FAIL: HoverCard must provide an explicit View Details action invoking openBlockDrawer'
+  /const onHoverEscape = \(e\) => \{\n\s+if \(e\.key !== 'Escape' \|\| !hoverCard\.value\) return;\n\s+e\.preventDefault\(\);\n\s+clearHover\(\);/.test(content) && content.includes("document.addEventListener('keydown', onHoverEscape, true);") && content.includes("document.removeEventListener('keydown', onHoverEscape, true);"),
+  'FAIL: Escape dismisses the hover card, and only it (WCAG 1.4.13)'
 );
 assert.ok(
-  content.includes('cancelHideHover') && content.includes('hideBlockHoverNow'),
-  'FAIL: HoverCard lifecycle must include cancelHideHover and hideBlockHoverNow for hover retention'
+  content.includes('cancelHideHover') && content.includes('_hoverCardTimer = setTimeout(clearHover, 160);'),
+  'FAIL: HoverCard lifecycle must include cancelHideHover and a short hide delay for hover retention'
 );
 
 const hoverSandbox = {
@@ -1313,7 +1332,7 @@ assert.strictEqual(hoverRes.placeBelow, true, 'FAIL: Mid-screen card must place 
 assert.strictEqual(hoverRes.top, 486, 'FAIL: Top must be 486 (r.bottom + 8), 8px completely clear of card');
 assert.strictEqual(hoverRes.CARD_EST_HEIGHT, 85, 'FAIL: CARD_EST_HEIGHT must be compact (85px)');
 
-console.log('✓ Test 35: HoverCard non-occlusion, interactivity & View Details action verified.');
+console.log('✓ Test 35: HoverCard non-occlusion, plain tooltip, aria-describedby and Escape verified.');
 
 // ---------------------------------------------------------------------------
 // TEST 36: Configurable Temporal Horizon & Past Block Grace Invariants
@@ -1452,7 +1471,7 @@ assert.ok(
 assert.ok(
   /<BlockDetailDrawer\s+v-if="trackerBoundBlock"\s+inline\b/.test(sessionBoxContent) &&
   sessionBoxContent.includes(":can-log-timesheet=\"() => false\"") &&
-  sessionBoxContent.includes("paneTabs = computed(() => ['notes', 'details',"),
+  sessionBoxContent.includes("paneTabs = computed(() => (props.mode === 'entry' ? ['notes'] : ['notes', 'details',"),
   'FAIL: the session Details tab renders BlockDetailDrawer inline (read-only), between Log and Task chat'
 );
 assert.ok(

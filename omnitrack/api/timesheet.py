@@ -39,6 +39,23 @@ def _require_session_notes(notes):
 	return require_session_notes(notes)
 
 
+# A clock a few minutes ahead of the server's is not time ahead
+FUTURE_SLACK = timedelta(minutes=5)
+
+
+def _require_worked(session_date, from_time, to_time):
+	"""A work session is time already worked: it may not end after now. Time not worked yet
+	would be charged and paid before it happened; it is logged by running a session instead."""
+	if not session_date or not to_time:
+		return
+	end_day = getdate(session_date)
+	if from_time and MidnightSplitter.is_overnight(from_time, to_time):
+		end_day = add_days(end_day, 1)
+	end = get_datetime(f"{end_day} {_time_str(to_time)}")
+	if end > now_datetime() + FUTURE_SLACK:
+		frappe.throw(_("A work session cannot end after now. Start a session when the work begins."))
+
+
 def get_timesheet_sync_mode():
 	"""Returns the configured ERPNext Timesheet sync mode: 'Never', 'On Approval', or 'Immediate'."""
 	from omnitrack.services import TimesheetBridge
@@ -149,24 +166,15 @@ def create_timesheet_from_work_block(block_name, force=False):
 	if completed_deliverables:
 		accomplished_text = "\n\nAccomplished Tasks:\n" + "\n".join(f"• {s}" for s in completed_deliverables)
 
-	from datetime import datetime, timedelta
+	from omnitrack.utils.log_span import log_span
 
 	if block.sessions:
 		for sess in block.sessions:
 			base_date = sess.session_date or block.work_date or nowdate()
 			start_t = sess.from_time or block.start_time or "09:00:00"
-			s_from = f"{base_date} {start_t}"
 			dur = flt(sess.hours)
-			if sess.to_time and str(sess.to_time) != str(sess.from_time):
-				s_to = f"{base_date} {sess.to_time}"
-			else:
-				try:
-					fmt = "%Y-%m-%d %H:%M:%S" if len(str(start_t).split(":")) == 3 else "%Y-%m-%d %H:%M"
-					dt_f = datetime.strptime(s_from, fmt)
-					dt_t = dt_f + timedelta(hours=dur if dur > 0 else 0.5)
-					s_to = dt_t.strftime("%Y-%m-%d %H:%M:%S")
-				except Exception:
-					s_to = s_from
+			# An end at or before the start is the next morning
+			s_from, s_to = log_span(base_date, start_t, sess.to_time, dur, 0.5)
 
 			base_desc = sess.notes or block.deliverable_notes or f"OmniTrack Session ({block.name})"
 			if accomplished_text and "Accomplished Tasks:" not in base_desc:
@@ -186,18 +194,8 @@ def create_timesheet_from_work_block(block_name, force=False):
 	else:
 		base_date = block.work_date or nowdate()
 		start_t = block.start_time or "09:00:00"
-		s_from = f"{base_date} {start_t}"
 		dur = flt(block.duration_hours)
-		if block.end_time and str(block.end_time) != str(block.start_time):
-			s_to = f"{base_date} {block.end_time}"
-		else:
-			try:
-				fmt = "%Y-%m-%d %H:%M:%S" if len(str(start_t).split(":")) == 3 else "%Y-%m-%d %H:%M"
-				dt_f = datetime.strptime(s_from, fmt)
-				dt_t = dt_f + timedelta(hours=dur if dur > 0 else 1.0)
-				s_to = dt_t.strftime("%Y-%m-%d %H:%M:%S")
-			except Exception:
-				s_to = s_from
+		s_from, s_to = log_span(base_date, start_t, block.end_time, dur, 1.0)
 
 		base_desc = block.deliverable_notes or f"OmniTrack Block {block.name} ({block.cryptographic_hash or ''})"
 		if accomplished_text and "Accomplished Tasks:" not in base_desc:
@@ -327,6 +325,7 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 	from omnitrack.services import TemporalGovernor, MidnightSplitter, PairingEngine
 	# OmniTrack Users can only log timesheets for today and yesterday; earlier dates require Manager
 	TemporalGovernor.check_timesheet_date_permission(base_date, frappe.session.user)
+	_require_worked(base_date, from_time, to_time)
 
 	if MidnightSplitter.is_overnight(from_time, to_time):
 		p1, p2 = MidnightSplitter.split_session_rows(
@@ -404,7 +403,8 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 		try:
 			create_timesheet_from_work_block(doc.name)
 		except Exception:
-			pass
+			# Kept on record: a Timesheet that silently never appears is lost time
+			frappe.log_error(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=doc.name)
 
 	# Auto-post structured sprint accomplishment recap to Raven task thread
 	try:
@@ -482,6 +482,7 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 		sess_row.hours = flt(_duration_hours(from_time, to_time))
 	elif hours:
 		sess_row.hours = flt(hours)
+	_require_worked(sess_row.session_date, sess_row.from_time, sess_row.to_time)
 
 	# save() rolls the sessions up into actual hours, variance and status (roll_up_sessions)
 	doc.flags.ignore_permissions = True
@@ -493,7 +494,8 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 	try:
 		sync_work_block_timesheet(doc)
 	except Exception:
-		pass
+		# Kept on record: a Timesheet that silently never appears is lost time
+		frappe.log_error(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=getattr(doc, "name", doc))
 
 	# Update Task KPI progress if linked to a Task
 	if doc.task:
@@ -549,7 +551,8 @@ def delete_work_session(session_name, block_name=None):
 	try:
 		sync_work_block_timesheet(doc)
 	except Exception:
-		pass
+		# Kept on record: a Timesheet that silently never appears is lost time
+		frappe.log_error(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=getattr(doc, "name", doc))
 
 	# Update Task KPI progress if linked to a Task
 	if doc.task:

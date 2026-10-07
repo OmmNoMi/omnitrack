@@ -47,52 +47,17 @@ def get_context(context):
 		except Exception:
 			ctx.csrf_token = ""
 
-	# Fetch today's Planned Work Blocks for the active user safely
+	# The page renders only the session it boots with. Blocks, tasks and settings come
+	# from the SPA's own permission-checked calls, so nothing else is fetched here.
 	try:
-		if ctx.is_client:
-			blocks = frappe.get_all(
-				"Planned Work Block",
-				filters={"work_date": nowdate()},
-				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
-				order_by="start_time asc",
-				limit=50
-			)
-		else:
-			blocks = frappe.get_all(
-				"Planned Work Block",
-				filters={"employee": user, "work_date": nowdate()},
-				fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
-				order_by="start_time asc"
-			)
-			if not blocks:
-				blocks = frappe.get_all(
-					"Planned Work Block",
-					filters={"work_date": nowdate()},
-					fields=["name", "start_time", "end_time", "duration_hours", "actual_hours", "variance_hours", "status", "cryptographic_hash", "task_nature", "unplanned", "project", "cancel_reason", "rescheduled_to", "rescheduled_from", "deliverable_notes"],
-					order_by="start_time asc",
-					limit=20
-				)
-	except Exception:
-		blocks = []
-
-	ctx.today_blocks = blocks
-
-	# Fetch initial live data and active session
-	try:
-		from omnitrack.api import get_workstation_data, get_active_session
-		ctx.initial_data = get_workstation_data()
+		from omnitrack.api import get_active_session
 		ctx.active_session = get_active_session()
 	except Exception:
-		ctx.initial_data = {}
 		ctx.active_session = None
 
-	# Fetch Settings safely as dict
-	try:
-		settings = frappe.get_doc("OmniTrack Settings").as_dict()
-	except Exception:
-		settings = {}
+	# Projects show only where the site has them (ERPNext's Projects module)
+	ctx.has_projects = 1 if frappe.db.exists("DocType", "Project") else 0
 
-	ctx.settings = settings
 	# The realtime socket joins the namespace named after the site (Frappe's socket server
 	# rejects any other), and in development it listens on its own port.
 	ctx.site_name = frappe.local.site

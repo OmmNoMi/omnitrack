@@ -15,6 +15,7 @@ const CHIP = {
     green: '!text-green-800 !bg-green-100',
     amber: '!text-amber-800 !bg-amber-100',
     blue: '!text-blue-800 !bg-blue-100',
+    purple: '!text-purple-800 !bg-purple-100',
     gray: '!text-gray-800 !bg-gray-100',
   },
   dark: {
@@ -22,6 +23,7 @@ const CHIP = {
     green: '!text-green-200 !bg-green-900',
     amber: '!text-amber-200 !bg-amber-900',
     blue: '!text-blue-200 !bg-blue-900',
+    purple: '!text-purple-200 !bg-purple-900',
     gray: '!text-gray-100 !bg-gray-800',
   },
 };

@@ -1,4 +1,4 @@
-import { Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, MultiSelect, TabButtons, Textarea, TextInput, TimePicker, Tooltip } from "frappe-ui";
+import { Avatar, Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, MultiSelect, TabButtons, Textarea, TextInput, TimePicker, Tooltip } from "frappe-ui";
 
 // frappe-ui's FrappeUI plugin only installs resources/call/socket; it does NOT
 // register components. An unregistered <Button> still renders (as a raw
@@ -11,7 +11,7 @@ import { Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, Mul
 // (useWorkstationEod), joined to the site the page names.
 export const FRAPPE_UI_OPTIONS = { socketio: false };
 
-export const FRAPPE_UI_COMPONENTS = { Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, MultiSelect, TabButtons, Textarea, TextInput, TimePicker, Tooltip };
+export const FRAPPE_UI_COMPONENTS = { Avatar, Badge, Button, Combobox, DatePicker, Dialog, Dropdown, FeatherIcon, MultiSelect, TabButtons, Textarea, TextInput, TimePicker, Tooltip };
 
 export function registerFrappeUIComponents(app) {
 	for (const [name, component] of Object.entries(FRAPPE_UI_COMPONENTS)) app.component(name, component);

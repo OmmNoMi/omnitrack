@@ -93,8 +93,6 @@ export function useWorkstationPlannerState(w) {
     domLabel,
     hourLabel,
     mondayOf,
-    awayBlocksForDay,
-    hasAwayBlocksInView,
     timedSegmentsForDay,
     blocksForDay,
     _gridBottomPx,
@@ -112,7 +110,6 @@ export function useWorkstationPlannerState(w) {
     onPlannerViewKey,
     officeStart,
     officeEnd,
-    officeBandStyle,
     onPlannerTouchStart,
     onPlannerTouchEnd,
     officeMarks,
@@ -204,6 +201,20 @@ export function useWorkstationPlannerState(w) {
   };
   let _hoverCardTimer = null;
   const hoverCard = ref(null);
+  // The card is a tooltip: the block it describes points at it while it shows, and Escape
+  // dismisses it without closing anything else (WCAG 1.4.13).
+  let _hoverTrigger = null;
+  const onHoverEscape = (e) => {
+    if (e.key !== 'Escape' || !hoverCard.value) return;
+    e.preventDefault();
+    clearHover();
+  };
+  const clearHover = () => {
+    hoverCard.value = null;
+    if (_hoverTrigger) _hoverTrigger.removeAttribute('aria-describedby');
+    _hoverTrigger = null;
+    document.removeEventListener('keydown', onHoverEscape, true);
+  };
   const cancelHideHover = () => {
     if (_hoverCardTimer) {
       clearTimeout(_hoverCardTimer);
@@ -213,19 +224,20 @@ export function useWorkstationPlannerState(w) {
   const hideBlockHover = (immediate = false) => {
     cancelHideHover();
     if (immediate === true) {
-      hoverCard.value = null;
+      clearHover();
       return;
     }
-    _hoverCardTimer = setTimeout(() => {
-      hoverCard.value = null;
-    }, 160);
+    _hoverCardTimer = setTimeout(clearHover, 160);
   };
-  const hideBlockHoverNow = () => hideBlockHover(true);
   const showBlockHover = (ev, seg, source) => {
     if (plannerDrag.value || slotSel.value) return;
     cancelHideHover();
     const b = (seg && seg.block) || seg;
     if (!b) return;
+    if (_hoverTrigger && _hoverTrigger !== ev.currentTarget) _hoverTrigger.removeAttribute('aria-describedby');
+    _hoverTrigger = ev.currentTarget;
+    _hoverTrigger.setAttribute('aria-describedby', 'block-hover-card');
+    document.addEventListener('keydown', onHoverEscape, true);
     const r = ev.currentTarget.getBoundingClientRect();
     const top = placeHoverCard(r, 85);
 
@@ -236,7 +248,7 @@ export function useWorkstationPlannerState(w) {
       state: source === 'logged' ? 'logged' : blockVisualState(b),
       // Fixed-position so the scroll container cannot clip it; flipped when it
       // would run off the right edge.
-      left: Math.max(10, Math.min(r.left, window.innerWidth - 280)),
+      left: Math.max(10, Math.min(r.left, window.innerWidth - 298)),
       top: Math.round(top)
     };
     // Titles wrap, so the card's height is only known once it renders. Measure it, then
@@ -295,8 +307,6 @@ export function useWorkstationPlannerState(w) {
     dowLabel,
     domLabel,
     hourLabel,
-    awayBlocksForDay,
-    hasAwayBlocksInView,
     timedSegmentsForDay,
     blocksForDay,
     blockTop,
@@ -312,7 +322,6 @@ export function useWorkstationPlannerState(w) {
     onPlannerViewKey,
     officeStart,
     officeEnd,
-    officeBandStyle,
     onPlannerTouchStart,
     onPlannerTouchEnd,
     officeMarks,
@@ -331,7 +340,6 @@ export function useWorkstationPlannerState(w) {
     hoverCard,
     cancelHideHover,
     hideBlockHover,
-    hideBlockHoverNow,
     showBlockHover,
     hoverStateText,
   });

@@ -98,7 +98,7 @@
           :class="r.is_live_active ? 'rounded-r-none z-10' : ''"
           :style="Object.assign({ left: r.left, width: r.width }, timelineLoggedStyle(r))"
           tabindex="0"
-          :aria-label="'Logged: ' + (r.notes || blockTitle(r.block, 'Session')) + ' · ' + fmtHrs(r.hours) + 'h'"
+          :aria-label="'Logged: ' + loggedName(r) + ', ' + loggedLength(r) + (r.is_live_active ? ', live' : '')"
           @mouseenter="showBlockHover($event, r, 'logged')"
           @mouseleave="hideBlockHover"
           @focus="showBlockHover($event, r, 'logged')"
@@ -106,8 +106,7 @@
           @keydown.enter.prevent="openLogged(r)"
           @click="openLogged(r)">
           <span v-if="r.is_live_active" class="w-1.5 h-1.5 rounded-full bg-white animate-pulse mr-1.5 shrink-0"></span>
-          <span class="truncate">{{ r.notes || blockTitle(r.block, '') || (r.timesheet ? 'TS: ' + r.timesheet : 'Logged ' + fmtHrs(r.hours) + 'h') }}</span>
-          <span v-if="r.is_live_active" class="ml-auto text-[9px] font-mono tracking-tight text-white/90 font-black pl-1 shrink-0">REC &bull;</span>
+          <span class="truncate">{{ loggedName(r) }}</span>
         </div>
         <!-- Interactive 1-Click Gap Booking Pills -->
         <div v-for="(g, gi) in (dayTimeline.gaps || [])" :key="'gap' + gi"
@@ -140,11 +139,19 @@
 <script>
 import { useWorkstationContext } from '../../composables/useWorkstationContext.js';
 import { blockTitle } from '../../utils/blockTitle.js';
+import { noteHeading } from '../../utils/wrapNote.js';
+import { durationLabel } from '../../utils/clockTime.js';
 
 export default {
   name: 'DashboardTimeline',
   methods: {
     blockTitle,
+    // A logged bar is named like its block, never by its whole notes (they start with that name
+    // and go on with every step); the hover card lists the steps.
+    loggedName(r) {
+      return blockTitle(r.block, '') || noteHeading(r.notes) || (r.timesheet ? 'ERPNext Timesheet ' + r.timesheet : 'Logged work');
+    },
+    loggedLength(r) { return durationLabel(Math.max(1, Math.round((Number(r.hours) || 0) * 60))); },
     // Each lane opens what it draws. A planned bar is the block; a logged bar is one
     // session of it, so it opens that session's details, and the running bar opens the live one.
     openLogged(r) {
@@ -157,7 +164,6 @@ export default {
     return useWorkstationContext([
       'attendancePresence',
       'dayTimeline',
-      'fmtHrs',
       'formatBlockRange',
       'hideBlockHover',
       'isDarkMode',

@@ -1,6 +1,8 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import DashboardView from '../views/DashboardView.vue';
 import CalendarView from '../views/CalendarView.vue';
+import ProjectsView from '../views/ProjectsView.vue';
+import TasksView from '../views/TasksView.vue';
 import TimesheetsView from '../views/TimesheetsView.vue';
 import AttendanceView from '../views/AttendanceView.vue';
 
@@ -16,10 +18,22 @@ const routes = [
     meta: { tab: 'dashboard' }
   },
   {
+    path: '/projects',
+    name: 'Projects',
+    component: ProjectsView,
+    meta: { tab: 'projects' }
+  },
+  {
     path: '/planner',
     name: 'Planner',
     component: CalendarView,
     meta: { tab: 'planner' }
+  },
+  {
+    path: '/tasks',
+    name: 'Tasks',
+    component: TasksView,
+    meta: { tab: 'tasks' }
   },
   {
     path: '/timesheets',

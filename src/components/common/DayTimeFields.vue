@@ -12,14 +12,15 @@
           format="ddd, D MMM YYYY"
           :clearable="false"
           placeholder="Pick a day"
-          :label="dayLabel"
+          :aria-label="dayLabel"
+          aria-haspopup="dialog"
           @update:model-value="$emit('update:date', $event)"
         />
         <ChoiceChips :options="dayOptions" :model-value="date" aria-label="Quick day" @update:model-value="$emit('update:date', $event)" />
       </div>
     </div>
 
-    <div v-if="!allDay" class="flex gap-3">
+    <div class="flex gap-3">
       <FeatherIcon name="clock" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
       <div class="flex-1 min-w-0 space-y-2">
         <p class="text-sm font-medium" :class="labelText" aria-hidden="true">{{ timeLabel }}</p>
@@ -33,20 +34,17 @@
         <div class="flex flex-wrap items-center gap-2">
           <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
           <span v-if="mins > 0 && !durations.includes(mins)" class="text-sm tabular-nums" :class="mutedText">{{ durationLabel(mins) }}</span>
-          <span v-else-if="start && end && mins <= 0" class="text-sm text-ink-red-4" role="alert">End is before start</span>
+          <span v-if="nextDay" class="text-sm" :class="mutedText">Ends next day</span>
+          <span v-if="start && end && mins <= 0" class="text-sm text-ink-red-4" role="alert">End is the same as start</span>
         </div>
       </div>
     </div>
-    <p v-else class="flex gap-3 items-center text-sm" :class="mutedText">
-      <FeatherIcon name="clock" class="w-5 h-5 shrink-0" :class="iconTone" aria-hidden="true" />
-      All day
-    </p>
   </div>
 </template>
 
 <script>
 import ChoiceChips from "./ChoiceChips.vue";
-import { toMin, toHHMM, localISO, durationLabel, endTimeOptions } from "../../utils/clockTime.js";
+import { toMin, toHHMM, spanMins, localISO, durationLabel, endTimeOptions } from "../../utils/clockTime.js";
 
 export default {
   name: "DayTimeFields",
@@ -55,7 +53,6 @@ export default {
     date: { type: String, default: "" },
     start: { type: String, default: "" },
     end: { type: String, default: "" },
-    allDay: { type: Boolean, default: false },
     // Quick-day chips, as offsets from today: planning looks ahead, logging looks back
     dayOffsets: { type: Array, default: () => [0, 1, 2, 3] },
     durations: { type: Array, default: () => [30, 60, 90, 120, 180, 240] },
@@ -79,7 +76,10 @@ export default {
       });
     },
     mins() {
-      return toMin(this.end) - toMin(this.start);
+      return spanMins(this.start, this.end);
+    },
+    nextDay() {
+      return !!(this.start && this.end) && toMin(this.end) < toMin(this.start);
     },
     durationOptions() {
       return this.durations.map((m) => ({ label: durationLabel(m), value: m }));
@@ -98,11 +98,11 @@ export default {
     setStart(value) {
       const keep = this.mins > 0 ? this.mins : 60;
       this.$emit("update:start", value);
-      if (value) this.$emit("update:end", toHHMM(Math.min(24 * 60 - 1, toMin(value) + keep)));
+      if (value) this.$emit("update:end", toHHMM((toMin(value) + keep) % (24 * 60)));
     },
     setDuration(mins) {
       if (!this.start || !mins) return;
-      this.$emit("update:end", toHHMM(Math.min(24 * 60 - 1, toMin(this.start) + mins)));
+      this.$emit("update:end", toHHMM((toMin(this.start) + mins) % (24 * 60)));
     },
   },
 };

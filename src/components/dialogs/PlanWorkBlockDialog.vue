@@ -59,7 +59,6 @@
         v-model:date="form.work_date"
         v-model:start="form.start_time"
         v-model:end="form.end_time"
-        :all-day="mode === 'away'"
         :is-dark-mode="isDarkMode"
       />
 
@@ -105,7 +104,7 @@
         <!-- A task already carries its project -->
         <div v-if="!form.work_items.length && projectOptions.length > 0" class="flex gap-3">
           <FeatherIcon name="folder" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
-          <div class="flex-1 min-w-0 [&_div[data-variant]]:w-full">
+          <div class="flex-1 min-w-0">
             <p class="mb-1 text-sm font-medium" :class="labelText" aria-hidden="true">Project</p>
             <Combobox open-on-click variant="outline" size="md" v-model="form.project" :options="projectOptions" placeholder="General Work" aria-label="Project" />
           </div>
@@ -156,7 +155,7 @@
       <!-- Managers can plan on a teammate's calendar -->
       <div v-if="isManager && planForOptions.length > 1" class="flex gap-3">
         <FeatherIcon name="user" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
-        <div class="flex-1 min-w-0 [&_div[data-variant]]:w-full">
+        <div class="flex-1 min-w-0">
           <p class="mb-1 text-sm font-medium" :class="labelText" aria-hidden="true">Whose calendar</p>
           <Combobox open-on-click variant="outline" size="md" v-model="form.assigned_employee" :options="planForOptions" :placeholder="planForOptions[0].label" aria-label="Whose calendar" />
         </div>
@@ -187,7 +186,7 @@ import ChoiceChips from "../common/ChoiceChips.vue";
 import PlanTaskStep from "./PlanTaskStep.vue";
 import DayTimeFields from "../common/DayTimeFields.vue";
 import { taskMeta, toneClass } from "../../utils/taskMeta.js";
-import { toMin, whenLine } from "../../utils/clockTime.js";
+import { spanMins, whenLine } from "../../utils/clockTime.js";
 
 let uid = 0;
 // A swipe is a mostly sideways move of at least this many pixels
@@ -267,7 +266,7 @@ export default {
       return this.checked.length === 1 ? "Continue with 1 task" : `Continue with ${this.checked.length} tasks`;
     },
     durationMins() {
-      return toMin(this.form.end_time) - toMin(this.form.start_time);
+      return spanMins(this.form.start_time, this.form.end_time);
     },
     // The tasks the block is for, in order (the first is its main task), then a new one
     pickedRows() {
@@ -308,9 +307,8 @@ export default {
     },
     canSave() {
       if (this.busy || !this.form.work_date) return false;
-      if (this.mode === "away") return true;
       if (this.durationMins <= 0) return false;
-      return this.mode === "break" || !!((this.form.deliverable_notes || "").trim() || this.form.work_items.length || this.form.new_task_subject);
+      return this.mode !== "work" || !!((this.form.deliverable_notes || "").trim() || this.form.work_items.length || this.form.new_task_subject);
     },
     iconTone() { return this.isDarkMode ? "text-gray-300" : "text-gray-600"; },
     mutedText() { return this.isDarkMode ? "text-gray-300" : "text-gray-700"; },

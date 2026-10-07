@@ -29,7 +29,9 @@
     :formatted-time="formattedTime"
     :notification-permission="notificationPermission"
     :header-menu-items="headerMenuItems"
+    :has-projects="hasProjects"
     @go-dashboard="activeTab = 'dashboard'"
+    @navigate="activeTab = $event"
     @toggle-focus="toggleSessionFocus"
     @open-raven="openRavenApp"
     @enable-notifications="enableNotificationsUserGesture"
@@ -99,6 +101,8 @@
     <!-- Views take everything from the workstation via useWorkstationContext. -->
     <div class="omnitrack-view-coordinator flex-1 flex flex-col min-h-0">
       <DashboardView v-if="activeTab === 'dashboard'" />
+      <ProjectsView v-else-if="activeTab === 'projects'" />
+      <TasksView v-else-if="activeTab === 'tasks'" />
       <TimesheetsView v-else-if="activeTab === 'timesheets'" />
       <AttendanceView v-else-if="activeTab === 'attendance'" />
       <CalendarView v-else-if="activeTab === 'planner'" />
@@ -109,12 +113,10 @@
   <BlockHoverCard
     :hover-card="hoverCard"
     :is-dark-mode="isDarkMode"
-    :fmt-hrs="fmtHrs"
     :seg-time-title="segTimeTitle"
     :is-block-locked="isBlockLocked"
     @cancel-hide="cancelHideHover"
     @hide="hideBlockHover"
-    @view-details="openBlockDrawer($event); hideBlockHoverNow()"
   />
 
   <!-- ========================================== -->
@@ -127,7 +129,6 @@
     :is-tracking="isTracking"
     :tracker-block-name="trackerBlockName"
     :planner-busy="plannerBusy"
-    :drawer-chat-messages="drawerChatMessages"
     :is-block-completed="isBlockCompleted"
     :is-block-reschedulable="isBlockReschedulable"
     :is-block-cancellable="isBlockCancellable"
@@ -144,11 +145,11 @@
     @close-block-drawer="showBlockDrawer = false"
     @close-session-drawer="showSessionDrawer = false"
     @open-session-block="openSessionBlock"
+    @open-block-session="openBlockSession"
     @start-session="startFocusBlock"
     @stop-session="toggleTrack"
     @open-cancel-modal="openCancelModal"
     @log-session="logSessionFor"
-    @open-raven="openRavenApp"
     @edit-session="editSessionRow"
     @delete-session="deleteSessionRow"
     @submit-reschedule="submitReschedule"
@@ -171,7 +172,6 @@
     :bottom-bar-timer="bottomBarTimer"
     :formatted-time="formattedTime"
     @open-session="openSessionCard"
-    @open-new-task="openNewTaskModal"
   />
 
   <!-- ========================================== -->
@@ -257,6 +257,9 @@
     @keep-session-running="applyAdjustedStartTime"
   />
 
+  <!-- A task's details, opened by clicking it anywhere; its Edit opens the one task form -->
+  <TaskDetailDrawer />
+
   <!-- The one task form: block task rows, assigned work and the dashboard all open it -->
   <TaskFormDialog />
 
@@ -285,7 +288,10 @@ export default {
     // A running session does not hold the plan where it is: rescheduling moves the plan and
     // the session keeps recording on this block until it is stopped. A session with no block
     // of its own (is_live_active) has no plan to move.
-    const isBlockReschedulable = (b) => isOpenPlan(b) && !b.is_live_active;
+    // A missed block (nothing logged) can still be moved forward, however old: the original
+    // stays on record as Rescheduled. omnitrack/api/planner.py reschedule_work_block agrees.
+    const isMissedPlan = (b) => !!b && isPastBlock(b) && !(parseFloat(b.actual_hours) > 0) && !['Rescheduled', 'Cancelled'].includes(b.status);
+    const isBlockReschedulable = (b) => (isOpenPlan(b) || isMissedPlan(b)) && !b.is_live_active;
     // Cancelling a block while its session runs would throw away the work being recorded
     const isBlockCancellable = (b) => isOpenPlan(b) && !b.is_live_active && !isRecordingOn(b);
     // Timesheet entry day chips reach back as far as the server's horizon allows
@@ -298,6 +304,11 @@ export default {
     const openSessionBlock = (block) => {
       workstation.showSessionDrawer.value = false;
       workstation.openBlockDrawer(block);
+    };
+    // And a block's logged entry hands over to that entry's sheet
+    const openBlockSession = (session, block) => {
+      workstation.showBlockDrawer.value = false;
+      workstation.openSessionDrawer(block, session);
     };
     const sendRavenMessage = ({ content }) => {
       workstation.ravenChatInput.value = content;
@@ -313,6 +324,7 @@ export default {
       logSessionFor,
       deleteSessionRow,
       openSessionBlock,
+      openBlockSession,
       sendRavenMessage
     };
   }

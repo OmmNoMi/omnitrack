@@ -27,7 +27,7 @@
         </div>
         <div>
           <label for="switch-wrap-note" class="block text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-            Current Session Wrap-Up Note (Saved to timesheet)
+            Wrap-up note for the current session
           </label>
           <input
             id="switch-wrap-note"

@@ -69,6 +69,8 @@
     (function() {
       const savedTheme = localStorage.getItem('omnitrack_theme');
       const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      // .dark drives the app's own dark: classes; data-theme drives frappe-ui's colour tokens
+      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
       if (isDark) {
         document.documentElement.classList.add('dark');
         document.documentElement.style.backgroundColor = '#121212';
@@ -84,6 +86,7 @@
       user_fullname: "{{ user_fullname }}",
       is_manager: {{ 'true' if is_manager else 'false' }},
       is_client: {{ 'true' if is_client else 'false' }},
+      has_projects: {{ 'true' if has_projects else 'false' }},
       min_log_line_chars: {{ min_log_line_chars | int }},
       site: "{{ site_name }}",
       socketio_port: {{ socketio_port | int }},

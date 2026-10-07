@@ -1,5 +1,6 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { KINDS, toKind } from '../utils/activity.js';
+import { noteHeading } from '../utils/wrapNote.js';
 
 export function useWorkstationPlannerLayout(opts) {
   const {
@@ -124,20 +125,11 @@ export function useWorkstationPlannerLayout(opts) {
   const domLabel = (iso) => _utc(iso).getUTCDate();
   const hourLabel = (h) => (h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p');
 
-  const awayBlocksForDay = (iso) => (plannerData.value.blocks || []).filter(b =>
-    b.work_date === iso && b.is_away &&
-    (natureFilter.value.length === 0 || natureFilter.value.includes(_blockNature(b))));
-
-  const hasAwayBlocksInView = computed(() =>
-    plannerDays.value.some(d => awayBlocksForDay(d).length > 0)
-  );
-
   const timedSegmentsForDay = (iso) => {
     const blocks = plannerData.value.blocks || [];
     const segments = [];
 
     for (const b of blocks) {
-      if (b.is_away) continue;
       if (natureFilter.value.length > 0 && !natureFilter.value.includes(_blockNature(b))) continue;
 
       const sMins = _mins(b.start_time);
@@ -194,7 +186,7 @@ export function useWorkstationPlannerLayout(opts) {
           // The session's notes are what got done, not a title: name it by the first line
           // that is not a ticked-off task
           const notes = String(trackerNotes.value || '').trim();
-          const heading = notes.split('\n').map((l) => l.trim()).find((l) => l && !/^\W*Completed:/.test(l)) || 'Live session';
+          const heading = noteHeading(notes) || 'Live session';
           const liveBlock = {
             name: trackerBlockName.value || 'live_active_session',
             is_live_active: true,
@@ -378,17 +370,6 @@ export function useWorkstationPlannerLayout(opts) {
     } catch (e) { /* private mode */ }
   });
 
-  const officeBandStyle = computed(() => {
-    const lo = plannerRange.value.lo * 60;
-    let a = _mins(officeStart.value);
-    let b = _mins(officeEnd.value);
-    if (!(b > a)) { a = 10 * 60; b = 18 * 60; }
-    return {
-      top: (((a - lo) / 60) * 44) + 'px',
-      height: (((b - a) / 60) * 44) + 'px'
-    };
-  });
-
   const _swipe = { x: 0, y: 0, t: 0, ok: false };
   const onPlannerTouchStart = (ev) => {
     const t = ev.touches && ev.touches.length === 1 ? ev.touches[0] : null;
@@ -454,8 +435,6 @@ export function useWorkstationPlannerLayout(opts) {
     domLabel,
     hourLabel,
     mondayOf,
-    awayBlocksForDay,
-    hasAwayBlocksInView,
     timedSegmentsForDay,
     blocksForDay,
     _gridBottomPx,
@@ -473,7 +452,6 @@ export function useWorkstationPlannerLayout(opts) {
     onPlannerViewKey,
     officeStart,
     officeEnd,
-    officeBandStyle,
     onPlannerTouchStart,
     onPlannerTouchEnd,
     officeMarks,

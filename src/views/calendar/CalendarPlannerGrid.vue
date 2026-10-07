@@ -122,19 +122,6 @@
             <div class="mx-auto mt-0.5 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold tabular-nums" :class="d === todayDate ? 'bg-[#1B64DA] text-white' : (isDarkMode ? 'text-gray-100' : 'text-gray-900')">{{ domLabel(d) }}</div>
           </div>
         </div>
-        <!-- all-day / away row -->
-        <div v-if="hasAwayBlocksInView" class="grid border-b text-[11px] shrink-0" :class="isDarkMode ? 'border-gray-800 bg-[#161719]' : 'border-gray-200 bg-gray-50/80'" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', minmax(0, 1fr))' }">
-          <div class="flex items-center justify-end pr-2 text-[10px] font-medium" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">All day</div>
-          <div v-for="d in plannerDays" :key="'away-' + d" class="border-l p-1 min-h-[34px] min-w-0 flex flex-col gap-1 overflow-hidden" :class="isDarkMode ? 'border-gray-800' : 'border-gray-100'">
-            <button type="button" v-for="b in awayBlocksForDay(d)" :key="b.name"
-              @click="openBlockDrawer(b)"
-              :title="[getNatureBadge(b.task_nature).label, b.deliverable_notes, 'Not paid'].filter(Boolean).join(' · ')"
-              class="w-full text-left rounded-md px-2 py-1 text-[10px] font-semibold truncate border cursor-pointer transition-transform hover:scale-[1.01] shadow-2xs flex items-center justify-between gap-1"
-              :class="isDarkMode ? 'bg-amber-950/60 border-amber-800 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-800'">
-              <span class="truncate">{{ getNatureBadge(b.task_nature).label }}</span>
-            </button>
-          </div>
-        </div>
         <!-- hour rows (full 24h, scrollable; opens scrolled to ~7a) -->
         <div ref="plannerGridScroll" class="overflow-y-auto overscroll-contain flex-1 min-h-0"
           @touchstart="onPlannerTouchStart" @touchend="onPlannerTouchEnd"
@@ -147,14 +134,6 @@
             </div>
             <!-- day columns -->
             <div v-for="d in plannerDays" :key="d" data-day-col class="relative border-l" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">
-              <!-- away day: stretch the all-day record across office hours -->
-              <div v-for="b in awayBlocksForDay(d)" :key="'awayband-' + b.name"
-                class="absolute left-0.5 right-0.5 rounded-lg border-2 border-dashed pointer-events-none z-0 flex items-center justify-center"
-                :class="isDarkMode ? 'bg-amber-950/40 border-amber-800/70' : 'bg-amber-100/70 border-amber-300'"
-                :style="officeBandStyle" aria-hidden="true">
-                <span class="text-[11px] font-semibold"
-                  :class="isDarkMode ? 'text-amber-300' : 'text-amber-700'">{{ getNatureBadge(b.task_nature).label }}</span>
-              </div>
               <!-- past time is shaded, so the eye avoids booking behind the now-line -->
               <div class="absolute left-0 right-0 pointer-events-none z-0" :class="isDarkMode ? 'bg-black/35' : 'bg-gray-900/[0.07]'" :style="pastShadeStyle(d)" aria-hidden="true"></div>
               <!-- office start/end: two hairlines instead of a banner above the grid -->
@@ -265,7 +244,8 @@ export default {
     lineRoom(seg) {
       const lines = Math.max(1, Math.floor((this.segHeight(seg) - 8) / 14));
       const time = !this.isSplit(seg) && lines >= 2;
-      const hours = time && lines >= 4;
+      // Time away is not worked, so it has no logged-of-planned line
+      const hours = time && lines >= 4 && !seg.block.is_away;
       return { lines, time, hours };
     },
     titleLines(seg) {
@@ -285,7 +265,6 @@ export default {
   },
   setup() {
     return useWorkstationContext([
-      'awayBlocksForDay',
       'blockClass',
       'domLabel',
       'dowLabel',
@@ -293,7 +272,6 @@ export default {
       'fmtHrs',
       'formattedTime',
       'getNatureBadge',
-      'hasAwayBlocksInView',
       'hideBlockHover',
       'holdArmed',
       'hourLabel',
@@ -305,7 +283,6 @@ export default {
       'natureFilterLabel',
       'nowLineLabel',
       'nowLineTop',
-      'officeBandStyle',
       'officeMarks',
       'onBlockClick',
       'onPlannerTouchEnd',

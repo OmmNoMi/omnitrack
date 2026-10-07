@@ -13,7 +13,7 @@
       </p>
       <div class="block space-y-1">
         <label class="text-[11px] font-bold" :class="isDarkMode ? 'text-gray-600' : 'text-gray-700'">
-          Quick Note (used for Timesheet description):
+          Note for this session
         </label>
         <input
           v-model="internalQuickNote"
@@ -34,7 +34,7 @@
           size="sm"
           @click="$emit('discard')"
         >
-          Discard (No Timesheet)
+          Discard session
         </Button>
         <Button
           variant="solid"

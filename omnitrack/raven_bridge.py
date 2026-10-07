@@ -43,8 +43,12 @@ def get_or_create_task_channel(task_id: str, project_id: str | None = None) -> s
 		return None
 
 	doctype, clean_id = _resolve_task_doctype_and_id(task_id)
+	# Raven is for Projects and their ERPNext Tasks. A to-do, a work block and a work session are
+	# talked about in their own Frappe comments (omnitrack.api.activity), never in a channel.
+	if doctype != "Task":
+		return None
 
-	# 1. Look for an existing channel linked directly to this Task / ToDo
+	# 1. Look for an existing channel linked directly to this Task
 	channel_name = frappe.db.get_value(
 		"Raven Channel",
 		{"linked_doctype": doctype, "linked_document": clean_id, "is_archived": 0},
@@ -63,11 +67,7 @@ def get_or_create_task_channel(task_id: str, project_id: str | None = None) -> s
 		return channel_name
 
 	# 3. Provision a new channel for this task
-	task_subject = None
-	if doctype == "Task" and frappe.db.exists("DocType", "Task"):
-		task_subject = frappe.db.get_value("Task", clean_id, "subject")
-	elif frappe.db.exists("DocType", "ToDo"):
-		task_subject = frappe.db.get_value("ToDo", clean_id, "description")
+	task_subject = frappe.db.get_value("Task", clean_id, "subject")
 	task_subject = strip_html(task_subject or clean_id)[:140]
 
 	default_workspace = (
@@ -431,13 +431,3 @@ def get_task_raven_timeline_content(doctype: str, docname: str) -> list[dict]:
 	except Exception:
 		return []
 
-
-def get_block_raven_timeline_content(doctype: str, docname: str) -> list[dict]:
-	"""Timeline hook for Planned Work Block - delegates to parent task if available."""
-	if not frappe.db.exists("Planned Work Block", docname):
-		return []
-
-	task_id = frappe.db.get_value("Planned Work Block", docname, "task")
-	if task_id:
-		return get_task_raven_timeline_content("Task", task_id)
-	return []

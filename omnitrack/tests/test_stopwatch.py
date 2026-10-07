@@ -110,15 +110,16 @@ class TestStopwatch(FrappeTestCase):
 		)
 		self.assertIsNone(get_active_session())
 
-	def test_active_session_24h_expiration(self):
-		"""Sessions older than 24 hours are automatically evicted."""
+	def test_active_session_is_never_deleted_by_a_read(self):
+		"""A session that ran past a day is returned so the person can decide, and stays stored."""
 		past_ms = int((time.time() - 25 * 3600) * 1000)
 		sync_active_session({
 			"startTime": past_ms,
 			"trackerNotes": "Ancient session",
 			"status": "active"
 		})
-		self.assertIsNone(get_active_session())
+		self.assertEqual(get_active_session().get("trackerNotes"), "Ancient session")
+		self.assertTrue(frappe.db.get_default("omnitrack_active_session", frappe.session.user))
 
 	def test_switch_active_session_atomic(self):
 		"""Switching active sessions atomically logs elapsed time on the prior block

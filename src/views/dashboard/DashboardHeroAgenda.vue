@@ -19,7 +19,7 @@
       </div>
       <div class="flex items-center gap-1.5 justify-end shrink-0">
         <Button v-if="getMeetUrl(upNextBlock)" variant="ghost" icon="video" label="Join the meeting link" tooltip="Join meeting" @click="openMeet" />
-        <Button variant="solid" theme="blue" class="!bg-blue-700 hover:!bg-blue-800" icon-left="play" label="Start session" :title="'Start a session on ' + nextTitle" @click="startFocusBlock(upNextBlock)" />
+        <Button variant="solid" theme="blue" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800" icon-left="play" label="Start session" :title="'Start a session on ' + nextTitle" @click="startFocusBlock(upNextBlock)" />
       </div>
     </article>
   </section>

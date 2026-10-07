@@ -118,9 +118,19 @@
       @confirm="$emit('submit-cancel-block', $event)"
     />
 
-    <!-- The one timesheet panel: add, edit, a free window, or the running session -->
+    <!-- Adding or editing a work session by hand is the session box people know from the
+         timer (add, edit, a free window). Correcting the running session's start stays a sheet. -->
+    <WorkSessionEntry
+      :model-value="showEditSessionModal && editSessionForm.mode !== 'live'"
+      @update:model-value="$emit('update:showEditSessionModal', $event)"
+      :form="editSessionForm"
+      :is-saving="isSavingEditSession"
+      :is-dark-mode="isDarkMode"
+      :day-offsets="entryDayOffsets"
+      @save="$emit('save-edit-session')"
+    />
     <TimesheetEntryDialog
-      :model-value="showEditSessionModal"
+      :model-value="showEditSessionModal && editSessionForm.mode === 'live'"
       @update:model-value="$emit('update:showEditSessionModal', $event)"
       :form="editSessionForm"
       :is-saving="isSavingEditSession"

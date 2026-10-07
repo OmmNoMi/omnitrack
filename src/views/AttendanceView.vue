@@ -8,8 +8,8 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">Team Work Block &amp; Timesheet Approvals</h3>
-              <p class="text-[11px] text-gray-700 dark:text-gray-300">Review logged team actuals, deliverables, and grant official timesheet approval.</p>
+              <h3 class="font-bold text-sm" :class="isDarkMode ? 'text-white' : 'text-gray-900'">Team approvals</h3>
+              <p class="text-[11px] text-gray-700 dark:text-gray-300">Review your team's logged time and approve it.</p>
             </div>
           </div>
           <div class="flex items-center gap-2 flex-wrap">

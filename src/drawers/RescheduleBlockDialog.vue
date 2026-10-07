@@ -30,7 +30,7 @@
 
 <script>
 import DayTimeFields from '../components/common/DayTimeFields.vue';
-import { whenLine, toMin, toHHMM } from '../utils/clockTime.js';
+import { whenLine, toMin, toHHMM, spanMins, localISO } from '../utils/clockTime.js';
 
 const hhmm = (t) => (t ? toHHMM(toMin(t)) : '');
 
@@ -56,7 +56,7 @@ export default {
     // A real move: a day and a time that ends after it starts, and not where it is now
     canMove() {
       const f = this.form, b = this.block;
-      const valid = !!f.work_date && !!f.start_time && toMin(f.end_time) > toMin(f.start_time);
+      const valid = !!f.work_date && !!f.start_time && spanMins(f.start_time, f.end_time) > 0;
       const moved = f.work_date !== String(b.work_date || '').slice(0, 10) || f.start_time !== hhmm(b.start_time) || f.end_time !== hhmm(b.end_time);
       return !this.busy && valid && moved;
     },
@@ -68,7 +68,10 @@ export default {
       handler(open) {
         if (!open) return;
         const b = this.block;
-        this.form = { work_date: String(b.work_date || '').slice(0, 10), start_time: hhmm(b.start_time), end_time: hhmm(b.end_time) };
+        const day = String(b.work_date || '').slice(0, 10);
+        const today = localISO(new Date());
+        // A missed block is moved forward, so it starts from today rather than the day it missed
+        this.form = { work_date: day && day < today ? today : day, start_time: hhmm(b.start_time), end_time: hhmm(b.end_time) };
       },
     },
   },

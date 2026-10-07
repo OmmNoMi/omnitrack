@@ -13,7 +13,7 @@ export function useWorkstationShell(w) {
 const getInitialTabFromHash = () => {
     if (typeof window !== 'undefined' && window.location.hash) {
       const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
-      if (['dashboard', 'planner', 'timesheets', 'attendance'].includes(raw)) {
+      if (['dashboard', 'projects', 'planner', 'tasks', 'timesheets', 'attendance'].includes(raw)) {
         return raw;
       }
     }
@@ -53,7 +53,11 @@ const getInitialTabFromHash = () => {
     syncActiveSession(true);
     triggerHaptic([25]);
   };
+  // Two switches, one theme: .dark drives the app's own dark: classes (tailwind.config darkMode
+  // "class"), data-theme drives frappe-ui's ink/surface/outline tokens. With only .dark, every
+  // frappe-ui control stayed light on a dark page.
   const applyTheme = (dark) => {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     if (dark) {
       document.documentElement.classList.add('dark');
       document.documentElement.style.backgroundColor = '#121212';

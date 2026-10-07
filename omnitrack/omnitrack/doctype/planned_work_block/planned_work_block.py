@@ -3,8 +3,10 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt
 
+from omnitrack.utils.optional_links import OptionalLinks
 
-class PlannedWorkBlock(Document):
+
+class PlannedWorkBlock(OptionalLinks, Document):
 	def validate(self):
 		self.normalize_activity()
 		self.validate_past_plan_immutability()

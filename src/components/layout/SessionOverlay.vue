@@ -4,7 +4,7 @@
       v-if="isTracking && (activeTab === 'dashboard' || isSessionElevated)"
       :class="[
         isSessionElevated
-          ? 'fixed inset-0 z-50 bg-gray-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto'
+          ? [SESSION_BACKDROP, 'z-50']
           : 'relative mb-6'
       ]"
       @click.self="$emit('update:isSessionElevated', false)"
@@ -12,7 +12,7 @@
       <div
         :class="[
           isSessionElevated
-            ? 'relative w-full max-w-4xl bg-white dark:bg-[#1E1F22] rounded-2xl shadow-2xl p-4 sm:p-6 space-y-4 my-auto'
+            ? SESSION_PANEL
             : 'relative w-full'
         ]"
         @click.stop
@@ -74,8 +74,11 @@
 </template>
 
 <script>
+import { SESSION_BACKDROP, SESSION_PANEL } from "../../utils/sessionFrame.js";
+
 export default {
   name: "SessionOverlay",
+  setup() { return { SESSION_BACKDROP, SESSION_PANEL }; },
   props: {
     isTracking: { type: Boolean, default: false },
     activeTab: { type: String, default: "dashboard" },

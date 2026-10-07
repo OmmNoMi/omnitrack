@@ -1,7 +1,7 @@
 <template>
-  <!-- The tasks this block is for. Tick one off where you see it; Edit opens its details.
+  <!-- The tasks this block is for. Tick one off where you see it; the task opens its details.
        A grid for the keyboard: one tab stop, Up/Down move between rows, Left/Right between
-       the checkbox and Edit (WAI-ARIA grid pattern, as the dashboard lists do). -->
+       the checkbox and the task (WAI-ARIA grid pattern, as the dashboard lists do). -->
   <section v-if="rows.length || canAdd" class="space-y-2" :aria-labelledby="headId">
     <div class="flex items-center justify-between gap-2">
       <h3 :id="headId" class="text-sm font-medium" :class="mutedText">Tasks ({{ rows.length }})</h3>
@@ -23,16 +23,16 @@
           :aria-disabled="t.locked ? 'true' : undefined"
           :tabindex="tabStop(i, 0)"
           :data-cell="i + ':0'"
+          @focus="cell = [i, 0]"
           class="shrink-0"
           :class="t.done ? doneTone : iconTone"
           @click="toggle(t, !t.done)"
         />
-        <div class="min-w-0 flex-1 py-1.5">
-          <p class="text-base leading-snug break-words" :class="t.done ? [mutedText, 'line-through'] : strongText">{{ t.subject }}</p>
-          <p v-if="t.meta" class="text-sm" :class="mutedText">{{ t.meta }}</p>
-        </div>
-        <!-- Shown on hover or focus; always on touch screens, which have no hover -->
-        <Button v-if="canChange" variant="ghost" icon="edit-2" :label="'Edit ' + t.subject" :tabindex="tabStop(i, 1)" :data-cell="i + ':1'" class="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100" @click="edit(t)" />
+        <!-- The task itself opens its details (Edit and its workflow steps are there) -->
+        <button type="button" class="min-w-0 flex-1 rounded-lg px-1 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" :tabindex="tabStop(i, 1)" :data-cell="i + ':1'" @focus="cell = [i, 1]" @click="edit(t)">
+          <span class="block text-base leading-snug break-words" :class="t.done ? [mutedText, 'line-through'] : strongText">{{ t.subject }}</span>
+          <span v-if="t.meta" class="block text-sm" :class="mutedText">{{ t.meta }}</span>
+        </button>
       </li>
     </ul>
 
@@ -44,7 +44,7 @@
 import AddBlockTasksDialog from './AddBlockTasksDialog.vue';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import { shortDate } from '../utils/taskMeta.js';
-import { openTaskForm } from '../composables/useTaskForm.js';
+import { openTaskForm, openTaskDetail } from '../composables/useTaskForm.js';
 
 export const isRowDone = (t) => !!t.completed_at || ['Done', 'Closed', 'Completed'].includes(t.status);
 
@@ -97,8 +97,10 @@ export default {
     rows(list) { if (this.cell[0] >= list.length) this.cell = [Math.max(0, list.length - 1), this.cell[1]]; },
   },
   methods: {
+    // A checkbox nobody here may tick is disabled, so the task is the only stop in its row
     tabStop(row, col) {
-      return this.cell[0] === row && this.cell[1] === col ? 0 : -1;
+      const c = this.canChange ? this.cell[1] : 1;
+      return this.cell[0] === row && c === col ? 0 : -1;
     },
     async toggle(t, done) {
       const item = (this.block.tasks || []).find((x) => (x.ref || x.id) === (t.ref || t.id));
@@ -107,13 +109,14 @@ export default {
       this.busy = t.ref;
       try { await this.toggleTaskDone(this.block, item, !!done); } finally { this.busy = ''; }
     },
-    // The one task form, told which block the row belongs to
+    // A block's task opens its details, told which block the row belongs to so Edit edits the
+    // row. A running session's task opens the form straight away: mid-session is for quick edits.
     edit(t) {
       const row = (this.block.tasks || []).find((x) => (x.ref || x.id) === (t.ref || t.id)) || t;
       if (this.block.is_session_tasks) {
         openTaskForm(row, { onRemove: this.removeSessionTask, onChange: this.onSessionTaskChange });
       } else {
-        openTaskForm(row, { block: this.block, canRemove: this.canAdd });
+        openTaskDetail(row, { block: this.block, canRemove: this.canAdd });
       }
     },
     onKey(e) {
@@ -121,8 +124,8 @@ export default {
       if (!at) return;
       const [r, c] = at.dataset.cell.split(':').map(Number);
       const last = this.rows.length - 1;
-      const cols = this.canChange ? 1 : 0;
-      const next = { ArrowDown: [Math.min(last, r + 1), c], ArrowUp: [Math.max(0, r - 1), c], ArrowRight: [r, cols], ArrowLeft: [r, 0], Home: [0, c], End: [last, c] }[e.key];
+      const first = this.canChange ? 0 : 1;
+      const next = { ArrowDown: [Math.min(last, r + 1), c], ArrowUp: [Math.max(0, r - 1), c], ArrowRight: [r, 1], ArrowLeft: [r, first], Home: [0, c], End: [last, c] }[e.key];
       if (!next) return;
       e.preventDefault();
       this.cell = next;

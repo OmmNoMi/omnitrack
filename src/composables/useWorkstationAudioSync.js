@@ -132,14 +132,14 @@ export function useWorkstationAudioSync({
       notificationPermission.value = perm;
       if (perm === 'granted') {
         showNotificationBanner.value = false;
-        showToast('Mobile notifications enabled! You will receive timesheet alerts.', 'success');
+        showToast('Notifications are on. You will get session and block reminders.', 'success');
         playStartOnTimeChime();
         if ('serviceWorker' in navigator) {
           try {
             const reg = await navigator.serviceWorker.register('/assets/omnitrack/sw.js');
             if (reg && reg.showNotification) {
               await reg.showNotification('OmniTrack Notifications Enabled', {
-                body: 'Timesheet reminders and planned block alerts are now active.',
+                body: 'Session and block reminders are on.',
                 icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
                 badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
                 tag: 'omnitrack-test',
@@ -174,7 +174,7 @@ export function useWorkstationAudioSync({
           } catch (e) {}
         }
       } else if (perm === 'denied') {
-        showToast('Notifications are blocked in browser settings. Please enable them to receive timesheet alerts.', 'warning');
+        showToast('Notifications are blocked. Allow them in your browser settings to get session reminders.', 'warning');
       }
     } catch (err) {
       showToast('Could not enable notifications: ' + (err && err.message || err), 'danger');
@@ -192,7 +192,7 @@ export function useWorkstationAudioSync({
     if (Notification.permission === 'granted') {
       const title = 'OmniTrack: Are you still working?';
       const options = {
-        body: msg || 'No activity logged for 30 minutes on active timesheet.',
+        body: msg || 'Nothing logged in the running session for 30 minutes.',
         icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
         badge: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
         tag: tag,

@@ -593,6 +593,15 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 	}
 
 
+# What a rescheduled copy must not inherit from the block it replaces: its Timesheet, its
+# approval, its integrity hash, its pairing link and why it was cancelled
+RESCHEDULE_RESET_FIELDS = {
+	"timesheet": None, "approval_status": "Draft", "approved_by": None, "approval_date": None,
+	"approval_notes": None, "cryptographic_hash": None, "paired_block": None, "cancel_reason": None,
+	"billing_status": "Unbilled", "costing_amount": 0, "billing_amount": 0,
+}
+
+
 @frappe.whitelist()
 def reschedule_work_block(block_name, new_date=None, new_start_time=None, new_end_time=None):
 	"""
@@ -603,21 +612,33 @@ def reschedule_work_block(block_name, new_date=None, new_start_time=None, new_en
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to reschedule this work block."), frappe.PermissionError)
 
+	if doc.status in ("Rescheduled", "Cancelled"):
+		frappe.throw(_("This block was already {0}.").format(_(doc.status).lower()))
+
 	from omnitrack.permissions import check_planned_block_past_lock
-	check_planned_block_past_lock(doc, new_work_date=new_date)
+	if flt(doc.actual_hours) > 0:
+		check_planned_block_past_lock(doc, new_work_date=new_date)
+	else:
+		# Nothing was logged, so moving it forward changes no record: the original stays as
+		# written, marked Rescheduled. Only where it goes is checked, however old it is.
+		check_planned_block_past_lock(None, new_work_date=new_date or doc.work_date)
 
 	target_date = new_date or doc.work_date
 	target_start = new_start_time or doc.start_time
 	target_end = new_end_time or doc.end_time
 
-	# Clone to target slot
+	# Clone to target slot: the plan travels, nothing that belonged to the original's outcome does
 	new_block = frappe.copy_doc(doc)
 	new_block.work_date = target_date
 	new_block.start_time = target_start
 	new_block.end_time = target_end
 	new_block.status = "Planned"
 	new_block.actual_hours = 0.0
+	new_block.variance_hours = 0.0
 	new_block.sessions = []
+	new_block.output_metrics = []
+	for field, value in RESCHEDULE_RESET_FIELDS.items():
+		new_block.set(field, value)
 	new_block.rescheduled_from = doc.name
 	new_block.rescheduled_to = None
 	new_block.flags.ignore_permissions = True

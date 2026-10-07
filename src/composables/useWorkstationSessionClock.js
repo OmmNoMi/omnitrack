@@ -196,20 +196,28 @@ export function useWorkstationSessionClock(w) {
     const ms = Date.now() - act;
     return Math.max(1, Math.floor(ms / 60000));
   });
+  // "20:39" today, "20:39 yesterday", "20:39, 5 Oct" before that. A session restored after
+  // midnight is asked about with these, and a bare time would point at the wrong day.
+  const clockLabel = (ms) => {
+    const t = new Date(ms), now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const hhmm = pad(t.getHours()) + ':' + pad(t.getMinutes());
+    const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const daysAgo = Math.round((day(now) - day(t)) / 86400000);
+    if (daysAgo <= 0) return hhmm;
+    if (daysAgo === 1) return hhmm + ' yesterday';
+    return hhmm + ', ' + t.getDate() + ' ' + t.toLocaleString('en', { month: 'short' });
+  };
   const lastActivityTimeHHMM = computed(() => {
     const _ = trackerSeconds.value;
     const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
-    const t = new Date(act);
-    const pad = (n) => String(n).padStart(2, '0');
-    return pad(t.getHours()) + ':' + pad(t.getMinutes());
+    return clockLabel(act);
   });
   const suggestedStopHHMM = computed(() => {
     const _ = trackerSeconds.value;
     const base = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
     const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
-    const t = new Date(targetMs);
-    const pad = (n) => String(n).padStart(2, '0');
-    return pad(t.getHours()) + ':' + pad(t.getMinutes());
+    return clockLabel(targetMs);
   });
   const checkInactivity = () => {
     if (!isTracking.value) return;
@@ -238,7 +246,7 @@ export function useWorkstationSessionClock(w) {
     nextTick(() => {
       focusSessionPointInput();
     });
-    showToast('Timesheet active — add your recent activity!', 'success');
+    showToast('Session open. Add what you have been working on.', 'success');
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().then(p => { notificationPermission.value = p; }).catch(() => {});
     }
@@ -260,7 +268,7 @@ export function useWorkstationSessionClock(w) {
     showInactivityModal.value = false;
     discardConfirm.value = true;
     discardSession();
-    showToast('Abandoned timer discarded — no timesheet logged', 'info');
+    showToast('Abandoned session discarded. Nothing was logged.', 'info');
   };
   // Multi-Device Cross-Tab Session Synchronization
   const sessionSyncStore = useWorkstationSessionSync({

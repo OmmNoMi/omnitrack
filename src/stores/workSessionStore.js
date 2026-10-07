@@ -216,7 +216,7 @@ export function useWorkSessionStore({
       fetchPlannerData();
     }
     if (!(opts && opts.silent)) {
-      showToast('Timesheet session saved on other device', 'info');
+      showToast('Session saved on another device', 'info');
     }
   };
 
@@ -445,7 +445,7 @@ export function useWorkSessionStore({
     trackerBlockName.value = null;
     trackerNotes.value = '';
     sessionNotesList.value = [];
-    showToast('Session discarded — no timesheet was created', 'info');
+    showToast('Session discarded. Nothing was logged.', 'info');
     setTimeout(() => { _isStoppingSession = false; }, 8000);
   };
 

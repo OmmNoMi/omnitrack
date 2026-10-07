@@ -90,3 +90,7 @@
   max-width: min(32rem, calc(100vw - 1.5rem));
 }
 [data-reka-popper-content-wrapper] > [role="listbox"] [role="option"] { overflow-wrap: anywhere; }
+/* A Combobox's trigger is inline-flex, so it shrank to its text and cut a long name short
+   ("Nomeshwer Sharma (") however wide its column was. It fills the width it is given; the
+   container sets the width, as for every other field. */
+[data-slot="trigger"]:has(> input[role="combobox"]) { display: flex; width: 100%; }

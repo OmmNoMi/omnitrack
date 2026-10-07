@@ -1,7 +1,9 @@
 import frappe
 from frappe.model.document import Document
 
-class OmniTrackRemoteConnection(Document):
+from omnitrack.utils.optional_links import OptionalLinks
+
+class OmniTrackRemoteConnection(OptionalLinks, Document):
 	@frappe.whitelist()
 	def test_connection(self):
 		import requests

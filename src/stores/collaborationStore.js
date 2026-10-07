@@ -12,10 +12,6 @@ export function useCollaborationStore({ postJSON, showToast }) {
   const ravenActiveTab = ref('spec');
   const ravenTaskSpec = ref('');
   const ravenSavingSpec = ref(false);
-  const drawerChatMessages = ref([]);
-  const drawerChatLoading = ref(false);
-  const drawerChatInput = ref('');
-  const drawerChatSending = ref(false);
 
   const teamMembers = ref([
     { name: 'hardiksharma80912@gmail.com', full_name: 'Hardik Sharma', role: 'Lead Architect / Founder' },
@@ -97,37 +93,6 @@ export function useCollaborationStore({ postJSON, showToast }) {
     }
   };
 
-  const fetchDrawerChat = async (taskId) => {
-    if (!taskId) { drawerChatMessages.value = []; return; }
-    drawerChatLoading.value = true;
-    try {
-      const res = await postJSON('get_task_chat', { task_id: taskId, limit: 30 });
-      drawerChatMessages.value = (res && res.messages) || [];
-    } catch (e) {
-      console.warn('Could not load drawer chat', e);
-    } finally {
-      drawerChatLoading.value = false;
-    }
-  };
-
-  const sendDrawerChatMessage = async (activeBlock) => {
-    const text = drawerChatInput.value.trim();
-    const taskId = activeBlock && (activeBlock.task || activeBlock.name);
-    if (!text || !taskId || drawerChatSending.value) return;
-    drawerChatSending.value = true;
-    try {
-      const res = await postJSON('post_task_chat_message', { task_id: taskId, content: text });
-      if (res && res.success) {
-        drawerChatInput.value = '';
-        await fetchDrawerChat(taskId);
-      }
-    } catch (e) {
-      showToast('Failed to send message: ' + (e && e.message || e), 'danger');
-    } finally {
-      drawerChatSending.value = false;
-    }
-  };
-
   return {
     showTaskRavenDrawer,
     ravenTask,
@@ -140,17 +105,11 @@ export function useCollaborationStore({ postJSON, showToast }) {
     ravenTaskSpec,
     ravenSavingSpec,
     ravenSprintRecaps,
-    drawerChatMessages,
-    drawerChatLoading,
-    drawerChatInput,
-    drawerChatSending,
     teamMembers,
     openTaskRavenDrawer,
     closeTaskRavenDrawer,
     openRavenApp,
     fetchTaskRavenDetails,
     sendRavenChatMessage,
-    fetchDrawerChat,
-    sendDrawerChatMessage
   };
 }

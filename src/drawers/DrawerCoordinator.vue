@@ -8,7 +8,6 @@
       :is-tracking="isTracking"
       :tracker-block-name="trackerBlockName"
       :planner-busy="plannerBusy"
-      :drawer-chat-messages="drawerChatMessages"
       :is-block-completed="isBlockCompleted"
       :is-block-reschedulable="isBlockReschedulable"
       :is-block-cancellable="isBlockCancellable"
@@ -19,9 +18,9 @@
       @stop-session="$emit('stop-session')"
       @open-cancel-modal="$emit('open-cancel-modal', $event)"
       @log-session="$emit('log-session', $event)"
-      @open-raven="$emit('open-raven', $event)"
       @edit-session="(session, block) => $emit('edit-session', session, block)"
       @delete-session="(session, block) => $emit('delete-session', session, block)"
+      @open-session="(session, block) => $emit('open-block-session', session, block)"
       @submit-reschedule="$emit('submit-reschedule', $event)"
       @approve="$emit('approve-block', $event)"
       @flag="(block, reason) => $emit('flag-block', block, reason)"
@@ -36,7 +35,6 @@
       :can-review="canReview"
       @close="$emit('close-session-drawer')"
       @open-block="$emit('open-session-block', $event)"
-      @open-raven="$emit('open-raven', $event)"
       @edit-session="(session, block) => $emit('edit-session', session, block)"
       @delete-session="(session, block) => $emit('delete-session', session, block)"
       @approve-block="$emit('approve-block', $event)"
@@ -72,7 +70,6 @@ export default {
     isTracking: { type: Boolean, default: false },
     trackerBlockName: { type: String, default: null },
     plannerBusy: { type: Boolean, default: false },
-    drawerChatMessages: { type: Array, default: () => [] },
     isBlockCompleted: { type: Function, default: () => false },
     isBlockReschedulable: { type: Function, default: () => false },
     isBlockCancellable: { type: Function, default: () => false },
@@ -95,11 +92,11 @@ export default {
     "close-block-drawer",
     "close-session-drawer",
     "open-session-block",
+    "open-block-session",
     "start-session",
     "stop-session",
     "open-cancel-modal",
     "log-session",
-    "open-raven",
     "edit-session",
     "delete-session",
     "submit-reschedule",

@@ -59,31 +59,18 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 	is_manager = is_omnitrack_manager(session_user)
 	is_client = "OmniTrack Client" in session_roles and not is_manager
 
-	allowed_projects = []
-	if is_client and frappe.db.exists("DocType", "Project"):
-		if frappe.db.exists("DocType", "Project User"):
-			allowed_projects.extend(frappe.db.sql_list("SELECT parent FROM `tabProject User` WHERE `user` = %s", session_user))
-		allowed_projects.extend(frappe.db.sql_list("SELECT name FROM `tabProject` WHERE `customer` = %s", session_user))
-		if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
-			contact_projs = frappe.db.sql_list("""
-				SELECT p.name FROM `tabProject` p
-				JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
-				JOIN `tabContact` c ON c.name = dl.parent
-				WHERE c.user = %s
-			""", session_user)
-			allowed_projects.extend(contact_projs)
-		allowed_projects = list(set(allowed_projects))
+	from omnitrack.permissions import projects_for
+	allowed_projects = (projects_for(session_user, include_assigned=False) or []) if is_client else []
 
 	if is_client:
-		if allowed_projects:
-			where_clause = "project IN %(allowed_projects)s"
-			params = {"allowed_projects": tuple(allowed_projects)}
-		else:
-			where_clause = "(project IS NOT NULL AND project != '')"
-			params = {}
+		# The same rule as the block permission query: shared projects, people visible to
+		# clients, shared tasks. A client with none of these sees nothing.
+		from omnitrack.permissions import client_block_condition
+		where_clause = client_block_condition(session_user) if allowed_projects else "1=0"
+		params = {}
 
 		if project:
-			where_clause += " AND project = %(filter_proj)s"
+			where_clause = f"({where_clause}) AND project = %(filter_proj)s"
 			params["filter_proj"] = project
 
 		work_blocks = frappe.db.sql(f"""
@@ -320,7 +307,7 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		"current_user": current_user,
 		"current_user_fullname": frappe.utils.get_fullname(current_user) or current_user,
 		"is_client": is_client,
-		"client_project": (allowed_projects[0] if allowed_projects else "CampusCredit") if is_client else None,
+		"client_project": (allowed_projects[0] if allowed_projects else None) if is_client else None,
 		"work_blocks": work_blocks,
 		"projects": projects,
 		"tasks": tasks,

@@ -1,4 +1,6 @@
 <template>
+  <!-- The pages used every day, around the session button. Projects and Logged time are in
+       the header's menu (WorkstationHeader "Go to"): seven targets crowded the bar. -->
   <nav
     class="fixed bottom-0 left-0 right-0 z-40 border-t flex items-center justify-around px-3 py-2 transition-colors pb-safe backdrop-blur-md"
     :class="isDarkMode ? 'bg-[#1E1F22]/95 border-gray-800 shadow-2xl' : 'bg-white/95 border-gray-200 shadow-lg'"
@@ -11,7 +13,7 @@
         :theme="activeTab === 'dashboard' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'dashboard' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
+        :class="activeTab === 'dashboard' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
         :aria-current="activeTab === 'dashboard' ? 'page' : null"
         label="Dashboard"
         @click="$emit('update:activeTab', 'dashboard')"
@@ -33,7 +35,7 @@
         :theme="activeTab === 'planner' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'planner' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
+        :class="activeTab === 'planner' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
         :aria-current="activeTab === 'planner' ? 'page' : null"
         label="Calendar"
         @click="$emit('update:activeTab', 'planner')"
@@ -61,8 +63,8 @@
           isDarkMode ? 'ring-[#1E1F22]' : 'ring-white',
           (isTracking && bottomBarTimer.isHours) ? '!w-auto !min-w-[4.75rem] !px-3 !rounded-full shadow-2xl' : '!w-14 !rounded-full'
         ]"
-        label="Open the current session timesheet"
-        :title="isTracking ? 'Open the session timesheet — recording ' + formattedTime : 'Open the session timesheet'"
+        label="Open the current session"
+        :title="isTracking ? 'Recording ' + formattedTime : null"
         @click="$emit('open-session')"
       >
         <template v-if="isTracking">
@@ -92,24 +94,24 @@
         <span v-else class="text-[11px] font-extrabold uppercase tracking-wide leading-none">Log</span>
       </Button>
 
-      <!-- Timesheets Tab -->
+      <!-- Tasks: everyone's open Tasks and to-dos, grouped by what to do next -->
       <Button
         variant="ghost"
-        :theme="activeTab === 'timesheets' ? 'blue' : 'gray'"
+        :theme="activeTab === 'tasks' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'timesheets' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
-        :aria-current="activeTab === 'timesheets' ? 'page' : null"
-        label="Timesheets"
-        @click="$emit('update:activeTab', 'timesheets')"
+        :class="activeTab === 'tasks' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
+        :aria-current="activeTab === 'tasks' ? 'page' : null"
+        label="Tasks"
+        @click="$emit('update:activeTab', 'tasks')"
       >
         <template #prefix>
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
+            <polyline points="9 11 12 14 22 4"></polyline>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
           </svg>
         </template>
-        <span class="text-[10px] mt-0.5">Timesheets</span>
+        <span class="text-[10px] mt-0.5">Tasks</span>
       </Button>
 
       <!-- Team: managers only -->
@@ -119,7 +121,7 @@
         :theme="activeTab === 'attendance' ? 'blue' : 'gray'"
         size="sm"
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'attendance' ? '!text-blue-500 font-bold' : (isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium')"
+        :class="activeTab === 'attendance' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
         :aria-current="activeTab === 'attendance' ? 'page' : null"
         label="Team"
         @click="$emit('update:activeTab', 'attendance')"
@@ -132,24 +134,6 @@
         <span class="text-[10px] mt-0.5">Team</span>
       </Button>
 
-      <!-- New task: everyone, managers included (a manager plans their own work too) -->
-      <Button
-        variant="ghost"
-        theme="gray"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="isDarkMode ? '!text-gray-600 font-medium' : '!text-gray-700 font-medium'"
-        label="Create a new task"
-        @click="$emit('open-new-task')"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </template>
-        <span class="text-[10px] mt-0.5">New task</span>
-      </Button>
     </div>
   </nav>
 </template>
@@ -165,6 +149,6 @@ export default {
     bottomBarTimer: { type: Object, default: () => ({ isHours: false, primary: "00:00", hours: "0", minutes: "00", seconds: "00" }) },
     formattedTime: { type: String, default: "00:00:00" }
   },
-  emits: ["update:activeTab", "open-session", "open-new-task"]
+  emits: ["update:activeTab", "open-session"]
 };
 </script>

@@ -22,6 +22,7 @@ from omnitrack.services import (
 	MidnightSplitter,
 	TimesheetBridge,
 )
+from omnitrack.api.projects import CLOSED_TASK
 from omnitrack.utils.block_tasks import (
 	CHILD,
 	block_tasks as _block_tasks,
@@ -50,6 +51,23 @@ def get_active_tasks_and_projects():
 	return {"projects": projects, "tasks": tasks}
 
 
+# Workflow states that end a ToDo whatever a site calls them: one its workflow says closes the
+# ToDo (sets status to Closed or Cancelled), or one named as finished.
+FINISHED_STATE_NAMES = {"Cancelled", "Closed", "Completed", "Done"}
+
+
+def _finished_todo_states():
+	states = set(FINISHED_STATE_NAMES)
+	for wf in frappe.get_all("Workflow", filters={"document_type": "ToDo", "is_active": 1}, pluck="name"):
+		for st in frappe.get_all(
+			"Workflow Document State",
+			filters={"parent": wf, "parenttype": "Workflow", "update_field": "status", "update_value": ["in", ["Closed", "Cancelled"]]},
+			pluck="state",
+		):
+			states.add(st)
+	return states
+
+
 @frappe.whitelist()
 def get_assigned_tasks(employee=None):
 	"""Assigned work for the target user, annotated with hours already booked / logged.
@@ -67,7 +85,7 @@ def get_assigned_tasks(employee=None):
 		names = set()
 		for td in frappe.get_all(
 			"ToDo",
-			filters={"allocated_to": target, "reference_type": "Task", "status": ["!=", "Cancelled"]},
+			filters={"allocated_to": target, "reference_type": "Task", "status": "Open"},
 			fields=["reference_name"],
 			limit=200,
 		):
@@ -75,7 +93,7 @@ def get_assigned_tasks(employee=None):
 				names.add(td.reference_name)
 		for t in frappe.get_all(
 			"Task",
-			filters={"_assign": ["like", f"%{target}%"], "status": ["not in", ["Cancelled", "Completed"]]},
+			filters={"_assign": ["like", f"%{target}%"], "status": ["not in", list(CLOSED_TASK)]},
 			fields=["name"],
 			limit=200,
 		):
@@ -88,9 +106,12 @@ def get_assigned_tasks(employee=None):
 					"custom_kpi_name", "custom_kpi_target_quantity", "custom_kpi_unit",
 					"custom_kpi_completed_quantity", "custom_kpi_progress_percent"
 				])
+			# A Task is often reached through an assignment that stays open after the Task is
+			# finished (ticking it done in a session sets the Task, not its ToDo), so its own
+			# status decides: a Completed Task is never listed, or flagged Overdue.
 			for r in frappe.get_all(
 				"Task",
-				filters={"name": ["in", list(names)]},
+				filters={"name": ["in", list(names)], "status": ["not in", list(CLOSED_TASK)]},
 				fields=task_fields,
 				limit=200,
 			):
@@ -121,16 +142,19 @@ def get_assigned_tasks(employee=None):
 	elif frappe.db.has_column("ToDo", "workflow_state"):
 		todo_fields.append("workflow_state")
 
+	finished = _finished_todo_states()
 	for td in frappe.get_all(
 		"ToDo",
 		filters={"allocated_to": target, "status": ["not in", ["Cancelled", "Closed"]]},
 		fields=todo_fields,
 		limit=200,
 	):
-		if has_task and td.reference_type == "Task" and td.reference_name in items:
+		# A ToDo on a Task is that Task's assignment: the Task is listed above while it is open,
+		# and the assignment a finished Task leaves open is not a to-do of its own
+		if has_task and td.reference_type == "Task":
 			continue
 		wf_st = td.get("workflow_state_todo") or td.get("workflow_state")
-		if wf_st in ("Cancelled", "Closed"):
+		if wf_st in finished:
 			continue
 		label = frappe.utils.strip_html(td.description or "").strip().split("\n")[0][:140] or "Untitled to-do"
 		items[f"todo:{td.name}"] = {
@@ -330,6 +354,8 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 
 	if doctype not in ("Task", "ToDo"):
 		frappe.throw(_("Workflow actions are only supported on Task and ToDo documents."))
+	if not frappe.db.exists("DocType", doctype):
+		frappe.throw(_("This site has no {0}.").format(_(doctype)))
 
 	doc = frappe.get_doc(doctype, docname)
 	doc.check_permission("write")
@@ -389,67 +415,32 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 
 @frappe.whitelist()
 def get_task_details(task_id: str, doctype: str = "Task"):
-	"""Return rich details for a Task or ToDo, including full description, connected planned blocks, and timesheet logs."""
-	if not task_id:
-		return {}
+	"""A Task or ToDo for its details panel: what the task form shows, plus who it is for, its
+	description as the person wrote it, and the hours ERPNext has logged on it. Only for someone
+	who may read the task; this once answered any name it was given, to anyone."""
+	from frappe.utils.html_utils import sanitize_html
 
-	doc = None
-	if doctype in ("Task", "ToDo") and frappe.db.exists(doctype, task_id):
-		doc = frappe.get_doc(doctype, task_id)
-	elif frappe.db.exists("Task", task_id):
-		doctype = "Task"
-		doc = frappe.get_doc("Task", task_id)
-	elif frappe.db.exists("ToDo", task_id):
-		doctype = "ToDo"
-		doc = frappe.get_doc("ToDo", task_id)
+	doc = _task_doc(doctype, task_id)
+	is_task = doc.doctype == "Task"
+	out = _task_form(doc)
+	if not is_task:
+		# A to-do's description is its name too; the title is its first line
+		out["subject"] = _todo_subject(doc.description)
 
-	if not doc:
-		return {}
+	text = frappe.utils.strip_html(doc.get("description") or "").strip()
+	# A one-line to-do is all title: showing it again below would say it twice
+	out["description_html"] = sanitize_html(doc.get("description") or "") if text and text != out["subject"] else ""
 
-	# Fetch connected planned work blocks
-	blocks = frappe.get_all(
-		"Planned Work Block",
-		filters={"task": task_id, "docstatus": ["<", 2]},
-		fields=["name", "work_date", "start_time", "end_time", "duration_hours", "status", "actual_hours", "task_nature", "deliverable_notes"],
-		order_by="work_date desc, start_time desc",
-		limit=20,
-	)
+	users = [doc.allocated_to] if doc.get("allocated_to") else (json.loads(doc.get("_assign") or "[]") if is_task else [])
+	out["assigned_to"] = [{"user": u, "name": frappe.utils.get_fullname(u)} for u in users if u]
+	out["project_name"] = (frappe.db.get_value("Project", out["project"], "project_name") if out["project"] else "") or out["project"]
 
-	# Fetch actual logged hours across timesheets
-	logged_hours = 0.0
-	try:
-		ts_records = frappe.db.sql(
-			"""
-			select coalesce(sum(hours), 0) as total_hours
-			from `tabTimesheet Detail`
-			where task = %s and docstatus < 2
-			""",
-			(task_id,),
-			as_dict=True,
-		)
-		if ts_records:
-			logged_hours = flt(ts_records[0].total_hours, 2)
-	except Exception:
-		pass
-
-	return {
-		"task": {
-			"name": doc.name,
-			"doctype": doctype,
-			"subject": getattr(doc, "subject", getattr(doc, "description", doc.name)),
-			"description": getattr(doc, "description", "") or "",
-			"project": getattr(doc, "project", "") or "",
-			"project_name": getattr(doc, "project_name", getattr(doc, "project", "")) or "",
-			"status": getattr(doc, "status", "Open"),
-			"priority": getattr(doc, "priority", "Medium"),
-			"expected_time": flt(getattr(doc, "expected_time", 0), 2),
-			"exp_start_date": str(getattr(doc, "exp_start_date", "") or ""),
-			"exp_end_date": str(getattr(doc, "exp_end_date", "") or ""),
-			"due_date": str(getattr(doc, "exp_end_date", getattr(doc, "date", "")) or ""),
-			"logged_hours": logged_hours,
-			"connected_blocks": blocks,
-		}
-	}
+	out["expected_hours"] = flt(doc.get("expected_time"), 2) if is_task else 0
+	out["logged_hours"] = flt(frappe.db.sql(
+		"select coalesce(sum(hours), 0) from `tabTimesheet Detail` where task = %s and docstatus < 2",
+		(doc.name,),
+	)[0][0], 2) if is_task else 0
+	return out
 
 
 def _can_change_block(block, user=None):

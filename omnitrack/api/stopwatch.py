@@ -39,6 +39,25 @@ from omnitrack.api.timesheet import (
 )
 
 
+def _punch_sessions(day, start_t, end_t, hours, notes, nature):
+	"""The session rows for a punch. Past midnight it is two rows, one on each day, as
+	log_work_session writes it, so the time after midnight lands on the day it was worked."""
+	if MidnightSplitter.is_overnight(start_t, end_t):
+		return list(MidnightSplitter.split_session_rows(
+			base_date=day, from_time=start_t, to_time=end_t,
+			notes=notes, logged_via="Stopwatch", task_nature=nature,
+		))
+	return [{
+		"session_date": day,
+		"from_time": start_t,
+		"to_time": end_t,
+		"hours": hours,
+		"notes": notes,
+		"logged_via": "Stopwatch",
+		"task_nature": nature,
+	}]
+
+
 @frappe.whitelist()
 def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None,
 					  deliverable_notes=None, work_nature=None,
@@ -80,6 +99,9 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 			start_dt = now_dt - timedelta(seconds=max(dur_secs, 60))
 			start_t = start_dt.strftime("%H:%M:%S")
 			end_t = now_dt.strftime("%H:%M:%S")
+			# A session that began before midnight belongs to the day it began
+			if not work_date:
+				target_date = str(start_dt.date())
 
 		block = frappe.new_doc("Planned Work Block")
 		block.employee = user
@@ -96,15 +118,8 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 		block.task_nature = work_nature
 		# A punch always makes a new block: no block was planned for this time
 		block.unplanned = 1
-		block.append("sessions", {
-			"session_date": target_date,
-			"from_time": start_t,
-			"to_time": end_t,
-			"hours": dur_hours,
-			"notes": block.deliverable_notes,
-			"logged_via": "Stopwatch",
-			"task_nature": block.task_nature,
-		})
+		for row in _punch_sessions(target_date, start_t, end_t, dur_hours, block.deliverable_notes, block.task_nature):
+			block.append("sessions", row)
 
 		# Phase 2: Quantitative Deliverable Output Metrics
 		if output_metrics:
@@ -136,7 +151,8 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 			try:
 				ts_name = create_timesheet_from_work_block(block.name)
 			except Exception:
-				pass
+				# Kept on record: a Timesheet that silently never appears is lost time
+				frappe.log_error(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=block.name)
 
 		# Phase 5: Collaborative / Pairing Sessions - Mirrored Timesheet for Partner
 		partner_block_name = None
@@ -157,15 +173,8 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 				p_doc.status = "Completed"
 				p_doc.task_nature = block.task_nature
 				p_doc.unplanned = 1
-				p_doc.append("sessions", {
-					"session_date": target_date,
-					"from_time": start_t,
-					"to_time": end_t,
-					"hours": dur_hours,
-					"notes": f"[Pairing with {user}] {block.deliverable_notes}",
-					"logged_via": "Stopwatch",
-					"task_nature": block.task_nature,
-				})
+				for row in _punch_sessions(target_date, start_t, end_t, dur_hours, f"[Pairing with {user}] {block.deliverable_notes}", block.task_nature):
+					p_doc.append("sessions", row)
 				if output_metrics and isinstance(output_metrics, list):
 					for m in output_metrics:
 						if isinstance(m, dict) and (m.get("quantity") or m.get("metric_type")):
@@ -183,7 +192,8 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 					try:
 						partner_ts_name = create_timesheet_from_work_block(p_doc.name)
 					except Exception:
-						pass
+						# Kept on record: a Timesheet that silently never appears is lost time
+						frappe.log_error(title="OmniTrack: Timesheet sync failed", reference_doctype="Planned Work Block", reference_name=p_doc.name)
 			except Exception as pe:
 				frappe.log_error(f"Pairing timesheet creation failed for {pairing_partner}: {pe}", "OmniTrack")
 
@@ -515,7 +525,10 @@ def log_catch_up_session(work_date=None, from_time=None, to_time=None, duration_
 def get_active_session(user=None):
 	"""
 	Returns the currently in-flight active session for the user across devices.
-	Automatically expires sessions older than 24 hours.
+
+	Reading never deletes. A session that has run for a day is still returned, so the app can
+	ask the person whether to log it up to the last note, keep it, or discard it. Only the
+	person's own Stop or Discard clears it (sync_active_session with no data).
 	"""
 	target_user = user or _resolve_planner_user() or frappe.session.user
 	if not target_user or target_user == "Guest":
@@ -535,22 +548,10 @@ def get_active_session(user=None):
 	if not data or not isinstance(data, dict):
 		return None
 
-	# Check expiration (24h threshold)
+	# A start more than 12 hours in the future is a broken clock, not a session. Hide it, keep it.
 	start_time = flt(data.get("startTime", 0))
-	if start_time > 0:
-		now_ms = datetime.now().timestamp() * 1000
-		diff_seconds = (now_ms - start_time) / 1000.0
-		if diff_seconds > 86400 or diff_seconds < -43200:
-			frappe.cache.hdel("omnitrack:active_session", target_user)
-			frappe.defaults.clear_default("omnitrack_active_session", parent=target_user)
-			frappe.db.set_default("omnitrack_active_session", None, parent=target_user)
-			frappe.db.sql(
-				"DELETE FROM `tabDefaultValue` WHERE defkey = 'omnitrack_active_session' AND parent = %(user)s",
-				{"user": target_user}
-			)
-			frappe.clear_cache(user=target_user)
-			frappe.db.commit()
-			return None
+	if start_time > 0 and (start_time - datetime.now().timestamp() * 1000) / 1000.0 > 43200:
+		return None
 
 	return data
 

@@ -1,5 +1,5 @@
 import { ref, computed } from "vue";
-import { openTaskForm } from "./useTaskForm.js";
+import { openTaskDetail } from "./useTaskForm.js";
 
 /**
  * Range selection and collaboration drawer actions.
@@ -113,21 +113,21 @@ export function useWorkstationPlannerSelect(w) {
     try {
       const res = await postJSON('create_timesheet_from_work_block', { block_name: block.name, force: true });
       const tsName = res && (res.message || res.name || res);
-      showToast(`Timesheet ${tsName || ''} created for Project ${block.project_name || block.project || ''}`, 'success');
+      showToast(`ERPNext Timesheet ${tsName || ''} created for Project ${block.project_name || block.project || ''}`, 'success');
       await fetchPlannerData();
       const refreshed = (plannerData.value.blocks || []).find(x => x.name === block.name);
       if (refreshed) activeBlock.value = refreshed;
     } catch (e) {
-      showToast('Could not generate timesheet: ' + (e && e.message || e), 'danger');
+      showToast('Could not create the ERPNext Timesheet: ' + (e && e.message || e), 'danger');
     } finally {
       plannerBusy.value = false;
     }
   };
   const rescheduleForm = ref({ work_date: '', start_time: '', end_time: '' });
   // Collaboration Drawer actions delegated to collaborationStore
-  // Every task opens the one task form (status, workflow moves, name, due day, priority)
+  // A task opens its details panel first; its Edit opens the one task form
   const openTaskDetails = (task) => {
-    openTaskForm(task);
+    openTaskDetail(task);
   };
   const taskConnectedBlocks = (task) => {
     if (!task) return [];

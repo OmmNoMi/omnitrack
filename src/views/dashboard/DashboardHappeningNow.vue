@@ -34,7 +34,7 @@
             :variant="stopConfirm ? 'solid' : 'subtle'"
             theme="red"
             icon-left="square"
-            :label="stopConfirm ? 'Stop and save without any log lines' : 'Stop the session and save the timesheet'"
+            :label="stopConfirm ? 'Stop and save without any log lines' : 'Stop and save the session'"
             @click.stop="requestStopFocusBlock(block)">
             {{ stopConfirm ? 'Stop anyway' : 'Stop & save' }}
           </Button>

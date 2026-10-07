@@ -12,7 +12,6 @@ from omnitrack.raven_bridge import (
 	post_session_accomplishment_recap,
 	pin_message_as_task_spec,
 	get_task_raven_timeline_content,
-	get_block_raven_timeline_content,
 )
 
 
@@ -40,10 +39,13 @@ class TestRavenBridge(unittest.TestCase):
 			self.assertIn("creation", item)
 			self.assertIn("content", item)
 
-	def test_block_timeline_content_fallback(self):
-		"""Block timeline should safely return empty list for non-existent blocks."""
-		items = get_block_raven_timeline_content("Planned Work Block", "NON_EXISTENT_BLOCK")
-		self.assertIsInstance(items, list)
+	def test_todo_gets_no_channel(self):
+		"""Raven is for ERPNext Tasks only: a to-do is talked about in its Frappe comments."""
+		if not frappe.db.exists("DocType", "ToDo"):
+			return
+		name = frappe.db.get_value("ToDo", {}, "name")
+		if name and not frappe.db.exists("Task", name):
+			self.assertIsNone(get_or_create_task_channel("todo:" + name))
 
 	def test_send_task_message_validation(self):
 		"""Empty message content without files must be rejected gracefully."""

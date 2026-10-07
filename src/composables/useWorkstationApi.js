@@ -203,7 +203,7 @@ export function useWorkstationApi(w) {
     w.sessionTasks.value = [];
     newSessionPoint.value = '';
     stopConfirmName.value = '';
-    showToast('Session discarded — no timesheet was created', 'info');
+    showToast('Session discarded. Nothing was logged.', 'info');
   };
   const toggleTrack = async (customEndMs = null, customStartMs = null) => {
     triggerHaptic([40]);
@@ -331,7 +331,8 @@ export function useWorkstationApi(w) {
         fetchWorkstationData(selectedEmployee.value);
         if (typeof fetchPlannerData === 'function' && activeTab.value === 'planner') fetchPlannerData();
       } catch (err) {
-        showToast('Timer punch recorded locally.', 'success');
+        // Nothing was kept: say so, so the time is added again rather than assumed saved
+        showToast('Could not save this session: ' + (err && err.message || err) + '. Add it again from Log.', 'danger');
       } finally {
         setStoppingSession(false);
       }

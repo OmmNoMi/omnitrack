@@ -35,7 +35,7 @@
           <Badge v-else size="lg" variant="subtle" class="h-8" :class="chip(detail.state)" :title="stateHint || 'No next step open to you from here'">{{ detail.state || 'Open' }}</Badge>
         </div>
         <div class="w-48">
-          <DatePicker v-model="form.due_date" variant="subtle" format="ddd, D MMM YYYY" placeholder="Due day" label="Due" :disabled="!editable">
+          <DatePicker v-model="form.due_date" variant="subtle" format="ddd, D MMM YYYY" placeholder="Due day" aria-label="Due" aria-haspopup="dialog" :disabled="!editable">
             <template #prefix><FeatherIcon name="calendar" class="h-4 w-4" :class="iconTone" aria-hidden="true" /></template>
           </DatePicker>
         </div>
@@ -163,7 +163,8 @@ export default {
     taskMenu() {
       const items = [];
       if (this.linked) {
-        items.push({ label: 'Open discussion', icon: 'message-circle', onClick: () => this.discuss() });
+        // Raven is for Projects and their ERPNext Tasks; a to-do is talked about in its Activity
+        if (this.linked.doctype === 'Task') items.push({ label: 'Raven chat', icon: 'message-circle', onClick: () => this.discuss() });
         items.push({ label: 'Open full form', icon: 'external-link', onClick: () => window.open(this.getTaskDeskUrl(this.linked), '_blank', 'noopener') });
       }
       if (taskForm.canRemove) items.push({ label: taskForm.onRemove ? 'Remove from session' : 'Remove from block', icon: 'x-circle', theme: 'red', onClick: () => this.remove() });

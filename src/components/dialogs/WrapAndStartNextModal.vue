@@ -50,7 +50,7 @@
         <Button
           variant="solid"
           theme="blue"
-          class="!bg-blue-700 hover:!bg-blue-800"
+          class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800"
           label="Switch"
           data-autofocus
           :loading="isSwitching"

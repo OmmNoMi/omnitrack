@@ -54,8 +54,8 @@ has_permission = {
 # Document Timeline Hooks (Zero-Write Raven Live Stream)
 # ------------------------------------------------------
 additional_timeline_content = {
+	# Raven is for Projects and their Tasks; a work block's talk is its own Frappe comments
 	"Task": ["omnitrack.raven_bridge.get_task_raven_timeline_content"],
-	"Planned Work Block": ["omnitrack.raven_bridge.get_block_raven_timeline_content"]
 }
 
 # Scheduled Tasks

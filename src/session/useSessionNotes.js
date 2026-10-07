@@ -4,7 +4,8 @@ export function useSessionNotes(props, emit) {
   const localLineText = ref('');
   const lineInputRef = ref(null);
   const toolbarRef = ref(null);
-  const activeToolIndex = ref(2); // Stop button is the default landing tab stop (index 2)
+  // The primary tool is the last one and the toolbar's tab stop: Stop, or an entry's Add session
+  const activeToolIndex = ref(props.mode === 'entry' ? 1 : 2);
   // Each line must say what was done: OmniTrack Settings > Minimum Characters per Session Log Line
   const lineChars = computed(() => localLineText.value.trim().length);
   const lineTooShort = computed(() => lineChars.value < props.minLineChars);
@@ -116,7 +117,7 @@ export function useSessionNotes(props, emit) {
       e.preventDefault();
       submitLine();
     } else if (e.key === 'Tab' && !e.shiftKey) {
-      // Tab from input line focuses directly on the Stop button in the toolbar
+      // Tab from input line focuses directly on the primary button (Stop, or Add session)
       e.preventDefault();
       focusStopButton();
     } else if (e.key === 'ArrowUp' && e.target.selectionStart === 0 && e.target.selectionEnd === 0) {
@@ -156,7 +157,9 @@ export function useSessionNotes(props, emit) {
     if (!keys.includes(ev.key)) return;
     const bar = toolbarRef.value;
     if (!bar) return;
-    const tools = [...bar.querySelectorAll('[data-session-tool]')];
+    // A disabled tool (Add session before there is a line) is passed over, as Tab passes it
+    const all = [...bar.querySelectorAll('[data-session-tool]')];
+    const tools = all.filter((el) => !el.disabled);
     if (tools.length < 2) return;
     ev.preventDefault();
 
@@ -167,7 +170,7 @@ export function useSessionNotes(props, emit) {
     else if (ev.key === 'Home') next = 0;
     else if (ev.key === 'End') next = tools.length - 1;
 
-    activeToolIndex.value = next;
+    activeToolIndex.value = all.indexOf(tools[next]);
     nextTick(() => {
       const target = tools[next];
       if (target) {
@@ -177,12 +180,13 @@ export function useSessionNotes(props, emit) {
   }
 
   function focusStopButton() {
-    activeToolIndex.value = 2; // Stop button
     nextTick(() => {
       if (toolbarRef.value) {
-        const tools = toolbarRef.value.querySelectorAll('[data-session-tool]');
-        if (tools.length > 2) {
-          tools[2].focus();
+        const all = [...toolbarRef.value.querySelectorAll('[data-session-tool]')];
+        const last = all.filter((el) => !el.disabled).pop();
+        if (last) {
+          activeToolIndex.value = all.indexOf(last);
+          last.focus();
         }
       }
     });

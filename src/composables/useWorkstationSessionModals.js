@@ -5,8 +5,9 @@
  * and deleting a logged entry.
  */
 import * as Vue from "vue";
-import { whenLine } from "../utils/clockTime.js";
-import { newEntryTimes } from "../utils/timesheetEntry.js";
+import { whenLine, spanMins } from "../utils/clockTime.js";
+import { newEntryTimes, entryEndMs } from "../utils/timesheetEntry.js";
+import { composeWrapNote, logLines } from "../utils/wrapNote.js";
 import { blockTitle } from '../utils/blockTitle.js';
 const { ref, computed } = Vue;
 
@@ -78,7 +79,8 @@ export function useWorkstationSessionModals(opts) {
     }
   };
 
-  // 3. The one timesheet panel (TimesheetEntryDialog). Every way of writing time opens it:
+  // 3. Writing time by hand. add, edit and free open the session box people know from the timer
+  //    (WorkSessionEntry), with its Log lines in form.log; live opens TimesheetEntryDialog:
   //    'add'  an entry against a block, for time already worked (never the block's future slot)
   //    'edit' a logged entry
   //    'free' a window with no block (a timeline gap, or Adjust with no clock running)
@@ -111,7 +113,13 @@ export function useWorkstationSessionModals(opts) {
       isSessionElevated.value = false;
     }
     editSessionTargetBlock.value = block;
-    editSessionForm.value = { mode: 'add', name: '', block_title: '', block_when: '', started_at: '', lines: 0, notes: '', ...form };
+    editSessionForm.value = {
+      mode: 'add', name: '', block_title: '', block_when: '', started_at: '', lines: 0, notes: '',
+      // A free entry starts from the last Project and Activity picked, unless a session is
+      // running: then those are the running session's, and this entry is not that session
+      log: [], project: isTracking.value ? '' : (selectedProject.value || ''),
+      nature: isTracking.value ? 'Work' : (selectedNature.value || 'Work'), ...form
+    };
     showEditSessionModal.value = true;
   };
 
@@ -125,7 +133,8 @@ export function useWorkstationSessionModals(opts) {
       session_date: fresh ? fresh.date : (session.session_date || todayISO()),
       from_time: fresh ? fresh.from : hhmm(session.from_time || ''),
       to_time: fresh ? fresh.to : hhmm(session.to_time || ''),
-      notes: session.notes || ''
+      // The saved notes back as the Log lines they were written as (composeWrapNote on save)
+      log: logLines(session.notes || '', block ? blockTitle(block, '') : '')
     }, block);
   };
 
@@ -161,8 +170,7 @@ export function useWorkstationSessionModals(opts) {
       mode: 'free',
       session_date: selectedDashboardDate.value || getLocalTodayISO(),
       from_time: gap.from_time.substring(0, 5),
-      to_time: gap.to_time.substring(0, 5),
-      notes: ''
+      to_time: gap.to_time.substring(0, 5)
     });
   };
 
@@ -220,16 +228,20 @@ export function useWorkstationSessionModals(opts) {
   // How far back is the server's call (its horizon is configurable); its refusal says why
   const writeEntry = async (f) => {
     const block = editSessionTargetBlock.value;
-    const times = { session_date: f.session_date, from_time: withSeconds(f.from_time), to_time: withSeconds(f.to_time), notes: f.notes };
+    // The Log's lines saved the way a stopped session saves them: its heading, then a bullet each
+    const notes = composeWrapNote(f.block_title, f.log);
+    const times = { session_date: f.session_date, from_time: withSeconds(f.from_time), to_time: withSeconds(f.to_time), notes };
     if (f.mode === 'edit') {
       const res = await postJSON('update_work_session', { session_name: f.name, block_name: block ? block.name : null, ...times });
       if (!res || res.status !== 'success') throw res;
-      return afterSave('Timesheet entry saved', res);
+      return afterSave('Work session saved', res);
     }
     if (f.mode === 'add' && block) {
-      return afterSave('Timesheet entry added', await postJSON('log_work_session', { block_name: block.name, ...times }));
+      return afterSave('Work session added', await postJSON('log_work_session', { block_name: block.name, ...times }));
     }
-    const mins = toMinutes(f.to_time) - toMinutes(f.from_time);
+    const mins = spanMins(f.from_time, f.to_time);
+    // A free entry is filed under the Project and Activity picked in its own box, never the
+    // running session's
     await postJSON('quick_timer_punch', {
       action: 'stop',
       work_date: f.session_date,
@@ -237,26 +249,29 @@ export function useWorkstationSessionModals(opts) {
       to_time: times.to_time,
       duration_seconds: mins * 60,
       duration_hours: Math.round((mins / 60) * 100) / 100,
-      work_nature: selectedNature.value,
-      task_nature: selectedNature.value,
-      deliverable_notes: f.notes,
-      notes: f.notes,
-      project: selectedProject.value
+      work_nature: f.nature || 'Work',
+      task_nature: f.nature || 'Work',
+      deliverable_notes: notes,
+      notes,
+      project: f.project || null
     });
-    afterSave('Timesheet entry added');
+    afterSave('Work session added');
   };
-  const toMinutes = (hm) => { const [h, m] = String(hm || '').split(':').map(Number); return h * 60 + m; };
-
   const saveEditSession = async () => {
     const f = editSessionForm.value;
     if (!f.session_date) { showToast('Pick the day you worked', 'warning'); return; }
-    if (!f.from_time || !f.to_time || toMinutes(f.to_time) <= toMinutes(f.from_time)) { showToast('The end must be after the start', 'warning'); return; }
+    // A span past midnight is one session (23:30 to 00:30 is an hour), as spanMins reads it
+    const mins = f.from_time && f.to_time ? spanMins(f.from_time, f.to_time) : 0;
+    if (!(mins > 0)) { showToast('The end must be after the start', 'warning'); return; }
+    // Time not worked yet is not a work session: it would be charged before it happened
+    if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) { showToast('A work session cannot end after now. Start a session when the work begins.', 'warning'); return; }
     if (f.mode === 'live') return stopAndLogSession(f);
+    if (!(f.log || []).length) { showToast('Add a line about what you got done', 'warning'); return; }
     isSavingEditSession.value = true;
     try {
       await writeEntry(f);
     } catch (e) {
-      showToast(extractErrorMessage(e, 'Could not save this timesheet entry'), 'danger');
+      showToast(extractErrorMessage(e, 'Could not save this work session'), 'danger');
     } finally {
       isSavingEditSession.value = false;
     }

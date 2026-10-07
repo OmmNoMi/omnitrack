@@ -55,6 +55,14 @@
       "in_list_view": 1
     },
     {
+      "fieldname": "visible_to_clients",
+      "fieldtype": "Check",
+      "label": "Visible to Clients",
+      "default": 0,
+      "in_list_view": 1,
+      "description": "Clients see this person's blocks on projects shared with them, and their name on shared tasks."
+    },
+    {
       "fieldname": "receive_push_notifications",
       "fieldtype": "Check",
       "label": "Receive Push Notifications",
@@ -63,5 +71,6 @@
     }
   ],
   "permissions": [],
-  "icon": "user-check"
+  "icon": "user-check",
+  "modified": "2026-10-07 12:00:00.000000"
 }

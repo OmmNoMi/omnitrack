@@ -1,8 +1,8 @@
 <template>
   <section class="rounded-2xl border overflow-hidden" :class="isDarkMode ? 'bg-[#1E1F22] border-gray-800' : 'bg-white border-gray-200'" aria-labelledby="timesheets-heading">
-    <!-- Toolbar: period, person, total. Approval happens inside each timesheet, not here. -->
+    <!-- Toolbar: period, person, total. Approval happens inside each block, not here. -->
     <div class="px-4 py-3 border-b flex items-center justify-between gap-3 flex-wrap" :class="isDarkMode ? 'border-gray-800' : 'border-gray-200'">
-      <h2 id="timesheets-heading" class="text-base font-semibold" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">Timesheets</h2>
+      <h2 id="timesheets-heading" class="text-base font-semibold" :class="isDarkMode ? 'text-gray-100' : 'text-gray-900'">Logged time</h2>
       <div class="flex items-center gap-2 flex-wrap">
         <div class="inline-flex items-center gap-0.5 rounded-lg p-0.5" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-100'" role="group" aria-label="Period">
           <Button
@@ -20,7 +20,7 @@
             :model-value="selectedEmployee"
             :options="employeeOptions"
             placeholder="Search teammates"
-            aria-label="Filter timesheets by team member"
+            aria-label="Show logged time for"
             @update:model-value="setSelectedEmployee"
           />
         </div>
@@ -29,11 +29,11 @@
     </div>
 
     <p v-if="filteredWorkBlocks.length === 0" class="px-4 py-10 text-center text-sm" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
-      No timesheets in this period.
+      Nothing logged in this period.
     </p>
 
-    <!-- One list for every width: each row opens the timesheet, where it can be reviewed -->
-    <ul v-else class="divide-y" :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-100'" aria-label="Timesheets">
+    <!-- One list for every width: each row opens its block, where it can be reviewed -->
+    <ul v-else class="divide-y" :class="isDarkMode ? 'divide-gray-800' : 'divide-gray-100'" aria-label="Logged time">
       <li v-for="b in filteredWorkBlocks" :key="b.name">
         <button
           type="button"

@@ -17,7 +17,8 @@ export function useSessionChat(props) {
   // Log, Details, then Task chat when Raven is installed. paneTab is never anything else, so the
   // pane is never blank: an unknown value shows the Log.
   const tabDetailsRef = ref(null);
-  const paneTabs = computed(() => ['notes', 'details', ...(isRavenAvailable.value ? ['chat'] : [])]);
+  // An entry added by hand is its Log only: the block's details and chat belong to the block
+  const paneTabs = computed(() => (props.mode === 'entry' ? ['notes'] : ['notes', 'details', ...(isRavenAvailable.value ? ['chat'] : [])]));
   const paneTab = computed(() => (paneTabs.value.includes(activePaneTab.value) ? activePaneTab.value : 'notes'));
   const tabRefs = { notes: tabNotesRef, details: tabDetailsRef, chat: tabChatRef };
 
@@ -204,6 +205,7 @@ export function useSessionChat(props) {
   });
 
   onMounted(() => {
+    if (props.mode === 'entry') return;
     checkRavenStatus();
     setupRealtimeChat();
   });

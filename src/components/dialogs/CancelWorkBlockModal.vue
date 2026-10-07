@@ -63,7 +63,7 @@
           <div class="text-xs">
             <span class="font-bold text-amber-900 dark:text-amber-200">Log elapsed wait time ({{ formattedTime }})</span>
             <p class="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-              Record this wait time as a timesheet session on the block before cancelling. Frees your tracker immediately.
+              Save the time as a work session on this block, then cancel it. The timer stops.
             </p>
           </div>
         </label>

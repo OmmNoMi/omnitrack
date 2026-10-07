@@ -1,5 +1,7 @@
 import * as Vue from "vue";
 import { WORK, BREAK as ACTIVITY_BREAK, AWAY, toKind } from '../utils/activity.js';
+// localISO, never toISOString(): that is the UTC date, a day behind in IST before 05:30
+import { toMin, toHHMM, spanMins, localISO } from '../utils/clockTime.js';
 const { ref, computed } = Vue;
 
 // Planned Work Block.task_nature, the block's activity (src/utils/activity.js). PLANNED keeps
@@ -9,10 +11,6 @@ export const BREAK = ACTIVITY_BREAK;
 export const AWAY_NATURES = AWAY;
 
 const isISODate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
-const toMin = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
-const toHHMM = (mins) => String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
-// Never toISOString(): that is the UTC date, a day behind in IST before 05:30
-const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function useWorkBlockStore({
   postJSON,
@@ -158,12 +156,13 @@ export function useWorkBlockStore({
     const nature = toKind(f.nature);
     const isAway = AWAY_NATURES.includes(nature);
     const isBreak = nature === BREAK;
-    if (!isAway && (!f.start_time || !f.end_time)) {
+    if (!f.start_time || !f.end_time) {
       showToast('Set a start and end time', 'danger');
       return;
     }
-    if (!isAway && f.end_time <= f.start_time) {
-      showToast('End time must be after the start time', 'danger');
+    // An end before the start is the next morning, as the server reads it
+    if (spanMins(f.start_time, f.end_time) <= 0) {
+      showToast('Set an end time that differs from the start', 'danger');
       return;
     }
     plannerBusy.value = true;
@@ -176,8 +175,8 @@ export function useWorkBlockStore({
       const newTask = !isAway && !isBreak ? (f.new_task_subject || '').trim() : '';
       await postJSON('book_work_block', {
         work_date: f.work_date,
-        start_time: isAway ? '09:00' : f.start_time,
-        end_time: isAway ? '18:00' : f.end_time,
+        start_time: f.start_time,
+        end_time: f.end_time,
         work_item: picked ? picked.ref : null,
         work_items: refs,
         task: picked && !String(picked.ref).startsWith('todo:') ? picked.ref : null,
@@ -214,8 +213,9 @@ export function useWorkBlockStore({
       showToast('Pick a date, a start and an end time', 'danger');
       return;
     }
-    if (f.end_time <= f.start_time) {
-      showToast('End time must be after the start time', 'danger');
+    // An end before the start is the next morning, as the server reads it
+    if (spanMins(f.start_time, f.end_time) <= 0) {
+      showToast('Set an end time that differs from the start', 'danger');
       return;
     }
     plannerBusy.value = true;

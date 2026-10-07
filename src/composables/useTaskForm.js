@@ -27,3 +27,30 @@ export function closeTaskForm() {
   taskForm.open = false;
   taskForm.ask = null;
 }
+
+// The Task or ToDo a task stands for, wherever it was listed; null for a block's plain
+// checklist item, which is only a name.
+export function taskDocRef(task) {
+  const t = task || {};
+  const ref = String(t.ref || '');
+  const doctype = t.doctype && t.doctype !== 'Item' ? t.doctype : (ref.startsWith('todo:') ? 'ToDo' : (t.doctype === 'Item' ? '' : 'Task'));
+  const name = t.docname || (ref.startsWith('todo:') ? ref.slice(5) : (t.id || t.name || ref));
+  return doctype && name ? { doctype, name } : null;
+}
+
+/*
+ * The task details panel (TaskDetailDrawer): what the task is, who it is for, where it stands
+ * and its description, read before anything is changed. Clicking a task opens this; its Edit
+ * opens the one task form with the same options, so a block row is still edited as that row.
+ */
+export const taskDetail = reactive({ open: false, task: null, opts: {} });
+
+export function openTaskDetail(task, opts = {}) {
+  if (!task) return;
+  if (!taskDocRef(task)) return openTaskForm(task, opts);
+  Object.assign(taskDetail, { task, opts: opts || {}, open: true });
+}
+
+export function closeTaskDetail() {
+  taskDetail.open = false;
+}

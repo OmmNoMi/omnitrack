@@ -70,13 +70,20 @@ export default {
     isSessionElevated: { type: Boolean, default: false },
     formattedTime: { type: String, default: "00:00:00" },
     notificationPermission: { type: String, default: "default" },
-    headerMenuItems: { type: Array, default: () => [] }
+    headerMenuItems: { type: Array, default: () => [] },
+    hasProjects: { type: Boolean, default: false }
   },
-  emits: ["go-dashboard", "toggle-focus", "open-raven", "enable-notifications"],
+  emits: ["go-dashboard", "toggle-focus", "open-raven", "enable-notifications", "navigate"],
   computed: {
     // Raven is reached from the menu, keeping the header to the clock and the menu
     menuItems() {
+      // Pages the bottom bar has no room for, first and apart from the actions
+      const pages = [
+        ...(this.hasProjects ? [{ label: "Projects", icon: "briefcase", onClick: () => this.$emit("navigate", "projects") }] : []),
+        { label: "Logged time", icon: "clock", onClick: () => this.$emit("navigate", "timesheets") },
+      ];
       return [
+        { group: "Go to", hideLabel: true, items: pages },
         { label: "Raven chat", icon: "message-circle", onClick: () => this.$emit("open-raven") },
         // Desk is where the rest of Frappe lives; client-portal users have no Desk access
         ...(this.isClient ? [] : [{ label: "OmniTrack Desk", icon: "grid", onClick: () => { window.location.href = "/desk/omnitrack"; } }]),

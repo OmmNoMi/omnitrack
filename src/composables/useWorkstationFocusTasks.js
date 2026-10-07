@@ -1,11 +1,12 @@
 import { ref, computed } from "vue";
+import { spanMins } from "../utils/clockTime.js";
 
 /**
  * Focus tasks, deliverables and block cancellation.
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationFocusTasks(w) {
-  const { activeBlock, activeTab, assignedTasks, cancelTargetBlock, drawerChatInput, fetchDrawerChat, fetchPlannerData, fetchWorkstationData, hhmm, hideBlockHover, plannerBusy, plannerData, postJSON, projects, rescheduleForm, sessionNotesList, showBlockDrawer, showBlockReschedule, showToast, syncActiveSession, teamMembers, trackerBlockName, trackerBoundBlock, workBlockStore } = w;
+  const { activeBlock, activeTab, assignedTasks, cancelTargetBlock, fetchPlannerData, fetchWorkstationData, hhmm, hideBlockHover, plannerBusy, plannerData, postJSON, projects, rescheduleForm, sessionNotesList, showBlockDrawer, showBlockReschedule, showToast, syncActiveSession, teamMembers, trackerBlockName, trackerBoundBlock, workBlockStore } = w;
 
   // ---- Focus Tasks & Connected Deliverables ----
   const showAttachTasksBox = ref(false);
@@ -244,8 +245,6 @@ export function useWorkstationFocusTasks(w) {
     newTaskPasteText.value = '';
     selectedTaskToAttach.value = '';
     rescheduleForm.value = { work_date: b.work_date || '', start_time: hhmm(b.start_time) || '', end_time: hhmm(b.end_time) || '' };
-    drawerChatInput.value = '';
-    fetchDrawerChat(b.task || b.name);
     showBlockDrawer.value = true;
   };
   // One logged entry's details (the timeline's logged bar). The sheet fetches the rest itself.
@@ -263,7 +262,7 @@ export function useWorkstationFocusTasks(w) {
     const b = activeBlock.value;
     const f = form || rescheduleForm.value;
     if (!b || !f || !f.work_date || !f.start_time || !f.end_time) return false;
-    if (f.end_time <= f.start_time) { showToast('End time must be after the start time', 'danger'); return false; }
+    if (spanMins(f.start_time, f.end_time) <= 0) { showToast('Set an end time that differs from the start', 'danger'); return false; }
     plannerBusy.value = true;
     try {
       await postJSON('reschedule_work_block', {

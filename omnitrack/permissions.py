@@ -305,19 +305,132 @@ def validate_timesheet_trash_event(doc, method=None):
 		)
 
 
+CLIENT_ROLES = {"OmniTrack Client", "Customer"}
+
+
+def is_project_client(user=None):
+	"""A client user: sees the projects shared with them, never the team's internals."""
+	user = user or frappe.session.user
+	return bool(CLIENT_ROLES & set(frappe.get_roles(user))) and not is_omnitrack_manager(user)
+
+
+def _assigned_like(user):
+	"""LIKE pattern for a user id inside a JSON `_assign` list, with `%` and `_` escaped."""
+	quoted = '"' + user.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + '"'
+	return "%" + quoted + "%"
+
+
+def projects_for(user=None, include_assigned=True):
+	"""Which Projects this person may see. None means every project (managers).
+
+	The one answer used by the Projects page, the block permission query and the
+	workstation feed:
+	- the project's owner, and anyone in its Project User table (team and client users alike);
+	- with include_assigned, anyone assigned a Task in it;
+	- a client, through a Contact on the project's Customer.
+	No ERPNext Project means no project to see, never every block that names one.
+	"""
+	user = user or frappe.session.user
+	if not user or user == "Guest":
+		return []
+	if is_omnitrack_manager(user):
+		return None
+	if not frappe.db.exists("DocType", "Project"):
+		return []
+	names = set(frappe.db.sql_list("SELECT name FROM `tabProject` WHERE owner = %s", user))
+	names.update(frappe.db.sql_list(
+		"SELECT parent FROM `tabProject User` WHERE user = %s AND parenttype = 'Project'", user))
+	if include_assigned and frappe.db.exists("DocType", "Task"):
+		names.update(frappe.db.sql_list(
+			"SELECT DISTINCT project FROM `tabTask` WHERE IFNULL(project, '') != '' AND _assign LIKE %s",
+			_assigned_like(user)))
+	if is_project_client(user) and frappe.db.exists("DocType", "Contact"):
+		names.update(frappe.db.sql_list("""
+			SELECT p.name FROM `tabProject` p
+			JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer' AND dl.parenttype = 'Contact'
+			JOIN `tabContact` c ON c.name = dl.parent
+			WHERE c.user = %s""", user))
+	return sorted(names)
+
+
+def _client_deliverables(doctype):
+	"""Clients see only rows marked as a public deliverable; deny when the field does not exist."""
+	if frappe.db.has_column(doctype, "custom_is_public_deliverable"):
+		return f"(`tab{doctype}`.`custom_is_public_deliverable` = 1)"
+	return "1=0"
+
+
+def client_visible_people():
+	"""Whose work a client may see: the people an OmniTrack User Entitlement row marks
+	visible_to_clients, by user or by role, with their Employee ids where HR is installed.
+
+	Nobody until the owner says so, and nobody before the field is migrated in.
+	"""
+	if not frappe.db.has_column("OmniTrack User Entitlement", "visible_to_clients"):
+		return set()
+	rows = frappe.db.sql(
+		"SELECT user, role FROM `tabOmniTrack User Entitlement` WHERE visible_to_clients = 1", as_dict=True)
+	people = {r.user for r in rows if r.user}
+	roles = tuple({r.role for r in rows if r.role})
+	if roles:
+		people.update(frappe.db.sql_list(
+			"SELECT DISTINCT parent FROM `tabHas Role` WHERE parenttype = 'User' AND role IN %s", (roles,)))
+	if people and frappe.db.exists("DocType", "Employee"):
+		people.update(frappe.db.sql_list(
+			"SELECT name FROM `tabEmployee` WHERE user_id IN %s", (tuple(people),)))
+	return people
+
+
+def _shared_tasks_sql():
+	"""Tasks a client may see, as a subquery. No Task DocType or no shared flag: none."""
+	if frappe.db.exists("DocType", "Task") and frappe.db.has_column("Task", "custom_is_public_deliverable"):
+		return "SELECT name FROM `tabTask` WHERE custom_is_public_deliverable = 1"
+	return None
+
+
+def client_block_condition(user):
+	"""What a client sees of a project's plan, as SQL on `tabPlanned Work Block`.
+
+	A block on a project shared with them, by a person visible to clients, and, when the
+	block names a task, only a task shared as a deliverable. Anything else stays hidden.
+	"""
+	projects = projects_for(user, include_assigned=False) or []
+	people = client_visible_people()
+	if not projects or not people:
+		return "1=0"
+	t = "`tabPlanned Work Block`"
+	listed = ", ".join(frappe.db.escape(p) for p in projects)
+	persons = ", ".join(frappe.db.escape(p) for p in sorted(people))
+	shared = _shared_tasks_sql()
+	task_ok = f"IFNULL({t}.`task`, '') = ''" + (f" OR {t}.`task` IN ({shared})" if shared else "")
+	return f"({t}.`project` IN ({listed}) AND {t}.`employee` IN ({persons}) AND ({task_ok}))"  # nosec B608
+
+
+def client_may_see_block(doc, user):
+	"""The same rule as client_block_condition, for one block."""
+	if not doc.get("project") or doc.get("project") not in (projects_for(user, include_assigned=False) or []):
+		return False
+	if doc.get("employee") not in client_visible_people():
+		return False
+	if not doc.get("task"):
+		return True
+	return bool(_shared_tasks_sql()) and bool(frappe.db.get_value("Task", doc.get("task"), "custom_is_public_deliverable"))
+
+
 def get_task_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
 	if is_omnitrack_manager(user):
 		return ""
-	
+
 	roles = frappe.get_roles(user)
 	if "OmniTrack Client" in roles:
-		return "(`tabTask`.`custom_is_public_deliverable` = 1)"
-	
-	if "OmniTrack User" in roles and not is_omnitrack_manager(user):
-		return f"(`tabTask`._assign LIKE '%{user}%' OR `tabTask`.owner = '{user}')"
-	
+		return _client_deliverables("Task")
+
+	if "OmniTrack User" in roles:
+		esc_user = frappe.db.escape(user)
+		return f"(`tabTask`._assign LIKE {frappe.db.escape(_assigned_like(user))} OR `tabTask`.owner = {esc_user})"
+
 	return ""
 
 
@@ -326,14 +439,15 @@ def get_todo_permission_query_conditions(user=None):
 		user = frappe.session.user
 	if is_omnitrack_manager(user):
 		return ""
-	
+
 	roles = frappe.get_roles(user)
 	if "OmniTrack Client" in roles:
-		return "(`tabToDo`.`custom_is_public_deliverable` = 1)"
-	
-	if "OmniTrack User" in roles and not is_omnitrack_manager(user):
-		return f"(`tabToDo`.allocated_to = '{user}' OR `tabToDo`.owner = '{user}')"
-	
+		return _client_deliverables("ToDo")
+
+	if "OmniTrack User" in roles:
+		esc_user = frappe.db.escape(user)
+		return f"(`tabToDo`.allocated_to = {esc_user} OR `tabToDo`.owner = {esc_user})"
+
 	return ""
 
 
@@ -344,35 +458,19 @@ def get_work_block_permission_query_conditions(user=None):
 		return ""
 	
 	esc_user = frappe.db.escape(user)
-	roles = frappe.get_roles(user)
 	conditions = [f"(`tabPlanned Work Block`.`employee` = {esc_user} OR `tabPlanned Work Block`.owner = {esc_user})"]
 
-	# 1. Project Team Members & Project Managers
-	if frappe.db.exists("DocType", "Project"):
-		if frappe.db.exists("DocType", "Project User"):
-			conditions.append(f"""`tabPlanned Work Block`.`project` IN (
-				SELECT parent FROM `tabProject User` WHERE `user` = {esc_user}
-				UNION
-				SELECT name FROM `tabProject` WHERE `owner` = {esc_user}
-			)""")  # nosec B608
-		else:
-			conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `owner` = {esc_user})")  # nosec B608
+	# A client sees only the people and tasks shared with clients
+	if is_project_client(user):
+		conditions.append(client_block_condition(user))
+		return " OR ".join(conditions)
 
-	# 2. Client Visibility (Project Customer)
-	if ("OmniTrack Client" in roles or "Customer" in roles):
-		if frappe.db.exists("DocType", "Project"):
-			cust_conditions = []
-			if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
-				cust_conditions.append(f"""`tabPlanned Work Block`.`project` IN (
-					SELECT p.name FROM `tabProject` p
-					JOIN `tabDynamic Link` dl ON dl.link_name = p.customer AND dl.link_doctype = 'Customer'
-					JOIN `tabContact` c ON c.name = dl.parent
-					WHERE c.user = {esc_user}
-				)""")  # nosec B608
-			cust_conditions.append(f"`tabPlanned Work Block`.`project` IN (SELECT name FROM `tabProject` WHERE `customer` = {esc_user})")  # nosec B608
-			conditions.extend(cust_conditions)
-		else:
-			conditions.append("(`tabPlanned Work Block`.`project` IS NOT NULL AND `tabPlanned Work Block`.`project` != '')")
+	# Project members see the project's plan. Being assigned one task is not
+	# membership here: it does not open everyone's blocks on that project.
+	projects = projects_for(user, include_assigned=False)
+	if projects:
+		listed = ", ".join(frappe.db.escape(p) for p in projects)
+		conditions.append(f"`tabPlanned Work Block`.`project` IN ({listed})")  # nosec B608
 
 	return " OR ".join(conditions)
 
@@ -386,32 +484,7 @@ def has_work_block_permission(doc, ptype="read", user=None):
 	if doc.employee == user or doc.owner == user:
 		return True
 
-	roles = frappe.get_roles(user)
-
-	# Project Team Member or Project Manager
-	if doc.project and frappe.db.exists("DocType", "Project"):
-		proj_owner = frappe.db.get_value("Project", doc.project, "owner")
-		if proj_owner == user:
-			return True
-		if frappe.db.exists("DocType", "Project User"):
-			if frappe.db.exists("Project User", {"parent": doc.project, "user": user}):
-				return True
-
-	# Client Visibility
-	if doc.project and ("OmniTrack Client" in roles or "Customer" in roles):
-		if frappe.db.exists("DocType", "Project"):
-			proj_cust = frappe.db.get_value("Project", doc.project, "customer")
-			if proj_cust == user:
-				return True
-			if frappe.db.exists("DocType", "Contact") and frappe.db.exists("DocType", "Dynamic Link"):
-				is_contact = frappe.db.sql("""
-					SELECT c.name FROM `tabContact` c
-					JOIN `tabDynamic Link` dl ON dl.parent = c.name
-					WHERE dl.link_doctype = 'Customer' AND dl.link_name = %s AND c.user = %s
-				""", (proj_cust, user))
-				if is_contact:
-					return True
-		else:
-			return True
-
-	return False
+	# Same rule as the list query
+	if is_project_client(user):
+		return client_may_see_block(doc, user)
+	return bool(doc.project) and doc.project in (projects_for(user, include_assigned=False) or [])

@@ -1,5 +1,6 @@
 import * as Vue from "vue";
 import { toKind } from "../utils/activity.js";
+import { noteHeading } from "../utils/wrapNote.js";
 import { TIMELINE_ZOOM_OPTIONS, defaultTimelineZoom } from "../utils/timelineZoom.js";
 import { countedHours } from "../utils/countedHours.js";
 const { ref, computed, watch, nextTick, onMounted } = Vue;
@@ -107,10 +108,12 @@ export function useWorkstationTimeline({
         // nowMinute, not new Date(): a computed only re-runs when a ref it reads changes,
         // so the bar froze while the now line kept moving.
         const ee = Math.max(ss + 1, nowMinute.value);
+        // Named like the planner's live block: the notes' first line that is not a ticked-off task
+        const heading = noteHeading(trackerNotes.value) || 'Live session';
         const runningBlock = blocks.find(b => b.name === trackerBlockName.value) || {
           name: trackerBlockName.value || 'live_running_session',
-          work_item_label: trackerNotes.value || 'Active Work Session',
-          task_subject: trackerNotes.value || 'Active Work Session',
+          work_item_label: heading,
+          task_subject: heading,
           project: selectedProject.value || '',
           task_nature: toKind(selectedNature.value)
         };
@@ -121,7 +124,7 @@ export function useWorkstationTimeline({
           to_time: _minToHHMM(ee),
           block: runningBlock,
           hours: (ee - ss) / 60,
-          notes: (trackerNotes.value || 'Active Work') + ' (Recording...)',
+          notes: trackerNotes.value || '',
           is_live_active: true
         });
       }

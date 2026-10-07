@@ -500,6 +500,21 @@ too, because `<html>` is this page's scrolling element.
 Still open: the work-block drawer (`showBlockDrawer`) is its own `role="dialog"`
 and does not go through `FDialog` — it still has no trap or scroll lock.
 
+### The page froze after Stop in the 30-minute reminder (fixed 2026-10-07)
+
+Not specific to Stop: closing any frappe-ui dialog left `body` at
+`overflow:hidden`. Our dialog watcher (`useWorkstationEod.js`) and the session
+popup watcher (`useWorkstationPickers.js`) each wrote `hidden` on both `<html>`
+and `<body>`. Reka's own lock saved that `hidden` as the body's original and
+restored it after our watchers had cleared it. Reproduced in memory, by
+toggling `showInactivityModal`/`showEmptyStopModal`, without stopping a session.
+
+Fixed at one choke point: `src/utils/scrollLock.js` locks `<html>` only, counted
+per owner, so the dialogs closing no longer unlock the page under the open
+session popup either. Guard: `scripts/check_scroll_lock.mjs` (in `npm test`) plus
+5 mutants. The old Test 23 assertion, which *required* the body write, was
+replaced. A tab already stuck from before needs one reload.
+
 ## Domain model written down (`docs/DOMAIN_MODEL.md`)
 
 Project / Task / Planned Work Block / Work Session were being used
@@ -668,13 +683,16 @@ Phase 0 → Phase 1 (dashboard first, as proof) → Phase 2 splits → Phase 3 �
 - Fixed: opening `#/planner` directly (reload, bookmark) never fetched planner data, because `watch(activeTab)` only fires on change. It now also fetches in `onMounted`.
 - Fixed: header tooltips were long sentences that repeated the button text. Tooltips are now a few words plus the shortcut, and "Alerts blocked" moved into the app menu.
 
-### Dummy / test data on ommnomi.local (open — needs the owner's go-ahead)
-- About 100 Planned Work Blocks on ommnomi.local come from test runs:
-  - employees `test_partner@ommnomi.local` and `test1@example.com`
-  - labels such as "TDD Immutability Test Deliverables…", "Test block for sync mode Never" and "Collaborative Sprint"
-  - Administrator blocks with notes like "Ad-hoc debug punch"
-- About 255 test ToDos ("test doctype", "sanity check from console", "Draft Q4 logistics SOP", "Review cold-chain telemetry API").
-- A backup was taken before any cleanup: `sites/ommnomi.local/private/backups/20261006_013326-ommnomi_local-database.sql.gz`. The cleanup has NOT run.
+### Dummy / test data on ommnomi.local
+- Done (2026-10-07, run with a one-off bench-folder script, `cleanup_ommnomi_test_data.py`, removed afterwards): deleted 147 test Planned Work Blocks and 255 test ToDos. 134 blocks and 11 ToDos remain. The deleted items:
+  - every block of `test_partner@ommnomi.local` and `test1@example.com`
+  - "TDD Immutability Test Deliverables…", "Test block for sync mode Never" and "Collaborative Sprint" blocks
+  - Administrator blocks with "Ad-hoc debug punch" notes
+  - ToDos such as "test doctype", "sanity check from console", "Draft Q4 logistics SOP" and "Review cold-chain telemetry API"
+
+  The owner's real block PWB-2026-00320 was kept. On 2026-10-07 the owner reverted its approval (made at 2026-10-06 20:56 as Administrator during testing) back to Draft. Its logged 1.44h is unchanged, and Logged shows it as "Awaiting approval". Backup taken before: `sites/ommnomi.local/private/backups/20261006_013326-ommnomi_local-database.sql.gz`.
+- The "Collaborative Sprint" pairs point at each other through `paired_block`, so Frappe refused to delete either half. The script clears `paired_block` inside the same transaction first.
+- Done (2026-10-07, second pass, on the owner's go-ahead): deleted six never-worked Administrator plans booked on the fake ToDos: PWB-2026-00007 to 00011 and 00318 ("Draft Q4 logistics SOP", "Review cold-chain telemetry API"). Also deleted 28 OmniTrack Work Session rows whose blocks (PWB-2026-00194 to 00222) an old test had removed with a raw delete on 2026-09-25. Now 128 blocks and 11 ToDos remain. No child rows are orphaned and no block points at a missing ToDo. Logged for this week went from 8.0h to 2.5h.
 - Root cause to fix: these tests still write to the shared site and leave data behind. `tests/test_fac.py`, `test_collaborative_pairing.py`, and tests using `test1@example.com` (`test_timesheet_capture_perfection`, `test_block_notifications`, `test_temporal_governance`, `test_planned_work_block`) need tearDown cleanup with no commits, and should run on a throwaway site.
 - Duplicate real ToDos, probably a double import ("invite all users of otc", "review data mapping sheet", "create the articulation A12345"). Owner to decide.
 - Hardcoded fake people in code:
@@ -784,10 +802,286 @@ Phase 0 → Phase 1 (dashboard first, as proof) → Phase 2 splits → Phase 3 �
 - Open (owner's go-ahead): `src/components/dialogs/TaskWorkflowModal.vue` is no longer imported anywhere and can be deleted.
 - Corrected: `SwitchTaskModal.vue` is reachable (the switch button on the "Happening now" card) and `selectedDashboardDateLabel` names the timeline for screen readers. Neither is dead. The `pushManager.subscribe` call has no `applicationServerKey`, so Chrome refuses it. It stays until the phone-push decision below.
 - Verified (2026-10-06): the entry sheet closes on Escape and on a scrim click, and both hand focus back to the logged bar that opened it.
-- Open: the mutation suite restarts the dev server whenever it mutates a Python file, so pages loaded during a run come up unstyled (seen 2026-10-06 22:00). Let the checks read a mutated copy (for example from a path in an environment variable) instead of rewriting the served file.
-- Open: `omnitrack.bundle.css` is 4.7 MB and takes about 5 s from the dev server. Purge unused Tailwind and frappe-ui classes before production.
+- Done: the mutation suite mutates and tests a temp copy of the app and refuses any mutant aimed at a served file. Verified: 180 of 180 killed, web PIDs unchanged, served files' mtimes unchanged. Before this, every Python mutant restarted the dev server, and the run inside the pre-push hook (2026-10-06 22:08) left the web process truncating every large response (`Errno 9 Bad file descriptor`), so the page stayed bare HTML until a full `bench start` restart (AGENTS.md has the check).
+- Open: `omnitrack.bundle.css` is 4.7 MB. (The "5 s" was macOS mDNS lookup of `.local` in curl, not the transfer, which takes about 10 ms.) Purge unused Tailwind and frappe-ui classes before production.
 - Done: the calendar's approval dot no longer carries a `title` nobody can see; the block's name takes `approvalLabel`. The entry sheet's chip and line come from `approvalState` (with a `short` form for the chip), so the screens use one wording.
 - Done: the entry sheet re-reads only when its own block comes back different from the dashboard feed (`blockStamp`), or when a task opened from it is saved or moved (`onChange`). It used to re-read on every timed refresh.
 - Open: "Upcoming focus blocks" offers Start session on a block that is already Logged (Full). The block sheet says 0h of 1.5h while it lists a session. "Close your day" figures disagree with Today.
-- Open: "Edit entry" and "Add timesheet entry" wording against the vocabulary rule (Work Session, never bare "timesheet").
+- Done: vocabulary. The app no longer says a bare "timesheet": Work Session (one recorded run), block, "Logged time" (the tab and page) or "ERPNext Timesheet" (the billing document). `scripts/check_vocabulary.cjs` fails `npm test` on a bare "timesheet" in any SPA string or template text; three mutants guard it. Mutation suite: 183 of 183 killed.
+- Open: the Python API's messages (`frappe.throw`, `msgprint`) are not scanned for bare "timesheet" yet.
+- Done: the block sheet takes focus when it opens (its Close button) and hands it back to the row that opened it, as the entry sheet does. Before this, Escape left focus on `<body>`. The inline details in the session popup never move focus. Guard in `check_block_reminders.mjs`, three mutants. Verified in the browser on the Oct 5 block in Logged time: Enter opens it with focus on Close, Escape returns focus to the row.
+- Open: Logged time lists tomorrow's planned block as "Not logged". A future block should be left out, or say Planned.
+- Done (verified): the block sheet of a past block (Oct 5) offered Start session. Start session now shows only on today's block (`canStart`). Guarded in `check_dialog_popovers.cjs`, with a mutant.
+- Done (verified): the block sheet's empty line repeated "session". It now reads "Nothing logged yet. Start a session, or add one from More.", and a block that cannot be started says only how to add one.
 - Open: phone push. The page plays a chime, but a closed app gets nothing. That needs FCM (Firebase) through the Frappe push relay, which means a new dependency, so it waits for the owner's decision. Production also needs deploying, the scheduler and the relay enabled.
+
+### Tasks are ERPNext Tasks; tracking serves the Project (2026-10-06, night)
+
+Owner direction, verbatim in substance: the Frappe ToDo is of no use as a task. It has no planned date, no description, no CC and none of what a task needs. Expected hours belong to the ERPNext Project, which holds milestones and the Tasks connected to them. Work tracking is not only time management. It is how the Project is managed better. Recorded in `docs/DOMAIN_MODEL.md` section 3.
+
+- Done (in the working tree, not verified end to end): the bottom bar's "New task" is gone. It only opened the plan dialog under a task's name. Its place is a Tasks page (`src/views/TasksView.vue`, `#/tasks`, Shift+T) for everyone. It groups work into Overdue, Due today, Not planned yet and Planned, with search, a project Combobox, a person Combobox for managers, one tab stop with arrow roving, and the shared task form, plan dialog and start flow. The header menu item now says "Plan a block". Guards are in `check_block_reminders.mjs`, with six mutants.
+- Open, blocked on owner: **install ERPNext** (at least its Projects module) on the bench and on `ommnomi.local`. There is no ERPNext checkout on this machine, and no site has it. Until then the Tasks page can only show ToDos, which is the thing the owner rejected.
+- Open, after ERPNext: rebuild the Tasks page as Project, then milestone, then Task. Each project shows planned and logged hours against `expected_time`, plus percent complete. Each task shows its planned start, due date, description on hover, assignees and dependencies. Drop standalone ToDos from `get_assigned_tasks` (`omnitrack/api/tasks.py`). Keep a ToDo only as the assignment that points at a Task.
+- Open, after ERPNext: "CC" on a task. A Task has no CC field. Candidates are more assignees (`_assign`), the Project's users table (Project User), or Frappe's document follow. Decide with the owner before building.
+- Open, after ERPNext: create a Task (with project, milestone, dates and estimate) from OmniTrack without leaving it. Today the only way in is Desk.
+- Open, after ERPNext: **reassign a Task** from OmniTrack. The owner listed this among the things a ToDo cannot do. Use Frappe's own assignment API (`frappe.desk.form.assign_to`: `add`, `remove`, `close`). It closes the old person's ToDo, opens the new one's, notifies both, and keeps `_assign` on the Task in step. Never write `allocated_to` by hand. Open questions: who may reassign (the manager, the project's users, or the assignee handing work back), and what happens to the old person's future Planned Work Blocks for that task (keep them, move them to the new person, or flag them for re-planning). Logged Work Sessions always stay with whoever did the work.
+- Open: `get_assigned_tasks` runs one `frappe.db.get_value("Project", ...)` per task. Batch it when the Project layer is live.
+- Open: the planner rail (CalendarAssignedTasks) and the dashboard's attention list overlap the Tasks page. They should share one list component.
+- Open: completed tasks are not shown anywhere in the SPA.
+- Open: the bottom bar's active `!text-blue-500` and dark inactive `!text-gray-600` may fail contrast. Measure them.
+
+### Project management basics, all inside OmniTrack (owner, 2026-10-06, night)
+
+Owner direction: everything basic to managing a project well is done here, not in Desk. ERPNext's Projects module is the data layer (Project, Task, Project Template, Project Update, Activity Type). OmniTrack is the place people work in. It never keeps a copy of ERPNext data. Each line says what OmniTrack has today.
+
+| Basic | Native record | OmniTrack today |
+|---|---|---|
+| A list of projects, each with status, dates, % complete and health (on track, at risk, late) | Project | Nothing |
+| Breaking work down: milestone, task, subtask | Task `is_group` / `parent_task` / `is_milestone` | Nothing |
+| A full task: description, planned start, due date, estimate, priority, attachments | Task | Task form edits workflow state only |
+| Assign, reassign, more than one person, followers (CC) | `assign_to`, `_assign`, follow | Assignment comes from Desk only |
+| Dependencies: blocked by, blocking, and a warning when planning ahead of a blocker | Task `depends_on` | Nothing |
+| Planning time against tasks | Planned Work Block | Done: blocks, calendar, plan dialog |
+| Recording work | Work Session | Done: sessions, notes, approval |
+| Estimate against planned against logged, per task and per project | Task `expected_time`, rolled up on Project | Per task only, in the attention list |
+| Workload: each person's planned hours against their week | Planned Work Block per person | Partly: the Team view and adherence figure |
+| Timeline (Gantt) of milestones and tasks | Task dates | Nothing |
+| Discussion on a task or project, with mentions | Comment, Raven | Partly: the Raven drawer on a block |
+| Status updates on a project (what moved, what is stuck) | Project Update | Nothing |
+| Issues and risks tied to the project | Issue (`project`) | Nothing |
+| Reports: time by project, person and week; variance; overdue | Built from the above | Partly: Logged time and the week figures |
+| Starting a project from a template | Project Template | Nothing |
+| Closing out: tasks done, time approved, and billing (ERPNext Timesheet) when it applies | Project, Timesheet | Approval done. Billing waits on ERPNext. |
+
+Order once ERPNext is installed:
+1. Projects page.
+2. The Tasks page by milestone, with the full task form, create, reassign and dependencies.
+3. Estimate against planned against logged.
+4. Workload.
+5. Timeline.
+6. Project updates and issues.
+7. Reports.
+8. Templates.
+
+Each step reuses frappe-ui and the existing roving list, form and plan patterns. Each step gets its guards and mutants.
+
+### Projects page: built on OmniTrack's client and team access (2026-10-06, night)
+
+Owner direction: OmniTrack already lets a client be added as a project user and see that project's data. The Projects page builds on that, and keeps the platform simple, secure and collaborative.
+
+Who sees a project today (`omnitrack/permissions.py`, `api/workstation.py`):
+- Managers (OmniTrack Manager or Admin, System Manager, HR Manager) see every project.
+- The project's owner, and anyone in its **Project User** table, see it. That covers team members and client users alike.
+- A client (OmniTrack Client role) sees a project whose Customer has a Contact linked to their user. Clients see only tasks marked `custom_is_public_deliverable`.
+
+Plan: one function, `projects_for(user)` in `permissions.py`, answers "which projects may this person see". The Projects page, the block permission query and `get_workstation_data` all use it, in place of three hand-copied versions. A client sees status, % complete, milestones, public deliverables, and logged hours where the project allows it (Project User `hide_timesheets`). They never see internal tasks, other clients or anyone's personal week.
+
+Found while reading, and where each stands (2026-10-07):
+- Done (security): the Task and ToDo permission queries escape the user id (`frappe.db.escape`, `%` and `_` escaped in the `_assign` LIKE pattern).
+- Done (bug): the dead `Project.customer = <user id>` branch is gone from the block query and `get_workstation_data`. The Contact join is the one path, inside `projects_for`.
+- Done (security): on a site without ERPNext, a client no longer reads every block that has a project. `projects_for` returns no projects and the query denies.
+- Done (security): the page boot (`www/omnitrack.py`) loaded today's blocks with `get_all`, skipping permissions. The client branch read every block of the day and the fallback read everyone's. Neither result was ever rendered. Removed, together with a second full `get_workstation_data` load that nothing showed.
+- Done (bug): the `"CampusCredit"` fallback for a client with no project is gone. A client with no shared project sees no blocks. The client portal's hard-coded "CampusCredit CATMA" chip and vendor name are gone too. `scripts/check_projects.mjs` fails on any customer name in the code.
+- Done: `projects_for(user)` is the one rule, used by the block query, opening one block, the workstation and the Projects page.
+- **Behaviour change the owner must act on:** the CampusCredit client users now see no blocks until a real Project exists for them. Create the Project (and PROJ-0015, which 20 old blocks name but which does not exist). Then link the client's Contact to the Project's Customer, or add them as a Project User. That is the owner's data to enter.
+- **Owner decision:** a client's block visibility uses `include_assigned=False`. Being assigned one task on a project does not show everyone's blocks on it. Confirm or change.
+- Open: `custom_is_public_deliverable` on Task and ToDo is a custom field that nothing in the app creates. Add it as a fixture or in `install.py`, and give the task form a "Visible to the client" switch. Until then a client sees no tasks (the code denies when the column is missing).
+- Open: `omnitrack/importer.py` still names the company "OmmNoMi Automation LLP" and a cut-off date. It is a one-off import script for this owner's history. Move it out of the shipped app, or read both values from settings.
+- Open: `useWorkstationIdentity.js` defaults `selectedEmployee` to the literal name "Hardik Sharma" when the boot has no full name. Use the user id instead.
+
+Bench note: `bench get-app erpnext` (2026-10-06) rewrote `sites/apps.txt` from the `apps/` folder and added `omniservey`, which is in `apps/` but not installed. Every bench command then failed importing it, and so did the ERPNext asset build. The owner approved removing the line, and it is done.
+
+### Projects page shipped (2026-10-07)
+
+`src/views/ProjectsView.vue` and `omnitrack/api/projects.py`. It appears in the bottom bar only when the site has the Project DocType (`has_projects` in the boot).
+- The list shows each project's title and one meta line: customer, due date and open tasks. A Late or At risk badge sits beside it, with the reason on hover and for screen readers. Percent complete is a labelled progressbar. Estimate, planned and logged hours show on hover.
+- Status tabs: Open (default), On hold, Completed, All. They share the Material tab look with the session pane through `src/utils/materialTab.js`. The count shows only on the selected tab, so four tabs fit at 375px.
+- The order is: Late, then At risk, then the nearest end date.
+- Opening a project shows its tasks in outline order, each subtask under its group task (milestone). Overdue tasks are marked. A task opens the one task form. A client reads the tasks but cannot open the form.
+- Keyboard: the list, the task list and the tab bar are each one tab stop. Arrows, Home and End move within them.
+- Clients see only shared deliverables and never see planned hours. Logged hours are hidden where their Project User row has `hide_timesheets`.
+- Guards: `scripts/check_projects.mjs` (in `npm test`) plus 13 mutants.
+- The bottom bar's 10px labels were blue-500 on white (3.7:1) and gray-600 on the dark bar (about 2.4:1). They are now blue-700/blue-300 and gray-700/gray-300.
+- Verified in the browser at r=145 to r=148. I checked the empty state on the real site. Sample rows and tasks were injected in memory only, and nothing was written. I checked keyboard roving, the dialog, and mobile 375px in dark mode.
+
+Follow-ups:
+- The bottom bar now has six destinations plus the Log button at 375px, and each still fits (43 to 61px). Material recommends three to five. When the Tasks page becomes Project, then milestone, then Task, consider folding Tasks into Projects for teams that use Projects.
+- A client's home is still the old "Project Pulse" portal (`DashboardClientPortal.vue`). It has uppercase micro-labels, gray-600 text on dark, and a pulsing dot. Make the Projects page the client's home and retire the portal.
+- Create a project and a task from OmniTrack. Today they are created in Desk.
+- A project-level discussion (Comment or Raven), and Project Updates.
+- The CSS bundle is 4.7 MB (gzip 3.4 MB). Find what Tailwind is emitting (a safelist or a wide content glob) and cut it.
+
+### Fixed: opening the app after midnight silently ended an evening session (found and fixed 2026-10-07)
+
+`restoreActiveSession` (`useWorkstationSessionSync.js`) evicts a session as a "zombie" when it started on an earlier local day and has run for 6 hours or more. It also evicts any session over 10 hours. It does this with no question and no toast: it clears the local copy and posts `sync_active_session(null)`, which deletes the stored session on the server for every device.
+
+What happened: the owner's session started 2026-10-06 at 20:39. It had no block and one ToDo ("Manage icons and add missing home/dashboard file to FAH workspace here"). At 04:29 I reloaded the page to check the Projects page. The rule fired, and the session's start time is gone from the server. Nothing had been logged from it. The ~7.8 hours have to be logged by hand if they were real work.
+
+Fix:
+- Never discard without asking. Treat a long or overnight session like the idle prompt: "This session has run since 20:39 yesterday. Log it up to the last activity, keep it running, or discard it." Default to the last activity, not the full span.
+- Never clear the server copy from a page load. Only an explicit person's choice may do that.
+- Guard and mutant: `restoreActiveSession` contains no `sync_active_session` call with `null` unless that call follows a choice the person made.
+- Note, corrected: `lastActivityTime` is written into the stored copy on every session sync, which happens when a note or task changes. That session had no edits, so its last activity was its start. "Last activity" is therefore the last note, which is the wording the dialog now uses.
+
+Shipped (owner agreed: "ask instead of evicting"):
+- `restoreActiveSession` has no age limit and never calls `sync_active_session`. A long or overnight session is restored, and the still-working dialog offers: stop at the last note, keep it running, or discard it.
+- `get_active_session` (`api/stopwatch.py`) only reads. It no longer deletes a day-old session.
+- The dialog names the day ("21:05 yesterday") for both the last-note time and the Stop at time (`clockLabel` in `useWorkstationSessionClock.js`).
+- Guards: `scripts/check_session_restore.mjs` plus 5 mutants. `omnitrack/tests/test_stopwatch.py` covers the read-only rule; run it on a throwaway site, never on ommnomi.local.
+- Not yet checked in the browser with a real overnight session, because starting one to test is off limits on the owner's site. Check it the next time a session runs past midnight.
+
+## One app, configured per customer (owner direction, 2026-10-07)
+
+Owner: "make OmniTrack one simple software for managing the full team, for teams of different size and different nature, based on the configuration of this app for each customer."
+
+Audit of today's settings:
+- OmniTrack Settings has 46 fields. 15 are never read by any code.
+- The 13 `enable_*` flags are read only by `get_system_status` (`api/analytics.py`), which the app never calls. They switch nothing. AGENTS.md said "keep all features toggleable via OmniTrack Settings", and the result is switches that do nothing.
+- Other configuration DocTypes: OmniTrack Workspace (linked customer, branding, `allow_*` flags), OmniTrack User Entitlement, OmniTrack Project Policy.
+
+Proposal: a few plain choices, each of which changes what people see.
+1. **How work is organised:** Projects and tasks, or Tasks only, or Shifts. This picks the pages in the bar and the words used.
+2. **Who reviews logged time:** no one, the person's manager, or the project manager.
+3. **Do clients see their projects:** off, or on (Project Users and the Customer's contacts, as `projects_for` defines).
+4. **Where hours go:** OmniTrack only, or OmniTrack and ERPNext Timesheet.
+
+Team size is not a setting. The app adapts to the team:
+- People pickers appear only for managers.
+- The project filter appears only when there are more than two projects.
+- Team is for managers only.
+- Projects appears only on a site that has Projects.
+
+Next steps:
+- Build the four choices on OmniTrack Settings. This is a schema change, so it needs a migrate the owner runs.
+- Remove or wire the 15 unread fields and the 13 decorative flags.
+- Add a guard: every OmniTrack Settings field is read somewhere in the code.
+- Employee goals: Frappe HR is installed on ommnomi.local since 2026-10-07 (owner: "yes install"), so Employee Goal and Appraisal now exist. Show a person's goals beside their work only when the DocType exists.
+- Done: the owner completed ERPNext's setup wizard on ommnomi.local, with its demo data.
+
+## Clients see the people and tasks you choose (2026-10-07)
+
+Owner: "it depends on the task and person visibility to the client."
+
+The rule (`permissions.client_block_condition` / `client_may_see_block`): a client sees a Planned Work Block when all three hold.
+1. The block's project is shared with them (`projects_for`, with `include_assigned=False`).
+2. The block's person is visible to clients: an OmniTrack User Entitlement row with **Visible to Clients** names their user or one of their roles.
+3. If the block names a task, that task is **Shared with Client** (`custom_is_public_deliverable`). A block with no task follows rules 1 and 2.
+
+On a shared task, a client sees only the visible people among its assignees.
+
+- Secure default: nobody is visible until the owner turns it on, so today clients see no project blocks. The field needs `bench --site ommnomi.local migrate` (the owner runs it).
+- `install.py` now creates the Task and ToDo "Shared with Client" field (it was referenced but never created), only where the DocType exists.
+- Guards: `scripts/check_projects.mjs` plus 9 mutants.
+- Simulated read-only before the migrate: with one person made visible, the CampusCredit client would see 9 blocks, all without a task.
+- Later: a per-project override ("visible on this project only"). Today visibility is per person across every project they share with a client.
+
+CampusCredit (owner: "Create it") exists as a Customer and Project, with its client users as Project Users. `welcome_email_sent=1` was set on each row so ERPNext sent no emails.
+
+Bug fixed: the project detail returned 417 ("Invalid field format in Order By"). Frappe 16 refuses an expression such as `exp_end_date is null` in `order_by`, so tasks are now sorted in Python (soonest due first, undated last). `check_projects.mjs` fails on any `order_by` expression in the app.
+
+## Works without ERPNext and Frappe HR (2026-10-07)
+
+Owner: "build OmniTrack so it also works independent of ERPNext and Frappe HR."
+
+An audit of every reference to an ERPNext or Frappe HR DocType found these, now fixed:
+- Saving a Planned Work Block, an OmniTrack Workspace or a Remote Connection failed on a plain Frappe site, because their Project, Task, Timesheet and Customer links point at DocTypes that are not there. Frappe checks links before `validate`, so the controller cannot skip them. A mixin (`omnitrack/utils/optional_links.py`) keeps such a value as plain text; every other link is still checked.
+- **Security:** the sync receiver (`omnitrack.sync.receive_sync_event`) is open to guests and verified nothing, so anyone could create or change Tasks. It now refuses any payload that an Active Remote Connection's HMAC secret did not sign (constant-time compare). The sender no longer falls back to a built-in `"default_secret"`. With no secret set, it stops and writes the reason on the connection.
+- **Security:** `synthesize_employee_attendance` was whitelisted for any signed-in user, and it writes Attendance for anyone. It now needs an OmniTrack Manager. The scheduler's internal calls use `_synthesize`.
+- The synthesizer, Task workflow actions and the Desk workspace content now check that Employee, Task, Employee Checkin and Attendance exist before using them.
+- Guards: `scripts/check_optional_apps.mjs` plus 10 mutants.
+
+Still open:
+- OmniTrack Attendance Synthesizer Log (`employee`), OmniTrack Project Policy (`project`) and OmniTrack Shift Split Assignment (`employee`) have required links to Employee or Project. On a plain Frappe site they cannot be saved. Hide them from the workspace there, or link the person by User.
+- `omnitrack/api/__init__.py` holds two hooked functions (`mark_past_unworked_blocks_missed`, `validate_task_variance`) that were not audited, because reading that file needs the owner's permission.
+- Test on a real Frappe-only site: create a fresh site with only frappe and omnitrack, then book, log and approve a block.
+
+## Activity on every details panel; Raven only for projects (2026-10-07)
+
+Owner: a work block is not a Raven channel. Raven belongs to the Project, its Milestones and its ERPNext Tasks. Everything else talks through Frappe's own comments, shown as Activity inside OmniTrack, so nobody has to open Desk.
+
+- Done: `DocActivity` (`src/components/common/DocActivity.vue`, server `omnitrack/api/activity.py`) on the Task, To-Do, Work Block and Work Session panels. A Work Session is a row of its block, so its Activity is the block's, and the panel says so.
+- Done: the box to comment is on top and the list reads newest first (owner: "reverse chronological"). The server still sends oldest first; the panel reverses it.
+- Fixed: "Youadded a task". Vue drops a space at the very edge of a `<template>`, so the name ran into the text. `check_doc_activity.mjs` now fails on that pattern in any `.vue` file.
+- Fixed: "added a task (2)" now reads "added 2 tasks". The same event by the same person within 10 minutes is one line ("updated a task, twice"), at its latest time.
+- Done: Raven is gone from blocks, sessions and To-Dos (client and server). `raven_bridge` makes channels for Tasks only, and Desk's timeline pulls Raven for Tasks only. Existing block and To-Do channels stay in Raven but are no longer opened from OmniTrack.
+- Guards: `scripts/check_doc_activity.mjs` plus 30 mutants.
+
+Open:
+- Raven for a Project and its Milestones (a channel per project, opened from the Projects page). Not built yet.
+- Activity does not update live. It refreshes when the panel opens or the block changes. Use `frappe.publish_realtime` on a new Comment.
+- @mentions in a comment, and editing or deleting your own comment.
+- Communications (emails) on a Task do not show in Activity.
+- A session's recap could be posted to its block as an Info comment, so Desk shows it too.
+- Name the task in a block's task events ("added Campus Credit: Create new …") instead of "added a task". Version rows carry the row's title.
+- Security: `raven_bridge` writes some message content without escaping it, and `RavenCollaborationDrawer` renders message HTML. Review both for XSS.
+- The block PWB-2026-00320's Version says Approved while the screen showed "Awaiting approval". Find which feed is stale.
+- "planned(−0.1h)" on a block has no space before the bracket.
+- The first `get_task_details` call after a restart is slow (cold cache).
+
+## A work session is time already worked (2026-10-07)
+
+Owner: "how can we know and charge for the timesheet in future which is not completed yet". And: adding a session must open the Work Session sheet, not a centred dialog, so people know it is a timesheet session.
+
+- Done: one sheet for adding, editing, logging a free window and stopping the running session (`TimesheetEntryDialog.vue`). It slides in from the right, with the Work Session kind label, like a logged entry's sheet. Esc closes it (an open list takes its own Escape first), Tab stays inside, and focus goes back to what opened it.
+- Done: an entry that ends after now cannot be saved. The sheet says why ("start a session when the work begins"), the save path refuses it, and the server refuses it too (`_require_worked` in `log_work_session` and `update_work_session`, 5 minutes of slack for clocks that differ). Past midnight counts as the next day.
+- Done: "Edit block" and "Add work session" had the same pencil icon. Add work session uses the Work Session icon. `scripts/check_menu_icons.mjs` fails when two items in one file's menus share an icon.
+- Guards: `scripts/check_entry_is_worked.mjs` plus 15 mutants.
+
+Superseded later that day: owner, on the sheet, "this is not the main component for the timesheet creation which the user recognizes, which is used in the timer". Adding or editing a session is now the timer's session box (see "Adding a work session is the timer's box" below). The sheet is left only for Adjust on the running session.
+
+Open:
+- Fixed: `saveEditSession` refused an overnight span (`to <= from`), while the sheet accepted one. Both measure with `spanMins` now.
+- The Away icon differs: sun in `DetailKind` and the dashboard, umbrella in `PlanWorkBlockDialog`. The sun is also the Today stat's icon. Pick one for Away.
+- Not yet checked in the browser: the owner was working in the browser pane, with a session running, when this was built.
+
+## The hover card reads like a card (2026-10-07)
+
+Owner, on the logged bar's hover card: "see how bad it is lookign". Its title was the session's whole notes (the block name, then every "Completed: …" step) in bold, in a narrow card, with "0.03h logged".
+
+- Done: `BlockHoverCard.vue` is a Material card: the time and one status chip, the block's name once, then up to three lines of what got done, then the project and review state. A ticked-off task shows a check; the block's own task reads "Completed" instead of its name again. "2m logged", not "0.03h logged". 18rem wide.
+- Done: the logged bar on the dashboard timeline is named like its block (not by its notes), its screen-reader name says "2m", and the "REC •" tag is gone (the dot and the Live chip say it runs). The live bar no longer carries "(Recording...)" in its notes.
+- Done: `wrapNote.noteLines` and `wrapNote.noteHeading` read notes back the way `composeWrapNote` writes them. The planner's live block uses `noteHeading` too.
+- Guards: `check_block_reminders.mjs`, `check_dialog_popovers.cjs`, 29 mutants.
+
+Open:
+- Notes are still parsed in two more places, each its own way: `BlockDetailDrawer.notes` and `useWorkstationSessionModals.notesWithoutLines`. Move both onto `wrapNote.noteLines`.
+- Done: the hover card is a plain tooltip. The "View details" button is gone (a keyboard user could never reach it), so nothing in the card takes focus; the block itself opens its details on click or Enter. While the card shows, the block carries `aria-describedby="block-hover-card"`, Escape dismisses only the card (a capture listener that exists only while the card is up), and the pointer can still rest on it (WCAG 1.4.13). The ERPNext Timesheet line now says "ERPNext Timesheet {ref}" instead of a bare reference. Test 35 plus 7 mutants guard it.
+- `bench get-app` (15:44 today, `taniya_dsilva`) put `omniservey` back into `sites/apps.txt` and every bench command failed. Removed again. Happens after every get-app.
+
+## Adding a work session is the timer's box (2026-10-07, evening)
+
+Owner: the add-session sheet "is not the main component … used in the timer, so it doesn't feel like the work session at all"; then, on desktop, "this page doesn't look that good"; after the redesign, "this one looks much better".
+
+- Done: Add and Edit work session open `WorkSessionEntry.vue`, which hosts `SessionBox mode="entry"`: the timer's own popup frame, with "When you worked" (day, from–to, length) where the clock sits, Cancel and Add session where Discard, Adjust and Stop sit, a blue wash instead of the live red. The Log is the same lines and "What did you get done?" field; a session needs at least one line, as when it is stopped. On a block, its tasks list under the Log; never the running session's tasks. A free entry asks for its own Project and Activity and files under them, never the running session's.
+- Done: on desktop the Log heading reads "Log" (with a count only once there are lines), and an empty Log says "A session needs at least one line to save." under the field instead of a blank panel.
+- Done: Cmd/Ctrl+Enter saves, Esc closes (an open list takes its Escape first), Tab stays inside, focus starts in the Log's field and goes back to the menu's button. The app's shortcuts (Cmd+S stops the running session) no longer reach past the entry.
+- Fixed: a disabled solid button (Add session, the Log's Add) was pale blue under white text, about 1.6:1. It now greys out with dark text (`DISABLED_SOLID` in `utils/sessionFrame.js`).
+- Fixed: editing a session that ran past midnight was refused as backwards (`saveEditSession` now uses `spanMins`).
+- Fixed: a component that asked the workstation context for a name App.vue did not provide rendered empty in production with no visible error. Guarded, and written up in AGENTS.md.
+- Guards: `check_entry_is_worked.mjs`, `check_dialog_popovers.cjs` (12c, 13), 28 retargeted or new mutants.
+
+Open:
+- The running session's Adjust is still the right-hand sheet (`TimesheetEntryDialog`). Move it into the session box too (adjust in place), then delete the sheet's add, edit and free code.
+- The app's shortcuts still reach past the Adjust sheet (Cmd+S behind it stops the session). Fixed in the entry only.
+- A free entry could take tasks too (pick existing ones, as a block does).
+- `BlockDetailDrawer` shows a session's raw notes ("• Completed: …"). Read them with `wrapNote.noteLines`.
+
+## Dark mode looked broken everywhere (fixed 2026-10-07)
+
+Owner: "on dark mode the whole app looks very bad … this x button is not at all visible, and a few things are very highlighted, buttons don't look like they are clickable at all".
+
+- Fixed: the app set only `.dark`. frappe-ui's colour tokens switch on `data-theme="dark"`, so every frappe-ui Button, close x and input stayed on light tokens over the dark page. `applyTheme` and the first-paint script now set both. `check_contrast_tokens.cjs` plus 2 mutants.
+
+Open:
+- In dark mode, check the "All" filter pill in "Needs your attention" (looked too bright in a screenshot), the "3h" range pill, and the faint "Day at a glance" hour labels (6p, 7p).
+- Walk every page in dark mode (Calendar, Tasks, Team, Projects, Logged time, each drawer).
+
+## The bottom bar holds only the daily pages (2026-10-07, evening)
+
+Owner: "adding the Project and Logged option to the bottom bar has cluttered the UI, so put it behind the top three lines".
+
+- Done: the bottom bar is Dashboard, Calendar, the session button, Tasks and Team (managers). Projects (only on a site that has ERPNext Projects) and Logged time open from the header's menu, first, set apart from its actions. Arrow keys and Enter work; focus goes back to the Menu button.
+- Guards: `check_projects.mjs` (the menu offers both, Projects only with Projects, neither is back in the bar) plus 3 mutants.
+
+Open:
+- The header does not say which page is open once it is a menu page (Projects, Logged time). Show the page's name, or mark the current item in the menu.

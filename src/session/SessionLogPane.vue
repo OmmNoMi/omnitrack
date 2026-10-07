@@ -1,27 +1,32 @@
 <template>
-  <div class="lg:col-span-7 flex flex-col min-h-[16rem]">
-    <div class="flex-1 min-h-0 flex flex-col">
+  <!-- An entry is not stretched to the controls' height: its Log is as tall as its lines, and
+       the block's tasks follow it, so the popup has no empty column on a wide screen -->
+  <div class="lg:col-span-7 flex flex-col" :class="isEntry ? 'gap-5' : 'min-h-[16rem]'">
+    <div class="min-h-0 flex flex-col" :class="isEntry ? '' : 'flex-1'">
+      <!-- An entry has the Log only: a heading, as the Tasks below it have, not a bar of one tab -->
+      <h3 v-if="isEntry" :id="idp + 'tab-session-notes'" class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Log<template v-if="(sessionNotesList || []).length"> ({{ sessionNotesList.length }})</template></h3>
       <!-- Log / Details / Chat: one WAI-ARIA tab group with arrow-key navigation. Material
            primary tabs: the whole tab is the target, hover and focus tint it, keyboard focus
            draws an inset ring that the bar cannot clip, and the active tab carries the bar. -->
-      <div class="mb-3 border-b border-gray-200 dark:border-gray-800">
+      <div v-else class="mb-3 border-b border-gray-200 dark:border-gray-800">
         <div role="tablist" aria-label="Session pane views" class="flex items-end gap-1" @keydown="onPaneTabKeydown">
           <button
             ref="tabNotesRef"
             type="button"
             role="tab"
-            id="tab-session-notes"
-            aria-controls="panel-session-notes"
+            :id="idp + 'tab-session-notes'"
+            :aria-controls="idp + 'panel-session-notes'"
             :aria-selected="paneTab === 'notes'"
             :tabindex="paneTab === 'notes' ? 0 : -1"
             @click="selectPaneTab('notes')"
             :class="[TAB, tabTone('notes')]"
           >
             Log
-            <span v-if="sessionNotesList && sessionNotesList.length" :class="[COUNT, paneTab === 'notes' ? 'bg-blue-600 text-white dark:bg-blue-400 dark:text-gray-950' : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100']">{{ sessionNotesList.length }}</span>
+            <span v-if="sessionNotesList && sessionNotesList.length" :class="[COUNT, countTone(paneTab === 'notes')]">{{ sessionNotesList.length }}</span>
             <span v-if="paneTab === 'notes'" :class="INDICATOR" aria-hidden="true"></span>
           </button>
           <button
+            v-if="!isEntry"
             ref="tabDetailsRef"
             type="button"
             role="tab"
@@ -36,7 +41,7 @@
             <span v-if="paneTab === 'details'" :class="INDICATOR" aria-hidden="true"></span>
           </button>
           <button
-            v-if="isRavenAvailable"
+            v-if="isRavenAvailable && !isEntry"
             ref="tabChatRef"
             type="button"
             role="tab"
@@ -57,13 +62,14 @@
       <!-- TAB 1: SESSION LOG -->
       <div
         v-if="paneTab === 'notes'"
-        id="panel-session-notes"
-        role="tabpanel"
-        aria-labelledby="tab-session-notes"
-        class="flex-1 flex flex-col min-h-0 justify-between"
+        :id="idp + 'panel-session-notes'"
+        :role="isEntry ? 'group' : 'tabpanel'"
+        :aria-labelledby="idp + 'tab-session-notes'"
+        class="flex flex-col min-h-0 justify-between"
+        :class="isEntry ? '' : 'flex-1'"
       >
         <div
-          v-if="!sessionNotesList || sessionNotesList.length === 0"
+          v-if="!isEntry && (!sessionNotesList || sessionNotesList.length === 0)"
           class="flex-1 flex flex-col items-center justify-center gap-2 px-6 py-8 text-center"
         >
           <FeatherIcon name="edit-3" class="w-6 h-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
@@ -72,7 +78,7 @@
         </div>
 
         <ol
-          v-else
+          v-else-if="sessionNotesList && sessionNotesList.length"
           ref="notesListRef"
           role="feed"
           aria-label="Session Log Lines"
@@ -110,25 +116,26 @@
         <!-- Add a line: Enter adds, Shift+Enter breaks the line. The field and its Add button
              are one pill (a half circle at each end) so they read as a single control. A line
              must be at least minLineChars long (OmniTrack Settings); the counter says so. -->
-        <div class="mt-auto pt-3">
+        <div :class="isEntry && !(sessionNotesList || []).length ? '' : 'mt-auto pt-3'">
           <div class="flex items-stretch overflow-hidden rounded-[20px] border transition-colors bg-gray-50 focus-within:bg-white focus-within:ring-2 dark:bg-[#2B2D30]"
             :class="lineHint ? 'border-red-600 focus-within:ring-red-600/20 dark:border-red-400' : 'border-gray-200 focus-within:border-blue-500 focus-within:ring-blue-500/20 dark:border-gray-700'">
             <textarea
-              data-session-input
+              :data-session-input="isEntry ? null : ''"
+              :data-entry-line="isEntry ? '' : null"
               ref="lineInputRef"
               v-model="localLineText"
               @input="autoGrowTextarea"
               @keydown="handleTextareaKey"
               rows="1"
               aria-label="Add a line to the session log"
-              aria-keyshortcuts="/"
+              :aria-keyshortcuts="isEntry ? null : '/'"
               :aria-invalid="lineHint ? 'true' : null"
-              :aria-describedby="lineChars > 0 && lineTooShort ? 'session-line-hint' : null"
-              placeholder="What did you just finish?"
+              :aria-describedby="lineChars > 0 && lineTooShort ? idp + 'session-line-hint' : null"
+              :placeholder="isEntry ? 'What did you get done?' : 'What did you just finish?'"
               class="peer flex-1 min-w-0 min-h-[38px] max-h-36 block resize-none overflow-y-auto bg-transparent border-0 shadow-none pl-4 pr-2 py-2.5 text-sm leading-5 outline-none focus:outline-none focus:ring-0 text-gray-900 placeholder-gray-600 dark:text-white dark:placeholder-gray-400"
             ></textarea>
             <!-- The "/" shortcut, shown on wide screens while the field is empty and unfocused -->
-            <kbd class="hidden sm:peer-placeholder-shown:inline-flex peer-focus:!hidden self-center mr-2 px-1.5 rounded border text-xs font-sans text-gray-700 border-gray-300 dark:text-gray-300 dark:border-gray-600" aria-hidden="true">/</kbd>
+            <kbd v-if="!isEntry" class="hidden sm:peer-placeholder-shown:inline-flex peer-focus:!hidden self-center mr-2 px-1.5 rounded border text-xs font-sans text-gray-700 border-gray-300 dark:text-gray-300 dark:border-gray-600" aria-hidden="true">/</kbd>
             <Button
               variant="solid"
               theme="blue"
@@ -139,18 +146,20 @@
               label="Add this line"
               tooltip="Enter"
               aria-keyshortcuts="Enter"
-              class="!h-auto self-stretch shrink-0 !rounded-none !rounded-r-[19px] !px-4"
+              :class="[DISABLED_SOLID, '!h-auto self-stretch shrink-0 !rounded-none !rounded-r-[19px] !px-4']"
             >Add</Button>
           </div>
           <p
             v-if="lineChars > 0 && lineTooShort"
-            id="session-line-hint"
+            :id="idp + 'session-line-hint'"
             class="flex justify-between gap-3 mt-1 px-4 text-xs"
             :class="lineHint ? 'text-red-700 dark:text-red-300' : 'text-gray-700 dark:text-gray-300'"
           >
             <span>Write at least {{ minLineChars }} characters</span>
             <span class="tabular-nums"><span class="sr-only">, so far </span>{{ lineChars }}/{{ minLineChars }}</span>
           </p>
+          <!-- What the empty state says on the clock, in one line: the placeholder asks the rest -->
+          <p v-else-if="isEntry && !(sessionNotesList || []).length" class="mt-1 px-4 text-xs text-gray-700 dark:text-gray-300">A session needs at least one line to save.</p>
         </div>
       </div>
 
@@ -247,6 +256,9 @@
         </div>
       </div>
     </div>
+
+    <!-- An entry's block tasks sit under what got done: what and which task, then when (right) -->
+    <BlockTasksSection v-if="isEntry && trackerBoundBlock" :block="trackerBoundBlock" :is-dark-mode="isDarkMode" />
   </div>
 </template>
 
@@ -255,16 +267,13 @@ import { Button, Badge, FeatherIcon } from 'frappe-ui';
 import { useSessionContext } from './useSessionContext.js';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import BlockDetailDrawer from '../drawers/BlockDetailDrawer.vue';
-
-// Material primary tab: a padded target with a state layer, an inset focus ring, and a 3px
-// indicator under the active label. One look for every tab bar in the app.
-const TAB = 'relative h-10 px-3 inline-flex items-center gap-1.5 rounded-t-lg text-sm font-medium cursor-pointer transition-colors outline-none hover:bg-gray-100 dark:hover:bg-gray-800 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:focus-visible:ring-blue-400';
-const INDICATOR = 'absolute inset-x-3 -bottom-px h-[3px] rounded-t-full bg-blue-600 dark:bg-blue-400';
-const COUNT = 'min-w-[1.25rem] h-5 px-1.5 rounded-full text-[11px] font-semibold tabular-nums inline-flex items-center justify-center';
+import BlockTasksSection from '../drawers/BlockTasksSection.vue';
+import { DISABLED_SOLID } from '../utils/sessionFrame.js';
+import { TAB, INDICATOR, COUNT, tabTone, countTone } from '../utils/materialTab.js';
 
 export default {
   name: 'SessionLogPane',
-  components: { Button, Badge, FeatherIcon, BlockDetailDrawer },
+  components: { Button, Badge, FeatherIcon, BlockDetailDrawer, BlockTasksSection },
   setup() {
     const session = useSessionContext([
       'activePaneTab',
@@ -300,20 +309,18 @@ export default {
       'taskMessages',
       'taskUnreadCount',
       'isDarkMode',
+      'idp',
+      'isEntry',
       'paneTab',
       'selectPaneTab',
       'tabDetailsRef',
       'trackerBoundBlock'
     ]);
     const ws = useWorkstationContext(['isBlockCompleted', 'openBlockDrawer', 'isSessionElevated']);
-    return { ...session, ...ws, TAB, INDICATOR, COUNT };
+    return { ...session, ...ws, TAB, INDICATOR, COUNT, DISABLED_SOLID, countTone };
   },
   methods: {
-    tabTone(id) {
-      return this.paneTab === id
-        ? 'text-blue-700 dark:text-blue-300'
-        : 'text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white';
-    },
+    tabTone(id) { return tabTone(this.paneTab === id); },
     // The full block, with its actions: the popup steps aside for the drawer
     openFullBlock(block) {
       this.isSessionElevated = false;

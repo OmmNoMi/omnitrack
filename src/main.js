@@ -18,12 +18,16 @@ import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import TimesheetEntryDialog from "./components/dialogs/TimesheetEntryDialog.vue";
+import WorkSessionEntry from "./components/dialogs/WorkSessionEntry.vue";
 import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
+import TaskDetailDrawer from "./drawers/TaskDetailDrawer.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
 import SessionDetailDrawer from "./drawers/SessionDetailDrawer.vue";
 import RavenCollaborationDrawer from "./drawers/RavenCollaborationDrawer.vue";
 import DashboardView from "./views/DashboardView.vue";
 import CalendarView from "./views/CalendarView.vue";
+import ProjectsView from "./views/ProjectsView.vue";
+import TasksView from "./views/TasksView.vue";
 import TimesheetsView from "./views/TimesheetsView.vue";
 import AttendanceView from "./views/AttendanceView.vue";
 
@@ -60,11 +64,14 @@ if (typeof window !== "undefined") {
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
 		TimesheetEntryDialog,
+		WorkSessionEntry,
 		BlockDetailDrawer,
 		SessionDetailDrawer,
 		RavenCollaborationDrawer,
 		DashboardView,
 		CalendarView,
+		ProjectsView,
+		TasksView,
 		TimesheetsView,
 		AttendanceView
 	};
@@ -103,7 +110,9 @@ function mountApp(target = "#app") {
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("TimesheetEntryDialog", TimesheetEntryDialog);
+	app.component("WorkSessionEntry", WorkSessionEntry);
 	app.component("TaskFormDialog", TaskFormDialog);
+	app.component("TaskDetailDrawer", TaskDetailDrawer);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("SessionDetailDrawer", SessionDetailDrawer);
 	app.component("RavenCollaborationDrawer", RavenCollaborationDrawer);
@@ -115,6 +124,8 @@ function mountApp(target = "#app") {
 	app.component("DrawerCoordinator", DrawerCoordinator);
 	app.component("DashboardView", DashboardView);
 	app.component("CalendarView", CalendarView);
+	app.component("ProjectsView", ProjectsView);
+	app.component("TasksView", TasksView);
 	app.component("TimesheetsView", TimesheetsView);
 	app.component("AttendanceView", AttendanceView);
 

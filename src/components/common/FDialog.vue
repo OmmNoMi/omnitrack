@@ -39,6 +39,9 @@ import { popoverOpen, markDialogEscape } from '../../utils/popover.js';
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const isClose = (el) => el.getAttribute('aria-label') === 'Close dialog';
+// A field that opens its own popup when focused (a DatePicker's calendar) would open over the
+// form the moment the dialog does, hiding the fields under it.
+const opensOnFocus = (el) => el.tagName === 'INPUT' && el.hasAttribute('aria-haspopup');
 const isDestructive = (el) => {
   const txt = (el.textContent || '').trim().toLowerCase();
   return el.getAttribute('theme') === 'red' || txt.includes('discard') || txt.includes('delete');
@@ -119,7 +122,7 @@ export default {
         if (!items.length) return;
         const target =
           items.find((el) => el.hasAttribute('autofocus') || el.hasAttribute('data-autofocus') || el.hasAttribute('data-confirm-working')) ||
-          items.find((el) => !isClose(el) && !isDestructive(el)) ||
+          items.find((el) => !isClose(el) && !isDestructive(el) && !opensOnFocus(el)) ||
           items.find((el) => !isClose(el)) ||
           items[0];
         target.focus();

@@ -8,7 +8,7 @@ import { blockTitle } from '../utils/blockTitle.js';
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationShortcuts(w) {
-  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, flt, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, markSessionEnded, newSessionPoint, openNewTaskModal, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
+  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, flt, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, markSessionEnded, newSessionPoint, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
   const discardSession = (...args) => w.discardSession(...args);
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
   const fetchWorkstationData = (...args) => w.fetchWorkstationData(...args);
@@ -59,7 +59,7 @@ export function useWorkstationShortcuts(w) {
       if (day) day.focus({ preventScroll: true });
     });
   };
-  // Global shortcuts. Shift+T new task · Shift+P plan a block · Shift+D the day view ·
+  // Global shortcuts. Shift+T the Tasks page (the session log while recording) · Shift+P plan a block · Shift+D the day view ·
   // Shift+S jump to the
   // session-log input (then Tab reaches Stop & Save) · Cmd/Ctrl+S stops and saves ·
   // "/" also jumps to the add-line input.
@@ -119,7 +119,8 @@ export function useWorkstationShortcuts(w) {
           isSessionElevated.value = true;
           focusSessionPointInput();
         } else {
-          openNewTaskModal();
+          // Not recording: T opens the Tasks page (P plans a block)
+          activeTab.value = 'tasks';
         }
         return;
       }
@@ -349,6 +350,7 @@ export function useWorkstationShortcuts(w) {
     quickLogTimelineGap,
     showEditSessionModal,
     isSavingEditSession,
+    editSessionTargetBlock,
     editSessionForm,
     editSessionDuration,
     openEditSessionModal,

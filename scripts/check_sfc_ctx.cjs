@@ -55,5 +55,37 @@ for (const file of walk(ROOT)) {
   const missing = [...used].filter((n) => !names.has(n) && !IMPLICIT.has(n));
   if (missing.length) { bad += missing.length; console.log(`${path.relative(process.cwd(), file)}: ${missing.length} undeclared -> ${missing.slice(0, 12).join(', ')}${missing.length > 12 ? ', …' : ''}`); }
 }
-if (bad) { console.error(`\nFAIL: ${bad} template reference(s) with no declaration.`); process.exit(1); }
+// Every name a component asks the workstation for must be one the workstation exposes. A name
+// it lacks makes useWorkstationContext throw in setup, and a production build swallows that: the
+// component renders with nothing from setup (WorkSessionEntry once opened with no frame, no
+// block and no projects, because editSessionTargetBlock was never put on the workstation).
+const CDIR = path.join(ROOT, 'composables');
+const exposed = new Set();
+let open = false;
+for (const f of fs.readdirSync(CDIR).filter((n) => /\.js$/.test(n))) {
+  const ast = babel.parse(fs.readFileSync(path.join(CDIR, f), 'utf8'), { sourceType: 'module', errorRecovery: true });
+  (function visit(n) {
+    if (!n || typeof n.type !== 'string') return;
+    if (n.type === 'CallExpression' && n.callee.type === 'MemberExpression' && n.callee.object.name === 'Object' && n.callee.property.name === 'assign' && n.arguments[0] && n.arguments[0].name === 'w') {
+      for (const arg of n.arguments.slice(1)) {
+        if (arg.type !== 'ObjectExpression') { open = true; continue; }
+        for (const q of arg.properties) q.type === 'SpreadElement' ? (open = true) : q.key && exposed.add(q.key.name || q.key.value);
+      }
+    }
+    if (n.type === 'AssignmentExpression' && n.left.type === 'MemberExpression' && n.left.object.name === 'w' && !n.left.computed) exposed.add(n.left.property.name);
+    for (const k of Object.keys(n)) { const v = n[k]; if (k === 'loc' || k === 'start' || k === 'end') continue; Array.isArray(v) ? v.forEach(visit) : v && typeof v === 'object' && visit(v); }
+  })(ast.program);
+}
+function allSrc(d, o = []) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); e.isDirectory() ? allSrc(p, o) : /\.(vue|js)$/.test(e.name) && o.push(p); } return o; }
+if (exposed.size < 50) { console.error(`FAIL: found only ${exposed.size} workstation names; the Object.assign(w, {...}) pattern changed, update this guard`); process.exit(1); }
+if (!open) {
+  for (const file of allSrc(ROOT)) {
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(/useWorkstationContext\(\[([\s\S]*?)\]\)/g)) {
+      const asked = [...m[1].matchAll(/['"]([\w$]+)['"]/g)].map((x) => x[1]);
+      const lacking = asked.filter((n) => !exposed.has(n));
+      if (lacking.length) { bad += lacking.length; console.log(`${path.relative(process.cwd(), file)}: asks the workstation for ${lacking.join(', ')}, which it does not expose`); }
+    }
+  }
+}
+if (bad) { console.error(`\nFAIL: ${bad} template or workstation reference(s) with no declaration.`); process.exit(1); }
 console.log('OK: every template reference is declared');

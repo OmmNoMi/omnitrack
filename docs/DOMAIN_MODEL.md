@@ -58,6 +58,12 @@ A contract, client milestone, or major product initiative: *OmmNoMi Automation*,
 
 **What it is not:** You never "work on a Project" for 45 minutes. A Project is too broad to be a unit of execution. It is the umbrella that holds tasks, invoices, and billing rules. Nothing logs time directly to a Project.
 
+**Who sees a Project: one rule.** `permissions.projects_for(user)` is the only place that decides it, and it is used by the block query, opening one block, the workstation and the Projects page.
+- Team members (anyone who is not a client) get `None`, meaning "no project filter": ordinary DocType permissions apply.
+- A client (`OmniTrack Client` role) sees the projects where they are a Project User, plus the projects of every Customer their Contact is linked to. With `include_assigned=True` (the Projects page), a project where a Task is assigned to them counts too. Block visibility uses `include_assigned=False`, so one assigned task does not reveal everyone's time on that project (owner to confirm).
+- A client with no shared project sees nothing, and a site without ERPNext gives clients no projects. No customer name is ever written into code.
+- On a shared project, a client sees only tasks marked `custom_is_public_deliverable`, never planned hours, and no logged hours where their Project User row has `hide_timesheets`.
+
 ---
 
 ## 3. 🎯 Task / ToDo — The "What"
@@ -67,6 +73,16 @@ A specific deliverable or engineering goal assigned to an associate: *"Build sea
 **A Task almost always takes multiple sittings across multiple days.** A 12-hour task cannot and should not be completed in one continuous sitting. This is the defining property: a Task is a unit of *intent*, not a unit of *time*. It is the reason Work Block and Work Session must both exist below it.
 
 The associate picks the Task from the searchable ToDo dropdown to declare what they are committing to. Selecting it binds the block, fills the project, and sets the activity nature.
+
+**Decision (owner, 2026-10-06): the Task is the ERPNext `Task`, never a bare `ToDo`.** Work tracking exists to run the Project better, not only to count hours. A core Frappe `ToDo` cannot carry the work: it has no planned (start) date, no real description field of its own beyond the one line used as a title, no people in CC, and no project, milestone or estimate. The structure is ERPNext's own:
+
+- **Project**: the client or initiative, its expected start and end, and the people on it.
+- **Milestone**: a group Task (`is_group = 1`, see AGENTS.md) or a Task marked as a milestone, under the Project.
+- **Task**: subject, description, planned start (`exp_start_date`), due date (`exp_end_date`), expected hours (`expected_time`), priority, dependencies, assignees.
+
+Expected hours and progress belong to the Task and roll up to the Project in ERPNext. OmniTrack does not keep its own copy. A `ToDo` stays what Frappe uses it for: the assignment record that points at a Task (`reference_type = "Task"`). A standalone ToDo is not a task and does not appear as one.
+
+Consequence: OmniTrack's project features need ERPNext's Projects module. `ommnomi.local` has no ERPNext (below), so until it is installed there, the app only has ToDos to show. See ROADMAP, "Tasks are ERPNext Tasks".
 
 ---
 
@@ -146,19 +162,20 @@ gapH     = Math.max(0, plannedH - loggedH)                     // rendered as "X
 
 ## 7. Ground Truth on `ommnomi.local` (Verified)
 
-This bench has **no ERPNext and no HRMS**. The upper two layers of the hierarchy have no doctype to live in:
+Since 2026-10-06 this bench has **ERPNext 16.50**, set up with its demo data, and since 2026-10-07 **Frappe HR**. The counts below were taken before ERPNext was installed and are kept for the history they explain:
 
 | Doctype | Exists on this site |
 |---|---|
-| `Project` | ❌ |
-| `Task` | ❌ |
-| `Timesheet` | ❌ |
-| `Employee` | ❌ |
-| `ToDo` (core Frappe) | ✅ — 121 rows, 120 open |
-| `Planned Work Block` | ✅ — 157 rows |
-| `OmniTrack Work Session` | ✅ — 158 child rows |
+| `Project` | yes since 2026-10-06 (ERPNext); demo projects plus CampusCredit (2026-10-07) |
+| `Task` | yes since 2026-10-06 (ERPNext) |
+| `Timesheet` | yes since 2026-10-06 (ERPNext) |
+| `Employee` | yes since 2026-10-06 (ERPNext) |
+| `Employee Goal`, `Appraisal`, `Leave Application` | yes since 2026-10-07 (Frappe HR) |
+| `ToDo` (core Frappe) | 121 rows, 120 open (before ERPNext) |
+| `Planned Work Block` | 157 rows (before ERPNext) |
+| `OmniTrack Work Session` | 158 child rows (before ERPNext) |
 
-Of the 157 blocks: **0** populate `project`, **0** populate `task`, **0** populate `timesheet`. Seven populate `work_item` — the site-portable substitute, holding a `todo:<name>` string with the subject mirrored into `work_item_label`:
+Of the 157 blocks: **0** populated `project`, **0** `task`, **0** `timesheet`. Seven populated `work_item`, the site-portable substitute, holding a `todo:<name>` string with the subject mirrored into `work_item_label`:
 
 ```
 todo:1490i091br   Draft Q4 logistics SOP
@@ -166,7 +183,9 @@ todo:14b8bs1u9j   Review cold-chain telemetry API
 todo:hl7hmckrdp   Manage icons and add missing home/dashboard file to OmniAssist workspace
 ```
 
-**On this site, the Task layer is `ToDo` and the Project layer is absent.** Every optional-doctype reference must stay guarded with `frappe.db.exists("DocType", "<name>")` — the page 500s on this site otherwise while working fine on an ERPNext bench.
+**OmniTrack runs on sites with and without ERPNext and Frappe HR.** Without ERPNext, the Task layer is `ToDo` and the Project layer is absent. Every optional-doctype reference must stay guarded with `frappe.db.exists("DocType", "<name>")`, or the page 500s on one site while working on another. A block's `project`, `task` and `timesheet` links are kept as plain text where their DocType is absent (`OptionalLinks`).
+
+**What a client sees.** A client sees a block only when its project is shared with them, its person is marked Visible to Clients (OmniTrack User Entitlement), and its task, if it has one, is Shared with Client. Nobody is visible until the owner says so.
 
 Two further schema hazards, both verified:
 

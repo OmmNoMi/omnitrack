@@ -22,12 +22,20 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 - Never write the word "timesheet" unqualified. Say **Work Session** (child row), **Planned Work Block** (commitment), or **ERPNext Timesheet** (billing doc, absent on `ommnomi.local`).
 
 ## Frappe Engineering Rules
-- **100% Configuration Driven**: Keep all features toggleable via `OmniTrack Settings`.
+- **Configuration changes behaviour, or it does not exist**: OmniTrack is one product configured per customer, for teams of any size and kind of work. A setting earns its place only if it changes what people see or what the app does. Today 15 of the 46 OmniTrack Settings fields are never read, and the 13 `enable_*` flags only feed `get_system_status`, which the app never calls (ROADMAP: "One app, configured per customer"). Never add a switch without the code that reads it. Prefer a few plain choices (how work is organised, who reviews time, whether clients see projects, where hours go) over many flags. Team size is never a setting: the app adapts to what it finds (managers get people pickers, a site with Projects gets the Projects page).
+- **No customer is special in code**: who sees a project comes from `permissions.projects_for(user)`, never from a customer's name. `scripts/check_projects.mjs` fails on a customer name in `src/` or `omnitrack/`.
 - **Zero Monkey Patching**: Standard hooks, DocEvents, and Permission Queries only.
 - **REST & HMAC Security**: All inter-bench live sync endpoints must sign and verify payloads via SHA-256 HMAC.
 
 ## Deployment-Specific Gotchas (learned the hard way)
-- **`ommnomi.local` has no ERPNext/HRMS.** No `Project`, `Task`, `Timesheet`, `Employee`, `Leave` doctypes — only core Frappe `ToDo`. Assigned work is sourced from `ToDo` (ids carry a `todo:` prefix). Guard every optional-doctype reference with `frappe.db.exists("DocType", "<name>")` or the page 500s on that site while working fine on ERPNext sites.
+- **ERPNext and Frappe HR are optional.** `ommnomi.local` has ERPNext 16.50 (setup done, with demo data) and, since 2026-10-07, Frappe HR (`Employee Goal`, `Appraisal`, `Leave`). Other customer sites may have neither, and then assigned work comes from `ToDo` (ids carry a `todo:` prefix). Guard every optional-doctype reference with `frappe.db.exists("DocType", "<name>")` or the page 500s on one site while working on another. Never add them to `required_apps`. The boot's `has_projects` flag tells the app whether the Projects page exists. `scripts/check_optional_apps.mjs` guards the rules below.
+- **`bench get-app` rewrites `sites/apps.txt`** from the `apps/` folder, so an app that is present but not installed (here `omniservey`) gets listed and every bench command fails importing it. Check `apps.txt` after any get-app.
+- **ERPNext's asset build needs Node 24**, while the shell's default node is 18. OmniTrack's own `npm run build` works on 18. After `install-app`, restart the bench, or the running workers do not know the new app.
+- **Adding a Project User sends a welcome email.** ERPNext's Project emails each new Project User whose `welcome_email_sent` is 0. When creating projects for a client from a script, set `welcome_email_sent=1` on each row unless the owner wants the invitation sent.
+- **Frappe 16 `get_all` refuses an expression in `order_by`** ("Invalid field format in Order By"), for example `exp_end_date is null, exp_end_date asc`. Order by plain fields and sort in Python. `check_projects.mjs` guards it.
+- **`Document._validate_links` runs before `validate`.** A controller cannot skip a link check from `validate` or `before_save`. A Link to a DocType the site lacks (Project, Task, Timesheet or Customer on a plain Frappe site) fails the save with "Options must be a valid DocType". Mix in `OptionalLinks` (`omnitrack/utils/optional_links.py`) before `Document` on any controller with such links.
+- **Endpoints open to guests verify a signature first.** `receive_sync_event` accepts a payload only when an Active OmniTrack Remote Connection's HMAC secret signed it (`hmac.compare_digest`). There is no fallback secret. A whitelisted function that writes another person's records (`synthesize_employee_attendance`) checks the manager role itself, and internal callers use the unwrapped `_synthesize`.
+- **`Project.actual_time` counts only ERPNext Timesheets.** OmniTrack's logged time lives in Planned Work Blocks, so the Projects page sums logged hours from blocks itself.
 - **CSRF token on `www/` pages: never read `frappe.local.session.data.csrf_token` directly.** For Administrator / freshly-created sessions it is `None`, which renders as the literal string `"None"` (or `""`) into the page and makes client POSTs fail. Use `from frappe.sessions import get_csrf_token; ctx.csrf_token = get_csrf_token()` — it generates *and persists* a token so `X-Frappe-CSRF-Token` validates. (`omnitrack/www/omnitrack.py`.)
 - **Frappe returns HTTP 417 for *any* server-side `frappe.throw` / `ValidationError`, not only CSRF failures.** When a whitelisted call 417s, read `response.exception` / `_server_messages` before assuming it is a token problem — it is usually a Select-field option mismatch or a validation error.
 - **Select-field option changes need `bench --site <site> migrate`.** Editing `options` in `planned_work_block.json` (e.g. adding `🌴 Leave` / `🤒 Absent` to `task_nature`) does nothing until migrate syncs the DocType; until then inserts with the new value throw "cannot be … It should be one of …".
@@ -129,7 +137,7 @@ Every frappe-ui component a template uses, `FeatherIcon` included, must be liste
 
 ## Gotcha: tests must never leave data on ommnomi.local
 
-ommnomi.local is the owner's shared, working site. Python tests that insert Planned Work Blocks, ToDos or Users must clean up in `tearDown` and must not commit. Run them on a throwaway site. Past runs left ~100 test blocks and ~255 test ToDos there (see ROADMAP).
+ommnomi.local is the owner's shared, working site. Python tests that insert Planned Work Blocks, ToDos or Users must clean up in `tearDown` and must not commit. Run them on a throwaway site. Past runs left 147 test blocks and 255 test ToDos there. They were deleted on 2026-10-07 (see ROADMAP); do not refill it. A test that deletes a block must use `delete_doc` so its child rows go too. Raw deletes left 28 orphan Work Session rows.
 
 ## Workflow
 
@@ -165,13 +173,20 @@ through, not in each caller. The ended-session set is mirrored into
 `localStorage` (`omnitrack_ended_sessions`) so a second tab cannot push a
 stopped session back either.
 
-## Gotcha: `document.body.style.overflow = 'hidden'` does not lock this page
+## Gotcha: lock the page on `<html>` only, never write `body` overflow
 
-`document.scrollingElement` here is `<html>`. A modal must set `overflow:hidden`
-on `documentElement` as well as `body`. Note that scripted `window.scrollBy`
-still moves an `overflow:hidden` page — verify the lock with
-`getComputedStyle(document.scrollingElement).overflowY`, not by scripting a
-scroll.
+`document.scrollingElement` here is `<html>`, so `overflow:hidden` on
+`documentElement` locks the page. Never write `body.style.overflow`: frappe-ui
+dialogs (reka) lock `<body>` themselves and, on close, restore whatever
+`body.style.overflow` was when they opened. If our code had already set it to
+`hidden`, reka saves that as the "original" and puts it back after we unlock.
+The page then stays frozen: with `<html>` visible, body's `hidden` propagates to
+the viewport. This happened on every f-dialog close, and the user hit it after Stop
+in the 30-minute reminder. All page locking goes through
+`setScrollLock(owner, open)` in `src/utils/scrollLock.js`, counted per owner;
+`scripts/check_scroll_lock.mjs` enforces it. Scripted `window.scrollTo` still
+moves an `overflow:hidden` page, so verify with the inline styles and
+`getComputedStyle(document.scrollingElement).overflowY`, not by scripting a scroll.
 
 ## Gotcha: Dropdown keyboard navigation leaks into grid shortcuts
 
@@ -262,7 +277,7 @@ reka places `[data-reka-popper-content-wrapper]` with a fractional `translate()`
 reka's DropdownMenu hands focus back to its trigger after the menu has closed, which is later than `nextTick` and later than `setTimeout(0)`. To move focus elsewhere after a pick, listen once for `focusin` on the trigger's wrapper and refocus from there (`TaskFormDialog.ask`).
 
 ## Gotcha: frappe-ui Tabs has no visible keyboard focus (0.1.278)
-`Tabs` (reka TabsRoot/TabsList/TabsTrigger) gives roving focus and an animated indicator. Its default trigger, though, is a bare `<button>` with no focus style, and its list carries `p-1 px-5 gap-5`, which you cannot override from outside. Until that changes, the app's tab bars use the Material tab in `SessionLogPane.vue` (`TAB`, `INDICATOR`, `COUNT`). On a tab, a focus ring must be **inset** (`focus-visible:ring-inset`) on a padded target. An outer ring on a bare label is clipped by the bar's underline into a broken box.
+`Tabs` (reka TabsRoot/TabsList/TabsTrigger) gives roving focus and an animated indicator. Its default trigger, though, is a bare `<button>` with no focus style, and its list carries `p-1 px-5 gap-5`, which you cannot override from outside. Until that changes, the app's tab bars use the Material tab in `src/utils/materialTab.js` (`TAB`, `INDICATOR`, `COUNT`, `tabTone`, `countTone`), shared by the session pane and the Projects page. `check_dialog_popovers.cjs` fails if a view defines its own copy. On a tab, a focus ring must be **inset** (`focus-visible:ring-inset`) on a padded target. An outer ring on a bare label is clipped by the bar's underline into a broken box.
 
 ## Gotcha: there are two `planned_work_block.json` files
 The DocType Frappe syncs is `omnitrack/omnitrack/doctype/planned_work_block/`. The top-level `omnitrack/doctype/` folder is a stale copy (it has a "Flagged" option the live one lacked, which is how Flag broke without anyone noticing). Edit only the inner one, bump `modified`, then migrate. `check_block_reminders.mjs` reads the inner one.
@@ -281,12 +296,57 @@ The live session popup's task checkboxes and the entry sheet's task list both us
 ## Gotcha: bench console takes one line
 `bench --site <site> console` reads stdin line by line, so multi-line Python breaks. Write the probe to a file and run `echo "exec(open('<file>').read())" | bench --site <site> console`.
 
+The console is an IPython embed, so the exec'd file runs with locals separate from globals. Two traps follow:
+- A flag typed before `exec` (`DELETE=1; exec(...)`) is not seen through `globals()`. Pass flags as environment variables (`echo "exec(...)" | FLAG=1 bench --site <site> console`).
+- A comprehension or generator at the file's top level cannot see top-level variables (`NameError`). Put the probe's body in a `def main():` and call it.
+
+`bench execute <method> --args '...'` reads `--args` with Python `eval`, not JSON. Write `None`, `True` and `False`. A JSON `null` raises `NameError`, and bench then quietly passes the whole string as one argument, so the call fails with "missing required positional arguments". It commits only when the call succeeds.
+
+With piped stdin, the console exits by itself after the last line ("Do you really want to exit" needs no answer). It does not commit: a script that writes must call `frappe.db.commit()` itself, and one that raises halfway leaves the database unchanged.
+
 ## Gotcha: a block field must be added to every feed
 The screens get Planned Work Blocks from five hand-written field lists: three in `api/workstation.py` (two SQL, one `get_all`), one in `api/planner.py` (the calendar) and one in `get_pending_approvals` in `api/timesheet.py`. A field missing from one of them is `undefined` on that screen only, with no error. This is how the calendar showed every logged block as awaiting approval. When a screen reads a new block field, add it to every list that feeds that screen. `check_block_reminders.mjs` guards `approval_status` and `approval_notes`.
 
 ## Gotcha: the agent's browser pane cannot reach socket.io
 In the Claude desktop browser pane, `ws://ommnomi.local:9003/socket.io/` fails hundreds of times, and a `fetch` to port 9003 never leaves the page. The pane treats the second port as another origin. The server is fine: `curl -H "Origin: http://ommnomi.local:8003" "http://ommnomi.local:9003/socket.io/?EIO=4&transport=polling"` returns 200. Filter those errors out of console checks; do not debug them as an app bug.
 
-## Gotcha: the mutation suite restarts the dev server
-`scripts/run_mutation_tests.cjs` rewrites real source files for a moment, the Python API files among them (`api/timesheet.py`, `api/planner.py`, `api/workstation.py`). `bench start` serves with the reloader, so each Python mutant restarts the web process. A page that loads during a restart gets its 4.7 MB stylesheet cut off and renders as bare HTML, or reports "Workstation initialization timed out". Do not run the suite while someone is using the site, and reload any page opened during a run.
+## Gotcha: mutants must never touch the served files
+`scripts/run_mutation_tests.cjs` used to rewrite real source files for a moment, the Python API files among them. `bench start` serves with the reloader, so each Python mutant restarted the web process, and pages loaded meanwhile came up as bare HTML. Mutant 1 also rebuilt the served bundle with a runtime-only Vue. The runner now copies the app to a temp directory (with `node_modules` symlinked), mutates and tests only there, and throws if a mutant names a file outside the copy. Build new mutants with `SRC(...)` or `path.resolve(omnitrackDir, ...)`, never `__dirname`. Side effect: you can keep editing `src/` while a run is going.
 
+The old runs once left the web process broken, and reloading did not help. It cuts large responses off at random sizes, the stylesheet and sometimes the script, and logs `OSError: [Errno 9] Bad file descriptor` from `werkzeug/serving.py` `write` → `sendall` (Python 3.14, werkzeug threaded server). Every client sees it, not just the browser. To tell: `curl -o /dev/null -w "%{size_download}\n"` the bundle CSS ten times. Anything short of the size on disk means the process is broken, and only a full `bench start` restart fixes it. The extra 5 s on `http://ommnomi.local` URLs in curl is macOS trying mDNS for `.local` before `/etc/hosts`. It is unrelated, so use `--resolve ommnomi.local:8003:127.0.0.1` to skip it.
+
+## Gotcha: `<component :is="'button'">` renders frappe-ui's Button
+Vue resolves a string `is` through the registered components first, case-insensitively, and frappe-ui registers `Button` globally. So `<component :is="'button'">` becomes a frappe-ui Button with its padding, theme and slots, not a native button. Write the two elements out with `v-if`/`v-else`. `check_projects.mjs` guards ProjectsView.
+
+## Gotcha: a page load must never end a running session
+`restoreActiveSession` (`useWorkstationSessionSync.js`) used to evict a session that started on an earlier local day and had run 6 hours or more, and it deleted the server copy too. On 2026-10-07 an agent's verification reload at 04:29 erased the owner's session that had started at 20:39. Now a long or overnight session is restored, and the still-working dialog asks the person to stop at the last note, keep it running, or discard it. `get_active_session` only reads. Only the person's choice or Stop clears the stored copy. `check_session_restore.mjs` guards this. Still check `omnitrack_active_session` read-only before reloading the owner's browser, and never start a session to test.
+
+## Gotcha: a teleported dialog loses `event.currentTarget` across `nextTick`
+`currentTarget` is only set while the event is being dispatched. A roving-focus handler that waits for `nextTick` and then reads `e.currentTarget` gets `null`. Inside a frappe-ui Dialog (teleported to `body`) there is no component root to search from either. Capture `const list = e.currentTarget.closest(...)` before the `await`.
+
+
+## Gotcha: Vue drops a space at the edge of a `<template>`
+In `<template v-if="x"><b>{{ who }}</b> </template>{{ what }}`, the space is a whitespace-only text node at the end of the template's children, so Vue's compiler removes it. The page then reads "Youadded a task". A space at the start of a template is dropped the same way. Write `{{ ' ' }}`. `check_doc_activity.mjs` fails on the pattern in any `.vue` file.
+
+## Gotcha: a Work Session has no Activity of its own
+A Work Session is a child row (`OmniTrack Work Session`) of its Planned Work Block. A Comment pointed at a child row is never shown in Desk, so a session's talk is its block's Activity, and the session sheet says so. The block drawer used to create a Raven channel just by being opened. Raven is now for Tasks only (`raven_bridge.get_or_create_task_channel`).
+
+## Gotcha: a custom sheet must sit below z-60
+frappe-ui's `Dialog` ignores its `zIndex` prop, the dialog overlay is z-50 and every popover wrapper is z-60 (`main.css`). A sheet with its own z-index must stay below 60, or its date and time lists open behind it. The sheets use z-45 (block, session) and z-47 (task); the work-session entry popup (`WorkSessionEntry`, scrim and panel) is z-49, above the sheets it can be opened from. Test 26 in `test_workstation_interactions.cjs` checks it.
+
+## Gotcha: the mutation runner finds the app from `__dirname`
+`scripts/run_mutation_tests.cjs` copies `path.resolve(__dirname, '..')`. A copy of the runner kept elsewhere (to run a subset) must hard-code the app path, or it copies the wrong folder. Pointing `TMPDIR` inside the app fails with "copy to a subdirectory of self". A mutator that changes nothing aborts the run.
+
+## Work sessions are past only
+A Work Session records time already worked. An entry that ends after now is refused in the entry (`useSessionEntry.js` `entryCanSave`, and the running session's Adjust sheet in `TimesheetEntryDialog.vue`), in `saveEditSession`, and on the server (`timesheet._require_worked`, 5 minutes of slack). Time still ahead is logged by running a session. `check_entry_is_worked.mjs` guards all three.
+
+Adding or editing a work session by hand is the timer's own session box: `WorkSessionEntry.vue` hosts `SessionBox mode="entry"`, so it reads as the session it becomes (Log lines, the block's tasks, Project and Activity). Only Adjust on the running session still opens the sheet. Do not build a second form for it.
+
+## Gotcha: dark mode is two switches
+The app's own `dark:` classes follow Tailwind `darkMode: "class"` (`.dark` on `<html>`). frappe-ui's preset uses `darkMode: ['selector', '[data-theme="dark"]']`, and its colour tokens (ink, surface, outline) are CSS variables defined under `[data-theme=dark]`. Setting only `.dark` leaves every frappe-ui Button, Dialog close x and input on light tokens over a dark page: invisible icons, glaring fills, buttons that do not look pressable. `applyTheme` (`useWorkstationShell.js`) and the first-paint script in `www/omnitrack.html` set both. `check_contrast_tokens.cjs` guards both.
+
+## Gotcha: a name missing from the workstation context renders nothing in production
+`useWorkstationContext([...])` throws in `setup` when App.vue does not expose a name. In development that is a loud error; in the production bundle Vue swallows it and the component renders empty, with nothing in the console a person would notice. When a component asks for a new name, add it to App.vue's provide in the same change and open that component in the browser.
+
+## Gotcha: `npm test` reads the built bundle
+`test_spa_smoke.cjs` checks `omnitrack/public/dist/omnitrack.bundle.js`, so a source change tested without `npm run build` first is tested against the old bundle. Build, then test.

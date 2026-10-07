@@ -74,9 +74,17 @@ CUSTOM_FIELDS = {
 			"insert_after": "custom_actual_hours"
 		},
 		{
+			"fieldname": "custom_is_public_deliverable",
+			"label": "Shared with Client",
+			"fieldtype": "Check",
+			"default": 0,
+			"description": "Clients of this project see this task.",
+			"insert_after": "custom_variance_hours"
+		},
+		{
 			"fieldname": "custom_col_break_omni",
 			"fieldtype": "Column Break",
-			"insert_after": "custom_variance_hours"
+			"insert_after": "custom_is_public_deliverable"
 		},
 		{
 			"fieldname": "custom_remote_task_id",
@@ -165,6 +173,14 @@ CUSTOM_FIELDS = {
 			"default": 0.0,
 			"read_only": 1,
 			"insert_after": "custom_actual_hours"
+		},
+		{
+			"fieldname": "custom_is_public_deliverable",
+			"label": "Shared with Client",
+			"fieldtype": "Check",
+			"default": 0,
+			"description": "Clients see this to-do.",
+			"insert_after": "custom_variance_hours"
 		}
 	]
 }
@@ -445,7 +461,9 @@ def _ensure_workspaces():
 
 		content.append({"id": "sp_2", "type": "spacer", "data": {"col": 12}})
 		content.append({"id": "hdr_actions", "type": "header", "data": {"text": "<span class=\"h4\">Quick Launch & Workstations</span>", "col": 12}})
-		for i, sc in enumerate(ws["shortcuts"]):
+		# Employee Checkin and Attendance exist only with Frappe HR
+		present = [sc for sc in ws["shortcuts"] if sc["type"] != "DocType" or frappe.db.exists("DocType", sc.get("link_to"))]
+		for i, sc in enumerate(present):
 			sc_data = {
 				"shortcut_name": sc["label"],
 				"label": sc["label"],

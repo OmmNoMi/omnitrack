@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { dueReminders, reminderKey, LEAD_MIN, START_GRACE_MIN } from "../src/utils/blockReminders.js";
+import { noteLines, noteHeading } from "../src/utils/wrapNote.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
@@ -72,21 +73,36 @@ need(/const openEditSessionModal = \(block, session = \{\}\) => \{/.test(modals)
 // The sheet: a modal dialog that reads the entry from the server, shows the task moves and
 // approval, and sends edits to the one form. Block and tasks may both be missing.
 const sheet = read("src/drawers/SessionDetailDrawer.vue");
-need(/role="dialog" aria-modal="true" aria-labelledby="session-drawer-title"/.test(sheet) && /id="session-drawer-title"/.test(sheet), "SessionDetailDrawer.vue: a labelled modal dialog");
+need(/role="dialog" aria-modal="true" aria-labelledby="session-drawer-kind session-drawer-title"/.test(sheet) && /id="session-drawer-title"/.test(sheet), "SessionDetailDrawer.vue: a modal dialog named by its kind and title");
 need(/postJSON\('get_work_session'/.test(sheet), "SessionDetailDrawer.vue: reads the entry with get_work_session");
 need(/v-if="moves\.length"/.test(sheet) && /task_moves/.test(sheet), "SessionDetailDrawer.vue: shows the task moves made while the entry ran");
 need(/\$emit\('edit-session', session, entry\.block\)/.test(sheet) && !/<Textarea|<DayTimeFields|<TimePicker/.test(sheet), "SessionDetailDrawer.vue: no inputs of its own; Edit opens the one entry form");
 need(/v-if="!block\.unplanned"/.test(sheet) && /v-if="tasks\.length"/.test(sheet), "SessionDetailDrawer.vue: an unplanned entry shows no plan, an entry with no tasks no task list");
 need(/\$emit\('approve-block', entry\.block\)/.test(sheet) && /\$emit\('flag-block', this\.entry\.block, reason\)/.test(sheet), "SessionDetailDrawer.vue: a manager approves or flags the entry here");
 // A task row shows its workflow state, and every move it offers goes through the one task form
-need(/taskState\(t\) \{ return t\.state \|\| t\.status/.test(sheet) && /<Dropdown v-if="taskMoves\(t\)\.length" :options="taskMoves\(t\)"/.test(sheet), "SessionDetailDrawer.vue: a task row shows its workflow state with the moves open from it");
-need(/onClick: \(\) => openTaskForm\(t, \{ block: this\.entry && this\.entry\.block, ask: a\.action[,} ]/.test(sheet) && !/execute_task_workflow_action/.test(sheet), "SessionDetailDrawer.vue: a move opens the task form at its confirm step, never applies itself");
-need(/ArrowRight: \[r, cols\(r\)\], ArrowLeft: \[r, 0\]/.test(sheet) && /clampCell\(\);/.test(sheet), "SessionDetailDrawer.vue: the task list is one tab stop, Left/Right between a task and its status");
+need(/taskState\(t\) \{ return t\.state \|\| t\.status/.test(sheet) && !/taskMoves/.test(sheet), "SessionDetailDrawer.vue: a task row shows its workflow state; its steps live in the task panel's action bar, not a menu on the row");
+need(/openTask\(t\) \{\s*openTaskDetail\(t, /.test(sheet) && !/openTaskForm|execute_task_workflow_action/.test(sheet), "SessionDetailDrawer.vue: a task opens its details panel, never the form or a move straight away");
+need(/ArrowDown: Math\.min\(last, r \+ 1\), ArrowUp: Math\.max\(0, r - 1\)/.test(sheet) && /clampCell\(\);/.test(sheet), "SessionDetailDrawer.vue: the task list is one tab stop, Up/Down between tasks");
 need(/sheet\.querySelector\('\[data-sheet-close\]'\)/.test(sheet) && /if \(lost && opener && document\.contains\(opener\)\) opener\.focus\(\);/.test(sheet), "SessionDetailDrawer.vue: focus moves into the sheet and back to its opener on close");
-// The bottom bar: New task for everyone (a manager plans their own work too), Team on top for managers.
-// It is a navigation landmark (aria-current), not a tablist: it also holds two actions.
+// The block sheet is a modal too: Escape once dropped focus on <body>
+const blockSheet = read("src/drawers/BlockDetailDrawer.vue");
+need(/ref="sheet"/.test(blockSheet) && /label="Close" data-sheet-close/.test(blockSheet) && /openKey\(key\) \{ if \(key\) this\.open\(\); else this\.closed\(\); \}/.test(blockSheet) && /sheet\.querySelector\('\[data-sheet-close\]'\)/.test(blockSheet) && /if \(lost && opener && document\.contains\(opener\)\) opener\.focus\(\);/.test(blockSheet), "BlockDetailDrawer.vue: focus moves into the sheet and back to its opener on close");
+need(/openKey\(\) \{ return !this\.inline && /.test(blockSheet), "BlockDetailDrawer.vue: the inline details never take or move focus");
+// The bottom bar: Tasks for everyone, Team on top for managers. "New task" opened the plan
+// dialog under a task's name, so it is gone; planning starts from a task, a day or the calendar.
+// It is a navigation landmark (aria-current), not a tablist: it also holds the session button.
 const navSrc = read("src/components/layout/WorkstationBottomNav.vue");
-need(/<Button\n        variant="ghost"\n        theme="gray"[\s\S]*?label="Create a new task"/.test(navSrc) && !/v-else[\s\S]{0,200}Create a new task/.test(navSrc), "WorkstationBottomNav.vue: New task shows for managers too, never as the else of Team");
+need(/<Button\n        variant="ghost"\n        :theme="activeTab === 'tasks' \? 'blue' : 'gray'"[\s\S]*?:aria-current="activeTab === 'tasks' \? 'page' : null"\n        label="Tasks"/.test(navSrc), "WorkstationBottomNav.vue: Tasks is a page in the bar, for everyone");
+need(!/New task|open-new-task/i.test(navSrc) && !/open-new-task/.test(read("src/App.vue")), "WorkstationBottomNav.vue: no New task button (it opened the plan dialog)");
+need(/label: 'Plan a block'/.test(read("src/composables/useWorkstationPickers.js")) && !/'New Task'/.test(read("src/composables/useWorkstationPickers.js")), "useWorkstationPickers.js: the header menu names what it opens: Plan a block");
+// The Tasks page: every open task grouped by what to do next, one tab stop, and the shared
+// task form, plan dialog and start flow. It never applies a workflow move itself.
+const tasksView = read("src/views/TasksView.vue");
+need(/id: 'overdue'[\s\S]*?id: 'today'[\s\S]*?id: 'unplanned'[\s\S]*?id: 'planned'/.test(tasksView), "TasksView.vue: groups run Overdue, Due today, Not planned yet, Planned");
+need(/for \(const t of items\) left\.splice/.test(tasksView), "TasksView.vue: a task sits in one group only");
+need(/tabindex\(t, col\) \{ return this\.current\[0\] === t\.ref && this\.current\[1\] === col \? 0 : -1; \}/.test(tasksView) && /e\.key === 'ArrowDown'/.test(tasksView) && /e\.key === 'ArrowRight'/.test(tasksView) && /e\.key === 'Home'/.test(tasksView), "TasksView.vue: one tab stop, arrows rove rows and actions");
+need(/openTaskDetail\(t, \{ onChange:/.test(tasksView) && /@click="planAttentionTask\(t\)"/.test(tasksView) && /@click="startTaskImmediately\(t\)"/.test(tasksView) && !/execute_task_workflow_action|<Dialog|<FDialog/.test(tasksView), "TasksView.vue: rows open the task details panel (its Edit the one task form), Plan the one plan dialog, play the one start flow");
+need(/<Combobox[^>]*aria-label="Show tasks for project"/.test(tasksView) && /<Combobox[^>]*aria-label="Show tasks for"/.test(tasksView), "TasksView.vue: project and person filters are searchable Comboboxes");
 need(!/role="tab/.test(navSrc) && /:aria-current="activeTab === 'attendance' \? 'page' : null"/.test(navSrc), "WorkstationBottomNav.vue: a navigation bar marks the current page with aria-current, no tab roles");
 // Planner blocks: the title wraps onto the lines the block has, never one clipped line
 const gridSrc = read("src/views/calendar/CalendarPlannerGrid.vue");
@@ -134,6 +150,21 @@ const plannerState = read("src/composables/useWorkstationPlannerState.js");
 need(/placeHoverCard\(r, card\.offsetHeight\)/.test(plannerState) && /nav\[aria-label="Workstation navigation"\]/.test(plannerState), "useWorkstationPlannerState.js: the hover card is placed by its measured height and kept clear of the bottom bar");
 // The dot alone is aria-hidden and takes no pointer, so the words must be on the block's name and its hover card.
 need(/\{\{ approval\.label \}\}/.test(read("src/components/common/BlockHoverCard.vue")), "BlockHoverCard.vue: the hover card says where the entry stands in review");
+// The hover card names a block once and lists what got done under it. Session notes start with
+// the title, so a title made of the notes says the name twice and runs every line together.
+const card = read("src/components/common/BlockHoverCard.vue");
+need(!/seg\.notes\)?\s*\|\|/.test(card) && /<div class="text-sm font-semibold leading-snug break-words">\{\{ title \}\}<\/div>/.test(card) && /title\(\) \{\n\s*return blockTitle\(this\.hoverCard\.block,/.test(card), "BlockHoverCard.vue: the card's title is the block's name, never its notes");
+need(/return noteLines\(raw, this\.title\);/.test(card) && /v-for="\(line, i\) in notes\.slice\(0, NOTE_LINES\)"/.test(card) && /^const NOTE_LINES = 3;$/m.test(card), "BlockHoverCard.vue: the notes show as a short list of lines under the title");
+need(/durationLabel\(Math\.max\(1, Math\.round\(hours \* 60\)\)\) \+ ' logged'/.test(card) && !/h logged/.test(card), "BlockHoverCard.vue: logged time reads in minutes under an hour (2m, not 0.03h)");
+need(/w-72 /.test(card) && /window\.innerWidth - 298\)/.test(plannerState), "BlockHoverCard.vue: the card is 18rem wide and kept that far from the right edge");
+need(/<span class="truncate">\{\{ loggedName\(r\) \}\}<\/span>/.test(tl) && /return blockTitle\(r\.block, ''\) \|\| noteHeading\(r\.notes\) \|\|/.test(tl) && /:aria-label="'Logged: ' \+ loggedName\(r\) \+ ', ' \+ loggedLength\(r\)/.test(tl), "DashboardTimeline.vue: a logged bar is named like its block, never by its whole notes");
+need(/durationLabel\(Math\.max\(1, Math\.round\(\(Number\(r\.hours\) \|\| 0\) \* 60\)\)\)/.test(tl) && !/fmtHrs|REC /.test(tl), "DashboardTimeline.vue: a logged bar's length reads in minutes under an hour, with no REC tag");
+const heads = [noteHeading("• Completed: A\nFix the boiler\n• Called Sam"), noteHeading("Completed: A\n- B"), noteHeading("")];
+need(JSON.stringify(heads) === JSON.stringify(["Fix the boiler", "", ""]), "wrapNote.noteHeading: a session is named by its first line that is not a logged step (got " + JSON.stringify(heads) + ")");
+const lines = noteLines("Fix the boiler\n\n• Completed: Order parts\n* Called Sam\n- Completed:  Fix the boiler\n", "Fix the boiler");
+need(JSON.stringify(lines) === JSON.stringify([{ text: "Completed", done: true }, { text: "Order parts", done: true }, { text: "Called Sam", done: false }]), "wrapNote.noteLines: notes read back one per entry, bullets dropped, ticked tasks marked done, and the title's own task as \"Completed\" first, never its name again (got " + JSON.stringify(lines) + ")");
+need(JSON.stringify(noteLines("Fix the boiler", "FIX the Boiler ")) === "[]", "wrapNote.noteLines: a note that only repeats the title adds nothing");
+need(/<FeatherIcon v-if="line\.done" name="check-circle"[^>]*aria-hidden="true" \/>/.test(card) && /class="sr-only">Done: <\/span>\{\{ line\.text \}\}/.test(card), "BlockHoverCard.vue: a ticked task shows a check, and says Done to screen readers");
 need(/:aria-label="\[blockTitle\(seg\.block\), segTimeTitle\(seg\), approvalLabel\(seg\.block\)\]/.test(gridSrc), "CalendarPlannerGrid.vue: a calendar block's name says where it stands in review");
 // The dot is aria-hidden and pointer-events-none, so a title on it can never show
 // The entry sheet words its review through approvalState too, so the screens cannot drift apart
@@ -141,7 +172,7 @@ need(/approval\(\) \{\n\s*const s = approvalState\(this\.block\);/.test(sheet) &
 // The dashboard refreshes on a timer: the sheet re-reads only when its own block changed,
 // and when a task it opened in the task form was saved or moved
 need(!/\n    workBlocks\(\) \{/.test(sheet) && /blockStamp\(now, before\) \{ if \(now !== before/.test(sheet), "SessionDetailDrawer.vue: the sheet re-reads only when its block changed, not on every dashboard refresh");
-need((sheet.match(/onChange: \(\) => this\.load\(\)/g) || []).length === 2, "SessionDetailDrawer.vue: a task saved or moved from the sheet reads the sheet again");
+need(/openTaskDetail\(t, \{ block: this\.entry && this\.entry\.block, onChange: \(\) => this\.load\(\) \}\)/.test(sheet), "SessionDetailDrawer.vue: a task saved or moved from the sheet reads the sheet again");
 need(!/approvalDot\(seg\.block\)[^>]*:title=/.test(gridSrc), "CalendarPlannerGrid.vue: the approval dot carries no title nobody can see");
 
 if (problems.length) {

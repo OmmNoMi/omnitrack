@@ -191,7 +191,7 @@
               variant="solid"
               theme="blue"
               size="sm"
-              class="!bg-blue-700 hover:!bg-blue-800"
+              class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800"
               @click.stop="startTaskImmediately(t)"
               :tabindex="attentionTabindex(rIdx, 2)"
               :data-attention-row="rIdx"

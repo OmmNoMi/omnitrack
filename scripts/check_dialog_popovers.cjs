@@ -122,10 +122,12 @@ if (!/<RescheduleBlockDialog\b[^>]*v-model="showReschedule"/.test(drawer) || !/@
 if (!/title="Reschedule"/.test(resched) || !/\$emit\('submit', \{ \.\.\.this\.form \}\)/.test(resched)) problems.push('RescheduleBlockDialog.vue: a dialog titled Reschedule that submits its own form');
 if (!/<Dropdown v-if="moreActions\.length"[\s\S]*?label="More"[^>]*>More<\/Button>/.test(drawer)) problems.push('BlockDetailDrawer.vue: rarer actions live in a menu behind a visible "More" button, not an unlabelled "..." icon');
 const more = (drawer.match(/moreActions\(\)\s*\{[\s\S]*?return [^;]*;/) || [''])[0];
-if (!/'Add timesheet entry'[\s\S]*?\$emit\('log-session'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Add timesheet entry" (log-session)');
+if (!/'Add work session'[\s\S]*?\$emit\('log-session'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Add work session" (log-session)');
 if (!/'Cancel block'[\s\S]*?\$emit\('open-cancel-modal'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Cancel block"');
 if (/label="Log work"|label="Cancel block" @click/.test(drawer)) problems.push('BlockDetailDrawer.vue: Log work / Cancel must not sit beside the primary actions');
 if (!/<BlockTasksSection\b/.test(drawer)) problems.push('BlockDetailDrawer.vue: must list the block\'s tasks (BlockTasksSection)');
+// A session runs now: Start session on an Oct 5 block would log today's work against Oct 5
+if (!/<Button v-if="canStart"[^>]*label="Start session"/.test(drawer) || !/canStart\(\) \{[^}]*b\.work_date === this\.todayDate/.test(drawer)) problems.push('BlockDetailDrawer.vue: Start session shows only on today\'s block (canStart)');
 if (!/block\.tasks/.test(tasksSection) || !/v-for="\(t, i\) in rows"/.test(tasksSection)) problems.push('BlockTasksSection.vue: must list every task linked to the block (block.tasks)');
 const tick = (tasksSection.match(/<Button[^>]*role="checkbox"[\s\S]*?\/>/) || [''])[0];
 if (!tick || !/:aria-checked=/.test(tick) || !/toggle\(t, !t\.done\)/.test(tick)) problems.push('BlockTasksSection.vue: each task needs a role=checkbox Button with aria-checked that marks it done');
@@ -164,8 +166,8 @@ const appVue = read('src/App.vue');
 const plannerSelect = read('src/composables/useWorkstationPlannerSelect.js');
 if ((appVue.match(/<TaskFormDialog\b/g) || []).length !== 1) problems.push('App.vue: mount TaskFormDialog exactly once');
 if (fs.existsSync(path.join(root, 'src/drawers/BlockTaskDialog.vue'))) problems.push('src/drawers/BlockTaskDialog.vue: a second task form; use TaskFormDialog');
-if (!/openTaskForm\(row, \{ block: this\.block, canRemove: this\.canAdd \}\)/.test(tasksSection)) problems.push('BlockTasksSection.vue: a task row opens the one task form (openTaskForm with its block)');
-if (!/const openTaskDetails = \(task\) => \{\s*openTaskForm\(task\);/.test(plannerSelect)) problems.push('useWorkstationPlannerSelect.js: openTaskDetails opens the one task form');
+if (!/openTaskDetail\(row, \{ block: this\.block, canRemove: this\.canAdd \}\)/.test(tasksSection)) problems.push('BlockTasksSection.vue: a task row opens its details, whose Edit opens the one task form with its block');
+if (!/const openTaskDetails = \(task\) => \{\s*openTaskDetail\(task\);/.test(plannerSelect)) problems.push('useWorkstationPlannerSelect.js: openTaskDetails opens the task details panel');
 if (!/'update_block_task'/.test(taskForm) || !/'update_task'/.test(taskForm) || (taskForm.match(/\.\.\.this\.changes/g) || []).length !== 2) problems.push('TaskFormDialog.vue: saves only what changed (update_block_task / update_task)');
 if (!/'remove_block_task'/.test(taskForm)) problems.push('TaskFormDialog.vue: can take a task off its block (remove_block_task)');
 if ((taskForm.match(/>\{\{ detail\.state \|\| 'Open' \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (detail.state)');
@@ -201,7 +203,12 @@ if (!/canAdd\(\)\s*\{\s*return \(this\.block\.is_session_tasks \|\| !this\.block
 if (/\{\{ block\.deliverable_notes \}\}/.test(drawer) || !/v-for="d in notes\.done"/.test(drawer)) problems.push('BlockDetailDrawer.vue: notes show ticked-off tasks as a list, never raw "Completed:" lines');
 // The live session's notes are what got done, never its title
 const layout = read('src/composables/useWorkstationPlannerLayout.js');
-if (/task_subject: trackerNotes|work_item_label: trackerNotes/.test(layout) || !/Completed:/.test((layout.match(/const heading = [^\n]*/) || [''])[0])) problems.push('useWorkstationPlannerLayout.js: the live block is titled by a notes line that is not a ticked-off task');
+{
+  const tl = read('src/composables/useWorkstationTimeline.js');
+  const wrap = read('src/utils/wrapNote.js');
+  if (/task_subject: trackerNotes|work_item_label: trackerNotes/.test(layout + tl) || !/const heading = noteHeading\(notes\) \|\| 'Live session';/.test(layout) || !/const heading = noteHeading\(trackerNotes\.value\) \|\| 'Live session';/.test(tl) || !/Completed:/.test((wrap.match(/export function noteHeading[\s\S]*?\n}/) || [''])[0])) problems.push('useWorkstationPlannerLayout.js / useWorkstationTimeline.js: the live block is titled by a notes line that is not a ticked-off task (wrapNote.noteHeading)');
+  if (/Recording\.\.\./.test(tl)) problems.push('useWorkstationTimeline.js: the live bar is named by its notes, not by notes with "(Recording...)" stuck on; the Live chip says it runs');
+}
 if (/✓|\\u2713/.test(read('omnitrack/api/tasks.py'))) problems.push('omnitrack/api/tasks.py: no glyphs in session notes; write "Completed: <task>" as the client does');
 const canEditBlock = (drawer.match(/canEditBlock\(\)\s*\{[\s\S]*?\n    \}/) || [''])[0];
 if (!/isManager/.test(canEditBlock) || !/b\.employee === this\.currentUser/.test(canEditBlock) || !/!this\.isPastBlock\(b\)/.test(canEditBlock) || !/'Cancelled'/.test(canEditBlock)) problems.push('BlockDetailDrawer.vue: Edit block only for its owner or a manager, and never on a past or cancelled block');
@@ -248,11 +255,20 @@ if (!/notes: notesWithoutLines\(trackerNotes\.value \|\| '', lines\)/.test(fnBod
   if (got !== 'Fixed the export') problems.push(`useWorkstationSessionModals.js: notesWithoutLines must drop notes that repeat a session line (got ${JSON.stringify(got)})`);
 }
 
+// 12c. A solid button that waits for input greys out legibly (DISABLED_SOLID), never frappe-ui's
+//      pale blue under white text: the entry's Add session and the Log's Add
+const frame = read('src/utils/sessionFrame.js');
+if (!/export const DISABLED_SOLID = 'disabled:!bg-gray-100 disabled:!text-gray-700 /.test(frame)) problems.push('utils/sessionFrame.js: DISABLED_SOLID greys a waiting button with dark text');
+if (!/:class="\[DISABLED_SOLID, 'enabled:!bg-blue-700/.test(read('src/session/SessionControlsPane.vue'))) problems.push('SessionControlsPane.vue: Add session waits in DISABLED_SOLID, not pale blue');
+if (!/:class="\[DISABLED_SOLID, '!h-auto self-stretch/.test(read('src/session/SessionLogPane.vue'))) problems.push('SessionLogPane.vue: the Log\'s Add waits in DISABLED_SOLID, not pale blue');
+
 // 13. What a session is for is the same task list a block shows (BlockTasksSection), never a
 //     Combobox of its own: bound, the block's tasks; unbound, the session's own list
 //     (w.sessionTasks), which travels with the live session and lands on the block Stop makes.
 const pane = read('src/session/SessionControlsPane.vue');
-if (!/<BlockTasksSection :block="trackerBoundBlock \|\| liveSessionBlock"/.test(pane)) problems.push('SessionControlsPane.vue: the session lists its tasks with BlockTasksSection (bound block, else liveSessionBlock)');
+if (!/<BlockTasksSection v-if="!isEntry" :block="trackerBoundBlock \|\| liveSessionBlock"/.test(pane)) problems.push('SessionControlsPane.vue: the session lists its tasks with BlockTasksSection (bound block, else liveSessionBlock)');
+// An entry lists its own block's tasks under its Log, never the running session's tasks
+if (!/<BlockTasksSection v-if="isEntry && trackerBoundBlock" :block="trackerBoundBlock"/.test(read('src/session/SessionLogPane.vue'))) problems.push('SessionLogPane.vue: an entry lists its block\'s tasks under the Log (its own block only, never the running session\'s tasks)');
 if (/workingOn|pickWorkingOn/.test(pane) || /useSessionTodoPicker/.test(read('src/session/SessionBox.vue'))) problems.push('SessionControlsPane.vue / SessionBox.vue: no "Working on" Combobox beside the task list (a second component for the same job)');
 if (!/if \(this\.block\.is_session_tasks\) \{\s*openTaskForm\(row, \{ onRemove: this\.removeSessionTask, onChange: this\.onSessionTaskChange \}\)/.test(tasksSection)) problems.push('BlockTasksSection.vue: a session task opens the one task form, removing it from the session and keeping the list in step');
 if (!/typeof taskForm\.onChange === 'function'/.test(taskForm) || !/taskForm\.onRemove\(this\.task\)/.test(taskForm)) problems.push('TaskFormDialog.vue: honours onRemove / onChange for a list that is not a block');
@@ -284,7 +300,8 @@ print(json.dumps(clean_session_tasks("not json")))`]).toString().trim();
 //     label's wrapper and its gap, which pushed each icon off centre: every tool is squared
 //     at the same breakpoint the label hides at.
 const toolSquare = (pane.match(/const TOOL_SQUARE = '([^']*)'/) || [])[1] || '';
-const tools = [...pane.matchAll(/<Button\s+data-session-tool[\s\S]*?<\/Button>/g)].map((m) => m[0]);
+const clockSection = pane.slice(pane.indexOf('aria-label="Session clock"'));
+const tools = [...clockSection.matchAll(/<Button\s+data-session-tool[\s\S]*?<\/Button>/g)].map((m) => m[0]);
 if (!/max-\[479px\]:w-7/.test(toolSquare) || !/max-\[479px\]:px-0/.test(toolSquare) || !/max-\[479px\]:gap-0/.test(toolSquare)) problems.push('SessionControlsPane.vue: TOOL_SQUARE squares the icon-only tools below 480px (w-7, px-0, gap-0)');
 if (tools.length !== 3 || tools.some((t) => !/:class="TOOL_SQUARE"/.test(t) || !/class="hidden min-\[480px\]:inline"/.test(t))) problems.push('SessionControlsPane.vue: each of the 3 session tools is squared (TOOL_SQUARE) and hides its label below 480px');
 
@@ -300,13 +317,13 @@ const slash = (read('src/composables/useWorkstationShortcuts.js').match(/const _
 if (!/if \(ev\.key === 'Escape' && isSessionElevated\.value\) \{\s*if \(ev\.defaultPrevented \|\| popoverOpen\(\)\) return;/.test(slash) || !/import \{ popoverOpen \} from "\.\.\/utils\/popover\.js"/.test(read('src/composables/useWorkstationShortcuts.js'))) problems.push('useWorkstationShortcuts.js: _slashFocus skips an Escape while a list is open or one already handled it (ev.defaultPrevented || popoverOpen()), so closing a list does not also minimise the session popup');
 
 // 17. Inline (the session popup's Details tab) the block drawer is facts only: no sheet, title,
-//     actions, task list or discussion, which the popup already has. Open block brings the sheet.
+//     actions, task list or activity, which the popup already has. Open block brings the sheet.
 for (const [what, re] of [
   ['the scrim', /<div v-if="show && block && !inline" @click="\$emit\('close'\)"/],
-  ['the title row', /<div v-if="!inline" class="flex items-start gap-1">\s*<h2 id="block-drawer-title"/],
-  ['the action row', /<div v-if="!inline" class="flex items-center gap-2">\s*<Button v-if="!isBlockCompleted\(block\)/],
-  ['the task list', /<BlockTasksSection v-if="!inline"/],
-  ['the discussion button', /<Button v-if="!inline" variant="outline" icon-left="message-square"/],
+  ['the title row', /<template v-if="!inline">\s*<div class="flex items-center gap-1">\s*<DetailKind id="block-drawer-kind"[^>]*>[\s\S]*?<\/div>\s*<h2 id="block-drawer-title"/],
+  ['the action row', /<div v-if="!inline" class="flex items-center gap-2">\s*<Button v-if="canStart"/],
+  ['the task list', /<BlockTasksSection v-if="!inline(?: && !block\.is_away)?"/],
+  ['the activity', /<DocActivity v-if="!inline && hasDoc"/],
   ['Open block', /<Button v-if="inline && !block\.is_session_tasks"[^>]*@click="\$emit\('open-full', block\)"/],
 ]) if (!re.test(drawer)) problems.push(`BlockDetailDrawer.vue: inline, ${what} follows the inline rule (hidden, or Open block shown)`);
 
@@ -314,14 +331,30 @@ for (const [what, re] of [
 //     inset (an outer ring was clipped by the bar into a broken box round "Log 5"), with a 3px
 //     indicator under the active tab instead of a border on the label.
 const logPane = read('src/session/SessionLogPane.vue');
-const tabCls = (logPane.match(/const TAB = '([^']*)'/) || ['', ''])[1];
-if (!/\bpx-3\b/.test(tabCls) || !/focus-visible:ring-inset/.test(tabCls) || /border-b-2|-mb-px/.test(tabCls)) problems.push('SessionLogPane.vue: TAB is a padded Material tab with an inset focus ring and no border underline (the outer ring was clipped)');
+// The look lives once, in utils/materialTab.js, and every tab bar imports it.
+const tabMod = read('src/utils/materialTab.js');
+const tabCls = (tabMod.match(/export const TAB = '([^']*)'/) || ['', ''])[1];
+if (!/\bpx-3\b/.test(tabCls) || !/focus-visible:ring-inset/.test(tabCls) || /border-b-2|-mb-px/.test(tabCls)) problems.push('utils/materialTab.js: TAB is a padded Material tab with an inset focus ring and no border underline (the outer ring was clipped)');
+for (const f of ['src/session/SessionLogPane.vue', 'src/views/ProjectsView.vue']) {
+  const src = read(f);
+  if (!/from '\.\.\/utils\/materialTab\.js'/.test(src) || /const (TAB|INDICATOR) = '/.test(src)) problems.push(`${f}: tab bars import TAB and INDICATOR from utils/materialTab.js instead of keeping a copy`);
+}
 if ((logPane.match(/:class="INDICATOR" aria-hidden="true"/g) || []).length !== 3) problems.push('SessionLogPane.vue: each of the three tabs draws the shared INDICATOR when active');
 
 // 19. One frame. Inside the session popup the popup is the frame, so the session card draws no
 //     ring or border of its own (a "flash" ring once boxed the popup's contents in blue).
 const sessionBox = read('src/session/SessionBox.vue');
-if (/\bring-\d|CardFlash/.test(sessionBox) || !/:class="isElevated \? '' :/.test(sessionBox)) problems.push('SessionBox.vue: the elevated session card has no ring or border of its own; the popup is the frame');
+if (/\bring-\d|CardFlash/.test(sessionBox) || !/:class="isElevated \|\| mode === 'entry' \? '' :/.test(sessionBox)) problems.push('SessionBox.vue: the elevated session card (and the entry, which has its own popup) has no ring or border of its own; the popup is the frame');
+// 19b. A work session added or edited by hand is the timer's own box in the timer's own popup:
+//     one frame (utils/sessionFrame.js) for both, and the entry is SessionBox mode="entry"
+for (const f of ['src/components/layout/SessionOverlay.vue', 'src/components/dialogs/WorkSessionEntry.vue']) {
+  const src = read(f);
+  if (!/from "\.\.\/\.\.\/utils\/sessionFrame\.js"|from '\.\.\/\.\.\/utils\/sessionFrame\.js'/.test(src) || !/SESSION_BACKDROP/.test(src) || !/SESSION_PANEL/.test(src)) problems.push(`${f}: the session popup and the entry share one frame (SESSION_BACKDROP, SESSION_PANEL from utils/sessionFrame.js)`);
+}
+{
+  const entryHost = read('src/components/dialogs/WorkSessionEntry.vue');
+  if (!/<SessionBox[^>]*\bmode="entry"/.test(entryHost)) problems.push('WorkSessionEntry.vue: a work session is added and edited in SessionBox mode="entry", the box the timer uses');
+}
 
 // Across src: a menu of further actions is a visible "More" button, never an unlabelled "..." icon.
 (function walk(dir) {
