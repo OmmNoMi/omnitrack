@@ -83,6 +83,12 @@ for (const f of DIALOGS) {
   if (/toMin\([^)]*(?:end|to_time)[^)]*\)\s*[->]\s*toMin\(|end_time\s*<=\s*f\.start_time/.test(src)) problems.push(`${f}: an end before the start is refused; it is the next morning`);
 }
 
+// 6. stopAndLogSession places its target stop time with entryEndMs, not a naive same-day msOf
+const modalsSrc = read("src/composables/useWorkstationSessionModals.js");
+if (/msOf\(f\.session_date,\s*f\.to_time\)/.test(modalsSrc)) {
+  problems.push("useWorkstationSessionModals.js: stopAndLogSession uses msOf on the session date; use entryEndMs so an overnight end rolls into the next day");
+}
+
 if (problems.length) {
   console.error("FAIL: overnight work\n  " + problems.join("\n  "));
   process.exit(1);
