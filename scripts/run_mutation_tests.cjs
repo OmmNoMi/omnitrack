@@ -964,6 +964,12 @@ runMutationTest('An end before the start is refused again', SRC('src/utils/clock
   (code) => code.replace('  return d < 0 ? d + 24 * 60 : d;', '  return d < 0 ? 0 : d;'), ON, 'spanMins(23:00, 04:00)');
 runMutationTest('The Timesheet dialog stops measuring past midnight', SRC('src/components/dialogs/TimesheetEntryDialog.vue'),
   (code) => code.replace('return spanMins(this.form.from_time, this.form.to_time);', 'return Math.max(0, toMin(this.form.to_time) - toMin(this.form.from_time));'), ON, 'TimesheetEntryDialog.vue');
+runMutationTest('Stop puts an overnight end on the start day again', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const end = msOf(f.session_date, f.to_time);'), ON, 'stopAndLogSession');
+runMutationTest('Stop puts an overnight end on the start day, spelt another way', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const { session_date: day, to_time: until } = f;\n    const end = mins >= 0 ? msOf(day, until) : 0;'), ON, 'stopAndLogSession');
+runMutationTest('An overnight stop ends on its start day', SRC('src/utils/timesheetEntry.js'),
+  (code) => code.replace('(toMin(from) + mins) * 60000', '((toMin(from) + mins) % 1440) * 60000'), ON, 'a session from 20:19 stopped at 01:10');
 
 const RS = 'node scripts/check_reschedule.mjs';
 runMutationTest('A missed plan cannot be rescheduled', SRC('src/App.vue'),

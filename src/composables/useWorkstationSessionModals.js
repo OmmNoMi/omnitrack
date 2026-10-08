@@ -210,7 +210,8 @@ export function useWorkstationSessionModals(opts) {
   const stopAndLogSession = async (f) => {
     if (!isTracking.value) return;
     if (restartClockAt(f) == null) return;
-    const end = msOf(f.session_date, f.to_time);
+    const mins = spanMins(f.from_time, f.to_time);
+    const end = entryEndMs(f.session_date, f.from_time, mins);
     showEditSessionModal.value = false;
     await toggleTrack(end < Date.now() ? end : null);
   };
