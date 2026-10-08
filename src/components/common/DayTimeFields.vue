@@ -34,7 +34,7 @@
         <div class="flex flex-wrap items-center gap-2">
           <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
           <span v-if="mins > 0 && !durations.includes(mins)" class="text-sm tabular-nums" :class="mutedText">{{ durationLabel(mins) }}</span>
-          <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
+          <span v-if="nextDay" class="text-sm font-medium text-ink-blue-3">Ends next day</span>
           <span v-if="start && end && mins <= 0" class="text-sm text-ink-red-4" role="alert">End is the same as start</span>
         </div>
       </div>

@@ -83,11 +83,18 @@ for (const f of DIALOGS) {
   if (/toMin\([^)]*(?:end|to_time)[^)]*\)\s*[->]\s*toMin\(|end_time\s*<=\s*f\.start_time/.test(src)) problems.push(`${f}: an end before the start is refused; it is the next morning`);
 }
 
-// 6. stopAndLogSession places its target stop time with entryEndMs, not a naive same-day msOf
-const modalsSrc = read("src/composables/useWorkstationSessionModals.js");
-if (/msOf\(f\.session_date,\s*f\.to_time\)/.test(modalsSrc)) {
-  problems.push("useWorkstationSessionModals.js: stopAndLogSession uses msOf on the session date; use entryEndMs so an overnight end rolls into the next day");
-}
+// 6. Stopping a running session that crossed midnight ends it the next morning. msOf puts a
+// clock time on the session's own (start) day, so 20:19 to 01:10 stopped at 01:10 the day
+// before it began and was cut to a minute. The end is placed by entryEndMs, however spelt.
+const { entryEndMs } = await import("../src/utils/timesheetEntry.js");
+const startMs = new Date(2026, 9, 7, 20, 19).getTime();
+const stopMs = entryEndMs("2026-10-07", "20:19", spanMins("20:19", "01:10"));
+if (stopMs !== new Date(2026, 9, 8, 1, 10).getTime()) problems.push(`a session from 20:19 stopped at 01:10 ends at ${new Date(stopMs)}, want 01:10 the next day (after its start, ${new Date(startMs)})`);
+const modals = read("src/composables/useWorkstationSessionModals.js");
+const stopAt = modals.indexOf("const stopAndLogSession");
+const stop = stopAt < 0 ? "" : modals.slice(stopAt, modals.indexOf("\n  };", stopAt));
+if (!stop) problems.push("src/composables/useWorkstationSessionModals.js: stopAndLogSession is gone; this check needs its new home");
+else if (/\bmsOf\(/.test(stop) || !/\bentryEndMs\(/.test(stop)) problems.push("src/composables/useWorkstationSessionModals.js stopAndLogSession: place the stop time with entryEndMs, never msOf, so an overnight end rolls into the next day");
 
 if (problems.length) {
   console.error("FAIL: overnight work\n  " + problems.join("\n  "));
