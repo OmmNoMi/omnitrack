@@ -557,7 +557,7 @@ Done:
   everyone on the task ..."). A to-do block had sent its own name as the task: the server failed
   to make a channel (an Error Log on every open and send), the page ignored the refusal, and Send
   looked dead. A message not sent now says "Not sent." and why, under the box; Send is in the tab
-  order.
+  order. The 56 Error Logs the bug wrote on ommnomi.local (since 2026-10-06) were cleared.
 
 Open:
 - A to-do or a block has no chat: its talk is the Activity under Details. Consider a "Discuss"
@@ -567,8 +567,6 @@ Open:
   for the same focus hand-back, and use `handFocus`.
 - The same TimePicker Escape swallow in `RescheduleBlockDialog` and `PlanWorkBlockDialog`:
   check with a real key press whether one Escape blurs the field instead of stepping back.
-- Error Logs "Failed to create Raven channel for task PWB-..." from before this fix are still on
-  ommnomi.local; clear them once the owner agrees.
 
 ## Domain model written down (`docs/DOMAIN_MODEL.md`)
 
