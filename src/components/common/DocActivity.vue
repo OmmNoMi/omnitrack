@@ -9,7 +9,7 @@
     <p v-if="note" class="text-sm" :class="mutedText">{{ note }}</p>
 
     <!-- Say something. Ctrl+Enter posts; an unsent draft is kept if the panel closes. -->
-    <form v-if="!failed || items.length" class="space-y-2" @submit.prevent="post">
+    <form v-if="!(failed || refused) || items.length" class="space-y-2" @submit.prevent="post">
       <Textarea
         v-model="draft"
         variant="outline"
@@ -27,10 +27,13 @@
       </div>
     </form>
 
-    <p v-if="loading && !items.length" class="text-sm" :class="mutedText" role="status">Loading activity…</p>
-    <p v-else-if="failed && !items.length" class="text-sm" :class="mutedText">
-      Activity could not be loaded. <Button variant="ghost" size="sm" label="Try again" @click="load">Try again</Button>
+    <!-- A refusal has no Try again: asking again gets the same answer. A failure keeps its line
+         while it retries, the button spinning, so the retry is seen and nothing flashes. -->
+    <p v-if="refused && !items.length" class="text-sm" :class="mutedText">You cannot see this {{ noun }}'s activity.</p>
+    <p v-else-if="failed && !items.length" class="text-sm" :class="mutedText" role="status">
+      Activity could not be loaded. <Button variant="ghost" size="sm" label="Try again" :loading="loading" @click="load">Try again</Button>
     </p>
+    <p v-else-if="loading && !items.length" class="text-sm" :class="mutedText" role="status">Loading activity…</p>
 
     <template v-else-if="items.length">
       <ol class="space-y-3" :aria-label="'Activity on this ' + noun + ', newest first'">
@@ -86,7 +89,7 @@ export default {
     return useWorkstationContext(['postJSON']);
   },
   data() {
-    return { items: [], comments: 0, loading: false, failed: false, posting: false, error: '', said: '', showAll: false, seq: 0, draft: '' };
+    return { items: [], comments: 0, loading: false, failed: false, refused: false, posting: false, error: '', said: '', showAll: false, seq: 0, draft: '' };
   },
   computed: {
     key() { return this.doctype + '\n' + this.name; },
@@ -102,7 +105,7 @@ export default {
     bubble() { return this.isDarkMode ? 'bg-gray-800' : 'bg-gray-50'; },
   },
   watch: {
-    key: { immediate: true, handler() { this.draft = drafts.get(this.key) || ''; this.items = []; this.comments = 0; this.showAll = false; this.error = ''; this.load(); } },
+    key: { immediate: true, handler() { this.draft = drafts.get(this.key) || ''; this.items = []; this.comments = 0; this.showAll = false; this.error = ''; this.failed = false; this.refused = false; this.load(); } },
     stamp() { this.load(); },
     draft(v) { if (v.trim()) drafts.set(this.key, v); else drafts.delete(this.key); },
   },
@@ -111,12 +114,12 @@ export default {
       if (!this.doctype || !this.name) return;
       const seq = ++this.seq;
       this.loading = true;
-      this.failed = false;
+      this.refused = false;
       try {
         const res = await this.postJSON('activity.get_activity', { doctype: this.doctype, name: this.name });
-        if (seq === this.seq) this.take(res);
+        if (seq === this.seq) { this.take(res); this.failed = false; }
       } catch (e) {
-        if (seq === this.seq) this.failed = true;
+        if (seq === this.seq) { this.refused = !!(e && e.status === 403); this.failed = !this.refused; }
       } finally {
         if (seq === this.seq) this.loading = false;
       }

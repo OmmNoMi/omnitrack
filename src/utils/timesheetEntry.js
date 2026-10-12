@@ -2,11 +2,39 @@
 // "now", and inside the days the server accepts (permissions.check_timesheet_date_permission).
 import { toMin, toHHMM, localISO } from "./clockTime.js";
 
-// Quick-day chips, today first and back as far as the server allows: round(hours / 24)
-// days, today included. Managers have no limit; a week of chips is enough to reach.
-export function entryDayOffsets(horizonHours, isManager) {
-  const days = isManager ? 7 : Math.max(1, Math.round((Number(horizonHours) || 48) / 24));
-  return Array.from({ length: Math.min(days, 7) }, (_, i) => -i);
+// Quick-day chips: Today, and Yesterday when the person may log it. Any other day is picked
+// in the date picker, so the chips stay one line at 375px however far back logging reaches.
+export function entryDayOffsets(daysBack, isManager) {
+  return isManager || (Number(daysBack) || 15) >= 2 ? [0, -1] : [0];
+}
+
+// "30 Sep", with the year when it is not this one
+export function dayWords(dayISO, now = new Date()) {
+  const d = new Date(String(dayISO).slice(0, 10) + "T00:00:00");
+  const opts = { day: "numeric", month: "short" };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-GB", opts);
+}
+
+// Why time on this day cannot be logged, changed or deleted, or "" when it can. The same rule
+// as the server (permissions.check_timesheet_date_permission): nobody touches a day payroll has
+// closed; past that, an employee reaches back daysBack days, today counted as day 1, and a
+// manager reaches any day.
+export function logDayRefusal(dayISO, { daysBack, payrollClosedThrough, isManager } = {}, now = new Date()) {
+  const day = String(dayISO || "").slice(0, 10);
+  if (!day) return "";
+  const closed = payrollClosedThrough ? String(payrollClosedThrough).slice(0, 10) : "";
+  if (closed && day <= closed) {
+    return `Payroll is closed through ${dayWords(closed, now)}. Time on or before that day can't be logged or changed.`;
+  }
+  if (isManager) return "";
+  const days = Math.max(1, Number(daysBack) || 15);
+  const first = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const firstISO = localISO(first);
+  if (day < firstISO) {
+    return `You can log time for the last ${days} days, from ${dayWords(firstISO, now)}. Ask a manager to log anything earlier.`;
+  }
+  return "";
 }
 
 // Day and times for a new entry against a block: the block's own slot once it has

@@ -1,6 +1,7 @@
 import { ref, computed, nextTick } from "vue";
 import { useWorkstationPlannerLayout } from "./useWorkstationPlannerLayout.js";
 import { useWorkstationCardStyles } from "./useWorkstationCardStyles.js";
+import { logDayRefusal } from "../utils/timesheetEntry.js";
 
 /**
  * Planner state, hover card and read-only past rules.
@@ -144,10 +145,17 @@ export function useWorkstationPlannerState(w) {
       ? Number(plannerData.value.past_block_lock_grace_hours)
       : 24;
   });
-  const timesheetHorizonHours = computed(() => {
-    return (plannerData.value && plannerData.value.timesheet_modification_horizon_hours != null)
-      ? Number(plannerData.value.timesheet_modification_horizon_hours)
-      : 48;
+  // How far back time can be logged (OmniTrack Settings): log_days_back for employees, and the
+  // day payroll is closed through for everyone
+  const logDaysBack = computed(() => {
+    const d = plannerData.value && Number(plannerData.value.log_days_back);
+    return d > 0 ? d : 15;
+  });
+  const payrollClosedThrough = computed(() => (plannerData.value && plannerData.value.payroll_closed_through) || '');
+  const logWindowRefusal = (dayISO) => logDayRefusal(dayISO, {
+    daysBack: logDaysBack.value,
+    payrollClosedThrough: payrollClosedThrough.value,
+    isManager: isManager.value,
   });
   const isPastBlock = (b) => {
     if (!b || !b.work_date) return false;
@@ -168,23 +176,7 @@ export function useWorkstationPlannerState(w) {
     const diffHours = (now.getTime() - blockDt.getTime()) / (1000 * 60 * 60);
     return diffHours > grace;
   };
-  const canLogTimesheet = (b) => {
-    if (!b) return false;
-    if (isManager.value) return true;
-    const horizon = timesheetHorizonHours.value;
-    const dtStr = b.work_date || todayDate.value || todayISO();
-    const parts = dtStr.split('-');
-    if (parts.length < 3) return true;
-    const blockDt = new Date(
-      parseInt(parts[0], 10),
-      parseInt(parts[1], 10) - 1,
-      parseInt(parts[2], 10),
-      23, 59, 59
-    );
-    const now = new Date();
-    const diffHours = (now.getTime() - blockDt.getTime()) / (1000 * 60 * 60);
-    return diffHours <= horizon;
-  };
+  const canLogTimesheet = (b) => !!b && !logWindowRefusal(b.work_date || todayDate.value || todayISO());
   const isBlockLocked = (b) => {
     if (!b) return false;
     let e = _mins(b.end_time);
@@ -333,7 +325,9 @@ export function useWorkstationPlannerState(w) {
     sessionForm,
     isPastSlot,
     pastBlockGraceHours,
-    timesheetHorizonHours,
+    logDaysBack,
+    payrollClosedThrough,
+    logWindowRefusal,
     isPastBlock,
     canLogTimesheet,
     isBlockLocked,

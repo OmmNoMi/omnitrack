@@ -50,6 +50,9 @@ const props = defineProps({
   // For mode 'entry': { mode: add | edit | free, session_date, from_time, to_time }
   entry: { type: Object, default: null },
   dayOffsets: { type: Array, default: () => [0, -1] },
+  // For mode 'entry': why the day cannot be logged (Save waits), and why the server refused
+  dayRefusal: { type: String, default: '' },
+  saveError: { type: String, default: '' },
   isSaving: { type: Boolean, default: false }
 });
 

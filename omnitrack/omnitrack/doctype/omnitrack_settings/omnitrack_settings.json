@@ -220,11 +220,19 @@
       "label": "Temporal Governance & Horizon Policies"
     },
     {
-      "fieldname": "timesheet_modification_horizon_hours",
+      "fieldname": "log_days_back",
       "fieldtype": "Int",
-      "label": "Timesheet Modification Horizon (Hours)",
-      "default": 48,
-      "description": "Hours during which standard users can log or modify timesheets without manager sign-off (e.g. 48 for 2 days, 168 for 1 week)."
+      "label": "Days back an employee can log time",
+      "default": "15",
+      "non_negative": 1,
+      "description": "Today counts as day 1, so 15 reaches back two weeks. Managers can log any day payroll has not closed."
+    },
+    {
+      "fieldname": "payroll_closed_through",
+      "fieldtype": "Date",
+      "label": "Payroll closed through",
+      "permlevel": 1,
+      "description": "HR sets this after running payroll, usually to the last day of last month. No one can log, change or delete time on or before this day."
     },
     {
       "fieldname": "allow_submitted_timesheet_amendment",
@@ -347,6 +355,35 @@
     },
     {
       "role": "OmniTrack Manager",
+      "read": 1,
+      "write": 0
+    },
+    {
+      "role": "HR Manager",
+      "read": 1,
+      "write": 0
+    },
+    {
+      "role": "HR Manager",
+      "permlevel": 1,
+      "read": 1,
+      "write": 1
+    },
+    {
+      "role": "System Manager",
+      "permlevel": 1,
+      "read": 1,
+      "write": 1
+    },
+    {
+      "role": "OmniTrack Admin",
+      "permlevel": 1,
+      "read": 1,
+      "write": 0
+    },
+    {
+      "role": "OmniTrack Manager",
+      "permlevel": 1,
       "read": 1,
       "write": 0
     }

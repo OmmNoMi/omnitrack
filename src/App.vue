@@ -262,7 +262,7 @@ export default {
     // The drawers are prop/emit components; these adapt their events to the
     // workstation's real signatures (the earlier wiring named functions that
     // never existed, so every drawer action was a silent no-op).
-    const { isBlockCompleted, isPastBlock, isTracking, trackerBlockName, timesheetHorizonHours, isManager } = workstation;
+    const { isBlockCompleted, isPastBlock, isTracking, trackerBlockName, logDaysBack, isManager } = workstation;
     const isOpenPlan = (b) => !!b && !isBlockCompleted(b) && !isPastBlock(b) && !['Rescheduled', 'Cancelled'].includes(b.status);
     const isRecordingOn = (b) => isTracking.value && trackerBlockName.value === b.name;
     // A running session does not hold the plan where it is: rescheduling moves the plan and
@@ -274,8 +274,8 @@ export default {
     const isBlockReschedulable = (b) => (isOpenPlan(b) || isMissedPlan(b)) && !b.is_live_active;
     // Cancelling a block while its session runs would throw away the work being recorded
     const isBlockCancellable = (b) => isOpenPlan(b) && !b.is_live_active && !isRecordingOn(b);
-    // Timesheet entry day chips reach back as far as the server's horizon allows
-    const entryDayOffsets = computed(() => dayOffsetsFor(timesheetHorizonHours.value, isManager.value));
+    // Work session entry day chips: Today, and Yesterday when it can be logged
+    const entryDayOffsets = computed(() => dayOffsetsFor(logDaysBack.value, isManager.value));
     const editSessionRow = (session, block) => workstation.openEditSessionModal(block, session);
     // Adding a timesheet entry by hand opens the same dialog as editing one
     const logSessionFor = (block) => workstation.openEditSessionModal(block, {});

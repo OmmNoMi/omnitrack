@@ -33,6 +33,8 @@
           :entry="form"
           :day-offsets="dayOffsets"
           :is-saving="isSaving"
+          :day-refusal="dayRefusal"
+          :save-error="editSessionError"
           :tracker-project="form.project || ''"
           :tracker-nature="form.nature || 'Work'"
           :tracker-bound-block="block"
@@ -78,7 +80,7 @@ export default {
   },
   emits: ["update:modelValue", "save"],
   setup() {
-    const ws = useWorkstationContext(["editSessionTargetBlock", "projects", "natureOptions", "minLogLineChars", "modKey"]);
+    const ws = useWorkstationContext(["editSessionTargetBlock", "editSessionError", "logWindowRefusal", "projects", "natureOptions", "minLogLineChars", "modKey"]);
     return { ...ws, block: ws.editSessionTargetBlock, SESSION_BACKDROP, SESSION_PANEL };
   },
   data() {
@@ -86,6 +88,8 @@ export default {
   },
   computed: {
     title() { return this.form.mode === "edit" ? "Edit work session" : "Add work session"; },
+    // A day outside the logging window or a closed payroll period, said before Save is pressed
+    dayRefusal() { return this.form.session_date ? this.logWindowRefusal(this.form.session_date) : ""; },
   },
   watch: {
     modelValue: { immediate: true, handler(open) { if (open) this.opened(); else this.closed(); } },

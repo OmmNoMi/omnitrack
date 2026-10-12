@@ -233,6 +233,7 @@ export function useWorkstationShortcuts(w) {
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
+    editSessionError,
     openEditSessionModal,
     saveEditSession,
     confirmDeleteSession
@@ -311,6 +312,7 @@ export function useWorkstationShortcuts(w) {
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
+    editSessionError,
     openEditSessionModal,
     saveEditSession,
     confirmDeleteSession,

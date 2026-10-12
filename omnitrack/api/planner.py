@@ -291,8 +291,22 @@ def get_planner_data(employee=None, week_start=None, start_date=None, end_date=N
 			"away_count": len(non_work_blocks),
 		},
 		"past_block_lock_grace_hours": getattr(frappe.get_single("OmniTrack Settings"), "past_block_lock_grace_hours", 24) or 24 if frappe.db.exists("DocType", "OmniTrack Settings") else 24,
-		"timesheet_modification_horizon_hours": getattr(frappe.get_single("OmniTrack Settings"), "timesheet_modification_horizon_hours", 48) or 48 if frappe.db.exists("DocType", "OmniTrack Settings") else 48,
+		**_log_window(),
 		"allow_submitted_timesheet_amendment": getattr(frappe.get_single("OmniTrack Settings"), "allow_submitted_timesheet_amendment", 1) if frappe.db.exists("DocType", "OmniTrack Settings") else 1,
+	}
+
+
+def _log_window():
+	"""How far back time can be logged: log_days_back for employees, and the day payroll is
+	closed through for everyone (omnitrack.permissions.check_timesheet_date_permission)."""
+	from omnitrack.permissions import get_log_days_back, get_payroll_closed_through
+
+	closed = get_payroll_closed_through()
+	days = get_log_days_back()
+	return {
+		"log_days_back": days,
+		"payroll_closed_through": str(closed) if closed else None,
+		"timesheet_modification_horizon_hours": days * 24,
 	}
 
 

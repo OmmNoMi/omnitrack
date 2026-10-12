@@ -102,6 +102,22 @@ for (const [zone, day, to] of [["America/New_York", "2026-10-31", "04:00"], ["Am
 }
 if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
 
+// 7. A length reads exactly ("7h 15m", never "7.3h"), and the quick lengths fit on one line:
+// four chips at most, so the session box's row never wraps onto a second line.
+const { durationLabel } = await import("../src/utils/clockTime.js");
+for (const [m, want] of [[45, "45m"], [60, "1h"], [90, "1h 30m"], [435, "7h 15m"], [120, "2h"]]) {
+  if (durationLabel(m) !== want) problems.push(`durationLabel(${m}) is ${durationLabel(m)}, want ${want}`);
+}
+const chipLists = [...read("src/session/SessionControlsPane.vue").matchAll(/:durations="\[([^\]]*)\]"/g)].map((m) => m[1]);
+const dflt = read("src/components/common/DayTimeFields.vue").match(/durations: \{ type: Array, default: \(\) => \[([^\]]*)\] \}/);
+if (!dflt) problems.push("src/components/common/DayTimeFields.vue: durations has a default list");
+for (const list of [...chipLists, dflt ? dflt[1] : ""]) {
+  if (list.split(",").filter((x) => x.trim()).length > 4) problems.push(`quick lengths [${list}]: four at most, so they fit on one line`);
+}
+const dtf = read("src/components/common/DayTimeFields.vue");
+if (!/<span aria-hidden="true">\{\{ timeLabel \}\}<\/span><span v-if="mins > 0 && !durations\.includes\(mins\)"[^>]*>\{\{ ' · ' \}\}\{\{ durationLabel\(mins\) \}\}<\/span><\/p>/.test(dtf) || /<ChoiceChips :options="durationOptions"[^\n]*\n\s*<span v-if="mins > 0/.test(dtf)) problems.push("src/components/common/DayTimeFields.vue: a length no chip names sits beside the label, not alone under the chips");
+if (chipLists.length !== 2) problems.push("src/session/SessionControlsPane.vue: both session boxes pass their own short list of lengths");
+
 if (problems.length) {
   console.error("FAIL: overnight work\n  " + problems.join("\n  "));
   process.exit(1);

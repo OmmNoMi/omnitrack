@@ -73,13 +73,24 @@ class PlannedWorkBlock(OptionalLinks, Document):
 					)
 
 	def validate_timesheet_session_horizons(self):
-		"""Rule: OmniTrack Users can only log or modify timesheet sessions within the configured horizon."""
+		"""Rule: a session can be added, changed or removed only on a day the person may log
+		(check_timesheet_date_permission). Rows left as they were are not checked, so a block whose
+		payroll has closed can still be approved."""
 		if getattr(self.flags, "ignore_permissions", False):
 			return
 		from omnitrack.permissions import check_timesheet_date_permission
-		for sess in (self.sessions or []):
-			if sess.get("session_date"):
-				check_timesheet_date_permission(sess.session_date)
+
+		before = self.get_doc_before_save()
+		row = lambda r: (str(r.session_date), str(r.from_time), str(r.to_time), flt(r.hours), r.notes or "")
+		old = {r.name: r for r in (before.sessions if before else [])}
+		touched = []
+		for sess in self.sessions or []:
+			prev = old.pop(sess.name, None)
+			if prev is None or row(prev) != row(sess):
+				touched += [sess.session_date, prev and prev.session_date]
+		touched += [r.session_date for r in old.values()]
+		for day in sorted({str(d) for d in touched if d}):
+			check_timesheet_date_permission(day)
 
 	def validate_no_future_sessions(self):
 		"""Rule: a session records work done, so it cannot end after now. Only new or changed

@@ -27,12 +27,12 @@ if (entryEndMs("", "10:00", 60) !== null) problems.push("src/utils/timesheetEntr
 const FILES = {
   "src/session/useSessionEntry.js": [
     [/const entryAhead = computed\(\(\) => \{\s*const end = entryEndMs\(entry\.value\.session_date, entry\.value\.from_time, entryMins\.value\);\s*return end != null && entryMins\.value > 0 && end > now\.value \+ 60000;/, "an entry ending after now is ahead"],
-    [/return !props\.isSaving && !!entry\.value\.session_date && entryMins\.value > 0 && !entryAhead\.value && said;/, "an entry ending after now cannot be saved"],
+    [/return !props\.isSaving && !!entry\.value\.session_date && !props\.dayRefusal && entryMins\.value > 0 && !entryAhead\.value && said;/, "an entry ending after now cannot be saved"],
     [/tick = setInterval\(\(\) => \{ now\.value = Date\.now\(\); \}, 30000\);/, "now moves on while the entry is open"],
     [/const said = \(props\.sessionNotesList \|\| \[\]\)\.length > 0 \|\| draftReady\.value;/, "a session needs a line, as when it is stopped"],
   ],
   "src/session/SessionControlsPane.vue": [
-    [/<p v-if="entryAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">\{\{ entryAheadText \}\}<\/p>/, "says why it cannot be saved"],
+    [/<p v-if="entryRefusal" class="text-sm text-red-700 dark:text-red-200" role="alert">\{\{ entryRefusal \}\}<\/p>/, "says why it cannot be saved"],
     [/:disabled="!entryCanSave"/, "Add session waits until it can be saved"],
     [/:tabindex="activeToolIndex === 0 \|\| !entryCanSave \? 0 : -1"/, "Cancel stays reachable by Tab while Add session is disabled"],
   ],
@@ -89,8 +89,8 @@ delete globalThis.document;
 //    spanMins, so an entry past midnight (23:30 to 00:30) is an hour, not refused as backwards.
 const modals = read("src/composables/useWorkstationSessionModals.js");
 if (!/const mins = f\.from_time && f\.to_time \? spanMins\(f\.from_time, f\.to_time\) : 0;\s*if \(!\(mins > 0\)\)/.test(modals) || /toMinutes/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: saveEditSession measures the entry with spanMins, so one past midnight is not refused");
-if (!/if \(entryEndMs\(f\.session_date, f\.from_time, mins\) > Date\.now\(\) \+ 60000\) \{ showToast\(/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: saveEditSession refuses an entry ending after now");
-if (!/if \(!\(f\.log \|\| \[\]\)\.length\) \{ showToast\(/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: saveEditSession refuses an entry with no line");
+if (!/if \(entryEndMs\(f\.session_date, f\.from_time, mins\) > Date\.now\(\) \+ 60000\) return refuse\(/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: saveEditSession refuses an entry ending after now");
+if (!/if \(!\(f\.log \|\| \[\]\)\.length\) return refuse\(/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: saveEditSession refuses an entry with no line");
 if (!/const notes = composeWrapNote\(f\.block_title, f\.log\);/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: writeEntry saves the Log's lines with composeWrapNote");
 if (!/log: logLines\(session\.notes \|\| '', /.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: editing a session opens its notes as Log lines");
 // A free entry files under its own Project and Activity, never the running session's

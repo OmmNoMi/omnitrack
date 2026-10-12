@@ -469,6 +469,10 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 	if not sess_row:
 		frappe.throw(_("Work session not found in work block."))
 
+	# The day it leaves is checked too: a session cannot be moved out of a closed payroll period
+	if sess_row.session_date and str(sess_row.session_date) != str(base_date):
+		check_timesheet_date_permission(sess_row.session_date, frappe.session.user)
+
 	if session_date:
 		sess_row.session_date = session_date
 	if from_time:
@@ -536,7 +540,9 @@ def delete_work_session(session_name, block_name=None):
 	check_approved_block_lock(doc, frappe.session.user)
 	check_session_deletion_permission(frappe.session.user)
 
-	base_date = doc.work_date or nowdate()
+	# The row's own day, not the block's: an overnight session's second half is the next day
+	row = next((s for s in doc.sessions if s.name == session_name), None)
+	base_date = (row and row.session_date) or doc.work_date or nowdate()
 	check_timesheet_date_permission(base_date, frappe.session.user)
 
 	doc.sessions = [s for s in doc.sessions if s.name != session_name]

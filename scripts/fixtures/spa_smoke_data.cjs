@@ -55,7 +55,7 @@ function build(now = new Date()) {
     planner: {
       user: 'smoke@example.com', is_manager: true, week_start: day(-3), week_end: day(3),
       days: [-3, -2, -1, 0, 1, 2, 3].map(day), blocks, assigned_tasks: tasks, attention_tasks: tasks, totals,
-      past_block_lock_grace_hours: 24, timesheet_modification_horizon_hours: 48, allow_submitted_timesheet_amendment: 0
+      past_block_lock_grace_hours: 24, log_days_back: 15, payroll_closed_through: null, timesheet_modification_horizon_hours: 360, allow_submitted_timesheet_amendment: 0
     },
     approvals: [block(1, { status: 'Completed', actual_hours: 1, approval_status: 'Pending' })]
   };

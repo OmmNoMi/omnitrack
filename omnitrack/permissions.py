@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, formatdate, getdate, nowdate
 
 
 def is_omnitrack_manager(user=None):
@@ -71,21 +71,68 @@ def can_access_user_data(target_user, session_user=None):
 	return False
 
 
-def get_timesheet_modification_horizon_hours():
-	"""Returns the configured horizon in hours for standard timesheet modifications (default: 48 hours)."""
-	horizon_hours = 48
+# How far back an employee may log time, today counted as day 1. 15 days lets people catch up on
+# a fortnight; a manager may log any day payroll has not closed.
+DEFAULT_LOG_DAYS_BACK = 15
+
+
+def _setting(fieldname):
+	"""One OmniTrack Settings value, or None when the DocType or the field is not there yet."""
 	try:
-		if frappe.db.exists("DocType", "OmniTrack Settings"):
-			meta = frappe.get_meta("OmniTrack Settings")
-			if meta.has_field("timesheet_modification_horizon_hours"):
-				val = frappe.db.get_single_value("OmniTrack Settings", "timesheet_modification_horizon_hours")
-				if val is not None and val != "":
-					val_int = int(val)
-					if val_int > 0:
-						horizon_hours = val_int
+		if frappe.db.exists("DocType", "OmniTrack Settings") and frappe.get_meta("OmniTrack Settings").has_field(fieldname):
+			return frappe.db.get_single_value("OmniTrack Settings", fieldname)
 	except Exception:
 		pass
-	return horizon_hours
+	return None
+
+
+def get_log_days_back():
+	"""Days back an employee may log, change or delete time (OmniTrack Settings > log_days_back)."""
+	try:
+		days = int(_setting("log_days_back") or 0)
+	except (TypeError, ValueError):
+		days = 0
+	return days if days > 0 else DEFAULT_LOG_DAYS_BACK
+
+
+def get_timesheet_modification_horizon_hours():
+	"""The same window in hours, for callers that still count in hours."""
+	return get_log_days_back() * 24
+
+
+def get_earliest_log_date():
+	"""The first day an employee may still log: today counts as day 1."""
+	return getdate(add_days(nowdate(), -(get_log_days_back() - 1)))
+
+
+def get_payroll_closed_through():
+	"""The last day of the last payroll run (OmniTrack Settings > payroll_closed_through), or None.
+	HR moves it after running payroll."""
+	val = _setting("payroll_closed_through")
+	closed = getdate(val) if val else None
+	# Frappe reads an empty Date on a Single as 0001-01-01: that is "not set", not a date
+	return closed if closed and closed.year > 1 else None
+
+
+def check_payroll_open(target_date):
+	"""Rule: time on or before the day payroll is closed through cannot be logged, changed or
+	deleted, by anyone. It has been paid. HR moves the date back to reopen it."""
+	closed = get_payroll_closed_through()
+	if closed and target_date and getdate(target_date) <= closed:
+		frappe.throw(
+			_("Payroll is closed through {0}. Time on or before that day can't be logged or changed.").format(formatdate(closed)),
+			frappe.PermissionError,
+		)
+	return True
+
+
+def _refuse_before_window():
+	frappe.throw(
+		_("You can log time for the last {0} days, from {1}. Ask a manager to log anything earlier.").format(
+			get_log_days_back(), formatdate(get_earliest_log_date())
+		),
+		frappe.PermissionError,
+	)
 
 
 def get_past_block_lock_grace_hours():
@@ -159,29 +206,17 @@ def check_session_deletion_permission(user=None):
 
 def check_timesheet_date_permission(session_date, user=None):
 	"""
-	Rule: An OmniTrack User can only log or modify timesheets within the configured
-	horizon in hours (OmniTrack Settings > timesheet_modification_horizon_hours).
-	Default is 48 hours (2 days: today and yesterday). Configurable to 72h (3 days), 168h (1 week), etc.
-	Dates before the horizon require an OmniTrack Manager or Administrator.
+	Rule: nobody logs, changes or deletes time on a day payroll has closed. Past that, an employee
+	works within the last log_days_back days (OmniTrack Settings, default 15, today included);
+	earlier days need an OmniTrack Manager or Administrator.
 	"""
 	if not user:
 		user = frappe.session.user
+	check_payroll_open(session_date)
 	if is_omnitrack_manager(user):
 		return True
-
-	horizon_hours = get_timesheet_modification_horizon_hours()
-	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
-	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
-	target_date = getdate(session_date)
-	if target_date < cutoff_date:
-		horizon_desc = f"{horizon_hours} hours"
-		if horizon_hours % 24 == 0:
-			days = horizon_hours // 24
-			horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
-		frappe.throw(
-			_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
-			frappe.PermissionError
-		)
+	if getdate(session_date) < get_earliest_log_date():
+		_refuse_before_window()
 	return True
 
 
@@ -242,67 +277,26 @@ def check_planned_block_past_lock(doc, new_work_date=None):
 	return True
 
 
+def _timesheet_dates(doc):
+	if hasattr(doc, "time_logs") and doc.time_logs:
+		return [getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate()) for row in doc.time_logs]
+	return [getdate(doc.get("start_date"))] if doc.get("start_date") else []
+
+
 def validate_timesheet_permission(doc, method=None):
-	"""DocEvent validation for standard Timesheet: users can only save logs within the configured horizon."""
-	user = frappe.session.user
-	if is_omnitrack_manager(user):
-		return
+	"""DocEvent on a standard Timesheet: the same days as a work session (check_timesheet_date_permission)."""
 	if getattr(doc.flags, "ignore_permissions", False):
 		return
-
-	horizon_hours = get_timesheet_modification_horizon_hours()
-	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
-	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
-	horizon_desc = f"{horizon_hours} hours"
-	if horizon_hours % 24 == 0:
-		days = horizon_hours // 24
-		horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
-
-	# Check child time_logs if present
-	if hasattr(doc, "time_logs") and doc.time_logs:
-		for row in doc.time_logs:
-			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
-			if t_date < cutoff_date:
-				frappe.throw(
-					_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
-					frappe.PermissionError
-				)
-	elif doc.get("start_date") and getdate(doc.get("start_date")) < cutoff_date:
-		frappe.throw(
-			_("OmniTrack Users can only log or modify timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical changes.").format(horizon_desc),
-			frappe.PermissionError
-		)
+	for d in _timesheet_dates(doc):
+		check_timesheet_date_permission(d)
 
 
 def validate_timesheet_trash_event(doc, method=None):
-	"""DocEvent validation on deleting a Timesheet."""
-	user = frappe.session.user
-	if is_omnitrack_manager(user):
-		return
+	"""DocEvent on deleting a Timesheet: the same days as logging one."""
 	if getattr(doc.flags, "ignore_permissions", False):
 		return
-
-	horizon_hours = get_timesheet_modification_horizon_hours()
-	days_allowed = max(int(round(horizon_hours / 24.0)), 1)
-	cutoff_date = getdate(add_days(nowdate(), -(days_allowed - 1)))
-	horizon_desc = f"{horizon_hours} hours"
-	if horizon_hours % 24 == 0:
-		days = horizon_hours // 24
-		horizon_desc += f" ({days} day{'s' if days > 1 else ''})"
-
-	if hasattr(doc, "time_logs") and doc.time_logs:
-		for row in doc.time_logs:
-			t_date = getdate(row.from_time or row.to_time or doc.get("start_date") or nowdate())
-			if t_date < cutoff_date:
-				frappe.throw(
-					_("OmniTrack Users can only delete timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical deletions.").format(horizon_desc),
-					frappe.PermissionError
-				)
-	elif doc.get("start_date") and getdate(doc.get("start_date")) < cutoff_date:
-		frappe.throw(
-			_("OmniTrack Users can only delete timesheets within the active {0} horizon. Contact an OmniTrack Manager for historical deletions.").format(horizon_desc),
-			frappe.PermissionError
-		)
+	for d in _timesheet_dates(doc):
+		check_timesheet_date_permission(d)
 
 
 CLIENT_ROLES = {"OmniTrack Client", "Customer"}

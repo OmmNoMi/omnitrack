@@ -80,7 +80,8 @@ export function useWorkstationIdentity(w) {
       try {
         msg = JSON.parse(data._server_messages).map((m) => { try { return JSON.parse(m).message; } catch { return m; } }).join(' ');
       } catch {}
-      throw new Error(String(msg).replace(/<[^>]+>/g, ''));
+      // The status rides along, so a refusal (403) is told apart from a failure worth retrying
+      throw Object.assign(new Error(String(msg).replace(/<[^>]+>/g, '')), { status: res.status });
     }
     return data.message;
   };

@@ -1259,16 +1259,16 @@ assert.ok(
   'FAIL: omnitrack.html must define pastBlockGraceHours computed ref'
 );
 assert.ok(
-  content.includes('const timesheetHorizonHours = computed('),
-  'FAIL: omnitrack.html must define timesheetHorizonHours computed ref'
+  content.includes('const logDaysBack = computed('),
+  'FAIL: the planner state must read log_days_back (OmniTrack Settings)'
 );
 assert.ok(
   content.includes('diffHours > grace'),
   'FAIL: isPastBlock must dynamically compare elapsed hours against configured grace period'
 );
 assert.ok(
-  content.includes('diffHours <= horizon'),
-  'FAIL: canLogTimesheet must dynamically compare elapsed hours against configured horizon'
+  content.includes('const canLogTimesheet = (b) => !!b && !logWindowRefusal('),
+  'FAIL: canLogTimesheet must use the same day rule as the server (logWindowRefusal)'
 );
 
 const temporalSandbox = {

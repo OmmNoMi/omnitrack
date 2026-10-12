@@ -51,11 +51,13 @@
         day-label="Worked on"
         time-label="From – to"
         :day-offsets="dayOffsets"
-        :durations="[15, 30, 60, 90, 120, 180]"
+        :durations="[15, 30, 60, 120]"
         :is-dark-mode="isDarkMode"
       />
-      <!-- Time not worked yet cannot be charged; the clock is how time ahead gets logged -->
-      <p v-if="entryAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">{{ entryAheadText }}</p>
+      <!-- Why it cannot be saved, inside the box that keeps what was typed: a day outside the
+           logging window or a closed payroll period, time not worked yet (the clock is how time
+           ahead gets logged), or the server's refusal. Never a toast behind it. -->
+      <p v-if="entryRefusal" class="text-sm text-red-700 dark:text-red-200" role="alert">{{ entryRefusal }}</p>
     </section>
 
     <!-- Adjust: the running session's own times, where its clock is. Its buttons stand where
@@ -326,6 +328,7 @@ export default {
         'entry',
         'entryAhead',
         'entryAheadText',
+        'entryRefusal',
         'entryCanSave',
         'entryLength',
         'entryLengthWords',

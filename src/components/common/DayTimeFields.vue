@@ -23,7 +23,8 @@
     <div class="flex gap-3">
       <FeatherIcon name="clock" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
       <div class="flex-1 min-w-0 space-y-2">
-        <p class="text-sm font-medium" :class="labelText" aria-hidden="true">{{ timeLabel }}</p>
+        <!-- A length no chip names sits beside the label, so the chip row stays one line at 375px -->
+        <p class="text-sm font-medium" :class="labelText"><span aria-hidden="true">{{ timeLabel }}</span><span v-if="mins > 0 && !durations.includes(mins)" class="font-normal tabular-nums" :class="mutedText">{{ ' · ' }}{{ durationLabel(mins) }}</span></p>
         <!-- As in Google Calendar: the end list starts after the start and names each length.
              Both accept typing ("2pm", "14:30"); the list is every 15 minutes. -->
         <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 [&_input]:h-9 [&_input]:text-base">
@@ -33,7 +34,6 @@
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
-          <span v-if="mins > 0 && !durations.includes(mins)" class="text-sm tabular-nums" :class="mutedText">{{ durationLabel(mins) }}</span>
           <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
           <span v-if="start && end && mins <= 0" class="text-sm text-ink-red-4" role="alert">End is the same as start</span>
         </div>
@@ -55,7 +55,8 @@ export default {
     end: { type: String, default: "" },
     // Quick-day chips, as offsets from today: planning looks ahead, logging looks back
     dayOffsets: { type: Array, default: () => [0, 1, 2, 3] },
-    durations: { type: Array, default: () => [30, 60, 90, 120, 180, 240] },
+    // Four at most, so the chips sit on one line in the narrowest box (the session box)
+    durations: { type: Array, default: () => [30, 60, 120, 240] },
     isDarkMode: { type: Boolean, default: false },
     // A timesheet entry says "Worked on"; a plan says "Day"
     dayLabel: { type: String, default: "Day" },

@@ -50,6 +50,10 @@ if (!timeline || /Planned Work Block|ToDo/.test(timeline)) problems.push("omnitr
 const api = read("omnitrack/api/activity.py");
 if (!/DOCTYPES = \("Planned Work Block", "ToDo", "Task"\)/.test(api)) problems.push("omnitrack/api/activity.py: activity is for Planned Work Block, ToDo and Task only");
 if (!/if doctype not in DOCTYPES or/.test(api)) problems.push("omnitrack/api/activity.py: _doc refuses any other DocType");
+// A work block goes by OmniTrack's own rule (your block, or your project's), as every block endpoint
+// does. Frappe's role check refused a person with no OmniTrack role their own block, every time.
+if (!/if doctype == "Planned Work Block":\n\t\tfrom omnitrack\.permissions import has_work_block_permission\n\n\t\tif not has_work_block_permission\(doc, "read"\):\n\t\t\tfrappe\.throw\([^\n]*frappe\.PermissionError\)\n\t\treturn doc/.test(api)) problems.push("omnitrack/api/activity.py: _doc reads a work block by has_work_block_permission, and refuses with a PermissionError");
+if (!/throw Object\.assign\(new Error\([^\n]*\), \{ status: res\.status \}\);/.test(read("src/composables/useWorkstationIdentity.js"))) problems.push("src/composables/useWorkstationIdentity.js: postJSON's error carries the HTTP status, so a refusal is told apart from a failure");
 if (!/doc\.check_permission\("read"\)\n\treturn doc/.test(api)) problems.push("omnitrack/api/activity.py: _doc checks read permission before anything is read or written");
 if (!/def get_activity\(doctype: str, name: str\):[\s\S]*?doc = _doc\(doctype, name\)/.test(api)) problems.push("omnitrack/api/activity.py: get_activity goes through _doc");
 if (!/@frappe\.whitelist\(methods=\["POST"\]\)\ndef add_comment\(doctype: str, name: str, content: str\):[\s\S]*?doc = _doc\(doctype, name\)/.test(api)) problems.push("omnitrack/api/activity.py: add_comment is POST only and goes through _doc");
@@ -79,7 +83,13 @@ const NEED = [
   [/catch \(e\) \{\n\s*\/\/ The words stay in the box to try again\n\s*this\.error =/, "a failed post keeps the words"],
   [/const drafts = new Map\(\);/, "unsent drafts are kept per document"],
   [/draft\(v\) \{ if \(v\.trim\(\)\) drafts\.set\(this\.key, v\); else drafts\.delete\(this\.key\); \}/, "the draft is saved as it is typed"],
-  [/if \(seq === this\.seq\) this\.take\(res\);/, "a slow load for the last document never lands on the next"],
+  [/if \(seq === this\.seq\) \{ this\.take\(res\); this\.failed = false; \}/, "a slow load for the last document never lands on the next"],
+  // A refusal is said once, with no Try again: asking again gets the same answer
+  [/this\.refused = !!\(e && e\.status === 403\); this\.failed = !this\.refused;/, "a refusal (403) is not offered Try again"],
+  [/<p v-if="refused && !items\.length"[^>]*>You cannot see this \{\{ noun \}\}'s activity\.<\/p>/, "a refusal says so, with no button"],
+  // A retry keeps its line and spins its button; it never flashes "Loading" and back
+  [/label="Try again" :loading="loading" @click="load"/, "Try again shows it is trying"],
+  [/<p v-else-if="failed && !items\.length"[\s\S]*?<p v-else-if="loading && !items\.length"/, "a retry keeps the failed line instead of swapping it for Loading"],
   [/<Avatar [^>]*aria-hidden="true"/, "the avatar is hidden from screen readers (the name is read)"],
   [/<time [^>]*:datetime="it\.at" :title="fullTime\(it\.at\)">/, "times carry the exact moment on hover"],
   [/:disabled="!draft\.trim\(\)"/, "an empty comment cannot be posted"],

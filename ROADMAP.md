@@ -515,6 +515,34 @@ session popup either. Guard: `scripts/check_scroll_lock.mjs` (in `npm test`) plu
 5 mutants. The old Test 23 assertion, which *required* the body write, was
 replaced. A tab already stuck from before needs one reload.
 
+### Logging window and payroll lock (2026-10-12)
+
+Employees could not catch up on their timesheets: the window was 48 hours, so two missed days
+were lost for good, and nothing stopped anyone changing time payroll had already paid.
+
+Done:
+- OmniTrack Settings > "Days back an employee can log time" (`log_days_back`, default 15, today
+  counted as day 1). A patch turns the old 48-hour default into 15 days and keeps any other value
+  chosen (in days).
+- OmniTrack Settings > "Payroll closed through" (HR Manager / System Manager). Nobody, managers
+  included, logs, changes, moves or deletes time on or before that day.
+- Fixed on the way: moving a session out of a closed day was not checked; a delete checked the
+  block's day, not the session's; the block validator re-checked every session, so a block on an
+  old day could not be approved; a refused save showed as a toast behind the box; an unset payroll
+  date read as 0001-01-01.
+
+Open:
+- Set "Payroll closed through" automatically when an HRMS Payroll Entry is submitted (its end
+  date), so HR does not have to remember.
+- A stale second copy of the settings DocType lives at `omnitrack/doctype/omnitrack_settings/`
+  (outside the module folder). Confirm nothing loads it, then remove it.
+- The edit box checks the day it is moving to, not the day the session is leaving; the server
+  refuses that, but the box only says so after Save.
+- The planner's day chips do not mark days payroll has closed; the refusal shows once picked.
+- Run the Python integration tests (updated for the 15-day window) on a throwaway site.
+- `src/stores/workSessionStore.js` is imported nowhere (the other three stores are, via
+  `useWorkstationStoreBindings.js`). Confirm and remove it.
+
 ## Domain model written down (`docs/DOMAIN_MODEL.md`)
 
 Project / Task / Planned Work Block / Work Session were being used

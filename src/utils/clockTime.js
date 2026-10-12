@@ -15,9 +15,11 @@ export const lengthWords = (mins) => mins < 60 ? `${mins} min` : `${(mins / 60).
 export const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // "1.5h", "2h", "45m"
+// Exact, never rounded: 435 minutes is "7h 15m", not "7.3h"
 export const durationLabel = (mins) => {
   if (mins < 60) return mins + "m";
-  return mins % 60 ? (mins / 60).toFixed(1).replace(/\.0$/, "") + "h" : mins / 60 + "h";
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h}h ${m}m` : h + "h";
 };
 
 // As in Google Calendar: every 15 minutes after the start, each with its length, on past

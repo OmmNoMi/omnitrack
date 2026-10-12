@@ -54,10 +54,19 @@ FOLD_SECONDS = 600
 
 
 def _doc(doctype, name):
-	"""The document, for someone Frappe lets read it (the rule Desk's own comment box uses)."""
+	"""The document, for someone allowed to read it. A work block goes by OmniTrack's own rule (your
+	block, or your project's), as every other block endpoint does: Frappe's role check refused a
+	person their own block when they had no OmniTrack role, and the panel could never load. Other
+	documents go by Frappe's rule, the one Desk's own comment box uses."""
 	if doctype not in DOCTYPES or not frappe.db.exists("DocType", doctype) or not frappe.db.exists(doctype, name):
 		frappe.throw(_("{0} {1} not found").format(_(doctype), name))
 	doc = frappe.get_doc(doctype, name)
+	if doctype == "Planned Work Block":
+		from omnitrack.permissions import has_work_block_permission
+
+		if not has_work_block_permission(doc, "read"):
+			frappe.throw(_("You cannot see this work block."), frappe.PermissionError)
+		return doc
 	doc.check_permission("read")
 	return doc
 

@@ -581,7 +581,7 @@ console.log('SUCCESS');
 		from omnitrack.api import quick_timer_punch, log_work_session
 		today = frappe.utils.nowdate()
 		yesterday = frappe.utils.add_days(today, -1)
-		two_days_ago = frappe.utils.add_days(today, -2)
+		two_days_ago = frappe.utils.add_days(today, -15)  # the 16th day back, past the 15-day window
 
 		frappe.set_user("test1@example.com")
 		try:
@@ -1145,7 +1145,7 @@ console.log('SUCCESS');
 		from omnitrack.api import log_catch_up_session
 		today = nowdate()
 		yesterday = str(getdate(add_days(today, -1)))
-		two_days_ago = str(getdate(add_days(today, -2)))
+		two_days_ago = str(getdate(add_days(today, -15)))  # the 16th day back, past the 15-day window
 
 		# 1. Today succeeds
 		res_today = log_catch_up_session(
@@ -1212,32 +1212,32 @@ console.log('SUCCESS');
 
 
 	def test_configurable_horizon_and_grace_hours(self):
-		"""Test that admin-configured horizon hours dynamically expand timesheet and block immutability windows."""
+		"""Admin-configured log_days_back and grace hours widen the timesheet and block windows."""
 		from omnitrack.api import log_work_session, update_work_block
 		from omnitrack.permissions import get_timesheet_modification_horizon_hours, get_past_block_lock_grace_hours
 
-		# By default, horizon is 48 hours and grace is 24 hours
-		self.assertEqual(get_timesheet_modification_horizon_hours(), 48)
+		# By default an employee logs the last 15 days (360 hours) and grace is 24 hours
+		self.assertEqual(get_timesheet_modification_horizon_hours(), 15 * 24)
 		self.assertEqual(get_past_block_lock_grace_hours(), 24)
 
-		# 1. Test expanding timesheet horizon to 168 hours (1 week)
-		three_days_ago = str(frappe.utils.getdate(frappe.utils.add_days(frappe.utils.nowdate(), -3)))
-		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: 168 if fn == "timesheet_modification_horizon_hours" else 24):
-			self.assertEqual(get_timesheet_modification_horizon_hours(), 168)
+		# 1. Widening the window to 30 days lets an employee log 20 days back
+		three_days_ago = str(frappe.utils.getdate(frappe.utils.add_days(frappe.utils.nowdate(), -20)))
+		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: 30 if fn == "log_days_back" else (None if fn == "payroll_closed_through" else 24)):
+			self.assertEqual(get_timesheet_modification_horizon_hours(), 30 * 24)
 			doc = _block(employee="test_user_no_emp@ommnomi.local", work_date=three_days_ago, start_time="10:00:00", end_time="12:00:00")
 			doc.flags.ignore_past_block_lock = True
 			doc.insert()
 
 			frappe.set_user("test_user_no_emp@ommnomi.local")
 			try:
-				# Three days ago succeeds because horizon is 168 hours (1 week)
+				# 20 days ago succeeds because the window is 30 days
 				res = log_work_session(
 					block_name=doc.name,
 					session_date=three_days_ago,
 					from_time="10:00:00",
 					to_time="11:30:00",
 					hours=1.5,
-					notes="Log on three days ago under 168h horizon"
+					notes="Log 20 days back under a 30-day window"
 				)
 				self.assertEqual(res["status"], "success")
 			finally:
@@ -1250,7 +1250,7 @@ console.log('SUCCESS');
 		yest_block.insert()
 
 		# With 48h grace period, updating yesterday's plan (notes / times) succeeds
-		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: 48 if fn == "past_block_lock_grace_hours" else 48):
+		with patch.object(frappe.db, "get_single_value", side_effect=lambda dt, fn: None if fn == "payroll_closed_through" else 48):
 			self.assertEqual(get_past_block_lock_grace_hours(), 48)
 			up_res = update_work_block(
 				block_name=yest_block.name,

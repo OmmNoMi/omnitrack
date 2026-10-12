@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta
 import frappe
 from omnitrack.utils.activity import is_away
+from omnitrack.api.planner import _log_window
 from frappe import _
 from frappe.utils import (
 	flt,
@@ -57,7 +58,7 @@ def get_system_status():
 		"pairing_sessions_enabled": getattr(settings, "enable_pairing_sessions", 1),
 		"lock_screen_actions_enabled": getattr(settings, "enable_lock_screen_actions", 1),
 		"past_block_lock_grace_hours": getattr(settings, "past_block_lock_grace_hours", 24) or 24,
-		"timesheet_modification_horizon_hours": getattr(settings, "timesheet_modification_horizon_hours", 48) or 48,
+		**_log_window(),
 		"allow_submitted_timesheet_amendment": 1 if getattr(settings, "allow_submitted_timesheet_amendment", 1) is None or getattr(settings, "allow_submitted_timesheet_amendment", 1) == 1 else 0,
 		"timestamp": frappe.utils.now()
 	}

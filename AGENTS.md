@@ -65,10 +65,13 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 - Never commit raw customer timesheet CSVs or personal timelog dumps to git. Strict `.gitignore` rules must remain active for all `.csv`, `Empire_NoMi*`, and `media_*` files.
 
 ## Temporal Governance & Workstation Invariants
-1. **Timesheet Modification Horizon**:
-   - An `OmniTrack User` can only log, edit, or adjust timesheet entries and real work sessions for **today and yesterday** (`session_date >= add_days(nowdate(), -1)`).
-   - Any timesheet entry, adjustment, or back-fill prior to yesterday strictly requires an `OmniTrack Manager` (or System Manager / Administrator).
-   - Enforce in Python backend (`permissions.check_timesheet_date_permission`, `api.log_work_session`, `PlannedWorkBlock.validate()`, and `Timesheet` DocEvents) and in the frontend workstation drawer.
+1. **Which days time can be logged on** (OmniTrack Settings):
+   - `log_days_back` (default 15): an employee logs, changes or deletes time on the last N days, today counted as day 1. A manager (`is_omnitrack_manager`: System Manager, HR Manager, OmniTrack Manager or Admin) reaches any day.
+   - `payroll_closed_through` (permlevel 1, HR Manager and System Manager write it): HR sets it after running payroll, usually to the last day of last month. Nobody, managers included, logs, changes, moves or deletes time on or before that day. Payroll is checked before the manager exemption.
+   - One rule, one place: `permissions.check_timesheet_date_permission`. The API calls it for the new day and, on an edit, the day a session leaves; a delete checks the session's own day. `PlannedWorkBlock.validate()` checks only added, changed or removed sessions, so a block on a closed day can still be approved. Timesheet DocEvents call it too, but skip `ignore_permissions` saves, which are OmniTrack's own API saves that already checked.
+   - The client mirrors it in `logDayRefusal` (`src/utils/timesheetEntry.js`), fed by `log_days_back` and `payroll_closed_through` in the planner and system-status payloads. A refused day or a refused save is said inside the entry box (`entryRefusal`, `role="alert"`), never as a toast behind it.
+   - Frappe reads an empty Date on a Single as `0001-01-01`, so `get_payroll_closed_through` treats year 1 as not set.
+   - `scripts/check_log_window.mjs` and `omnitrack/tests/test_unit_governance.py` (in `npm run test:fixtures`, no site needed) guard it.
 
 2. **Past Planned Work Blocks Lock (Historical Plan Immutability)**:
    - In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Administrator) can create, modify, reschedule, move, or delete planned work blocks.
@@ -278,7 +281,7 @@ reka's Combobox and MultiSelect are the exception: they close on Escape **withou
 Planned-ness is the block's `unplanned` Check, never an activity. Every stored, remembered or emitted value goes through `to_kind` (`omnitrack/utils/activity.py`) / `toKind` (`src/utils/activity.js`). Never patch a stored live-session default (`omnitrack_active_session`); normalise on read. `scripts/check_activity_kinds.cjs` keeps py, js and the DocType options in step.
 
 ## Gotcha: migrate syncs a DocType only when its JSON `modified` is newer
-Editing a DocType JSON without bumping `modified` past the database's value is silently skipped by `bench migrate`. Migrate also rewrites `dashboard_chart` JSONs on the way. A Single DocType has no table, so `frappe.db.has_column` throws on it.
+Editing a DocType JSON without bumping `modified` past the database's value is silently skipped by `bench migrate`. A JSON with no `modified` key at all (`omnitrack_settings.json`) is compared by `migration_hash` instead, so any content change syncs. Migrate's `dashboard_chart` rewrites only bump `modified`; revert them rather than commit them. A Single DocType has no table, so `frappe.db.has_column` throws on it.
 
 ## Gotcha: reka popovers read blurry
 reka places `[data-reka-popper-content-wrapper]` with a fractional `translate()` and writes `will-change: transform` inline, so the list rasterises off the pixel grid. `main.css` sets `will-change: auto !important` on it; `check_dialog_popovers.cjs` guards it.

@@ -520,7 +520,21 @@ runMutationTest('A posted comment is not announced', DAC,
 runMutationTest('Closing a panel loses the draft', DAC,
   (code) => code.replace('if (v.trim()) drafts.set(this.key, v); else drafts.delete(this.key);', 'drafts.delete(this.key);'), DA, 'saved as it is typed');
 runMutationTest('A slow load lands on the next document', DAC,
-  (code) => code.replace('if (seq === this.seq) this.take(res);', 'this.take(res);'), DA, 'slow load');
+  (code) => code.replace('if (seq === this.seq) { this.take(res); this.failed = false; }', '{ this.take(res); this.failed = false; }'), DA, 'slow load');
+runMutationTest('A refused Activity offers Try again', DAC,
+  (code) => code.replace('this.refused = !!(e && e.status === 403); this.failed = !this.refused;', 'this.refused = false; this.failed = true;'), DA, 'not offered Try again');
+runMutationTest('A refused Activity says nothing', DAC,
+  (code) => code.replace("You cannot see this {{ noun }}'s activity.", ''), DA, 'a refusal says so');
+runMutationTest('Try again does not show it is trying', DAC,
+  (code) => code.replace('label="Try again" :loading="loading" @click="load"', 'label="Try again" @click="load"'), DA, 'shows it is trying');
+runMutationTest('A retry flashes Loading again', DAC,
+  (code) => code.replace('<p v-else-if="loading && !items.length"', '<p v-if="loading && !items.length"'), DA, 'keeps the failed line');
+runMutationTest('postJSON drops the HTTP status', path.resolve(omnitrackDir,'src/composables/useWorkstationIdentity.js'),
+  (code) => code.replace('{ status: res.status }', '{}'), DA, 'carries the HTTP status');
+runMutationTest('Activity refuses a person their own block again', path.resolve(omnitrackDir,'omnitrack/api/activity.py'),
+  (code) => code.replace('\tif doctype == "Planned Work Block":\n', '\tif False:\n'), DA, 'has_work_block_permission');
+runMutationTest('Activity reads any block', path.resolve(omnitrackDir,'omnitrack/api/activity.py'),
+  (code) => code.replace('\t\tif not has_work_block_permission(doc, "read"):\n', '\t\tif False:\n'), DA, 'has_work_block_permission');
 runMutationTest('Activity renders any HTML', DAC,
   (code) => code.replace('<p v-if="note"', '<p v-html="note" v-if="note"'), DA, 'v-html only');
 runMutationTest('Activity reads oldest first again', DAC,
@@ -563,7 +577,7 @@ runMutationTest('The entry saves time not worked yet', USE,
 runMutationTest('The entry saves a session with nothing said', USE,
   (code) => code.replace('const said = (props.sessionNotesList || []).length > 0 || draftReady.value;', 'const said = true;'), EW, 'needs a line');
 runMutationTest('The entry keeps quiet about why it cannot save', SCP,
-  (code) => code.replace('dark:text-red-200" role="alert">{{ entryAheadText }}', 'dark:text-red-200">{{ entryAheadText }}'), EW, 'says why');
+  (code) => code.replace('dark:text-red-200" role="alert">{{ entryRefusal }}', 'dark:text-red-200">{{ entryRefusal }}'), EW, 'says why');
 runMutationTest('Cancel drops out of Tab while Add session waits', SCP,
   (code) => code.replace(':tabindex="activeToolIndex === 0 || !entryCanSave ? 0 : -1"', ':tabindex="activeToolIndex === 0 ? 0 : -1"'), EW, 'Cancel stays reachable');
 runMutationTest('Adding a session opens the sheet, not the session box', path.resolve(omnitrackDir,'src/components/dialogs/DialogCoordinator.vue'),
@@ -591,7 +605,7 @@ runMutationTest('Cmd+Enter does not save the entry', WSE,
 runMutationTest('The save path takes an entry past midnight as backwards', WSM,
   (code) => code.replace('f.from_time && f.to_time ? spanMins(f.from_time, f.to_time) : 0;', 'f.from_time && f.to_time ? toMinutes(f.to_time) - toMinutes(f.from_time) : 0;'), EW, 'measures the entry with spanMins');
 runMutationTest('The save path takes an entry with no line', WSM,
-  (code) => code.replace("if (!(f.log || []).length) { showToast(", 'if (false) { showToast('), EW, 'refuses an entry with no line');
+  (code) => code.replace("if (!(f.log || []).length) return refuse(", 'if (false) return refuse('), EW, 'refuses an entry with no line');
 runMutationTest('The Log is saved as one run-on note', WSM,
   (code) => code.replace('const notes = composeWrapNote(f.block_title, f.log);', "const notes = (f.log || []).join(' ');"), EW, "saves the Log's lines");
 runMutationTest('Editing a session loses its lines', WSM,
@@ -718,7 +732,7 @@ runMutationTest('An empty comment looks ready to post', path.resolve(omnitrackDi
 runMutationTest('An overnight entry ends on its start day', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
   (code) => code.replace('0, toMin(from) + mins)', '0, (toMin(from) + mins) % 1440)'), EW, 'overnight');
 runMutationTest('The save path takes time not worked yet', path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
-  (code) => code.replace('if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) { showToast(', 'if (false) { showToast('), EW, 'saveEditSession refuses');
+  (code) => code.replace('if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) return refuse(', 'if (false) return refuse('), EW, 'saveEditSession refuses');
 const TSP = path.resolve(omnitrackDir,'omnitrack/api/timesheet.py');
 runMutationTest('The server logs time not worked yet', TSP,
   (code) => code.replace('\t_require_worked(base_date, from_time, to_time)\n', ''), EW, 'log_work_session checks');
@@ -764,14 +778,16 @@ runMutationTest('An Escape a dialog took closes the drawer too', path.resolve(om
   (code) => code.replace('    else if (dialogEsc) return;\n', ''), DP, 'must not also close the entry sheet or the block drawer');
 runMutationTest('FDialog stops claiming its Escape', path.resolve(omnitrackDir,'src/components/common/FDialog.vue'),
   (code) => code.replace('      markDialogEscape(e);\n', ''), DP, 'claim its Escape');
-runMutationTest('Timesheet day chips ignore the horizon', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
-  (code) => code.replace('Math.round((Number(horizonHours) || 48) / 24)', '2'), TE, '72h horizon');
+runMutationTest('Day chips offer Yesterday when only today can be logged', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
+  (code) => code.replace('(Number(daysBack) || 15) >= 2 ? [0, -1] : [0]', 'true ? [0, -1] : [0]'), TE, 'today only');
+runMutationTest('Day chips grow with the logging window again', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
+  (code) => code.replace("return isManager || (Number(daysBack) || 15) >= 2 ? [0, -1] : [0];", "return Array.from({ length: Math.min(isManager ? 7 : Math.max(1, Number(daysBack) || 15), 7) }, (_, i) => -i);"), TE, '15 days back');
 runMutationTest('A new entry defaults to a future block\'s own slot', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
   (code) => code.replace('if (planned && day && day <= today)', 'if (planned && day)'), TE, 'a future block');
 runMutationTest('Adding an entry drops log_work_session\'s result', path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
   (code) => code.replace("return afterSave('Work session added', await postJSON('log_work_session'", "await postJSON('log_work_session'"), TE, 'log_work_session\'s result');
 runMutationTest('A client-side day limit comes back', path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
-  (code) => code.replace("const withSeconds = ", "const minTimesheetDate = null;\n  const withSeconds = "), TE, 'server\'s horizon');
+  (code) => code.replace("const withSeconds = ", "const minTimesheetDate = null;\n  const withSeconds = "), TE, 'minTimesheetDate');
 runMutationTest('Drawer Reschedule moves the store\'s block', path.resolve(omnitrackDir,'src/composables/useWorkstationFocusTasks.js'),
   (code) => code.replace('    const b = activeBlock.value;\n    const f = form', '    const b = workBlockStore.activeBlock;\n    const f = form'), TE, 'w.activeBlock');
 runMutationTest('A refused tick stays ticked', path.resolve(omnitrackDir,'src/composables/useWorkstationFocusTasks.js'),
@@ -1012,6 +1028,14 @@ runMutationTest('A moved block can be moved again', SRC('omnitrack/api/planner.p
   (code) => code.replace('\tif doc.status in ("Rescheduled", "Cancelled"):\n', '\tif False:\n'), RS, 'already moved');
 
 // The switch dialog never asks to retype the log
+runMutationTest('A length reads as a rounded decimal again', SRC('src/utils/clockTime.js'),
+  (code) => code.replace('return m ? `${h}h ${m}m` : h + "h";', 'return m ? (mins / 60).toFixed(1) + "h" : h + "h";'), ON, 'want 7h 15m');
+runMutationTest('The session box offers six lengths again', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace(':durations="[15, 30, 60, 120]"', ':durations="[15, 30, 60, 90, 120, 180]"'), ON, 'four at most');
+runMutationTest('The odd length drops under the chips again', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace('aria-label="Length" @update:model-value="setDuration" />', 'aria-label="Length" @update:model-value="setDuration" />\n          <span v-if="mins > 0 && !durations.includes(mins)">{{ durationLabel(mins) }}</span>'), ON, 'beside the label');
+runMutationTest('The default lengths wrap again', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace('default: () => [30, 60, 120, 240] }', 'default: () => [30, 60, 90, 120, 180, 240] }'), ON, 'four at most');
 const SD = 'node scripts/check_switch_dialog.mjs';
 runMutationTest('The switch prefills the log again', SRC('src/composables/useWorkstationAttendance.js'),
   (code) => code.replace("switchWrapUpNote.value = '';", "switchWrapUpNote.value = (sessionNotesList.value || []).join('\\n');"), SD, 'FAIL: switch dialog');
@@ -1443,6 +1467,62 @@ runMutationTest('The switch invents a note again', SRC('omnitrack/api/stopwatch.
   (code) => code.replace('\t\t\tnotes=current_session_notes,\n\t\t\tlogged_via="Stopwatch"', '\t\t\tnotes=current_session_notes or "Switched to another task",\n\t\t\tlogged_via="Stopwatch"'), SD, 'never an invented note');
 runMutationTest('A session on no block is dropped by a switch', SRC('omnitrack/api/stopwatch.py'),
   (code) => code.replace('\telif start_ms > 0:\n', '\telif False:\n'), SD, 'on no block is saved');
+
+// Which days can be logged (scripts/check_log_window.mjs)
+const LW = 'node scripts/check_log_window.mjs';
+const TSE = SRC('src/utils/timesheetEntry.js');
+runMutationTest('Today stops counting as day 1', TSE,
+  (code) => code.replace('now.getDate() - (days - 1)', 'now.getDate() - days'), LW, 'the 16th day back');
+runMutationTest('The window falls back to two days again', TSE,
+  (code) => code.replace('const days = Math.max(1, Number(daysBack) || 15);', 'const days = Math.max(1, Number(daysBack) || 2);'), LW, 'the 15-day default');
+runMutationTest('The payroll day itself stays open', TSE,
+  (code) => code.replace('if (closed && day <= closed) {', 'if (closed && day < closed) {'), LW, 'the day payroll is closed through');
+runMutationTest('A manager edits paid time on the client', TSE,
+  (code) => code.replace("  if (isManager) return \"\";\n  const days", "  const days").replace('const closed = payrollClosedThrough', 'if (isManager) return "";\n  const closed = payrollClosedThrough'), LW, 'a manager on a closed day');
+runMutationTest('The window lets any day through', TSE,
+  (code) => code.replace('if (day < firstISO) {', 'if (false) {'), LW, 'the 16th day back');
+runMutationTest('The block menu ignores the window again', SRC('src/composables/useWorkstationPlannerState.js'),
+  (code) => code.replace('const canLogTimesheet = (b) => !!b && !logWindowRefusal(', 'const canLogTimesheet = (b) => !!b || !logWindowRefusal('), LW, 'canLogTimesheet uses logWindowRefusal');
+runMutationTest('The entry box forgets the payroll date', SRC('src/composables/useWorkstationPlannerState.js'),
+  (code) => code.replace('payrollClosedThrough: payrollClosedThrough.value,', 'payrollClosedThrough: "",'), LW, 'passes the window, the payroll date');
+runMutationTest('Save works on a closed day', SRC('src/session/useSessionEntry.js'),
+  (code) => code.replace('!!entry.value.session_date && !props.dayRefusal &&', '!!entry.value.session_date &&'), LW, 'Save waits');
+runMutationTest('The server refusal goes unsaid in the box', SRC('src/session/useSessionEntry.js'),
+  (code) => code.replace(" || props.saveError || ''", " || ''"), LW, 'one reason at a time');
+runMutationTest('The entry never asks about its day', SRC('src/components/dialogs/WorkSessionEntry.vue'),
+  (code) => code.replace(':day-refusal="dayRefusal"', ''), LW, "hands the day's refusal");
+runMutationTest('A refused save is a toast behind the box again', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace("refuse(extractErrorMessage(e, 'Not saved. Try again.'));", "showToast(extractErrorMessage(e, 'Could not save this work session'), 'danger');"), LW, 'never a toast');
+runMutationTest('An old refusal greets a new entry', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace("editSessionTargetBlock.value = block;\n    editSessionError.value = '';", 'editSessionTargetBlock.value = block;'), LW, 'starts with no old refusal');
+runMutationTest('Managers skip the payroll lock', SRC('omnitrack/permissions.py'),
+  (code) => code.replace('\tcheck_payroll_open(session_date)\n\tif is_omnitrack_manager(user):\n\t\treturn True\n', '\tif is_omnitrack_manager(user):\n\t\treturn True\n\tcheck_payroll_open(session_date)\n'), LW, 'payroll before the manager exemption');
+runMutationTest('The server window falls back to 48 hours', SRC('omnitrack/permissions.py'),
+  (code) => code.replace('DEFAULT_LOG_DAYS_BACK = 15\n', 'DEFAULT_LOG_DAYS_BACK = 2\n'), LW, 'defaults to 15 days');
+runMutationTest('The server leaves the payroll day open', SRC('omnitrack/permissions.py'),
+  (code) => code.replace('getdate(target_date) <= closed:', 'getdate(target_date) < closed:'), LW, 'the payroll date itself is closed');
+runMutationTest('An empty payroll date reads as closed through 0001-01-01', SRC('omnitrack/permissions.py'),
+  (code) => code.replace('return closed if closed and closed.year > 1 else None', 'return closed'), LW, 'means not set');
+runMutationTest('An ERPNext Timesheet keeps its own copy of the window', SRC('omnitrack/permissions.py'),
+  (code) => code.replace('\tfor d in _timesheet_dates(doc):\n\t\tcheck_timesheet_date_permission(d)\n\n\nCLIENT_ROLES', '\tpass\n\n\nCLIENT_ROLES'), LW, 'validate_timesheet_trash_event');
+runMutationTest('A session moves out of a closed payroll period', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('\t\tcheck_timesheet_date_permission(sess_row.session_date, frappe.session.user)\n', '\t\tpass\n'), LW, 'the day the session leaves');
+runMutationTest('Delete checks the block day, not the session day', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('base_date = (row and row.session_date) or doc.work_date or nowdate()', 'base_date = doc.work_date or nowdate()'), LW, "the session's own day");
+runMutationTest('Approving a paid-out block is refused', SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py'),
+  (code) => code.replace('if prev is None or row(prev) != row(sess):', 'if True:'), LW, 'can still be approved');
+runMutationTest('Removing a paid session goes unchecked', SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py'),
+  (code) => code.replace('\t\ttouched += [r.session_date for r in old.values()]\n', ''), LW, "removed session's day");
+runMutationTest('Any OmniTrack Manager moves the payroll date', SRC('omnitrack/omnitrack/doctype/omnitrack_settings/omnitrack_settings.json'),
+  (code) => code.replace('"role": "OmniTrack Manager",\n      "permlevel": 1,\n      "read": 1,\n      "write": 0', '"role": "OmniTrack Manager",\n      "permlevel": 1,\n      "read": 1,\n      "write": 1'), LW, 'only HR and System Manager');
+runMutationTest('HR cannot set the payroll date', SRC('omnitrack/omnitrack/doctype/omnitrack_settings/omnitrack_settings.json'),
+  (code) => code.replace('"role": "HR Manager",\n      "permlevel": 1,\n      "read": 1,\n      "write": 1', '"role": "HR Manager",\n      "permlevel": 1,\n      "read": 1,\n      "write": 0'), LW, 'HR Manager sets payroll_closed_through');
+runMutationTest('The payroll date is a level-0 field anyone with Settings edits', SRC('omnitrack/omnitrack/doctype/omnitrack_settings/omnitrack_settings.json'),
+  (code) => code.replace('"label": "Payroll closed through",\n      "permlevel": 1,', '"label": "Payroll closed through",'), LW, 'payroll_closed_through is a Date at permlevel 1');
+runMutationTest('The app never hears the payroll date', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('"payroll_closed_through": str(closed) if closed else None,', ''), LW, 'the planner payload carries both');
+runMutationTest('The hours-to-days patch is not run', SRC('omnitrack/patches.txt'),
+  (code) => code.replace('omnitrack.patches.v1_5.log_days_back\n', ''), LW, 'the patch moving hours to days');
 
 // Summary Report
 console.log('\n===========================================================');

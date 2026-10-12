@@ -8,6 +8,7 @@ from frappe.utils import add_days, getdate, nowdate
 
 from omnitrack.api import book_work_block, update_work_block, delete_work_block, log_work_session
 from omnitrack.permissions import (
+	DEFAULT_LOG_DAYS_BACK,
 	get_timesheet_modification_horizon_hours,
 	get_past_block_lock_grace_hours,
 	validate_timesheet_permission,
@@ -77,10 +78,10 @@ class TestTemporalGovernance(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			delete_work_block(block_name=past_block.name)
 
-	def test_user_cannot_log_session_before_yesterday(self):
-		"""Invariant: Regular users can only log for today & yesterday."""
+	def test_user_cannot_log_session_before_the_window(self):
+		"""Invariant: Regular users log only the last log_days_back days (15, today being day 1)."""
 		today = nowdate()
-		two_days_ago = add_days(today, -2)
+		two_days_ago = add_days(today, -DEFAULT_LOG_DAYS_BACK)  # the 16th day back
 
 		b = _block(work_date=today, start_time="14:00:00", end_time="16:00:00", employee="test1@example.com").insert()
 
@@ -119,7 +120,7 @@ class TestTemporalGovernance(FrappeTestCase):
 
 	def test_timesheet_permission_validator(self):
 		today = nowdate()
-		two_days_ago = add_days(today, -2)
+		two_days_ago = add_days(today, -DEFAULT_LOG_DAYS_BACK)  # the 16th day back
 
 		mock_ts_past = frappe._dict({
 			"start_date": two_days_ago,
@@ -143,6 +144,6 @@ class TestTemporalGovernance(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_configurable_horizon_and_grace_hours(self):
-		"""Admin-configured horizon hours dynamically expand timesheet modification windows."""
-		self.assertEqual(get_timesheet_modification_horizon_hours(), 48)
+		"""The window is log_days_back days, read in hours by older callers."""
+		self.assertEqual(get_timesheet_modification_horizon_hours(), DEFAULT_LOG_DAYS_BACK * 24)
 		self.assertEqual(get_past_block_lock_grace_hours(), 24)

@@ -33,11 +33,13 @@ export function useSessionEntry(props, emit, notes) {
     const d = new Date(now.value);
     return `A work session is time already worked, so it has to end by ${clock(d.getHours() * 60 + d.getMinutes())}. For time still ahead, start a session when the work begins.`;
   });
+  // One reason at a time, in place: the day first, then time ahead, then what the server said
+  const entryRefusal = computed(() => props.dayRefusal || (entryAhead.value ? entryAheadText.value : '') || props.saveError || '');
   const entrySaveLabel = computed(() => (entry.value.mode === 'edit' ? 'Save' : 'Add session'));
   const draftReady = computed(() => notes.localLineText.value.trim().length >= props.minLineChars);
   const entryCanSave = computed(() => {
     const said = (props.sessionNotesList || []).length > 0 || draftReady.value;
-    return !props.isSaving && !!entry.value.session_date && entryMins.value > 0 && !entryAhead.value && said;
+    return !props.isSaving && !!entry.value.session_date && !props.dayRefusal && entryMins.value > 0 && !entryAhead.value && said;
   });
 
   function entrySave() {
@@ -57,6 +59,7 @@ export function useSessionEntry(props, emit, notes) {
     entryLengthWords,
     entryAhead,
     entryAheadText,
+    entryRefusal,
     entrySaveLabel,
     entryCanSave,
     entrySave

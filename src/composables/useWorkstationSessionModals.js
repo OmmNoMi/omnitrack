@@ -95,6 +95,8 @@ export function useWorkstationSessionModals(opts) {
   const isSavingEditSession = ref(false);
   const editSessionTargetBlock = ref(null);
   const editSessionForm = ref({ mode: 'add', name: '', session_date: '', from_time: '', to_time: '', notes: '' });
+  // Why the last save was refused, said inside the box (role=alert) that keeps what was typed
+  const editSessionError = ref('');
 
   const pad = (n) => String(n).padStart(2, '0');
   const clockOf = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -112,6 +114,7 @@ export function useWorkstationSessionModals(opts) {
       isSessionElevated.value = false;
     }
     editSessionTargetBlock.value = block;
+    editSessionError.value = '';
     editSessionForm.value = {
       mode: 'add', name: '', block_title: '', block_when: '', started_at: '', lines: 0, notes: '',
       // A free entry starts from the last Project and Activity picked, unless a session is
@@ -240,7 +243,7 @@ export function useWorkstationSessionModals(opts) {
     if (fetchPlannerData) fetchPlannerData();
     fetchWorkstationData(selectedEmployee.value);
   };
-  // How far back is the server's call (its horizon is configurable); its refusal says why
+  // The server has the last word on which days can be logged (permissions.check_timesheet_date_permission)
   const writeEntry = async (f) => {
     const block = editSessionTargetBlock.value;
     // The Log's lines saved the way a stopped session saves them: its heading, then a bullet each
@@ -274,18 +277,21 @@ export function useWorkstationSessionModals(opts) {
   };
   const saveEditSession = async () => {
     const f = editSessionForm.value;
-    if (!f.session_date) { showToast('Pick the day you worked', 'warning'); return; }
+    const refuse = (msg) => { editSessionError.value = msg; };
+    editSessionError.value = '';
+    if (!f.session_date) return refuse('Pick the day you worked.');
     // A span past midnight is one session (23:30 to 00:30 is an hour), as spanMins reads it
     const mins = f.from_time && f.to_time ? spanMins(f.from_time, f.to_time) : 0;
-    if (!(mins > 0)) { showToast('The end must be after the start', 'warning'); return; }
+    if (!(mins > 0)) return refuse('The end must be after the start.');
     // Time not worked yet is not a work session: it would be charged before it happened
-    if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) { showToast('A work session cannot end after now. Start a session when the work begins.', 'warning'); return; }
-    if (!(f.log || []).length) { showToast('Add a line about what you got done', 'warning'); return; }
+    if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) return refuse('A work session cannot end after now. Start a session when the work begins.');
+    if (!(f.log || []).length) return refuse('Add a line about what you got done.');
     isSavingEditSession.value = true;
     try {
       await writeEntry(f);
     } catch (e) {
-      showToast(extractErrorMessage(e, 'Could not save this work session'), 'danger');
+      // The box stays open with everything typed; the server's reason shows inside it
+      refuse(extractErrorMessage(e, 'Not saved. Try again.'));
     } finally {
       isSavingEditSession.value = false;
     }
@@ -327,6 +333,7 @@ export function useWorkstationSessionModals(opts) {
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
+    editSessionError,
     openEditSessionModal,
     openAdjustModal,
     liveAdjust,
