@@ -236,7 +236,12 @@ export function useWorkstationShortcuts(w) {
     editSessionError,
     openEditSessionModal,
     saveEditSession,
-    confirmDeleteSession
+    confirmDeleteSession,
+    deleteEntry,
+    deleteEntryError,
+    isDeletingEntry,
+    closeDeleteEntry,
+    deleteSessionEntry
   } = sessionModalsStore;
   // A Stop the log cannot carry yet is refused in toggleTrack, which asks for it in the box
   const requestStopFocusBlock = (b) => {
@@ -316,6 +321,11 @@ export function useWorkstationShortcuts(w) {
     openEditSessionModal,
     saveEditSession,
     confirmDeleteSession,
+    deleteEntry,
+    deleteEntryError,
+    isDeletingEntry,
+    closeDeleteEntry,
+    deleteSessionEntry,
     requestStopFocusBlock,
     startFocusBlock,
   });

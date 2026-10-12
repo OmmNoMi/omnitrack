@@ -24,12 +24,6 @@ export function useWorkBlockStore({
   sessionStore,
   isBlockLocked,
   isPastBlock,
-  isTracking,
-  trackerBlockName,
-  currentElapsedSeconds,
-  sessionNotesList,
-  stopSessionRemote,
-  discardSession,
   assignedTasks
 }) {
   // The planner's list when it has loaded, else the dashboard's (same get_assigned_tasks rows)
@@ -74,20 +68,23 @@ export function useWorkBlockStore({
     ask_task: false
   });
   const bookForm = ref(blankPlanForm());
+  // Why the plan was not saved, shown inside the Plan dialog, which stays open as filled in
+  const bookError = ref('');
   const showCancelModal = ref(false);
   const cancelTargetBlock = ref(null);
-  const cancelForm = ref({
-    reason: 'Client No-Show',
-    notes: '',
-    log_elapsed: true
-  });
+  // Nothing is picked for the person: the reason goes on the block's record
+  const cancelForm = ref({ reason: '', notes: '' });
+  // Planned Work Block.cancel_reason's options, word for word: any other value is refused
   const cancelReasons = ref([
     'Client No-Show',
-    'Client Cancelled / Requested Reschedule',
+    'Client Requested Reschedule',
+    'Dependency Blocked',
     'Internal Priority Shift',
-    'Blocked by Dependency',
+    'Meeting Cancelled',
     'Other'
   ]);
+  // Why the server refused a cancel, said inside the dialog; the block is as it was
+  const cancelError = ref('');
   const plannerBusy = ref(false);
 
   const openBlockDrawer = (b) => {
@@ -148,6 +145,7 @@ export function useWorkBlockStore({
       // A manager looking at a teammate's calendar plans for that teammate
       assigned_employee: (isManager && isManager.value && viewing && viewing !== 'All') ? viewing : ''
     };
+    bookError.value = '';
     showBookModal.value = true;
   };
 
@@ -157,15 +155,16 @@ export function useWorkBlockStore({
     const isAway = AWAY_NATURES.includes(nature);
     const isBreak = nature === BREAK;
     if (!f.start_time || !f.end_time) {
-      showToast('Set a start and end time', 'danger');
+      bookError.value = 'Set a start and an end time.';
       return;
     }
     // An end before the start is the next morning, as the server reads it
     if (spanMins(f.start_time, f.end_time) <= 0) {
-      showToast('Set an end time that differs from the start', 'danger');
+      bookError.value = 'Set an end time that differs from the start.';
       return;
     }
     plannerBusy.value = true;
+    bookError.value = '';
     try {
       const refs = isAway || isBreak ? [] : [...new Set((f.work_items || []).filter(Boolean))];
       const picked = refs.length ? (assignedWork().find(t => t.ref === refs[0]) || { ref: refs[0], subject: f.work_item_label || refs[0] }) : null;
@@ -196,42 +195,8 @@ export function useWorkBlockStore({
       if (fetchPlannerData) await fetchPlannerData();
       if (fetchWorkstationData) await fetchWorkstationData(selectedEmployee ? selectedEmployee.value : null);
     } catch (e) {
-      showToast('Could not plan this time: ' + (e && e.message || e), 'danger');
-    } finally {
-      plannerBusy.value = false;
-    }
-  };
-
-  const submitReschedule = async () => {
-    if (!activeBlock.value) return;
-    if (isBlockLocked && isBlockLocked(activeBlock.value)) {
-      showToast('Planned work blocks in the past cannot be rescheduled', 'warning');
-      return;
-    }
-    const f = rescheduleForm.value;
-    if (!f.work_date || !f.start_time || !f.end_time) {
-      showToast('Pick a date, a start and an end time', 'danger');
-      return;
-    }
-    // An end before the start is the next morning, as the server reads it
-    if (spanMins(f.start_time, f.end_time) <= 0) {
-      showToast('Set an end time that differs from the start', 'danger');
-      return;
-    }
-    plannerBusy.value = true;
-    try {
-      await postJSON('reschedule_work_block', {
-        block_name: activeBlock.value.name,
-        new_date: f.work_date,
-        new_start_time: f.start_time,
-        new_end_time: f.end_time
-      });
-      showToast('Block rescheduled', 'success');
-      showBlockDrawer.value = false;
-      if (fetchPlannerData) await fetchPlannerData();
-      if (fetchWorkstationData) await fetchWorkstationData(selectedEmployee ? selectedEmployee.value : null);
-    } catch (e) {
-      showToast('Could not reschedule block: ' + (e && e.message || e), 'danger');
+      const msg = e && e.message;
+      bookError.value = msg && msg !== 'Request failed' ? msg : 'Try again.';
     } finally {
       plannerBusy.value = false;
     }
@@ -244,57 +209,37 @@ export function useWorkBlockStore({
       return;
     }
     cancelTargetBlock.value = block;
-    cancelForm.value = {
-      reason: 'Client No-Show',
-      notes: '',
-      log_elapsed: isTracking && isTracking.value && trackerBlockName && trackerBlockName.value === block.name
-    };
+    cancelForm.value = { reason: '', notes: '' };
+    cancelError.value = '';
     showCancelModal.value = true;
   };
 
+  // A block that is recording is never offered here (isBlockCancellable): nothing below stops,
+  // discards or writes into a running session. A refusal keeps the dialog open and says why.
   const submitCancelBlock = async () => {
-    if (!cancelTargetBlock.value) return;
+    const blk = cancelTargetBlock.value;
+    const reason = cancelForm.value.reason;
+    if (!blk || !reason) return;
     plannerBusy.value = true;
+    cancelError.value = '';
     try {
-      const blk = cancelTargetBlock.value;
-      const reason = cancelForm.value.reason;
-      const notes = cancelForm.value.notes ? `Cancelled (${reason}): ${cancelForm.value.notes}` : `Cancelled (${reason})`;
-
-      if (isTracking && isTracking.value && trackerBlockName && trackerBlockName.value === blk.name) {
-        if (cancelForm.value.log_elapsed && currentElapsedSeconds && currentElapsedSeconds.value >= 30) {
-          if (sessionNotesList && sessionNotesList.value && sessionNotesList.value.length === 0) {
-            sessionNotesList.value.push(notes);
-          }
-          if (stopSessionRemote) await stopSessionRemote(false);
-        } else {
-          if (discardSession) discardSession();
-        }
-      }
-
       await postJSON('update_work_block', {
         block_name: blk.name,
         status: 'Cancelled',
-        cancel_reason: reason
+        cancel_reason: reason,
+        cancel_note: (cancelForm.value.notes || '').trim()
       });
-
-      if (trackerBlockName && trackerBlockName.value === blk.name) {
-        trackerBlockName.value = '';
-      }
-
       showCancelModal.value = false;
       showBlockDrawer.value = false;
-      showToast(`Block cancelled (${reason})`, 'info');
+      showToast('Block cancelled', 'info');
       if (fetchPlannerData) await fetchPlannerData();
       if (fetchWorkstationData) await fetchWorkstationData(selectedEmployee ? selectedEmployee.value : null);
     } catch (e) {
-      showToast('Could not cancel block: ' + (e && e.message || e), 'danger');
+      const msg = e && e.message;
+      cancelError.value = msg && msg !== 'Request failed' ? msg : 'Try again.';
     } finally {
       plannerBusy.value = false;
     }
-  };
-
-  const cancelActiveBlock = async () => {
-    openCancelModal(activeBlock.value);
   };
 
   return {
@@ -313,18 +258,18 @@ export function useWorkBlockStore({
     rescheduleForm,
     showBookModal,
     bookForm,
+    bookError,
     showCancelModal,
     cancelTargetBlock,
     cancelForm,
     cancelReasons,
+    cancelError,
     plannerBusy,
     openBlockDrawer,
     closeBlockDrawer,
     openPlanDialog,
     submitBooking,
-    submitReschedule,
     submitCancelBlock,
-    openCancelModal,
-    cancelActiveBlock
+    openCancelModal
   };
 }

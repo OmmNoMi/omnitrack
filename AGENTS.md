@@ -289,6 +289,27 @@ reka places `[data-reka-popper-content-wrapper]` with a fractional `translate()`
 ## Gotcha: focus after picking from a Dropdown
 reka's DropdownMenu hands focus back to its trigger after the menu has closed, which is later than `nextTick` and later than `setTimeout(0)`. To move focus elsewhere after a pick, listen once for `focusin` on the trigger's wrapper and refocus from there (`TaskFormDialog.ask`).
 
+## Gotcha: a dialog takes focus back after it closes
+A frappe-ui (reka) Dialog remembers what had focus when it opened and focuses it again once its
+close animation ends, later than `nextTick` and `setTimeout(0)`. A dialog answer that opens work
+elsewhere ("Adjust times" opens the session box) lost its focus to the page behind (the week
+strip). Use `handFocus(getTarget)` (`src/utils/focusHandOff.js`): it focuses the target and puts
+focus back if it is taken without a press, then lets go. `check_live_adjust.mjs` guards it.
+
+## Gotcha: TimePicker swallows every Escape (frappe-ui 0.1.278)
+`TimePicker` has `@keydown.esc.prevent` and blurs its field on Escape, list open or not. A
+container's bubble-phase Escape (which skips `defaultPrevented`) never closes anything, and focus
+falls to `<body>`. Catch Escape in the capture phase on the container (`@keydown.esc.capture`),
+let it through while `popoverOpen()`, and otherwise `preventDefault()` + `stopPropagation()`
+before closing (`SessionControlsPane.onAdjustEscape`).
+
+## Gotcha: Task chat is an ERPNext Task's only
+`raven_bridge._resolve_task_doctype_and_id` calls any unknown id a Task, so a block's name or a
+`todo:` ref sent as `task_id` reached `Raven Channel.insert` and failed on the link, with an Error
+Log each time. `get_or_create_task_channel` now returns None unless the Task exists, and
+`useSessionChat.connectedTaskId` is only ever a block's `task` or an assigned row with
+`kind === 'Task'`. `check_task_chat.mjs` guards both ends.
+
 ## Gotcha: frappe-ui Tabs has no visible keyboard focus (0.1.278)
 `Tabs` (reka TabsRoot/TabsList/TabsTrigger) gives roving focus and an animated indicator. Its default trigger, though, is a bare `<button>` with no focus style, and its list carries `p-1 px-5 gap-5`, which you cannot override from outside. Until that changes, the app's tab bars use the Material tab in `src/utils/materialTab.js` (`TAB`, `INDICATOR`, `COUNT`, `tabTone`, `countTone`), shared by the session pane and the Projects page. `check_dialog_popovers.cjs` fails if a view defines its own copy. On a tab, a focus ring must be **inset** (`focus-visible:ring-inset`) on a padded target. An outer ring on a bare label is clipped by the bar's underline into a broken box.
 
@@ -394,3 +415,12 @@ A desktop notification's `onclick` only brings the page forward (`window.focus()
 ## Gotcha: a hash-only navigate does not reload
 `navigate` (or `location.href =`) to the same URL with only a `#/route` changes the hash; the page keeps running the old bundle. After `npm run build`, use `location.reload()` and check `performance.getEntriesByType('resource')` for the new bundle size before judging a fix.
 
+
+## Gotcha: a dialog's refusal belongs to the dialog
+A toast sits behind an open frappe-ui Dialog and is gone before anyone reads it, and the browser's `confirm()`/`alert()` freeze the page and cannot say which record. A dialog that sends something keeps an `error` string, cleared when it opens and on each try, set in the `catch` with `extractErrorMessage(e, 'Try again.')`, and shown as `<p v-if="error" role="alert">Not saved. {{ error }}</p>`. `submitReschedule` (useWorkstationFocusTasks) returns that string ('' on success) for RescheduleBlockDialog to show; it no longer emits up through the drawer. The store's `bookError` and `cancelError` do the same for Plan time and Cancel block. `check_dialog_refusals.mjs` refuses a toast in those catches and any `confirm(`/`alert(` in `src`.
+
+## Gotcha: Cancel is never offered on a recording block
+`isBlockCancellable` (App.vue) is false while the block records, so code in the cancel path that stops, discards or logs a session is dead. It was, and it wrote "Cancelled (reason)" into the person's log. Keep the cancel path to `update_work_block` only. Its reasons must match Planned Work Block's `cancel_reason` options exactly, or the server refuses them. The server holds the same rules for every caller (`planner._check_cancellable`): a reason from that list, not a past block, not one already cancelled or rescheduled, not one a session records on. The page hides Cancel in those cases; the FAC tools have no page, so the server is the guard.
+
+## Gotcha: the FAC tools are a second set of buttons
+`omnitrack/fac.py` lets an assistant (MCP via Frappe Assistant Core) do what the page does, through its own functions. Each rule the page keeps must be kept there too, or an assistant breaks it: a session is saved with `compose_wrap_note` (the Python twin of `composeWrapNote`; both read `tests/fixtures/wrap_notes.json`), on the day it started; starting over a running session is refused; a log line bumps `linesRev`; dates go through `check_timesheet_date_permission` for `frappe.session.user`; no time, length, next task or cancel reason is filled in for the person. Tool descriptions are what the assistant reads, so they state the rules and say "ask the person first" for delete, discard and cancel. When a page rule changes, change `fac.py`, its tool text and `docs/OMNITRACK_FAC_INTEGRATION.md` together. `check_fac_tools.mjs` guards them. Tool schemas are built at import with no site connected, so `CANCEL_REASONS` is read from the DocType JSON, not `frappe.get_meta`.

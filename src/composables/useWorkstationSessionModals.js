@@ -164,7 +164,9 @@ export function useWorkstationSessionModals(opts) {
       session_date: dayOf(start),
       from_time: clockOf(start),
       to_time: clockOf(cap),
-      started_at: clockOf(start)
+      started_at: clockOf(start),
+      // A suggested end is what the person came to check, so focus starts there
+      focus: opt && opt.endMs ? 'end' : 'start'
     };
     if (!(opt && opt.inPlace)) showSessionBox();
   };
@@ -297,25 +299,41 @@ export function useWorkstationSessionModals(opts) {
     }
   };
 
-  // 4. Delete a logged entry
-  const confirmDeleteSession = async (block, session) => {
+  // 4. Delete a logged entry: one question in DeleteEntryDialog, never the browser's confirm().
+  //    A refusal keeps the dialog open and says why inside it.
+  const deleteEntry = ref(null);
+  const deleteEntryError = ref('');
+  const isDeletingEntry = ref(false);
+  const confirmDeleteSession = (block, session) => {
     if (!session || !session.name) return;
-    const timeLabel = session.from_time ? hhmm(session.from_time) + '–' + hhmm(session.to_time) : fmtHrs(session.hours) + 'h';
-    if (!confirm(`Delete work session (${timeLabel})? This will update actual hours on this block.`)) return;
+    deleteEntryError.value = '';
+    deleteEntry.value = { block: block || null, session };
+  };
+  const closeDeleteEntry = () => {
+    if (isDeletingEntry.value) return;
+    deleteEntry.value = null;
+    deleteEntryError.value = '';
+  };
+  const deleteSessionEntry = async () => {
+    const target = deleteEntry.value;
+    if (!target || isDeletingEntry.value) return;
+    isDeletingEntry.value = true;
+    deleteEntryError.value = '';
     try {
       const res = await postJSON('delete_work_session', {
-        session_name: session.name,
-        block_name: block ? block.name : null
+        session_name: target.session.name,
+        block_name: target.block ? target.block.name : null
       });
-      if (res && res.status === 'success') {
-        showToast('Work session deleted', 'info');
-        fetchWorkstationData(selectedEmployee.value);
-        applyBlockTotals(res);
-      } else {
-        showToast(extractErrorMessage(res, 'Failed to delete work session'), 'danger');
-      }
+      if (!res || res.status !== 'success') throw new Error((res && res.message) || 'Request failed');
+      isDeletingEntry.value = false;
+      closeDeleteEntry();
+      showToast('Entry deleted', 'info');
+      applyBlockTotals(res);
+      fetchWorkstationData(selectedEmployee.value);
     } catch (e) {
-      showToast(extractErrorMessage(e, 'Failed to delete work session'), 'danger');
+      deleteEntryError.value = extractErrorMessage(e, 'Try again.');
+    } finally {
+      isDeletingEntry.value = false;
     }
   };
 
@@ -342,6 +360,11 @@ export function useWorkstationSessionModals(opts) {
     stopAndLogSession,
     quickLogTimelineGap,
     saveEditSession,
-    confirmDeleteSession
+    confirmDeleteSession,
+    deleteEntry,
+    deleteEntryError,
+    isDeletingEntry,
+    closeDeleteEntry,
+    deleteSessionEntry
   };
 }

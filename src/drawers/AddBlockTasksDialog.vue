@@ -18,6 +18,7 @@
       @continue="add(checked, '')"
       @skip="add([], query.trim())"
     />
+    <p v-if="error" role="alert" class="mt-3 text-sm text-ink-red-4">Not added. {{ error }}</p>
 
     <template #actions>
       <div class="flex items-center justify-end gap-2">
@@ -44,10 +45,11 @@ export default {
   },
   emits: ['update:modelValue'],
   setup() {
-    return useWorkstationContext(['postJSON', 'showToast', 'fetchPlannerData', 'comboboxBookTaskOptions', 'addSessionTasks']);
+    return useWorkstationContext(['postJSON', 'showToast', 'extractErrorMessage', 'fetchPlannerData', 'comboboxBookTaskOptions', 'addSessionTasks']);
   },
   data() {
-    return { query: '', checked: [], busy: false };
+    // error: why the server refused, shown in the dialog, which stays open with the picks kept
+    return { query: '', checked: [], busy: false, error: '' };
   },
   computed: {
     // Everything assigned, less what the block already has
@@ -65,7 +67,7 @@ export default {
   },
   watch: {
     modelValue(open) {
-      if (open) { this.query = ''; this.checked = []; this.busy = false; }
+      if (open) { this.query = ''; this.checked = []; this.busy = false; this.error = ''; }
     },
   },
   methods: {
@@ -75,6 +77,7 @@ export default {
       const subject = String(newSubject || '').trim();
       if (this.busy || (!list.length && !subject)) return;
       this.busy = true;
+      this.error = '';
       try {
         // A running session with no block yet keeps the tasks until Stop makes its block
         if (this.block.is_session_tasks) {
@@ -94,7 +97,7 @@ export default {
         this.showToast(n > 1 ? `${n} tasks added` : 'Task added', 'success');
         this.$emit('update:modelValue', false);
       } catch (e) {
-        this.showToast('Could not add tasks: ' + (e && e.message || e), 'danger');
+        this.error = this.extractErrorMessage(e, 'Try again.');
       } finally {
         this.busy = false;
       }

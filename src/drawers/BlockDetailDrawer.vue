@@ -123,7 +123,7 @@
         </div>
       </div>
     </transition>
-    <RescheduleBlockDialog v-if="block" v-model="showReschedule" :block="block" :title="title" :busy="plannerBusy" :is-dark-mode="isDarkMode" @submit="$emit('submit-reschedule', $event)" />
+    <RescheduleBlockDialog v-if="block" v-model="showReschedule" :block="block" :title="title" :busy="plannerBusy" :is-dark-mode="isDarkMode" />
     <EditBlockDialog v-if="block" v-model="showEdit" :block="block" :title="title" :is-dark-mode="isDarkMode" />
   </div>
 </template>
@@ -311,7 +311,6 @@ export default {
     'edit-session',
     'delete-session',
     'open-session',
-    'submit-reschedule',
     'approve',
     'flag'
   ]

@@ -62,7 +62,7 @@ class TestOmniTrackFAC(unittest.TestCase):
 			plan_work_blocks(blocks=sample_blocks, work_date=past_date)
 
 	def test_mandatory_session_notes(self):
-		"""Invariant 2: Work session logging strictly requires meaningful notes (>= 3 chars)."""
+		"""Invariant 2: a logged Work Session needs notes of at least Minimum Words per Session words."""
 		from omnitrack.fac import log_work_session
 
 		with self.assertRaises(Exception):
@@ -75,9 +75,38 @@ class TestOmniTrackFAC(unittest.TestCase):
 		with self.assertRaises(Exception):
 			log_work_session(
 				hours=1.0,
-				notes="ok",  # Less than 3 chars
+				notes="ok",  # Fewer words than the minimum
 				session_date=nowdate()
 			)
+
+	def test_nothing_is_assumed(self):
+		"""The FAC tools never invent a length, a start time, a next task or a cancel reason."""
+		from omnitrack.fac import cancel_work_block, log_work_session, quick_create_task, switch_timer
+
+		notes = "Reviewed the quarterly vendor contracts and wrote up the renewal terms for the finance team today"
+		with self.assertRaises(frappe.ValidationError):
+			log_work_session(notes=notes, session_date=nowdate())
+		with self.assertRaises(frappe.ValidationError):
+			quick_create_task(subject="Book a block with no time", book_block=True)
+		with self.assertRaises(frappe.ValidationError):
+			switch_timer(current_session_notes=notes)
+		with self.assertRaises(frappe.ValidationError):
+			cancel_work_block(block_name=None, cancel_reason="Other")
+
+	def test_log_rules_in_workspace(self):
+		"""get_my_workspace tells the assistant the log window, the payroll lock and the minimums."""
+		from omnitrack.fac import get_my_workspace
+
+		rules = get_my_workspace()["log_rules"]
+		for key in ("log_days_back", "payroll_closed_through", "can_log_from", "min_session_words", "min_log_line_chars", "rules"):
+			self.assertIn(key, rules)
+
+	def test_cancel_reasons_match_the_doctype(self):
+		"""The tool schemas offer exactly Planned Work Block.cancel_reason's options."""
+		from omnitrack.fac import CANCEL_REASONS, OmniTrackCancelWorkBlockTool, cancel_work_block_reasons
+
+		self.assertEqual(CANCEL_REASONS, cancel_work_block_reasons())
+		self.assertEqual(OmniTrackCancelWorkBlockTool().inputSchema["properties"]["cancel_reason"]["enum"], CANCEL_REASONS)
 
 	def test_empty_task_subject_rejected(self):
 		"""Verifies that tasks cannot be created with blank subjects."""
@@ -139,7 +168,7 @@ class TestOmniTrackFAC(unittest.TestCase):
 		self.assertTrue(can_access_user_data("standard_employee@example.com", session_user="Administrator"))
 
 	def test_assistant_tools_hook_registered(self):
-		"""Verifies that hooks.py assistant_tools contains all 20 BaseTool classes."""
+		"""Verifies that hooks.py assistant_tools contains all 22 BaseTool classes."""
 		import omnitrack.hooks as hooks
 		self.assertTrue(hasattr(hooks, "assistant_tools"))
 		expected_classes = [
@@ -164,13 +193,14 @@ class TestOmniTrackFAC(unittest.TestCase):
 			"omnitrack.fac.OmniTrackCompleteBlockTaskTool",
 			"omnitrack.fac.OmniTrackGetPlanVsActualTool",
 			"omnitrack.fac.OmniTrackApproveWorkBlocksTool",
+			"omnitrack.fac.OmniTrackCancelWorkBlockTool",
 		]
-		self.assertEqual(len(hooks.assistant_tools), 21)
+		self.assertEqual(len(hooks.assistant_tools), 22)
 		for c_path in expected_classes:
 			self.assertIn(c_path, hooks.assistant_tools)
 
 	def test_basetool_subclasses_instantiation(self):
-		"""Verifies that all 21 BaseTool classes can be instantiated and provide correct metadata."""
+		"""Verifies that all 22 BaseTool classes can be instantiated and provide correct metadata."""
 		from omnitrack.fac import (
 			OmniTrackGetMyWorkspaceTool,
 			OmniTrackPlanWorkBlocksTool,
@@ -193,6 +223,7 @@ class TestOmniTrackFAC(unittest.TestCase):
 			OmniTrackCompleteBlockTaskTool,
 			OmniTrackGetPlanVsActualTool,
 			OmniTrackApproveWorkBlocksTool,
+			OmniTrackCancelWorkBlockTool,
 		)
 		tool_classes = [
 			OmniTrackGetMyWorkspaceTool,
@@ -216,8 +247,9 @@ class TestOmniTrackFAC(unittest.TestCase):
 			OmniTrackCompleteBlockTaskTool,
 			OmniTrackGetPlanVsActualTool,
 			OmniTrackApproveWorkBlocksTool,
+			OmniTrackCancelWorkBlockTool,
 		]
-		self.assertEqual(len(tool_classes), 21)
+		self.assertEqual(len(tool_classes), 22)
 		for cls in tool_classes:
 			inst = cls()
 			self.assertTrue(inst.name.startswith("omnitrack_"))

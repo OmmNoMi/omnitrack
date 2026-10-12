@@ -34,6 +34,7 @@
         @keydown.meta.enter.prevent="save"
         @keydown.ctrl.enter.prevent="save"
       />
+      <p v-if="error" role="alert" class="text-sm text-ink-red-4">Not saved. {{ error }}</p>
     </form>
 
     <template #actions>
@@ -62,10 +63,11 @@ export default {
   },
   emits: ['update:modelValue'],
   setup() {
-    return useWorkstationContext(['postJSON', 'showToast', 'fetchPlannerData', 'fetchWorkstationData', 'selectedEmployee']);
+    return useWorkstationContext(['postJSON', 'showToast', 'extractErrorMessage', 'fetchPlannerData', 'fetchWorkstationData', 'selectedEmployee']);
   },
   data() {
-    return { form: { title: '', notes: '' }, busy: false };
+    // error: why the server refused, shown in the dialog, which stays open
+    return { form: { title: '', notes: '' }, busy: false, error: '' };
   },
   computed: {
     when() {
@@ -95,6 +97,7 @@ export default {
       handler(open) {
         if (!open) return;
         this.busy = false;
+        this.error = '';
         this.form = { title: this.title, notes: this.notesMirrorTitle ? '' : String(this.block.deliverable_notes || '') };
       },
     },
@@ -104,6 +107,7 @@ export default {
       if (!this.canSave) return;
       const b = this.block, changes = this.changes;
       this.busy = true;
+      this.error = '';
       try {
         await this.postJSON('update_work_block', { block_name: b.name, ...changes });
         if (changes.work_item_label) Object.assign(b, { work_item_label: changes.work_item_label, task_subject: changes.work_item_label });
@@ -113,7 +117,7 @@ export default {
         this.showToast('Block saved', 'success');
         this.$emit('update:modelValue', false);
       } catch (e) {
-        this.showToast('Could not save this block: ' + (e && e.message || e), 'danger');
+        this.error = this.extractErrorMessage(e, 'Try again.');
       } finally {
         this.busy = false;
       }

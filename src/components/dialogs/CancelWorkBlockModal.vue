@@ -1,98 +1,70 @@
 <template>
+  <!-- One question; the buttons are the answers. Nothing is picked for the person: the reason
+       goes on the block's record, so Cancel block waits until they choose one. A block that is
+       recording is not offered here (isBlockCancellable): its session is stopped and saved first. -->
   <f-dialog
     :model-value="modelValue"
-    title="Cancel Work Block"
-    subtitle="Audit reason for schedule variance"
+    title="Cancel this block?"
     size="sm"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <template #header-icon>
-      <svg class="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="15" y1="9" x2="9" y2="15"></line>
-        <line x1="9" y1="9" x2="15" y2="15"></line>
-      </svg>
-    </template>
-
-    <div v-if="targetBlock" class="space-y-4 text-xs">
-      <!-- Target Block Summary Card -->
-      <div class="p-3 rounded-2xl border" :class="isDarkMode ? 'bg-[#161618] border-[#2E2E32]' : 'bg-gray-50 border-gray-200'">
-        <div class="text-[10px] uppercase font-bold tracking-wider text-gray-600 dark:text-gray-300">Target Block</div>
-        <div class="font-extrabold text-sm text-gray-900 dark:text-white mt-0.5">
-          {{ blockTitle(targetBlock) }}
-        </div>
-        <div class="text-[11px] text-gray-700 dark:text-gray-300 mt-1 flex items-center gap-2">
-          <span class="tabular-nums">{{ targetBlock.work_date }} · {{ formatHHMM(targetBlock.start_time) }}–{{ formatHHMM(targetBlock.end_time) }} · {{ formatDuration(targetBlock.duration_hours) }}h</span>
-        </div>
+    <div v-if="targetBlock" class="space-y-4">
+      <div>
+        <div class="text-base font-semibold text-ink-gray-9 break-words">{{ blockTitle(targetBlock) }}</div>
+        <div class="text-sm text-ink-gray-7 tabular-nums">{{ whenLine }}</div>
       </div>
 
-      <!-- Structured Reason Dropdown -->
       <div>
-        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Cancellation Reason *</label>
-        <Combobox open-on-click
-          v-model="cancelForm.reason"
+        <label for="cancel-reason" class="block mb-1 text-sm font-medium text-ink-gray-8">Reason</label>
+        <Combobox
+          id="cancel-reason"
+          open-on-click
+          variant="outline"
+          size="md"
+          :model-value="cancelForm.reason || null"
           :options="reasons"
-          placeholder="Select cancellation reason..."
-          aria-label="Cancellation reason"
-         />
+          placeholder="Pick a reason"
+          data-autofocus
+          @update:model-value="setReason"
+        />
       </div>
 
-      <!-- Notes / Context -->
       <div>
-        <label class="block font-bold mb-1" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">Context / Notes (Optional)</label>
-        <textarea
-          v-model="cancelForm.notes"
-          rows="2"
-          placeholder="e.g. Waited 10m on call. Rescheduling needed."
-          class="w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
-          :class="isDarkMode ? 'bg-[#121212] border-[#2A2A2A] text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'"
-        ></textarea>
+        <label for="cancel-note" class="block mb-1 text-sm font-medium text-ink-gray-8">Note <span class="font-normal text-ink-gray-7">(optional)</span></label>
+        <Textarea
+          id="cancel-note"
+          variant="outline"
+          size="md"
+          :rows="2"
+          :model-value="cancelForm.notes"
+          placeholder="Added to the block's activity"
+          @update:model-value="setNote"
+        />
       </div>
 
-      <!-- Log Elapsed Time Checkbox -->
-      <div
-        v-if="isTrackingThisBlock"
-        class="p-3 rounded-xl border bg-amber-50/60 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 space-y-1"
-      >
-        <label class="flex items-start gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            v-model="cancelForm.log_elapsed"
-            class="mt-0.5 rounded text-red-600 focus:ring-red-500"
-          />
-          <div class="text-xs">
-            <span class="font-bold text-amber-900 dark:text-amber-200">Log elapsed wait time ({{ formattedTime }})</span>
-            <p class="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-              Save the time as a work session on this block, then cancel it. The timer stops.
-            </p>
-          </div>
-        </label>
-      </div>
+      <p v-if="error" role="alert" class="text-sm text-ink-red-4">Not cancelled. {{ error }}</p>
     </div>
 
-    <!-- Footer Actions -->
     <template #actions>
-      <div class="flex items-center justify-between gap-2 w-full">
-        <Button variant="ghost" theme="gray" size="sm" @click="$emit('update:modelValue', false)">
-          Keep Block
-        </Button>
+      <div class="flex items-center justify-end gap-2 w-full">
+        <Button variant="ghost" label="Keep block" @click="$emit('update:modelValue', false)" />
         <Button
           variant="solid"
           theme="red"
-          size="sm"
-          :disabled="busy"
+          label="Cancel block"
           :loading="busy"
+          :disabled="!cancelForm.reason || busy"
           @click="$emit('confirm')"
-        >
-          Confirm Cancellation
-        </Button>
+        />
       </div>
     </template>
   </f-dialog>
 </template>
 
 <script>
-import { blockTitle } from '../../utils/blockTitle.js';
+import { blockTitle } from "../../utils/blockTitle.js";
+import { clock, toMin } from "../../utils/clockTime.js";
+
 export default {
   name: "CancelWorkBlockModal",
   props: {
@@ -100,20 +72,28 @@ export default {
     targetBlock: { type: Object, default: null },
     cancelForm: { type: Object, required: true },
     reasons: { type: Array, default: () => [] },
-    isTrackingThisBlock: { type: Boolean, default: false },
-    formattedTime: { type: String, default: "00:00:00" },
     busy: { type: Boolean, default: false },
-    isDarkMode: { type: Boolean, default: false },
+    // Why the server refused; the block is as it was
+    error: { type: String, default: "" },
   },
   emits: ["update:modelValue", "confirm"],
+  computed: {
+    whenLine() {
+      const b = this.targetBlock;
+      if (!b) return "";
+      const [y, m, d] = String(b.work_date || "").split("-").map(Number);
+      const day = y ? new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : "";
+      const span = b.start_time && b.end_time ? `${clock(toMin(b.start_time))} – ${clock(toMin(b.end_time))}` : "";
+      return [day, span].filter(Boolean).join(" · ");
+    },
+  },
   methods: {
     blockTitle,
-    formatHHMM(val) {
-      if (!val) return "";
-      return String(val).substring(0, 5);
+    setReason(v) {
+      this.cancelForm.reason = (v && typeof v === "object" ? v.value : v) || "";
     },
-    formatDuration(hours) {
-      return Number(hours || 0).toFixed(1);
+    setNote(v) {
+      this.cancelForm.notes = v || "";
     },
   },
 };

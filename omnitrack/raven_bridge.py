@@ -45,7 +45,9 @@ def get_or_create_task_channel(task_id: str, project_id: str | None = None) -> s
 	doctype, clean_id = _resolve_task_doctype_and_id(task_id)
 	# Raven is for Projects and their ERPNext Tasks. A to-do, a work block and a work session are
 	# talked about in their own Frappe comments (omnitrack.api.activity), never in a channel.
-	if doctype != "Task":
+	# _resolve_task_doctype_and_id names an unknown id a Task too: a block's name sent as one
+	# failed the channel insert on every open and every send, each with an Error Log.
+	if doctype != "Task" or not frappe.db.exists("Task", clean_id):
 		return None
 
 	# 1. Look for an existing channel linked directly to this Task
@@ -199,7 +201,7 @@ def send_task_message(
 
 	channel_id = get_or_create_task_channel(task_id)
 	if not channel_id:
-		return {"success": False, "error": f"Could not find or create channel for task {task_id}"}
+		return {"success": False, "error": _("Only an ERPNext Task has a chat; {0} is not one.").format(task_id)}
 
 	doctype, clean_id = _resolve_task_doctype_and_id(task_id)
 

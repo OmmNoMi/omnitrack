@@ -152,7 +152,6 @@
     @log-session="logSessionFor"
     @edit-session="editSessionRow"
     @delete-session="deleteSessionRow"
-    @submit-reschedule="submitReschedule"
     @approve-block="quickApproveBlock"
     @flag-block="quickFlagBlock"
     @close-raven-drawer="closeTaskRavenDrawer"
@@ -185,6 +184,7 @@
 
     v-model:show-book-modal="showBookModal"
     :book-form="bookForm"
+    :book-error="bookError"
     :combobox-assignee-options="comboboxAssigneeOptions"
     :combobox-book-task-options="comboboxBookTaskOptions"
     :combobox-project-options="comboboxProjectOptions"
@@ -227,7 +227,7 @@
     :cancel-target-block="cancelTargetBlock"
     :cancel-form="cancelForm"
     :cancel-reasons="cancelReasons"
-    :is-tracking-this-block="isTracking && trackerBlockName === (cancelTargetBlock && cancelTargetBlock.name)"
+    :cancel-error="cancelError"
     @submit-cancel-block="submitCancelBlock"
 
     v-model:show-edit-session-modal="showEditSessionModal"
@@ -242,6 +242,9 @@
 
   <!-- The one task form: block task rows, assigned work and the dashboard all open it -->
   <TaskFormDialog />
+
+  <!-- Deleting a logged entry asks here, never with the browser's confirm() -->
+  <DeleteEntryDialog />
 
 </div>
 </template>

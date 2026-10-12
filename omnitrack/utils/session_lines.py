@@ -23,3 +23,13 @@ def keep_newer_lines(stored, incoming):
 		if field in stored:
 			kept[field] = stored[field]
 	return kept
+
+
+def compose_wrap_note(title, log_lines, last_line=None):
+	"""The notes a running session is saved with: its title, then its log lines and an optional
+	last line as bullets. The same as composeWrapNote (src/utils/wrapNote.js), so a session
+	stopped or switched from an assistant is saved as the page saves it, its log lines kept."""
+	lines = [str(p or "").strip() for p in [*(log_lines or []), last_line]]
+	bullets = "\n".join(f"• {p}" for p in lines if p)
+	head = str(title or "").strip()
+	return f"{head}\n\n{bullets}" if head and bullets else (head or bullets)

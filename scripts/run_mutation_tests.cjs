@@ -371,10 +371,16 @@ runMutationTest(
   'node scripts/check_dialog_popovers.cjs',
   'stops at the end they show'
 );
+runMutationTest('The TimePicker swallows the Escape that closes the times again', path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
+  (code) => code.replace('@keydown.esc.capture="onAdjustEscape"', '@keydown.esc="onAdjustEscape"'), 'node scripts/check_dialog_popovers.cjs', 'caught before the TimePicker');
+runMutationTest('The times close but the TimePicker still blurs its field', path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
+  (code) => code.replace('      e.preventDefault();\n      e.stopPropagation();\n      ws.cancelLiveAdjust();', '      e.preventDefault();\n      ws.cancelLiveAdjust();'), 'node scripts/check_dialog_popovers.cjs', 'never blurs its field');
+runMutationTest('Escape on an open time list drops focus to the page', path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
+  (code) => code.replace("        setTimeout(() => { if (document.activeElement === document.body && field.isConnected) field.focus(); });\n", ''), 'node scripts/check_dialog_popovers.cjs', 'focus stays on its field');
 runMutationTest(
   'Escape inside the inline times does nothing',
   path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
-  (code) => code.replace('@keydown.esc="onAdjustEscape"', ''),
+  (code) => code.replace('@keydown.esc.capture="onAdjustEscape"', ''),
   'node scripts/check_dialog_popovers.cjs',
   'Escape inside the open times closes them'
 );
@@ -482,7 +488,7 @@ runMutationTest('A To-Do offers Raven chat again', drawerDir('TaskDetailDrawer.v
 runMutationTest('The task form offers Raven chat on a To-Do', path.resolve(omnitrackDir,'src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("if (this.linked.doctype === 'Task') items.push({ label: 'Raven chat'", "items.push({ label: 'Raven chat'"), DA, 'ERPNext Task only');
 runMutationTest('The server makes Raven channels for blocks again', path.resolve(omnitrackDir,'omnitrack/raven_bridge.py'),
-  (code) => code.replace('\tif doctype != "Task":\n\t\treturn None', '\tif not doctype:\n\t\treturn None'), DA, 'a Task and nothing else');
+  (code) => code.replace('\tif doctype != "Task" or not frappe.db.exists("Task", clean_id):\n\t\treturn None', '\tif not doctype:\n\t\treturn None'), DA, 'a Task and nothing else');
 runMutationTest('Desk shows Raven on a block again', path.resolve(omnitrackDir,'omnitrack/hooks.py'),
   (code) => code.replace('"Task": ["omnitrack.raven_bridge.get_task_raven_timeline_content"],', '"Task": ["omnitrack.raven_bridge.get_task_raven_timeline_content"],\n\t"Planned Work Block": ["x"],'), DA, 'Task only');
 runMutationTest('Activity reads without a permission check', path.resolve(omnitrackDir,'omnitrack/api/activity.py'),
@@ -1393,6 +1399,50 @@ runMutationTest('An ended session keeps its word prompt', WSM,
   (code) => code.replace('    liveAdjust.value = null;\n    stopNeedsWords.value = false;\n  });', '    liveAdjust.value = null;\n  });'), LA, 'takes its open box and prompt with it');
 runMutationTest('Stop and log stops at now, not the end picked', WSM,
   (code) => code.replace('await toggleTrack(end < Date.now() ? end : null);', 'await toggleTrack(null);'), LA, 'ends at the end picked');
+runMutationTest('Adjust times starts on the start, not the suggested end', WSM,
+  (code) => code.replace("focus: opt && opt.endMs ? 'end' : 'start'", "focus: 'start'"), LA, 'starts on the suggested end');
+runMutationTest('Adjust on its own starts on the end', WSM,
+  (code) => code.replace("focus: opt && opt.endMs ? 'end' : 'start'", "focus: 'end'"), LA, 'starts on the start time');
+runMutationTest('The box focuses the start whatever was asked', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('return (wantsEnd ? inputs[2] : inputs[1]) || inputs[0];', 'return inputs[1] || inputs[0];'), LA, 'handed to the end');
+runMutationTest('The box focuses once and lets the closing dialog take it back', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('            handFocus(() => {', '            ((f) => { const el = f(); if (el) el.focus(); })(() => {'), LA, 'handed to the end');
+runMutationTest('Focus taken by a closing dialog is not put back', SRC('src/utils/focusHandOff.js'),
+  (code) => code.replace("  document.addEventListener('focusin', onFocus, true);\n", ''), LA, 'is put back');
+runMutationTest("The hand-off overrides the person's own click", SRC('src/utils/focusHandOff.js'),
+  (code) => code.replace("  document.addEventListener('pointerdown', stop, true);\n", ''), LA, 'never overridden');
+runMutationTest('The hand-off never lets go', SRC('src/utils/focusHandOff.js'),
+  (code) => code.replace('  timer = setTimeout(stop, ms);\n', ''), LA, 'lets go after a moment');
+// Task chat is the ERPNext Task's Raven channel, never a block's or a to-do's
+const TC = 'node scripts/check_task_chat.mjs';
+const CHATJS = SRC('src/session/useSessionChat.js');
+runMutationTest("A block's own name is sent as its task again", CHATJS,
+  (code) => code.replace('if (blk) return blk.task || null;', 'if (blk) return blk.task || blk.name;'), TC, "a block's own name");
+runMutationTest('A to-do picked by title is sent as a task', CHATJS,
+  (code) => code.replace("t.kind === 'Task' && t.subject && t.subject === props.trackerNotes", 't.subject && t.subject === props.trackerNotes'), TC, 'a to-do picked by title');
+runMutationTest('The Task chat tab is offered with nothing to chat about', CHATJS,
+  (code) => code.replace("isRavenAvailable.value && connectedTaskId.value ? ['chat'] : []", "isRavenAvailable.value ? ['chat'] : []"), TC, 'offered only with a Task');
+runMutationTest('A refused message says nothing again', CHATJS,
+  (code) => code.replace("        chatError.value = 'Not sent. ' + ((res && res.message && res.message.error) || 'Try again.');\n", ''), TC, 'a refused message says Not sent');
+runMutationTest('A failed request is only logged', CHATJS,
+  (code) => code.replace("      chatError.value = 'Not sent. ' + refusal(e, 'Try again.');", "      console.error('Failed to send message', e);"), TC, 'a failed request says Not sent');
+runMutationTest('A new try keeps the last refusal', CHATJS,
+  (code) => code.replace("    chatSending.value = true;\n    chatError.value = '';\n", '    chatSending.value = true;\n'), TC, 'clears the last refusal');
+runMutationTest('A refused pin says nothing', CHATJS,
+  (code) => code.replace("        chatError.value = 'Not pinned. ' + ((res && res.message && res.message.error) || 'Try again.');\n", ''), TC, 'Not pinned');
+const SLPANE = SRC('src/session/SessionLogPane.vue');
+runMutationTest('The Task chat tab shows for any block', SLPANE,
+  (code) => code.replace('v-if="isRavenAvailable && connectedTaskId && !isEntry"', 'v-if="isRavenAvailable && !isEntry"'), TC, 'shows only with a Task');
+runMutationTest('The chat stops naming its task', SLPANE,
+  (code) => code.replace('With everyone on the task <span', 'Chat <span'), TC, 'names the task');
+runMutationTest('A chat refusal is not announced', SLPANE,
+  (code) => code.replace('<p v-if="chatError" role="alert"', '<p v-if="chatError"'), TC, 'announced under the box');
+runMutationTest('Send leaves the tab order', SLPANE,
+  (code) => code.replace('@click="sendChatMessage"\n', '@click="sendChatMessage"\n              tabindex="-1"\n'), TC, 'Send is in the tab order');
+runMutationTest('The server makes a channel for any id', SRC('omnitrack/raven_bridge.py'),
+  (code) => code.replace('if doctype != "Task" or not frappe.db.exists("Task", clean_id):\n\t\treturn None', 'if doctype != "Task":\n\t\treturn None'), TC, 'anything but a real Task');
+runMutationTest('A message with no channel is not told why', SRC('omnitrack/raven_bridge.py'),
+  (code) => code.replace('_("Only an ERPNext Task has a chat; {0} is not one.").format(task_id)', '"Failed to resolve channel"'), TC, 'says why');
 runMutationTest('The server counts a hyphen as part of a word', SRC('omnitrack/utils/validators.py'),
   (code) => code.replace('("\\u2022", "-", "*",', '("\\u2022", "*",'), SLT, 'test_counted_as_the_page_counts_them');
 runMutationTest('The server lets an older copy replace the log', SRC('omnitrack/utils/session_lines.py'),
@@ -1523,6 +1573,136 @@ runMutationTest('The app never hears the payroll date', SRC('omnitrack/api/plann
   (code) => code.replace('"payroll_closed_through": str(closed) if closed else None,', ''), LW, 'the planner payload carries both');
 runMutationTest('The hours-to-days patch is not run', SRC('omnitrack/patches.txt'),
   (code) => code.replace('omnitrack.patches.v1_5.log_days_back\n', ''), LW, 'the patch moving hours to days');
+
+// Refused dialogs say why inside themselves; cancel asks for a real reason (scripts/check_dialog_refusals.mjs)
+const DR = 'node scripts/check_dialog_refusals.mjs';
+runMutationTest('Cancel presets a reason again', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("cancelForm.value = { reason: '', notes: '' };", "cancelForm.value = { reason: 'Internal Priority Shift', notes: '' };"), DR, 'starts with no reason');
+runMutationTest('Cancel offers a reason the server refuses', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("    'Dependency Blocked',\n", "    'Blocked by Dependency',\n"), DR, "cancel_reason's options");
+runMutationTest('Cancel writes into the running session again', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("    if (!blk || !reason) return;\n", "    if (!blk || !reason) return;\n    if (discardSession) discardSession();\n"), DR, 'writes into no session');
+runMutationTest('A refused cancel is a toast behind the dialog', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("cancelError.value = msg && msg !== 'Request failed' ? msg : 'Try again.';", "showToast('Could not cancel block: ' + msg, 'danger');"), DR, 'submitCancelBlock says why in the dialog');
+runMutationTest('The cancel note never reaches the server', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace(",\n        cancel_note: (cancelForm.value.notes || '').trim()", ''), DR, 'the note goes to the server');
+runMutationTest('Cancel block works with no reason', SRC('src/components/dialogs/CancelWorkBlockModal.vue'),
+  (code) => code.replace(':disabled="!cancelForm.reason || busy"', ':disabled="busy"'), DR, 'waits until a reason is picked');
+runMutationTest('The cancel title is a label, not a question', SRC('src/components/dialogs/CancelWorkBlockModal.vue'),
+  (code) => code.replace('title="Cancel this block?"', 'title="Cancel Work Block"'), DR, 'the title is the question');
+runMutationTest('The cancel refusal is never shown', SRC('src/components/dialogs/CancelWorkBlockModal.vue'),
+  (code) => code.replace('<p v-if="error" role="alert" class="text-sm text-ink-red-4">Not cancelled. {{ error }}</p>', ''), DR, 'role="alert" inside the dialog');
+runMutationTest('The cancel dialog never hears the refusal', SRC('src/components/dialogs/DialogCoordinator.vue'),
+  (code) => code.replace(':error="cancelError"', ''), DR, 'the cancel dialog gets the refusal');
+runMutationTest('The server drops the cancel note', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('\t\tdoc.add_comment("Comment", text=frappe.utils.escape_html(note))\n', '\t\tpass\n'), DR, "the note goes on the block's activity");
+runMutationTest('The cancel note goes on the activity unescaped', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('text=frappe.utils.escape_html(note)', 'text=note'), DR, 'escaped');
+runMutationTest('Delete asks with the browser confirm() again', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace("    deleteEntryError.value = '';\n    deleteEntry.value = { block: block || null, session };", "    if (!confirm('Delete work session?')) return;\n    deleteEntryError.value = '';\n    deleteEntry.value = { block: block || null, session };"), DR, 'no browser confirm()');
+runMutationTest('A refused delete is a toast', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace("deleteEntryError.value = extractErrorMessage(e, 'Try again.');", "showToast(extractErrorMessage(e, 'Failed to delete work session'), 'danger');"), DR, 'deleteSessionEntry says why in the dialog');
+runMutationTest('Enter deletes the entry', SRC('src/components/dialogs/DeleteEntryDialog.vue'),
+  (code) => code.replace('<Button variant="ghost" label="Keep entry" data-autofocus', '<Button variant="ghost" label="Keep entry"').replace('theme="red" label="Delete entry"', 'theme="red" data-autofocus label="Delete entry"'), DR, 'focus starts on Keep entry');
+runMutationTest('The delete dialog is never mounted', SRC('src/App.vue'),
+  (code) => code.replace('<DeleteEntryDialog />', ''), DR, 'App mounts DeleteEntryDialog');
+runMutationTest('A refused task save is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not save this task: ' + (e && e.message || e), 'danger');"), DR, 'save says why in the dialog');
+runMutationTest('A refused workflow move is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Not moved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not move this task: ' + (e && e.message || e), 'danger');"), DR, 'a workflow move says why in the dialog');
+runMutationTest('A task that will not open closes the form', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Could not open this task. ' + this.extractErrorMessage(e, 'Try again.');", "this.error = 'Could not open this task.';\n        closeTaskForm();"), DR, 'not a toast and a closed form');
+runMutationTest('A refused block edit is a toast again', SRC('src/drawers/EditBlockDialog.vue'),
+  (code) => code.replace("this.error = this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not save this block: ' + (e && e.message || e), 'danger');"), DR, 'Edit block says why in the dialog');
+runMutationTest('A refused Add tasks is never shown', SRC('src/drawers/AddBlockTasksDialog.vue'),
+  (code) => code.replace('<p v-if="error" role="alert" class="mt-3 text-sm text-ink-red-4">Not added. {{ error }}</p>', ''), DR, 'Add tasks: the refusal shows');
+runMutationTest('A refused reschedule is a toast again', SRC('src/composables/useWorkstationFocusTasks.js'),
+  (code) => code.replace("return w.extractErrorMessage(e, 'Try again.');", "showToast('Could not reschedule block: ' + (e && e.message || e), 'danger');\n      return 'x';"), DR, 'submitReschedule says why in the dialog');
+runMutationTest('Reschedule drops the refusal', SRC('src/drawers/RescheduleBlockDialog.vue'),
+  (code) => code.replace('this.error = await this.submitReschedule({ ...this.form });', 'await this.submitReschedule({ ...this.form });'), DR, 'Reschedule keeps what submitReschedule says');
+runMutationTest('A refused plan is a toast again', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("      const msg = e && e.message;\n      bookError.value = msg && msg !== 'Request failed' ? msg : 'Try again.';", "      showToast('Could not plan this time: ' + (e && e.message || e), 'danger');"), DR, 'submitBooking says why in the Plan dialog');
+runMutationTest('An old plan refusal greets a new plan', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace("    bookError.value = '';\n    showBookModal.value = true;", '    showBookModal.value = true;'), DR, 'starts with no old refusal');
+runMutationTest('The Plan dialog never hears the refusal', SRC('src/components/dialogs/DialogCoordinator.vue'),
+  (code) => code.replace(':error="bookError"', ''), DR, 'the Plan dialog gets the refusal');
+runMutationTest('A failed drag freezes the page with alert()', SRC('src/composables/useWorkstationPlannerDrag.js'),
+  (code) => code.replace("showToast('Not moved. ' + extractErrorMessage(e, 'Try again.'), 'danger');", "alert('Could not reschedule block: ' + (e && e.message || e));"), DR, 'no browser confirm() or alert()');
+
+// The FAC (MCP) tools keep the page's rules (scripts/check_fac_tools.mjs)
+const FT_ = 'node scripts/check_fac_tools.mjs';
+runMutationTest('FAC log invents half an hour again', FACPY,
+  (code) => code.replace('\tif dur_hours <= 0:\n\t\tfrappe.throw(_("Not logged. Say how long: hours, or from_time and to_time."), frappe.ValidationError)\n', '\tif dur_hours <= 0:\n\t\tdur_hours = 0.5\n'), FT_, 'log_work_session invents no length');
+runMutationTest('FAC log puts a new block at 09:00 again', FACPY,
+  (code) => code.replace('\t\t\tstart_t = _time_str(from_time)\n', '\t\t\tstart_t = _time_str(from_time) if from_time else "09:00:00"\n'), FT_, 'no block is put at 09:00 or 10:00');
+runMutationTest('FAC log guesses a block with no task or project', FACPY,
+  (code) => code.replace('if match_existing_block and (task or project):', 'if match_existing_block:'), FT_, 'joins a block only by its task or project');
+runMutationTest('FAC log joins a cancelled block', FACPY,
+  (code) => code.replace('"status": ["not in", ("Cancelled", "Rescheduled")]', '"status": ["!=", "Rescheduled"]'), FT_, 'never joins a cancelled');
+runMutationTest('FAC log checks the window for the employee, not the asker', FACPY,
+  (code) => code.replace('check_timesheet_date_permission(target_date, frappe.session.user)', 'check_timesheet_date_permission(target_date, target_user)'), FT_, 'for whoever is asking');
+runMutationTest('FAC quick task books a block with no start', FACPY,
+  (code) => code.replace('\t\tif not block_start:\n\t\t\tfrappe.throw(', '\t\tif not block_start:\n\t\t\tblock_start = "10:00:00"\n\t\tif False:\n\t\t\tfrappe.throw('), FT_, 'needs its start');
+runMutationTest('FAC start throws away a running session again', FACPY,
+  (code) => code.replace('\t\tif running and running.get("status") == "active":\n', '\t\tif False:\n'), FT_, 'start refuses while a session runs');
+runMutationTest('FAC start saves its title twice again', FACPY,
+  (code) => code.replace('"trackerNotes": title,', '"trackerNotes": raw_notes,'), FT_, 'keeps the title apart');
+runMutationTest('FAC start reads a bad time as now', FACPY,
+  (code) => code.replace('\t\t\t\tfrappe.throw(_("Not started. {0} is not a time; send HH:MM:SS.").format(start_time), frappe.ValidationError)\n', '\t\t\t\tstart_ms = None\n'), FT_, 'an unreadable start_time is refused');
+runMutationTest('FAC stop drops the session log again', FACPY,
+  (code) => code.replace('compose_wrap_note(active.get("trackerNotes"), active.get("sessionNotesList"), notes)', 'notes'), FT_, 'stop saves the title, the log lines');
+runMutationTest('FAC stop saves on today, not the start day', FACPY,
+  (code) => code.replace('session_date=start_dt.strftime("%Y-%m-%d"),', 'session_date=nowdate(),'), FT_, 'the day the session started');
+runMutationTest('FAC stop moves the time onto a matched block', FACPY,
+  (code) => code.replace('\t\t\tmatch_existing_block=False,\n', ''), FT_, 'never moves the time onto another block');
+runMutationTest('FAC switch drops the session log again', FACPY,
+  (code) => code.replace('compose_wrap_note(active.get("trackerNotes"), active.get("sessionNotesList"), current_session_notes) if running else current_session_notes', 'current_session_notes'), FT_, 'switch saves the title');
+runMutationTest('FAC switch starts nothing in particular', FACPY,
+  (code) => code.replace('\tif not (target_block or target_task):\n\t\tfrappe.throw(', '\tif False:\n\t\tfrappe.throw('), FT_, 'switch needs what comes next');
+runMutationTest('FAC add_note replaces the title again', FACPY,
+  (code) => code.replace('\t\tactive["sessionNotesList"] = lines\n', '\t\tactive["sessionNotesList"] = lines\n\t\tactive["trackerNotes"] = new_line\n'), FT_, 'never replaces the title');
+runMutationTest('FAC add_note is held to 3 characters again', FACPY,
+  (code) => code.replace('\t\tmin_chars = get_min_log_line_chars()\n', '\t\tmin_chars = 3\n'), FT_, 'Minimum Characters per Log Line');
+runMutationTest('FAC add_note is not stamped newest', FACPY,
+  (code) => code.replace('\t\tactive["linesRev"] = int(datetime.now().timestamp() * 1000)\n', ''), FT_, 'stamped newest');
+runMutationTest('FAC discard says success with nothing running', FACPY,
+  (code) => code.replace('frappe.throw(_("Nothing to discard: no session is running."), frappe.ValidationError)', 'return {"status": "success"}'), FT_, 'discard with nothing running');
+runMutationTest('FAC adjust moves sessions to today again', FACPY,
+  (code) => code.replace('\t\tsession_date=session_date or None,\n', '\t\tsession_date=session_date or nowdate(),\n'), FT_, 'adjust keeps the session');
+runMutationTest('FAC workspace keeps the log rules to itself', FACPY,
+  (code) => code.replace('\t\t"log_rules": get_log_rules(),\n', ''), FT_, 'returns log_rules');
+runMutationTest('FAC log rules leave out the payroll date', FACPY,
+  (code) => code.replace('"payroll_closed_through":', '"payroll":'), FT_, 'payroll_closed_through');
+runMutationTest('FAC schedule has no cancel', FACPY,
+  (code) => code.replace('\telif act == "cancel":\n', '\telif act == "cancel_block_unused":\n'), FT_, "omnitrack_schedule cancels");
+runMutationTest('FAC schedule tool hides cancel', FACPY,
+  (code) => code.replace('"approve", "update", "get_block", "cancel"]', '"approve"]'), FT_, 'offers every action');
+runMutationTest('FAC cancel reason is any string again', FACPY,
+  (code) => code.replace('"cancel_reason": {"type": "string", "enum": CANCEL_REASONS, "description": "For \'cancel\': why, the person\'s pick."}', '"cancel_reason": {"type": "string", "description": "For \'cancel\': why."}'), FT_, "cancel_reason is the DocType's options");
+runMutationTest('FAC cancel needs no reason', FACPY,
+  (code) => code.replace('"required": ["block_name", "cancel_reason"]', '"required": ["block_name"]'), FT_, 'needs a block and a reason');
+runMutationTest('FAC update drops the cancel note', FACPY,
+  (code) => code.replace('\t\tcancel_note=cancel_note\n\t)\n\n\ndef cancel_work_block_reasons', '\t)\n\n\ndef cancel_work_block_reasons'), FT_, 'passes the note on');
+runMutationTest('FAC delete stops asking first', FACPY,
+  (code) => code.replace('"Ask the person first, naming the entry (its day, times and notes), and call only after their yes. "', '""'), FT_, 'OmniTrackDeleteWorkSessionTool tells the assistant to ask');
+runMutationTest('FAC tools tell the old two-day rule again', FACPY,
+  (code) => code.replace('"Only to move it to another day (YYYY-MM-DD); omit to keep its day."', '"Work date (YYYY-MM-DD). Regular users can only adjust today and yesterday."'), FT_, 'no outdated rule');
+runMutationTest('The cancel tool is not registered', SRC('omnitrack/hooks.py'),
+  (code) => code.replace('\t"omnitrack.fac.OmniTrackCancelWorkBlockTool",\n', ''), FT_, 'the cancel tool is registered');
+runMutationTest('A past block is cancelled again', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('\tif block_date < today:\n\t\tfrappe.throw(', '\tif False:\n\t\tfrappe.throw('), FT_, 'a past block is not cancelled');
+runMutationTest('Any cancel reason is taken', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('\tif cancel_reason not in reasons:\n\t\tfrappe.throw(', '\tif False:\n\t\tfrappe.throw('), FT_, "only the DocType's reasons");
+runMutationTest('A recording block is cancelled', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('active.get("status") == "active" and active.get("trackerBlockName") == doc.name:', 'False:'), FT_, 'a block a session records on');
+runMutationTest('update_work_block skips the cancel checks', SRC('omnitrack/api/planner.py'),
+  (code) => code.replace('\tif status == "Cancelled":\n\t\t_check_cancellable(doc, cancel_reason)\n', ''), FT_, 'checks every cancel');
+runMutationTest('The FAC guide tells the old 3-character rule', SRC('docs/OMNITRACK_FAC_INTEGRATION.md'),
+  (code) => code.replace('at least **Minimum Words per Session** (default 15) words.', 'at least 3 characters.'), FT_, 'the FAC guide');
+runMutationTest('JS composeWrapNote keeps a blank line', SRC('src/utils/wrapNote.js'),
+  (code) => code.replace(/\.filter\(Boolean\)/, '.filter((x) => x !== undefined)'), FT_, 'as compose_wrap_note does');
+runMutationTest('Python compose_wrap_note keeps a blank line', SRC('omnitrack/utils/session_lines.py'),
+  (code) => code.replace('for p in lines if p)', 'for p in lines)'), SLT, 'test_same_notes_as_the_page');
 
 // Summary Report
 console.log('\n===========================================================');

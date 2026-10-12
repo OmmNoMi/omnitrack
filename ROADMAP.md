@@ -543,6 +543,33 @@ Open:
 - `src/stores/workSessionStore.js` is imported nowhere (the other three stores are, via
   `useWorkstationStoreBindings.js`). Confirm and remove it.
 
+### Task chat, and focus after "Are you still working?" (2026-10-12)
+
+Reported: Adjust times in the still-working question put focus on the week strip, not the end
+time; and Send in the session's Task chat did nothing.
+
+Done:
+- Adjust times starts on the suggested end (Adjust on its own still starts on the start), and
+  `src/utils/focusHandOff.js` keeps it there while the question's dialog closes.
+- One Escape in the open times closes them. frappe-ui's TimePicker took every Escape, blurred its
+  field (focus fell to the page) and left the times open.
+- Task chat is shown only when the work is an ERPNext Task, and says whose chat it is ("With
+  everyone on the task ..."). A to-do block had sent its own name as the task: the server failed
+  to make a channel (an Error Log on every open and send), the page ignored the refusal, and Send
+  looked dead. A message not sent now says "Not sent." and why, under the box; Send is in the tab
+  order.
+
+Open:
+- A to-do or a block has no chat: its talk is the Activity under Details. Consider a "Discuss"
+  shortcut from the session pane straight to that comment box, so the missing tab is not missed.
+- The chat box is a bare `<textarea>`, not frappe-ui's `Textarea`; move it over.
+- Audit other dialogs whose answer opens work elsewhere (the day's review Log, Switch's target)
+  for the same focus hand-back, and use `handFocus`.
+- The same TimePicker Escape swallow in `RescheduleBlockDialog` and `PlanWorkBlockDialog`:
+  check with a real key press whether one Escape blurs the field instead of stepping back.
+- Error Logs "Failed to create Raven channel for task PWB-..." from before this fix are still on
+  ommnomi.local; clear them once the owner agrees.
+
 ## Domain model written down (`docs/DOMAIN_MODEL.md`)
 
 Project / Task / Planned Work Block / Work Session were being used
@@ -1221,3 +1248,45 @@ Open:
 - The hash once jumped to `#/planner` after the prompt closed; not reproduced since. Watch for it.
 - Fixed: `Uncaught (in promise) TypeError: e.focus is not a function`. An interim still-working prompt focused `this.$refs.keepBtn.$el` / `discardBtn.$el`; a frappe-ui Button's `$el` can be a text node. That code is gone, and `check_field_focus.mjs` now refuses focusing any `$el`.
 - Maybe: show a passive word count in the Log once a minimum is set, so the refusal is never a surprise.
+
+## Dialogs say why in place (2026-10-12)
+
+The owner: "fix the other dialogs the same way" as the switch dialog. Each title is the question, the buttons are the answers, a refusal shows inside the dialog, and nothing is picked for the person.
+
+Done:
+- Cancel a block asks "Cancel this block?". The reason is a frappe-ui Combobox with nothing picked (it used to start on "Other"), from Planned Work Block's own `cancel_reason` options, word for word. The old list had values the server refuses. An optional note goes on the block's activity as a comment (`update_work_block(cancel_note=…)`, escaped, 1000 characters). The answers are Keep block and Cancel block, which waits for a reason.
+- Removed: cancelling a block that was recording stopped the session and wrote "Cancelled (reason)" into its log. That path was dead, because Cancel is never offered on a recording block (`isBlockCancellable`). Its branch in the dialog ("Stop the running session", a checkbox) went with it.
+- Deleting a logged entry asks in its own dialog, "Delete this entry?", naming the entry and its span. It used to be the browser's `confirm()`. Focus starts on Keep entry, so Enter never deletes.
+- No browser `confirm()` or `alert()` is left in `src`. A planner drag the server refused used `alert()`; it is a toast now, since no dialog is open at that point.
+- Each of these says why inside itself when the server refuses, and stays open as filled in: Cancel block ("Not cancelled."), Delete entry ("Not deleted."), the task form ("Not saved.", "Not moved.", "Not taken off."), Edit block ("Not saved."), Add tasks ("Not added."), Reschedule ("Not moved.") and Plan time ("Not planned."). Each used to close or stay put with a toast behind it.
+- A task that will not open now says so in the task form, with Try again. It used to close the form and show a toast.
+- Guarded by `check_dialog_refusals.mjs` (in `test:static`) and 26 mutants.
+
+Open:
+- Plan time's own checks ("Set a start and an end time.") are asked after Plan is pressed. Maybe: hold Plan until the times are set, as Cancel block holds for a reason.
+- `src/components/dialogs/TaskWorkflowModal.vue` is still imported nowhere (see above). Delete it with the owner's go-ahead.
+- Server test for `update_work_block(cancel_note=…)` (the comment is added, escaped, only on Cancelled). Not run yet: ommnomi.local is the only site with OmniTrack.
+
+## The FAC tools keep the page's rules (2026-10-12)
+
+The owner: what was done today must hold for the FAC-based OmniTrack tools too, so time can be run through an assistant (MCP via Frappe Assistant Core) as well as on the page.
+
+Done (`omnitrack/fac.py`):
+- `get_my_workspace` returns `log_rules`: `log_days_back`, `payroll_closed_through`, `can_log_from`, the note minimums and the rules in plain words, so an assistant knows the window before it tries.
+- Logging checks the window for whoever is asking, and assumes nothing. A missing length is refused; it used to log half an hour. A new block needs its start; it used to go at 09:00. With no task or project, time no longer goes on the day's first block. It never joins a cancelled or rescheduled block.
+- Booking a task's block needs its start and end (or length). It used to go at 10:00 for an hour.
+- Start is refused while a session runs; it used to throw the running one away, unsaved. Its notes' first line is the title; the whole text used to be the title and the first log line, so it was saved twice. A start_time that is not a time, or is in the future, is refused; it used to start at now.
+- Stop and switch save what the page saves: the title, every log line, then the last line (`compose_wrap_note`). Only the sent notes used to be saved, and the session's log was lost. Stop saves on the day the session started, on its own block. Switch needs what comes next.
+- Add note keeps the title (it used to replace it). It is held to Minimum Characters per Log Line (it was 3), and it stamps `linesRev`, so an open page's older copy does not write over it.
+- Discard with nothing running says so; it used to report success. It returns what was thrown away.
+- Adjust keeps the session's day; it used to move every session it touched to today.
+- Cancel is a tool (`omnitrack_cancel_work_block`, and `omnitrack_schedule` action `cancel`). It takes the DocType's reasons only, with an optional note. The server now refuses a past block, one already cancelled or rescheduled, and one a session records on, for the page and the assistant alike (`planner._check_cancellable`).
+- Delete, discard and cancel tell the assistant to ask the person first, naming the entry. No tool text tells the old rules (3 characters, today and yesterday). `docs/OMNITRACK_FAC_INTEGRATION.md` was rewritten to match.
+- Guarded by `check_fac_tools.mjs` (in `test:static`), `TestComposeWrapNote` (test:fixtures) and 36 mutants. The refusals were checked on ommnomi.local without saving anything.
+
+Open:
+- The end-of-day audit and `get_my_workspace` use a fixed 8-hour day (`fac.py`, `target_hrs = 8.0`). It belongs in OmniTrack Settings, or the employee's shift.
+- A blockless session stopped through FAC goes through `log_work_session`, not `quick_timer_punch` as on the page, so its ticked session tasks (`sessionTasks`) are not saved.
+- Stop rounds a session shorter than 3 minutes up to 0.05 hours. Check what the page does and match it.
+- `OmniTrackUpdateWorkBlockTool` and `OmniTrackGetWorkBlockTool` are in `get_fac_tools(consolidated=False)` but not in hooks' `assistant_tools`. Register them, or say why not.
+- The new `test_fac.py` cases (nothing assumed, log rules, cancel reasons) have not run: they need a site, and ommnomi.local is the only one with OmniTrack. Run them on a throwaway site with the owner's OK.

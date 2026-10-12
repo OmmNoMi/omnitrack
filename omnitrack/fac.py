@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import re
 from datetime import datetime, timedelta
 import frappe
 from frappe import _
@@ -31,9 +32,14 @@ from omnitrack.api import (
 from omnitrack.permissions import (
 	check_planned_block_past_lock,
 	check_timesheet_date_permission,
+	get_earliest_log_date,
+	get_log_days_back,
+	get_payroll_closed_through,
 	is_omnitrack_manager,
 )
 from omnitrack.utils.block_slot import block_slot, split_stamp
+from omnitrack.utils.session_lines import compose_wrap_note
+from omnitrack.utils.validators import get_min_log_line_chars, get_min_session_words
 from omnitrack.utils.time_math import pad_time as _time_str
 
 
@@ -117,6 +123,35 @@ def get_my_workspace(employee=None, work_date=None):
 			"remaining_to_target": max(0.0, round(8.0 - total_actual_hours, 2)),
 		},
 		"assigned_tasks": task_list[:25],
+		"log_rules": get_log_rules(),
+	}
+
+
+def get_log_rules(user=None):
+	"""Which days time can be logged on, and what a saved session needs: the same rules the page
+	and the server use (OmniTrack Settings), so the assistant asks for a day that will be accepted
+	instead of finding out from a refusal."""
+	user = user or frappe.session.user
+	closed = get_payroll_closed_through()
+	is_manager = is_omnitrack_manager(user)
+	earliest = None if is_manager else get_earliest_log_date()
+	if closed:
+		after_closed = getdate(add_days(closed, 1))
+		earliest = max(earliest, after_closed) if earliest else after_closed
+	return {
+		"log_days_back": get_log_days_back(),
+		"payroll_closed_through": str(closed) if closed else None,
+		# The first day this person can log, change or delete time on (None: any day)
+		"can_log_from": str(earliest) if earliest else None,
+		"is_manager": is_manager,
+		"min_session_words": get_min_session_words(),
+		"min_log_line_chars": get_min_log_line_chars(),
+		"rules": [
+			"Time is logged, changed or deleted only on days from can_log_from to today; payroll_closed_through and earlier are paid and closed to everyone.",
+			"A saved session describes what was done in at least min_session_words words, in the person's own words; never invent or pad them.",
+			"Nothing is assumed for the person: ask for times, reasons and notes they have not given.",
+			"Before deleting an entry, discarding a running session or cancelling a block, say which one and wait for the person's yes.",
+		],
 	}
 
 
@@ -235,14 +270,19 @@ def log_work_session(
 	task_nature=None,
 	auto_create_block_if_missing=True,
 	logged_via="AI Assistant",
-	employee=None
+	employee=None,
+	match_existing_block=True
 ):
 	"""Log a real work session against a planned block, or auto-book and log time.
 
 	Enforces OmniTrack Invariants:
-	1. Session notes are strictly mandatory (>= 3 chars) for client billing audit.
-	2. Modification horizon: regular users can only log for TODAY and YESTERDAY.
-	3. Automatically syncs with ERPNext Timesheet.
+	1. Notes say what was done in at least Minimum Words per Session words (OmniTrack Settings,
+	   default 15), in the person's own words.
+	2. Log window: an employee logs on the last log_days_back days (default 15, today is day 1);
+	   a manager on any day. Nobody logs on or before payroll_closed_through.
+	3. Nothing is assumed: the length (hours, or from_time and to_time) is the person's to give,
+	   and a new block needs from_time, so it sits where the work happened.
+	4. Automatically syncs with ERPNext Timesheet.
 
 	Args:
 		hours (float, optional): Duration in hours.
@@ -257,6 +297,8 @@ def log_work_session(
 		auto_create_block_if_missing (bool): Auto-creates a block if none is targeted.
 		logged_via (str): Source label (e.g. "AI Assistant", "Cursor", "Claude").
 		employee (str, optional): Target employee/user (defaults to current human user, e.g. Nomeshwer).
+		match_existing_block (bool): False when a stopped session with no block gets its own,
+			as the page's Stop makes one, instead of joining the day's block for its project.
 
 	Returns:
 		dict: Session result with updated block and timesheet details.
@@ -265,15 +307,16 @@ def log_work_session(
 	target_user = _resolve_planner_user(employee)
 	target_date = session_date or nowdate()
 
-	# Enforce 2-day modification horizon
-	check_timesheet_date_permission(target_date, target_user)
+	# The log window and the payroll lock, for whoever is asking (a manager reaches any open day),
+	# checked before a block is made for the time
+	check_timesheet_date_permission(target_date, frappe.session.user)
 
-	# Calculate duration hours
+	# How long is the person's to say: an invented half hour was once logged and paid
 	dur_hours = flt(hours)
 	if dur_hours <= 0 and from_time and to_time:
 		dur_hours = _duration_hours(from_time, to_time)
 	if dur_hours <= 0:
-		dur_hours = 0.5  # default 30 mins if completely unspecified
+		frappe.throw(_("Not logged. Say how long: hours, or from_time and to_time."), frappe.ValidationError)
 
 	target_block = None
 
@@ -282,27 +325,21 @@ def log_work_session(
 			frappe.throw(_("Planned Work Block {0} does not exist.").format(block_name))
 		target_block = block_name
 	else:
-		# Try to find an existing planned block for today matching task/project
-		match_filters = {"employee": target_user, "work_date": target_date}
-		if task:
-			match_filters["task"] = task
-		elif project:
-			match_filters["project"] = project
-
-		existing_block = frappe.db.get_value("Planned Work Block", match_filters, "name")
+		# The day's block for this task or project. With neither, no block is guessed: the time
+		# once went on whichever block came first that day.
+		existing_block = None
+		if match_existing_block and (task or project):
+			match_filters = {"employee": target_user, "work_date": target_date, "status": ["not in", ("Cancelled", "Rescheduled")]}
+			match_filters["task" if task else "project"] = task or project
+			existing_block = frappe.db.get_value("Planned Work Block", match_filters, "name")
 		if existing_block:
 			target_block = existing_block
 		elif auto_create_block_if_missing:
-			# Auto-create block for this session
-			start_t = from_time or "09:00:00"
-			end_t = to_time
-			if not end_t:
-				try:
-					st_dt = datetime.strptime(start_t, "%H:%M:%S")
-					end_dt = st_dt + timedelta(hours=dur_hours)
-					end_t = end_dt.strftime("%H:%M:%S")
-				except Exception:
-					end_t = "10:00:00"
+			# A new block sits where the work happened: its start is the person's to say, never 09:00
+			if not from_time:
+				frappe.throw(_("Not logged. Say when it started (from_time), or name the block it belongs to."), frappe.ValidationError)
+			start_t = _time_str(from_time)
+			end_t = to_time or (datetime.strptime(start_t, "%H:%M:%S") + timedelta(hours=dur_hours)).strftime("%H:%M:%S")
 
 			nature = task_nature or "Work"
 			bk_res = book_work_block(
@@ -388,7 +425,7 @@ def quick_create_task(
 	expected_time=0.0,
 	description=None,
 	book_block=False,
-	block_start="10:00:00",
+	block_start=None,
 	block_end=None,
 	work_date=None,
 	employee=None
@@ -402,8 +439,8 @@ def quick_create_task(
 		expected_time (float): Estimated hours.
 		description (str, optional): Task details.
 		book_block (bool): If True, immediately books a planned work block for this task.
-		block_start (str): Start time for booked block (default "10:00:00").
-		block_end (str, optional): End time (auto-calculated from expected_time if omitted).
+		block_start (str): Start time for the booked block; required with book_block, never assumed.
+		block_end (str, optional): End time; when omitted, block_start plus expected_time (required then).
 		work_date (str, optional): Work date for the booked block (default today).
 		employee (str, optional): Target employee (defaults to current human user, e.g. Nomeshwer).
 
@@ -416,16 +453,20 @@ def quick_create_task(
 	# The block's day and times are checked before the task exists, so a bad time creates (and
 	# assigns, which can notify) nothing. A dated block_start sets the day, as when planning.
 	if book_block:
+		# When is the person's to say: a block was once put at 10:00 for an hour on nobody's word
+		if not block_start:
+			frappe.throw(_("Not created. Say when the block starts (block_start), or create the task without booking a block."), frappe.ValidationError)
+		if not block_end and flt(expected_time) <= 0:
+			frappe.throw(_("Not created. Say when the block ends (block_end) or how long it takes (expected_time)."), frappe.ValidationError)
 		try:
-			start_day, block_start = split_stamp(block_start or "10:00:00")
+			start_day, block_start = split_stamp(block_start)
 		except ValueError as e:
 			frappe.throw(_("block_start: {0}").format(str(e)), frappe.ValidationError)
 		if start_day and work_date and str(work_date) != start_day:
 			frappe.throw(_("block_start is on {0} but work_date is {1}; send one date, or the same date in both").format(start_day, work_date), frappe.ValidationError)
 		target_date = work_date or start_day or nowdate()
 		if not block_end:
-			est_hours = flt(expected_time) if flt(expected_time) > 0 else 1.0
-			block_end = (datetime.strptime(block_start, "%H:%M:%S") + timedelta(hours=est_hours)).strftime("%H:%M:%S")
+			block_end = (datetime.strptime(block_start, "%H:%M:%S") + timedelta(hours=flt(expected_time))).strftime("%H:%M:%S")
 		try:
 			_d, block_start, block_end = block_slot(f"{target_date} {block_start}", block_end, target_date)
 		except ValueError as e:
@@ -510,16 +551,18 @@ def quick_timer_action(
 ):
 	"""Controls live stopwatch session for the target user (defaults to human operator).
 
-	Terminology invariant:
-	- Starting is strictly "Start Session" (play icon).
-	- Stopping requires notes and an active running timer.
-	- Discard allows discarding without blank timesheets.
+	The page's rules, the same here:
+	- Start refuses while a session runs: stop it, or switch to the next work.
+	- Stop saves the session as the page does: its title, every log line, then notes as the last
+	  line, in at least Minimum Words per Session words. Refused, the session keeps running.
+	- Discard throws the running session away unsaved: ask the person first.
+	- add_note adds one log line of at least Minimum Log Line Length characters.
 
 	Args:
-		action (str): "start", "stop", "discard", or "status".
+		action (str): "start", "stop", "discard", "status" or "add_note".
 		task (str, optional): Linked task.
 		project (str, optional): Linked project.
-		notes (str, optional): Session notes (required for "stop").
+		notes (str, optional): "stop": the last line of the log; "add_note": the line; "start": the title.
 		block_name (str, optional): Target Planned Work Block.
 		nature (str): The activity (default "Work").
 		start_time (str, optional): Scheduled/retroactive start time (e.g. "21:30:00").
@@ -553,6 +596,12 @@ def quick_timer_action(
 		}
 
 	elif action == "start":
+		running = get_active_session(user)
+		if running and running.get("status") == "active":
+			# Starting over a running session once threw it away, unsaved
+			frappe.throw(_("Not started. A session is already running{0}. Stop it, or switch to the next work.").format(
+				_(" on {0}").format(running.get("trackerBlockName")) if running.get("trackerBlockName") else ""
+			), frappe.ValidationError)
 		start_ms = None
 		if start_time_epoch_ms:
 			try:
@@ -572,26 +621,27 @@ def quick_timer_action(
 				dt = datetime(today_date.year, today_date.month, today_date.day, h, m, s, tzinfo=tz)
 				start_ms = int(dt.timestamp() * 1000)
 			except Exception:
-				start_ms = None
+				# An unreadable time once started the session at now, without a word
+				frappe.throw(_("Not started. {0} is not a time; send HH:MM:SS.").format(start_time), frappe.ValidationError)
 
+		now_ms = int(datetime.now().timestamp() * 1000)
+		if start_ms and start_ms > now_ms:
+			frappe.throw(_("Not started. {0} is later than now.").format(start_time or start_time_epoch_ms), frappe.ValidationError)
 		if not start_ms:
-			start_ms = int(datetime.now().timestamp() * 1000)
+			start_ms = now_ms
 
+		# The first part names the session (its title); the rest are its log lines. The whole text
+		# was once both the title and the first line, so it was saved twice on stop.
 		raw_notes = (notes or "").strip()
-		notes_lines = []
-		if raw_notes:
-			if "•" in raw_notes:
-				notes_lines = [p.strip() for p in raw_notes.split("•") if p.strip()]
-			elif "\n" in raw_notes:
-				notes_lines = [p.strip() for p in raw_notes.split("\n") if p.strip()]
-			else:
-				notes_lines = [raw_notes]
+		parts = [p.strip() for p in re.split(r"[\n\u2022]", raw_notes) if p.strip()]
+		title = parts[0] if parts else ""
+		notes_lines = parts[1:]
 
 		session_data = {
 			"startTime": start_ms,
 			"selectedNature": nature or "Work",
 			"selectedProject": project or "",
-			"trackerNotes": raw_notes,
+			"trackerNotes": title,
 			"trackerBlockName": block_name or None,
 			"sessionNotesList": notes_lines,
 			"status": "active"
@@ -617,14 +667,17 @@ def quick_timer_action(
 		from_t = start_dt.strftime("%H:%M:%S")
 		to_t = now_dt.strftime("%H:%M:%S")
 
-		session_notes = notes or (active.get("trackerNotes") if active else None)
-		session_notes = _require_session_notes(session_notes)
+		# Saved as the page saves it: the title, every line logged during it, then this last line.
+		# Only the notes sent here were once saved, and the session's own log was lost.
+		session_notes = _require_session_notes(
+			compose_wrap_note(active.get("trackerNotes"), active.get("sessionNotesList"), notes)
+		)
 
-		target_block = block_name or (active.get("trackerBlockName") if active else None)
-		target_proj = project or (active.get("selectedProject") if active else None)
-		target_nature = nature or (active.get("selectedNature") if active else "Work")
+		target_block = active.get("trackerBlockName") or block_name
+		target_proj = project or active.get("selectedProject")
+		target_nature = active.get("selectedNature") or nature
 
-		# Log the session with exact from_time and to_time so the Workstation renders the Logged bar
+		# The day it started on, as the page saves it: a session past midnight belongs to its start
 		res = log_work_session(
 			hours=elapsed_hours,
 			from_time=from_t,
@@ -633,10 +686,11 @@ def quick_timer_action(
 			project=target_proj,
 			task=task,
 			notes=session_notes,
-			session_date=target_date,
+			session_date=start_dt.strftime("%Y-%m-%d"),
 			task_nature=target_nature,
 			logged_via="Stopwatch",
-			employee=user
+			employee=user,
+			match_existing_block=False,
 		)
 		# Clear active session
 		sync_active_session(None, user=user)
@@ -647,22 +701,39 @@ def quick_timer_action(
 		}
 
 	elif action == "discard":
-		# Discard active session with zero timesheet creation
+		# Nothing of it is saved. The assistant asks the person first, naming the session.
+		active = get_active_session(user)
+		if not active or active.get("status") != "active":
+			frappe.throw(_("Nothing to discard: no session is running."), frappe.ValidationError)
+		start_ms = active.get("startTime", 0)
+		elapsed = int((datetime.now().timestamp() * 1000 - start_ms) / 1000) if start_ms else 0
 		sync_active_session(None, user=user)
-		return {"status": "success", "message": f"Active session discarded for {user}."}
+		return {
+			"status": "success",
+			"message": f"Discarded the running session for {user}; nothing of it was saved.",
+			"discarded": {
+				"block_name": active.get("trackerBlockName"),
+				"title": active.get("trackerNotes"),
+				"log_lines": list(active.get("sessionNotesList") or []),
+				"elapsed_seconds": max(0, elapsed),
+			},
+		}
 
 	elif action in ("add_line", "add_note"):
 		active = get_active_session(user)
 		if not active or active.get("status") != "active":
 			frappe.throw(_("No active session running to append notes to."))
-		if not notes or len(str(notes).strip()) < 3:
-			frappe.throw(_("Note line must be at least 3 characters."))
+		new_line = str(notes or "").strip()
+		min_chars = get_min_log_line_chars()
+		if len(new_line) < min_chars:
+			frappe.throw(_("Not added. A log line says what was done in at least {0} characters.").format(min_chars), frappe.ValidationError)
 		lines = list(active.get("sessionNotesList") or [])
-		new_line = str(notes).strip()
 		if new_line not in lines:
 			lines.append(new_line)
+		# A line joins the log; the title stays. Stamped newest, so no page holding an older copy
+		# of the log writes over it (keep_newer_lines).
 		active["sessionNotesList"] = lines
-		active["trackerNotes"] = "• " + "\n• ".join(lines)
+		active["linesRev"] = int(datetime.now().timestamp() * 1000)
 		sync_active_session(active, user=user)
 		return {
 			"status": "success",
@@ -703,7 +774,8 @@ def start_timer(block_name=None, notes=None, project=None, task=None, nature="Wo
 def stop_timer(notes=None, block_name=None, project=None, task=None, employee=None):
 	"""Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session
 	into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00.
-	Session notes describing what was accomplished are strictly required (>= 3 chars).
+	Saved as the page saves it: the session's title and log lines, then notes as the last line, in
+	at least Minimum Words per Session words (default 15). Refused, the session keeps running.
 	"""
 	return quick_timer_action(
 		action="stop",
@@ -717,7 +789,7 @@ def stop_timer(notes=None, block_name=None, project=None, task=None, employee=No
 
 @frappe.whitelist()
 def discard_timer(employee=None):
-	"""Discards an active live stopwatch session without creating any empty or fractional timesheet."""
+	"""Throws the running session away: nothing of it is saved. Ask the person first, naming it."""
 	return quick_timer_action(action="discard", employee=employee)
 
 
@@ -729,17 +801,24 @@ def get_timer_status(employee=None):
 
 @frappe.whitelist()
 def switch_timer(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None, employee=None):
-	"""Atomically switches the active running stopwatch session to another block or task.
-	Closes the active session, logs its elapsed time with current_session_notes, and starts
-	a fresh session on the target block/task with zero dropped time.
+	"""Ends the running session and starts the next work in one step, as the page's Switch does.
+	The session that ends is saved with its title and log lines, then current_session_notes as
+	the last line, in at least Minimum Words per Session words. Refused, it keeps running.
 	"""
 	from omnitrack.api import switch_active_session
+	if not (target_block or target_task):
+		frappe.throw(_("Not switched. Say what comes next: a block (target_block) or a task (target_task)."), frappe.ValidationError)
+	user = _resolve_planner_user(employee)
+	active = get_active_session(user) or {}
+	running = active.get("status") == "active"
 	return switch_active_session(
 		target_block=target_block,
 		target_task=target_task,
 		target_project=target_project,
 		target_nature=target_nature,
-		current_session_notes=current_session_notes
+		# Only what was sent here was once saved, and the session's own log was lost
+		current_session_notes=compose_wrap_note(active.get("trackerNotes"), active.get("sessionNotesList"), current_session_notes) if running else current_session_notes,
+		session_tasks=json.dumps(active.get("sessionTasks") or []) if running else None,
 	)
 
 
@@ -766,31 +845,33 @@ def extend_active_block(extend_minutes=30, employee=None):
 
 @frappe.whitelist()
 def adjust_work_session(session_name, block_name=None, from_time=None, to_time=None, hours=None, session_date=None, notes=None, employee=None):
-	"""Adjusts a previously logged work session's time, duration, or deliverable notes.
-	Automatically synchronizes or amends the linked ERPNext Timesheet. Users can only adjust today and yesterday.
+	"""Adjusts a previously logged work session's time, duration, or notes, and amends the linked
+	ERPNext Timesheet. The session stays on its own day unless session_date moves it; the day it is
+	on and the day it moves to must both be in the log window and after payroll_closed_through.
 	"""
 	from omnitrack.api import update_work_session as api_update_work_session
-	target_user = _resolve_planner_user(employee)
-	target_date = session_date or nowdate()
-	check_timesheet_date_permission(target_date, target_user)
+	_resolve_planner_user(employee)
 	if notes:
 		notes = _require_session_notes(notes)
+	# No session_date keeps the session's day. It once defaulted to today, and an edit to an
+	# old entry's notes moved it to today. The api checks both days against the window.
 	return api_update_work_session(
 		session_name=session_name,
 		block_name=block_name,
 		from_time=from_time,
 		to_time=to_time,
 		hours=flt(hours) if hours is not None else None,
-		session_date=target_date,
+		session_date=session_date or None,
 		notes=notes
 	)
 
 
 @frappe.whitelist()
 def delete_work_session(session_name, block_name, employee=None):
-	"""Deletes an erroneously logged work session from a Planned Work Block.
-	Automatically recalculates block actuals and cancels/amends the linked ERPNext Timesheet.
-	Controlled by OmniTrack Settings > allow_session_deletion; always allowed for managers.
+	"""Deletes a logged work session from a Planned Work Block; its hours come off the block and
+	the linked ERPNext Timesheet is amended. Ask the person first, naming the entry (its day, times
+	and notes). Controlled by OmniTrack Settings > allow_session_deletion (always allowed for
+	managers); the session's day must be in the log window and after payroll_closed_through.
 	"""
 	from omnitrack.permissions import check_session_deletion_permission
 	check_session_deletion_permission(frappe.session.user)
@@ -934,9 +1015,11 @@ def update_work_block(
 	deliverable_notes=None,
 	status=None,
 	cancel_reason=None,
-	employee=None
+	employee=None,
+	cancel_note=None
 ):
-	"""Domain-governed update of an existing Planned Work Block."""
+	"""Domain-governed update of an existing Planned Work Block. Cancelling needs a cancel_reason
+	from cancel_work_block_reasons(); cancel_note, the person's own words, goes on its activity."""
 	from omnitrack.api.planner import update_work_block as api_update_work_block
 	user = _resolve_planner_user(employee)
 	if block_name and frappe.db.exists("Planned Work Block", block_name):
@@ -953,8 +1036,33 @@ def update_work_block(
 		project=project,
 		deliverable_notes=deliverable_notes,
 		status=status,
-		cancel_reason=cancel_reason
+		cancel_reason=cancel_reason,
+		cancel_note=cancel_note
 	)
+
+
+def cancel_work_block_reasons():
+	"""The reasons a block can be cancelled for (Planned Work Block.cancel_reason's options)."""
+	from omnitrack.api.planner import cancel_reasons
+	return cancel_reasons()
+
+
+@frappe.whitelist()
+def cancel_work_block(block_name, cancel_reason=None, cancel_note=None, employee=None):
+	"""Cancels a planned block, as the page's "Cancel this block?" does. The reason is the
+	person's to pick: ask them, never pick one for them. Refused for a block in the past, one
+	already cancelled or rescheduled, and one a session is recording on (stop or switch first).
+	Ask the person first, naming the block."""
+	if not block_name:
+		frappe.throw(_("Not cancelled. Say which block (block_name)."), frappe.ValidationError)
+	res = update_work_block(
+		block_name=block_name,
+		status="Cancelled",
+		cancel_reason=cancel_reason,
+		cancel_note=cancel_note,
+		employee=employee
+	)
+	return {"status": "success", "message": f"Cancelled block {block_name} ({cancel_reason}).", "block": res}
 
 
 @frappe.whitelist()
@@ -1032,20 +1140,22 @@ def omnitrack_session(
 	session_name=None,
 	target_block=None,
 	nature="Work",
+	start_time=None,
 	employee=None
 ):
-	"""Unified controller for live stopwatch timers and completed timesheet sessions.
+	"""Unified controller for live stopwatch timers and logged Work Sessions.
 
 	Actions:
-	  - 'start': Starts a live running stopwatch session on block/task.
-	  - 'stop': Stops live session, computes elapsed time, and logs actual session (notes required).
-	  - 'status': Checks live stopwatch state, elapsed seconds, and active block.
-	  - 'discard': Cancels active running session without creating any timesheet entry.
-	  - 'add_note': Appends an accomplishment bullet to active running session in real time.
-	  - 'switch': Atomically stops active session and starts a new session on target block.
-	  - 'log': Directly records a completed work session (with optional hours or time range).
-	  - 'adjust': Modifies time, duration, or notes on an existing session (today/yesterday).
-	  - 'delete': Deletes an erroneously logged session row from a Planned Work Block.
+	  - 'start': Starts a session on a block or task; refused while one is running.
+	  - 'stop': Saves the running session: its title, log lines and notes as the last line.
+	  - 'status': The running session, its elapsed seconds and block.
+	  - 'discard': Throws the running session away, nothing saved. Ask the person first.
+	  - 'add_note': Adds a log line to the running session.
+	  - 'switch': Saves the running session and starts the next work (target_block or task).
+	  - 'log': Records finished work: hours or from_time/to_time, nothing assumed.
+	  - 'adjust': Changes a logged session's time or notes; it keeps its day unless session_date moves it.
+	  - 'delete': Deletes a logged session. Ask the person first, naming the entry.
+	Every date is checked against the log window and the payroll lock (get_log_rules).
 	"""
 	act = str(action or "").lower().strip()
 	if act in ("start", "stop", "discard", "status", "add_line", "add_note"):
@@ -1056,6 +1166,7 @@ def omnitrack_session(
 			notes=notes,
 			block_name=block_name,
 			nature=nature,
+			start_time=start_time,
 			employee=employee
 		)
 	elif act == "switch":
@@ -1113,7 +1224,9 @@ def omnitrack_schedule(
 	work_date=None,
 	employee=None,
 	block_names=None,
-	comments=None
+	comments=None,
+	cancel_reason=None,
+	cancel_note=None
 ):
 	"""Unified controller for pre-scheduled commitments and block governance.
 
@@ -1124,6 +1237,8 @@ def omnitrack_schedule(
 	  - 'approve': Manager or HR approval for employee work blocks.
 	  - 'update': Modifies an existing Planned Work Block's schedule, notes, or status.
 	  - 'get_block': Fetches single block details with sessions and adherence.
+	  - 'cancel': Cancels a block for the person's own cancel_reason, with an optional cancel_note.
+	    Ask them first, naming the block; never pick the reason for them.
 	"""
 	act = str(action or "").lower().strip()
 	if act == "plan":
@@ -1156,8 +1271,15 @@ def omnitrack_schedule(
 		)
 	elif act in ("get_block", "get"):
 		return get_work_block(block_name=block_name, employee=employee)
+	elif act == "cancel":
+		return cancel_work_block(
+			block_name=block_name,
+			cancel_reason=cancel_reason,
+			cancel_note=cancel_note,
+			employee=employee
+		)
 	else:
-		frappe.throw(_("Invalid omnitrack_schedule action '{0}'. Choose 'plan', 'reschedule', 'extend', 'approve', 'update', or 'get_block'.").format(action))
+		frappe.throw(_("Invalid omnitrack_schedule action '{0}'. Choose 'plan', 'reschedule', 'extend', 'approve', 'update', 'get_block', or 'cancel'.").format(action))
 
 
 @frappe.whitelist()
@@ -1172,7 +1294,8 @@ def omnitrack_workspace(
 	expected_time=0.0,
 	description=None,
 	book_block=False,
-	block_start="10:00:00",
+	block_start=None,
+	block_end=None,
 	doctype=None,
 	docname=None,
 	workflow_action=None,
@@ -1188,14 +1311,15 @@ def omnitrack_workspace(
 	"""Unified controller for workstation state, tasks, checklists, and analytics.
 
 	Actions:
-	  - 'get_workspace': Retrieves live workstation data (timer HUD, today's schedule, summary).
+	  - 'get_workspace': Retrieves live workstation data (timer HUD, today's schedule, summary)
+	    and log_rules: the log window, the payroll lock and the note minimums.
 	  - 'get_tasks': Retrieves assigned tasks and ToDos categorized by attention level.
 	  - 'quick_create_task': Creates an ERPNext Task (or ToDo) and assigns to employee.
 	  - 'task_workflow': Executes task status transition ('Start Work', 'Close Task', etc.).
 	  - 'attach_tasks': Attaches task references or new checklist items to a block.
 	  - 'complete_task': Marks a block checklist item completed or pending.
 	  - 'analytics': Computes Plan Adherence Index (PAI) and Plan vs Actual hours.
-	  - 'eod_reconcile': Audits the day against the 8.0-hour target and checks missing notes.
+	  - 'eod_reconcile': Audits the day against an 8-hour day and lists blocks with no notes.
 	"""
 	act = str(action or "").lower().strip()
 	if act in ("get_workspace", "workspace"):
@@ -1211,6 +1335,7 @@ def omnitrack_workspace(
 			description=description,
 			book_block=book_block,
 			block_start=block_start,
+			block_end=block_end,
 			work_date=work_date,
 			employee=employee
 		)
@@ -1248,6 +1373,19 @@ def omnitrack_workspace(
 		frappe.throw(_("Invalid omnitrack_workspace action '{0}'. Choose 'get_workspace', 'get_tasks', 'quick_create_task', 'task_workflow', 'attach_tasks', 'complete_task', 'analytics', or 'eod_reconcile'.").format(action))
 # 8. MCP TOOL DEFINITIONS & BASETOOL SUBCLASSES FOR FRAPPE ASSISTANT CORE
 # ==============================================================================
+
+def _cancel_reasons_from_doctype():
+	"""Planned Work Block.cancel_reason's options, read from its DocType file: the tool schemas
+	are built at import, before any site is connected, so frappe.get_meta is not an option."""
+	import json
+	import os
+	path = os.path.join(os.path.dirname(__file__), "omnitrack", "doctype", "planned_work_block", "planned_work_block.json")
+	with open(path) as f:
+		field = next((x for x in json.load(f)["fields"] if x["fieldname"] == "cancel_reason"), {})
+	return [o for o in str(field.get("options") or "").split("\n") if o.strip()]
+
+
+CANCEL_REASONS = _cancel_reasons_from_doctype()
 
 try:
 	from frappe_assistant_core.core.base_tool import BaseTool
@@ -1358,7 +1496,8 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 		self.description = (
 			"Records a real work session against a planned block, or auto-books and logs time into an ERPNext Timesheet. "
 			"Notes are mandatory (at least 15 words by default; configured via OmniTrack Settings). "
-			"Modification dates are governed by the configured modification horizon in OmniTrack Settings (managers can back-fill anytime). "
+			"An employee logs on the last log_days_back days (OmniTrack Settings, default 15, today is day 1); a manager on any day; nobody on or before payroll_closed_through (get_workspace returns log_rules.can_log_from). "
+			"Nothing is assumed: ask the person how long (hours, or from_time and to_time) and, for time not on a block, when it started. "
 			"Format notes with deliverable context, bulleted accomplishments, and meaningful progress suitable for billing, audit, and operational tracking across any organization."
 		)
 		self.category = "OmniTrack"
@@ -1373,11 +1512,11 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 				},
 				"hours": {
 					"type": "number",
-					"description": "Duration in hours (decimal or integer, e.g. 1.25, 2.5, 4.0)."
+					"description": "Duration in hours (e.g. 1.25). Required unless from_time and to_time are given; never assumed."
 				},
 				"from_time": {
 					"type": "string",
-					"description": "Start time (HH:MM:SS)."
+					"description": "Start time (HH:MM:SS). Required when no block_name is given and no block matches task or project."
 				},
 				"to_time": {
 					"type": "string",
@@ -1393,11 +1532,11 @@ class OmniTrackLogWorkSessionTool(BaseTool):
 				},
 				"block_name": {
 					"type": "string",
-					"description": "Specific Planned Work Block ID (e.g. PWB-2026-00012)."
+					"description": "Specific Planned Work Block ID (e.g. PWB-2026-00012). Without it, the day's block for task or project, else a new block."
 				},
 				"session_date": {
 					"type": "string",
-					"description": "Date of work (YYYY-MM-DD). Defaults to today."
+					"description": "Date of work (YYYY-MM-DD), inside the log window. Defaults to today."
 				},
 				"auto_create_block_if_missing": {
 					"type": "boolean",
@@ -1447,11 +1586,19 @@ class OmniTrackQuickCreateTaskTool(BaseTool):
 				},
 				"book_block": {
 					"type": "boolean",
-					"description": "If true, schedules a planned work block for this task today."
+					"description": "If true, also plans a block for this task; needs block_start, and block_end or expected_time."
 				},
 				"block_start": {
 					"type": "string",
-					"description": "Start time for booked block (default '10:00:00')."
+					"description": "Start time of the booked block (HH:MM, or 'YYYY-MM-DD HH:MM'). Ask the person; never assumed."
+				},
+				"block_end": {
+					"type": "string",
+					"description": "End time of the booked block. When omitted, block_start plus expected_time."
+				},
+				"work_date": {
+					"type": "string",
+					"description": "Day of the booked block (YYYY-MM-DD). Defaults to today."
 				},
 				"employee": {
 					"type": "string",
@@ -1468,7 +1615,10 @@ class OmniTrackQuickTimerActionTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_quick_timer_action"
-		self.description = "Controls live stopwatch session for the user ('start', 'stop', 'discard', 'status')."
+		self.description = (
+			"Controls the person's running session: 'start' (refused while one runs: stop or switch), 'stop' (saves the title, every log line and notes as the last line, at least 15 words by default; refused, it keeps running), "
+			"'discard' (throws it away unsaved: ask the person first, naming it), 'status', 'add_note' (one log line)."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1477,12 +1627,12 @@ class OmniTrackQuickTimerActionTool(BaseTool):
 			"properties": {
 				"action": {
 					"type": "string",
-					"enum": ["start", "stop", "discard", "status"],
-					"description": "'start' (Start Session), 'stop' (requires notes), 'discard' (2-step discard), 'status'."
+					"enum": ["start", "stop", "discard", "status", "add_note"],
+					"description": "'start', 'stop', 'discard' (only after the person says yes), 'status', 'add_note'."
 				},
 				"notes": {
 					"type": "string",
-					"description": "Session notes (required when stopping)."
+					"description": "'start': its title. 'stop': the last line of its log, in the person's words. 'add_note': the line."
 				},
 				"task": {
 					"type": "string",
@@ -1523,7 +1673,7 @@ class OmniTrackStartTimerTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_start_timer"
-		self.description = "Starts a live running stopwatch session for the user. Live ticking starts immediately in the OmniTrack workstation UI across all devices. Terminates previous idle state."
+		self.description = "Starts a live running session for the person; it ticks at once in the OmniTrack workstation on every device. Refused while a session runs: stop it, or switch."
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1566,21 +1716,21 @@ class OmniTrackStopTimerTool(BaseTool):
 		self.name = "omnitrack_stop_timer"
 		self.description = (
 			"Stops the active live stopwatch session, calculates elapsed time, logs the actual worked session into the Planned Work Block and ERPNext Timesheet, and resets the workstation stopwatch to 00:00:00. "
-			"Session notes describing what was accomplished are strictly required (minimum words configured in OmniTrack Settings, default: 15 words) and must follow clear timesheet quality standards (deliverable context, specific accomplishments, and progress)."
+			"It is saved as the page saves it: its title, every line logged during it, then notes as the last line, together at least Minimum Words per Session words (default 15) in the person's own words. "
+			"Refused, the session keeps running and nothing is lost."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
 			"type": "object",
-			"required": ["notes"],
 			"properties": {
 				"notes": {
 					"type": "string",
-					"description": "Mandatory structured session notes describing what was accomplished (minimum words configured in OmniTrack Settings, default: 15 words). Include deliverable context and specific work performed."
+					"description": "The last line of the session's log: what got done, in the person's words. Its existing log lines are kept."
 				},
 				"block_name": {
 					"type": "string",
-					"description": "Optional override Planned Work Block ID."
+					"description": "Block to save it on when the session is not recording on one."
 				},
 				"project": {
 					"type": "string",
@@ -1605,7 +1755,7 @@ class OmniTrackDiscardTimerTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_discard_timer"
-		self.description = "Discards an active live stopwatch session without creating any empty or fractional timesheet."
+		self.description = "Throws the running session away; nothing of it is saved. Ask the person first, naming the session and how long it has run, and call only after their yes."
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1647,7 +1797,7 @@ class OmniTrackGetEODReconciliationTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_get_eod_reconciliation"
-		self.description = "Audits the employee's day: checks total logged hours vs 8h target, unallocated gaps, missing session notes, and temporal compliance."
+		self.description = "Audits the employee's day: total logged hours against an 8-hour day, blocks with logged time but no notes, and planning gaps."
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1672,7 +1822,10 @@ class OmniTrackSwitchTimerTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_switch_timer"
-		self.description = "Atomically switches the active running stopwatch session to another block or task. Closes the current session, logs its elapsed time with session notes, and starts a fresh session on the target block/task with zero dropped time."
+		self.description = (
+			"Ends the running session and starts the next work in one step, as the page's Switch does. Needs target_block or target_task. "
+			"The session that ends is saved with its title and log lines, then current_session_notes as the last line, together at least 15 words by default in the person's words. Refused, it keeps running and nothing starts."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1682,7 +1835,7 @@ class OmniTrackSwitchTimerTool(BaseTool):
 				"target_task": {"type": "string", "description": "Target Task ID to switch to."},
 				"target_project": {"type": "string", "description": "Target Project ID."},
 				"target_nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away'."},
-				"current_session_notes": {"type": "string", "description": "Session notes to log for the block/session being closed."},
+				"current_session_notes": {"type": "string", "description": "The last line of the ending session's log: what got done, in the person's words. Its log lines are kept."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
 			}
 		}
@@ -1737,7 +1890,10 @@ class OmniTrackAdjustWorkSessionTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_adjust_work_session"
-		self.description = "Adjusts a previously logged work session's time, duration, or deliverable notes in a Planned Work Block. Automatically recalculates block totals and updates/amends the linked ERPNext Timesheet."
+		self.description = (
+			"Adjusts a logged work session's time, duration or notes; recalculates block totals and amends the linked ERPNext Timesheet. "
+			"The session keeps its day unless session_date moves it. Both days must be in the log window: an employee's last log_days_back days (default 15, today is day 1), a manager any day, nobody on or before payroll_closed_through."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1749,8 +1905,8 @@ class OmniTrackAdjustWorkSessionTool(BaseTool):
 				"from_time": {"type": "string", "description": "Updated start time (HH:MM:SS)."},
 				"to_time": {"type": "string", "description": "Updated end time (HH:MM:SS)."},
 				"hours": {"type": "number", "description": "Updated duration in hours."},
-				"session_date": {"type": "string", "description": "Work date (YYYY-MM-DD). Regular users can only adjust today and yesterday."},
-				"notes": {"type": "string", "description": "Updated deliverable notes describing work accomplished."},
+				"session_date": {"type": "string", "description": "Only to move it to another day (YYYY-MM-DD); omit to keep its day."},
+				"notes": {"type": "string", "description": "Its notes in full, in the person's words (at least 15 words by default)."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
 			}
 		}
@@ -1764,9 +1920,9 @@ class OmniTrackDeleteWorkSessionTool(BaseTool):
 		super().__init__()
 		self.name = "omnitrack_delete_work_session"
 		self.description = (
-			"Deletes an erroneously logged work session from a Planned Work Block, automatically recalculating block actuals and linked ERPNext Timesheet. "
-			"Governance Protection: Work sessions directly impact billing, payroll, and financial records. Deletion is governed by OmniTrack Settings "
-			"('allow_session_deletion' policy) — standard users are restricted from deleting logged hours unless explicitly permitted, while managers can delete when authorized."
+			"Deletes a logged work session from a Planned Work Block; its hours come off the block and the linked ERPNext Timesheet is amended. "
+			"Ask the person first, naming the entry (its day, times and notes), and call only after their yes. "
+			"Governed by OmniTrack Settings > allow_session_deletion (managers always may) and the log window: the entry's day must be within log_days_back for an employee and after payroll_closed_through for everyone."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -1925,7 +2081,10 @@ class OmniTrackUpdateWorkBlockTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_update_work_block"
-		self.description = "Updates an existing Planned Work Block's schedule (start_time, end_time, work_date), deliverable notes, or status."
+		self.description = (
+			"Updates a Planned Work Block's schedule (start_time, end_time, work_date), deliverable notes or status. "
+			"To cancel, prefer omnitrack_cancel_work_block: it needs the person's cancel_reason, and it is refused for a block in the past or one a session is recording on."
+		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {
@@ -1940,13 +2099,41 @@ class OmniTrackUpdateWorkBlockTool(BaseTool):
 				"project": {"type": "string", "description": "ERPNext Project ID."},
 				"deliverable_notes": {"type": "string", "description": "Updated deliverable notes describing the block's focus."},
 				"status": {"type": "string", "description": "Block status ('Planned', 'In Progress', 'Completed', 'Logged (Full)', 'Cancelled')."},
-				"cancel_reason": {"type": "string", "description": "Reason for cancellation if status is 'Cancelled'."},
+				"cancel_reason": {"type": "string", "enum": CANCEL_REASONS, "description": "Why it is cancelled, the person's pick (required with status 'Cancelled'). Ask; never pick one."},
+				"cancel_note": {"type": "string", "description": "Optional, the person's own words; goes on the block's activity."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
 			}
 		}
 
 	def execute(self, arguments: dict):
 		return update_work_block(**arguments)
+
+
+class OmniTrackCancelWorkBlockTool(BaseTool):
+	def __init__(self):
+		super().__init__()
+		self.name = "omnitrack_cancel_work_block"
+		self.description = (
+			"Cancels a planned block, as the page's \"Cancel this block?\" does. Ask the person first, naming the block, "
+			"and ask why: cancel_reason is theirs to pick, never pick one for them. "
+			"Refused for a block in the past (it is recorded as Missed), one already cancelled or rescheduled, and one a session is recording on (stop or switch first). "
+			"A refusal changes nothing; say why to the person."
+		)
+		self.category = "OmniTrack"
+		self.source_app = "omnitrack"
+		self.inputSchema = {
+			"type": "object",
+			"required": ["block_name", "cancel_reason"],
+			"properties": {
+				"block_name": {"type": "string", "description": "Planned Work Block ID to cancel (e.g. 'PWB-2026-12446')."},
+				"cancel_reason": {"type": "string", "enum": CANCEL_REASONS, "description": "Why it is cancelled, in the person's words mapped to one of these."},
+				"cancel_note": {"type": "string", "description": "Optional, the person's own words; goes on the block's activity."},
+				"employee": {"type": "string", "description": "Target employee email (defaults to current human user)."}
+			}
+		}
+
+	def execute(self, arguments: dict):
+		return cancel_work_block(**arguments)
 
 
 class OmniTrackGetWorkBlockTool(BaseTool):
@@ -1974,14 +2161,14 @@ class OmniTrackSessionTool(BaseTool):
 		super().__init__()
 		self.name = "omnitrack_session"
 		self.description = (
-			"Unified tracker for live stopwatch sessions and logged timesheets across any industry or organization. "
-			"Actions: 'start' (starts ticking stopwatch), 'stop' (stops stopwatch and logs actual time), "
-			"'status' (checks live running timer), 'discard' (throws away live timer without creating timesheet), "
-			"'add_note' (appends bullet note to live session), 'switch' (atomically switches active timer to another task/block), "
-			"'log' (manually records completed work session), 'adjust' (updates time or notes within configured horizon), "
-			"'delete' (removes erroneous session subject to OmniTrack Settings deletion governance). "
-			"Timesheet Quality Standard: 'notes' MUST be audit-ready, meaningful, and meet minimum word thresholds (default: 15 words) "
-			"with clear workstream context, delivered results, and operational progress."
+			"Unified tracker for live stopwatch sessions and logged Work Sessions. "
+			"Actions: 'start' (starts a session; refused while one runs), 'stop' (saves the running session: title, log lines, then notes as the last line), "
+			"'status' (the running session), 'discard' (throws it away unsaved: ask the person first), "
+			"'add_note' (adds a log line), 'switch' (saves the running session and starts target_block or task), "
+			"'log' (records finished work: hours or from_time/to_time; nothing is assumed), 'adjust' (a logged session's time or notes; it keeps its day unless session_date moves it), "
+			"'delete' (a logged session, per OmniTrack Settings > allow_session_deletion: ask the person first, naming the entry). "
+			"Dates: an employee's last log_days_back days (default 15, today is day 1), a manager any day, nobody on or before payroll_closed_through. "
+			"Notes are the person's own words: at least 15 words per session and 10 characters per log line by default (log_rules). Never invent them; a refusal saves nothing, say why to the person."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -2008,8 +2195,9 @@ class OmniTrackSessionTool(BaseTool):
 				"hours": {"type": "number", "description": "Duration in decimal hours (e.g. 1.25, 2.5, 4.0; for manual log or adjustment)."},
 				"from_time": {"type": "string", "description": "Start time (HH:MM:SS)."},
 				"to_time": {"type": "string", "description": "End time (HH:MM:SS)."},
-				"session_date": {"type": "string", "description": "Date of work (YYYY-MM-DD)."},
+				"session_date": {"type": "string", "description": "Date of work (YYYY-MM-DD) for 'log'; for 'adjust' only to move it to another day."},
 				"session_name": {"type": "string", "description": "Child session row ID (for 'adjust' or 'delete')."},
+				"start_time": {"type": "string", "description": "For 'start': when it began (HH:MM:SS), if earlier than now."},
 				"target_block": {"type": "string", "description": "New target block ID (for 'switch' action)."},
 				"nature": {"type": "string", "description": "The activity: 'Work', 'Break' or 'Away' (default 'Work')."},
 				"employee": {"type": "string", "description": "Target employee email (defaults to current user)."}
@@ -2027,7 +2215,10 @@ class OmniTrackScheduleTool(BaseTool):
 		self.description = (
 			"Manages Planned Work Blocks and commitments. "
 			"Actions: 'plan' (batch schedules work blocks for a day), 'reschedule' (moves unworked block to a new date/time), "
-			"'extend' (extends scheduled end of active block by minutes), 'approve' (manager approval for employee blocks)."
+			"'extend' (extends scheduled end of active block by minutes), 'approve' (manager approval for employee blocks), "
+			"'update' (a block's date, times or deliverable notes), 'get_block' (one block with its sessions), "
+			"'cancel' (cancels a block for the person's cancel_reason: ask them first, naming the block, and never pick the reason; "
+			"refused for a past block, one already cancelled, or one a session is recording on)."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -2037,7 +2228,7 @@ class OmniTrackScheduleTool(BaseTool):
 			"properties": {
 				"action": {
 					"type": "string",
-					"enum": ["plan", "reschedule", "extend", "approve"],
+					"enum": ["plan", "reschedule", "extend", "approve", "update", "get_block", "cancel"],
 					"description": "Scheduling operation to execute."
 				},
 				"blocks": {"type": "array", "description": "List of block objects with start_time, end_time, project, task, deliverable_notes."},
@@ -2048,7 +2239,9 @@ class OmniTrackScheduleTool(BaseTool):
 				"extend_minutes": {"type": "integer", "description": "Minutes to extend (default 30)."},
 				"work_date": {"type": "string", "description": "Work date (YYYY-MM-DD)."},
 				"block_names": {"type": "array", "items": {"type": "string"}, "description": "List of block IDs for approval."},
-				"comments": {"type": "string", "description": "Manager review comments."},
+				"comments": {"type": "string", "description": "Manager review comments ('approve'), or the new deliverable notes ('update')."},
+				"cancel_reason": {"type": "string", "enum": CANCEL_REASONS, "description": "For 'cancel': why, the person's pick."},
+				"cancel_note": {"type": "string", "description": "For 'cancel': optional, the person's own words."},
 				"employee": {"type": "string", "description": "Target employee email."}
 			}
 		}
@@ -2069,7 +2262,8 @@ class OmniTrackWorkspaceTool(BaseTool):
 			"'attach_tasks' (attaches task references or new checklist items to a block), "
 			"'complete_task' (marks a checklist item completed or pending), "
 			"'analytics' (computes Plan Adherence Index PAI and Plan vs Actual hours), "
-			"'eod_reconcile' (end-of-day audit against 8h target)."
+			"'eod_reconcile' (end-of-day audit against an 8-hour day). "
+			"get_workspace returns log_rules: the log window, payroll_closed_through and the note minimums. Read them before logging or adjusting."
 		)
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
@@ -2087,8 +2281,9 @@ class OmniTrackWorkspaceTool(BaseTool):
 				"priority": {"type": "string", "description": "Priority ('Low', 'Medium', 'High', 'Urgent')."},
 				"expected_time": {"type": "number", "description": "Estimated hours."},
 				"description": {"type": "string", "description": "Task description."},
-				"book_block": {"type": "boolean", "description": "True to immediately book a block for task."},
-				"block_start": {"type": "string", "description": "Start time for booked block."},
+				"book_block": {"type": "boolean", "description": "True to book a block for the task too; needs block_start and block_end (or expected_time)."},
+				"block_start": {"type": "string", "description": "Start of the booked block (HH:MM:SS), as the person says; nothing is assumed."},
+				"block_end": {"type": "string", "description": "End of the booked block (HH:MM:SS); else expected_time sets its length."},
 				"doctype": {"type": "string", "description": "DocType ('Task' or 'ToDo')."},
 				"docname": {"type": "string", "description": "Document ID for workflow transition."},
 				"workflow_action": {"type": "string", "description": "State transition to apply (e.g. 'Start Work', 'Close Task')."},
@@ -2158,6 +2353,7 @@ def get_fac_tools(consolidated=True):
 		OmniTrackApproveWorkBlocksTool,
 		OmniTrackUpdateWorkBlockTool,
 		OmniTrackGetWorkBlockTool,
+		OmniTrackCancelWorkBlockTool,
 	]
 	tools = []
 	for cls in tool_classes:

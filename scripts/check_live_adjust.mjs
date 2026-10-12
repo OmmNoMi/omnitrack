@@ -10,6 +10,8 @@
 //   6. A session that ends takes the open box and the prompt with it.
 //   7. With nothing running, Adjust is the free-entry panel for the last hour.
 //   8. A session past midnight stops the next morning, never on its start day.
+//   9. Adjust times from the still-working question starts on the suggested end, and a closing
+//      dialog does not take focus back.
 import { useWorkstationSessionModals } from "../src/composables/useWorkstationSessionModals.js";
 import { ref, computed, nextTick } from "vue";
 
@@ -83,6 +85,25 @@ const stopClock = (s) => { if (s.trackerTimer.value) clearInterval(s.trackerTime
   const { s: s2, m: m2 } = setup({ tab: "planner" });
   m2.openAdjustModal();
   check(s2.isSessionElevated.value, "Adjust from elsewhere (Cmd+E, the timeline) brings the session box up");
+  check(m.liveAdjust.value.focus === "start" && m2.liveAdjust.value.focus === "start", "Adjust on its own starts on the start time");
+  const { m: m3 } = setup({ tab: "dashboard" });
+  m3.openAdjustModal({ endMs: Date.now() - 60000 });
+  check(m3.liveAdjust.value && m3.liveAdjust.value.focus === "end", "Adjust times from the still-working question starts on the suggested end");
+}
+
+// 9. Focus lands on that field and stays there while the question's dialog closes. reka gives
+// focus back to whatever had it before the dialog opened, after its close animation: the week
+// strip's Next week button took it from the end time.
+{
+  const fs = await import("node:fs");
+  const read = (f) => fs.readFileSync(new URL("../" + f, import.meta.url), "utf8");
+  const pane = read("src/session/SessionControlsPane.vue");
+  check(/const wantsEnd = ws\.liveAdjust\.value && ws\.liveAdjust\.value\.focus === 'end';/.test(pane), "SessionControlsPane: the box reads which field to start on");
+  check(/handFocus\(\(\) => \{[\s\S]*?return \(wantsEnd \? inputs\[2\] : inputs\[1\]\) \|\| inputs\[0\];/.test(pane), "SessionControlsPane: focus is handed to the end (or the start), and kept there");
+  const hand = read("src/utils/focusHandOff.js");
+  check(/document\.addEventListener\('focusin', onFocus, true\)/.test(hand), "focusHandOff: focus taken away is put back");
+  check(/document\.addEventListener\('pointerdown', stop, true\)/.test(hand) && /document\.addEventListener\('keydown', stop, true\)/.test(hand), "focusHandOff: the person's own click or key is never overridden");
+  check(/timer = setTimeout\(stop, ms\)/.test(hand), "focusHandOff: it lets go after a moment");
 }
 
 // 2-4. A short log refuses in place; the draft counts; then Stop and log ends it

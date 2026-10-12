@@ -18,7 +18,8 @@ export function useSessionChat(props) {
   // pane is never blank: an unknown value shows the Log.
   const tabDetailsRef = ref(null);
   // An entry added by hand is its Log only: the block's details and chat belong to the block
-  const paneTabs = computed(() => (props.mode === 'entry' ? ['notes'] : ['notes', 'details', ...(isRavenAvailable.value ? ['chat'] : [])]));
+  // Task chat is a Raven channel on an ERPNext Task: offered only when this work is one
+  const paneTabs = computed(() => (props.mode === 'entry' ? ['notes'] : ['notes', 'details', ...(isRavenAvailable.value && connectedTaskId.value ? ['chat'] : [])]));
   const paneTab = computed(() => (paneTabs.value.includes(activePaneTab.value) ? activePaneTab.value : 'notes'));
   const tabRefs = { notes: tabNotesRef, details: tabDetailsRef, chat: tabChatRef };
 
@@ -66,21 +67,35 @@ export function useSessionChat(props) {
     return { message: data.message };
   }
 
+  // The ERPNext Task this session's chat is about, or null. Never the block's own name or a
+  // to-do: Raven has no channel for them (their talk is the block's Activity, under Details),
+  // so a message sent with one went nowhere and the page said nothing.
   const connectedTaskId = computed(() => {
-    if (props.trackerBoundBlock && props.trackerBoundBlock.task) {
-      return props.trackerBoundBlock.task;
-    }
-    if (props.trackerBoundBlock && props.trackerBoundBlock.name) {
-      return props.trackerBoundBlock.name;
-    }
+    const blk = props.trackerBoundBlock;
+    if (blk) return blk.task || null;
     const match = (props.assignedTasks || []).find(t =>
-      (t.subject && t.subject === props.trackerNotes) ||
-      (t.title && t.title === props.trackerNotes) ||
-      t.name === props.trackerNotes
+      t.kind === 'Task' && t.subject && t.subject === props.trackerNotes
     );
-    if (match) return match.name;
-    return null;
+    return match ? match.ref : null;
   });
+  // The task's own name, to say what the chat is about
+  const chatTaskSubject = computed(() => {
+    const id = connectedTaskId.value;
+    if (!id) return '';
+    const row = (props.assignedTasks || []).find(t => t.ref === id);
+    return (row && row.subject) || (props.trackerBoundBlock && props.trackerBoundBlock.task_subject) || id;
+  });
+  // Why a message was not sent (or pinned), said under the box; what was typed stays
+  const chatError = ref('');
+  const refusal = (e, fallback) => {
+    const msg = e && e.message;
+    if (!msg || msg === 'Request failed') return fallback;
+    try {
+      const list = JSON.parse(msg);
+      if (Array.isArray(list) && list.length) return JSON.parse(list[0]).message || fallback;
+    } catch (_) {}
+    return msg;
+  };
 
   const connectedTaskName = computed(() => {
     if (props.trackerBoundBlock) {
@@ -149,6 +164,7 @@ export function useSessionChat(props) {
     const text = chatInputText.value.trim();
     if (!text || !connectedTaskId.value || chatSending.value) return;
     chatSending.value = true;
+    chatError.value = '';
     try {
       const res = await callApi('post_task_chat_message', {
         task_id: connectedTaskId.value,
@@ -157,9 +173,11 @@ export function useSessionChat(props) {
       if (res && res.message && res.message.success) {
         chatInputText.value = '';
         await fetchTaskChat();
+      } else {
+        chatError.value = 'Not sent. ' + ((res && res.message && res.message.error) || 'Try again.');
       }
     } catch (e) {
-      console.error('Error sending task message', e);
+      chatError.value = 'Not sent. ' + refusal(e, 'Try again.');
     } finally {
       chatSending.value = false;
     }
@@ -167,6 +185,7 @@ export function useSessionChat(props) {
 
   async function pinSpec(msgId) {
     if (!msgId || !connectedTaskId.value) return;
+    chatError.value = '';
     try {
       const res = await callApi('pin_task_spec', {
         message_id: msgId,
@@ -176,9 +195,11 @@ export function useSessionChat(props) {
         if (typeof window !== 'undefined' && window.frappe && window.frappe.show_alert) {
           window.frappe.show_alert({ message: 'Pinned as the task spec', indicator: 'green' });
         }
+      } else {
+        chatError.value = 'Not pinned. ' + ((res && res.message && res.message.error) || 'Try again.');
       }
     } catch (e) {
-      console.error('Failed to pin message', e);
+      chatError.value = 'Not pinned. ' + refusal(e, 'Try again.');
     }
   }
 
@@ -199,6 +220,7 @@ export function useSessionChat(props) {
 
   // Watch for connected task change to refresh chat if chat tab is active
   watch(() => connectedTaskId.value, (newId) => {
+    chatError.value = '';
     if (newId && activePaneTab.value === 'chat') {
       fetchTaskChat();
     }
@@ -228,6 +250,8 @@ export function useSessionChat(props) {
     callApi,
     connectedTaskId,
     connectedTaskName,
+    chatTaskSubject,
+    chatError,
     formatCleanTime,
     formatMsgTime,
     checkRavenStatus,

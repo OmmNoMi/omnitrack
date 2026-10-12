@@ -21,7 +21,6 @@
       @edit-session="(session, block) => $emit('edit-session', session, block)"
       @delete-session="(session, block) => $emit('delete-session', session, block)"
       @open-session="(session, block) => $emit('open-block-session', session, block)"
-      @submit-reschedule="$emit('submit-reschedule', $event)"
       @approve="$emit('approve-block', $event)"
       @flag="(block, reason) => $emit('flag-block', block, reason)"
     />
@@ -99,7 +98,6 @@ export default {
     "log-session",
     "edit-session",
     "delete-session",
-    "submit-reschedule",
     "approve-block",
     "flag-block",
     "close-raven-drawer",

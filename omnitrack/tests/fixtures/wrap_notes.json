@@ -1,0 +1,8 @@
+[
+  {"title": "Fix login", "lines": ["read logs", " ", "patched"], "last": "", "want": "Fix login\n\n• read logs\n• patched"},
+  {"title": "Fix login", "lines": [], "last": "", "want": "Fix login"},
+  {"title": "", "lines": ["one"], "last": "", "want": "• one"},
+  {"title": "Fix login", "lines": ["read logs"], "last": "  sent to QA ", "want": "Fix login\n\n• read logs\n• sent to QA"},
+  {"title": "", "lines": [], "last": "", "want": ""},
+  {"title": "  ", "lines": [], "last": "wrote the release notes", "want": "• wrote the release notes"}
+]

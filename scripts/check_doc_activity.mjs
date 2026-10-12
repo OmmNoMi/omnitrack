@@ -40,7 +40,7 @@ if (!/if \(this\.linked\.doctype === 'Task'\) items\.push\(\{ label: 'Raven chat
 
 // 3. The server makes Raven channels for Tasks only, and Desk's timeline pulls Raven for Tasks only.
 const bridge = read("omnitrack/raven_bridge.py");
-if (!/def get_or_create_task_channel[\s\S]*?\n\tif doctype != "Task":\n\t\treturn None/.test(bridge)) problems.push("omnitrack/raven_bridge.py: get_or_create_task_channel makes a channel for a Task and nothing else");
+if (!/def get_or_create_task_channel[\s\S]*?\n\tif doctype != "Task" or not frappe\.db\.exists\("Task", clean_id\):\n\t\treturn None/.test(bridge)) problems.push("omnitrack/raven_bridge.py: get_or_create_task_channel makes a channel for a Task and nothing else");
 if (/get_block_raven_timeline_content/.test(bridge)) problems.push("omnitrack/raven_bridge.py: a block has no Raven timeline");
 const hooks = read("omnitrack/hooks.py");
 const timeline = (hooks.match(/additional_timeline_content = \{[\s\S]*?\n\}/) || [""])[0];

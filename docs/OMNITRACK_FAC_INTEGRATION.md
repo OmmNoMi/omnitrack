@@ -30,8 +30,8 @@ flowchart TD
     end
 
     subgraph OmniTrack_Core ["OmniTrack Core Engine"]
-        FAC_Module["omnitrack.fac\n(6 Specialized MCP Tools)"]
-        Temporal["Temporal Governance Guardrails\n- Modification Horizon (Today & Yesterday)\n- Past Planned Block Immutability"]
+        FAC_Module["omnitrack.fac\n(3 consolidated tools, 22 granular)"]
+        Temporal["Temporal Governance Guardrails\n- Log window (Settings: Log Days Back, default 15)\n- Payroll lock (Payroll Closed Through)\n- Past Planned Block Immutability"]
         DocTypes["Planned Work Block · Timesheet · Task"]
     end
 
@@ -48,9 +48,9 @@ flowchart TD
 
 ---
 
-## ⚙️ The 6 OmniTrack MCP Tools
+## ⚙️ The OmniTrack MCP Tools
 
-FAC exposes six purpose-built domain tools for OmniTrack. Each tool enforces strict user scoping and temporal invariants automatically:
+OmniTrack offers three consolidated tools (the `fac_tools` hook, `get_fac_tools()`): `omnitrack_session` (start, stop, status, discard, add_note, switch, log, adjust, delete), `omnitrack_schedule` (plan, reschedule, extend, approve, update, get_block, cancel) and `omnitrack_workspace`. It also registers 22 granular tool classes (the `assistant_tools` hook). Both run the same functions, so the rules below hold for either. The core ones:
 
 ### 1. `omnitrack_get_my_workspace`
 * **Purpose**: Retrieves the employee's live workstation data for today.
@@ -59,6 +59,7 @@ FAC exposes six purpose-built domain tools for OmniTrack. Each tool enforces str
   * Today's planned work blocks, timings, task associations, and variance.
   * Total planned vs actual hours logged today.
   * Open assigned tasks (from ERPNext `Task` or Frappe `ToDo`).
+  * `log_rules`: `log_days_back`, `payroll_closed_through`, `can_log_from`, `min_session_words`, `min_log_line_chars` and the rules in plain words. An assistant reads these before it logs, adjusts or deletes anything.
 * **Example Agent Query**: *"What's on my plate today and how much time have I logged so far?"*
 
 ### 2. `omnitrack_plan_work_blocks`
@@ -69,24 +70,36 @@ FAC exposes six purpose-built domain tools for OmniTrack. Each tool enforces str
 * **Example Agent Query**: *"Plan my day: 2 hrs on Gaonhae invoice bug starting at 9:30 AM, 1 hr team sync, and 3 hrs on CardView accessibility."*
 
 ### 3. `omnitrack_log_work_session`
-* **Purpose**: Records a real work session against a planned block, or automatically creates an unplanned block and logs time into an ERPNext `Timesheet`.
-* **Audit Rule**: **Session notes are mandatory (>= 3 characters)** describing what was delivered.
-* **Temporal Rule**: Regular users can only log time for **today and yesterday**. Earlier historical back-fills require manager authorization.
+* **Purpose**: Records a real Work Session against a planned block, or creates an unplanned block for it, and syncs the linked ERPNext Timesheet.
+* **Audit Rule**: The notes are the person's own words, at least **Minimum Words per Session** (default 15) words.
+* **Log window**: an employee logs only in the last **Log Days Back** days (default 15; today is day 1). A manager reaches any day. Nobody logs on or before **Payroll Closed Through**: those days are paid.
+* **Nothing is assumed**: the length (`hours`, or `from_time` and `to_time`) is required. Time joins the day's block for its `task` or `project` (never a cancelled one); with neither, it needs `block_name`, or a `from_time` for its own new block. No block is guessed and no start time is made up.
 * **Example Agent Query**: *"I just finished 90 minutes refactoring the Redis timeout handling. Log this under the CardView project with detailed notes."*
 
 ### 4. `omnitrack_quick_create_task`
 * **Purpose**: Creates an ERPNext `Task` (or Frappe `ToDo`), assigns it to the current user, and optionally books a planned work block immediately.
+* **Booking**: `book_block` needs `block_start`, and `block_end` or `expected_time`. Nothing is created until the block's time is valid.
 * **Example Agent Query**: *"Create a high priority task 'Fix broken checkout redirect' under Project E-Commerce, estimated at 2 hours, and book it for 2 PM today."*
 
 ### 5. `omnitrack_quick_timer_action`
-* **Purpose**: Controls live stopwatch sessions (`"start"`, `"stop"`, `"discard"`, `"status"`).
-* **Terminology Invariant**: Terminology is strictly **"Start Session"** with Play icon (▶).
-* **Clean Discard**: Allows 2-step discard to throw away false starts without creating empty timesheets.
+* **Purpose**: Controls live stopwatch sessions (`"start"`, `"stop"`, `"discard"`, `"status"`, `"add_note"`), as the page's own controls do.
+* **Start**: refused while a session is running (stop it, or switch). The first line of `notes` is the session's title; a `start_time` that is not a time, or is later than now, is refused.
+* **Stop**: saves what the page saves: the title, every log line, then `notes` as the last line, together at least Minimum Words per Session. It is saved on the day the session started, on its own block. Refused, it keeps running.
+* **Add note**: a log line of at least **Minimum Characters per Log Line** (default 10). The title stays.
+* **Discard**: throws the running session away, nothing saved. The assistant asks the person first.
+* **Switch** (`omnitrack_switch_timer`): saves the running session as Stop does, then starts the next block or task, which must be named.
 * **Example Agent Query**: *"Start session on Task-0089"* or *"Stop session with note: finished all unit tests."*
 
 ### 6. `omnitrack_get_eod_reconciliation`
-* **Purpose**: Audits the employee's day: checks total logged hours vs the 8.0-hour daily commitment, unallocated gaps, missing session notes, and temporal compliance.
+* **Purpose**: Audits the employee's day: total logged hours against an 8-hour day, blocks with logged time but no notes, and planning gaps.
 * **Example Agent Query**: *"Audit my day before I sign off. Am I missing any notes or hours?"*
+
+### 7. Changing and removing what is logged or planned
+* **`omnitrack_adjust_work_session`**: changes a logged session's time or notes. It keeps its day unless `session_date` moves it, and both days must be in the log window.
+* **`omnitrack_delete_work_session`**: governed by OmniTrack Settings > Allow Session Deletion and the log window. The assistant asks the person first, naming the entry (its day, times and notes).
+* **`omnitrack_cancel_work_block`** (or `omnitrack_schedule` with `action: "cancel"`): cancels a planned block for one of Planned Work Block's cancel reasons (Client No-Show, Client Requested Reschedule, Dependency Blocked, Internal Priority Shift, Meeting Cancelled, Other), with an optional `cancel_note` that goes on the block's activity. The reason is the person's to give; the assistant never picks one. Refused for a block in the past (it is recorded as Missed), one already cancelled or rescheduled, and one a session is recording on. The page and the assistant share these checks (`planner._check_cancellable`).
+
+Every refusal says why and changes nothing; the assistant tells the person and asks for what is missing.
 
 ---
 
@@ -143,22 +156,31 @@ Place this prompt in your project root as `.cursorrules` or `.github/copilot-ins
 You are connected to the OmniTrack Workforce Engine via Frappe Assistant Core (FAC).
 When managing timesheets, work blocks, or tasks, you MUST adhere to these invariants:
 
-1. Temporal Modification Horizon:
-   - Regular employees can only log or adjust timesheets for TODAY and YESTERDAY.
-   - Any historical date prior to yesterday strictly requires an OmniTrack Manager.
+1. Log window and payroll lock (read omnitrack_get_my_workspace's log_rules first):
+   - Employees log, adjust or delete Work Sessions only from can_log_from to today
+     (Log Days Back, default 15 days, today is day 1). Managers reach any day.
+   - Nobody touches a day on or before payroll_closed_through: it is paid.
 
 2. Past Planned Work Blocks Lock:
    - In the past (work_date < today), NO ONE can create, reschedule, or edit planned work blocks. Historical plans are immutable.
 
-3. Mandatory Session Notes:
-   - Every logged session MUST have at least one descriptive line explaining what was delivered (>= 3 characters). Never log blank or "worked on stuff" notes.
+3. Session notes in the person's words:
+   - A saved session says what was done in at least min_session_words words (default 15);
+     a log line has at least min_log_line_chars characters (default 10). Never invent or pad them.
 
-4. Session Controls:
+4. Nothing is assumed:
+   - Ask for any time, length, next task or cancel reason the person has not given.
+
+5. Ask first:
+   - Before deleting an entry, discarding a running session or cancelling a block, say which
+     one and wait for the person's yes.
+
+6. Session Controls:
    - Terminology for starting a session is strictly "Start Session" (▶).
-   - Stopping a session requires deliverable notes.
-   - Abandoned or accidental sessions must use "discard" to avoid creating empty timesheets.
+   - Starting while a session runs is refused: stop it, or switch.
+   - Abandoned or accidental sessions use "discard" (after asking), so no empty Work Session is saved.
 
-5. Morning Workflow:
+7. Morning Workflow:
    - When the user asks to plan their day, call `omnitrack_get_my_workspace` first to check assigned tasks and existing commitments, then call `omnitrack_plan_work_blocks`.
 ```
 
@@ -181,12 +203,13 @@ When managing timesheets, work blocks, or tasks, you MUST adhere to these invari
 ---
 
 ### 💻 In-IDE Commit-to-Timesheet Logging
-> **User:** *"I just pushed commit `fix(redis): add connection pool retry logic` after working on it for 1 hour 45 minutes. Log it on OmniTrack."*
+> **User:** *"I just pushed commit `fix(redis): add connection pool retry logic`. I worked on it from 2 PM to 3:45 PM on the CardView project. Log it on OmniTrack."*
 >
 > **Assistant Action:**
 > 1. Calls `omnitrack_log_work_session`:
->    - `hours`: `1.75`
->    - `notes`: `"fix(redis): implemented connection pool retry with exponential backoff on cluster timeout"`
+>    - `from_time`: `14:00:00`, `to_time`: `15:45:00`
+>    - `project`: `CardView`
+>    - `notes`: `"Added connection pool retry with exponential backoff for Redis cluster timeouts and covered the reconnect path with tests"`
 >    - `logged_via`: `"Cursor / IDE"`
 > 2. **Assistant Response:** *"Logged 1.75 hours on your active work block. Linked ERPNext Timesheet updated (total today: 6.25 hrs)."*
 
@@ -208,7 +231,7 @@ When managing timesheets, work blocks, or tasks, you MUST adhere to these invari
 ## 🔒 Security & User Isolation
 
 * **Strict Session Scoping**: The Frappe API keypair identifies the user via `frappe.session.user`.
-* **Zero Privilege Escalation**: Non-manager users cannot target other employees' blocks or approve their own historical timesheets beyond yesterday.
+* **Zero Privilege Escalation**: Non-manager users cannot target other employees' blocks, or reach days outside their log window. Nobody reaches days on or before Payroll Closed Through.
 * **Audit Trail**: Every session logged records `logged_via` (e.g. `AI Assistant`, `Cursor`, `Claude Desktop`) in the database for compliance reporting.
 
 ---

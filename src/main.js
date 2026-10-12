@@ -16,6 +16,7 @@ import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vu
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import WorkSessionEntry from "./components/dialogs/WorkSessionEntry.vue";
 import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
+import DeleteEntryDialog from "./components/dialogs/DeleteEntryDialog.vue";
 import TaskDetailDrawer from "./drawers/TaskDetailDrawer.vue";
 import BlockDetailDrawer from "./drawers/BlockDetailDrawer.vue";
 import SessionDetailDrawer from "./drawers/SessionDetailDrawer.vue";
@@ -100,6 +101,7 @@ function mountApp(target = "#app") {
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("WorkSessionEntry", WorkSessionEntry);
 	app.component("TaskFormDialog", TaskFormDialog);
+	app.component("DeleteEntryDialog", DeleteEntryDialog);
 	app.component("TaskDetailDrawer", TaskDetailDrawer);
 	app.component("BlockDetailDrawer", BlockDetailDrawer);
 	app.component("SessionDetailDrawer", SessionDetailDrawer);

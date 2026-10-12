@@ -69,7 +69,7 @@
       ref="adjustRef"
       class="rounded-2xl px-4 py-4 border space-y-4 bg-gradient-to-br from-red-50 via-white to-blue-50 border-red-100 dark:from-red-950/40 dark:via-[#1E1F22] dark:to-blue-950/30 dark:border-red-900/40"
       aria-label="Adjust this session's times"
-      @keydown.esc="onAdjustEscape"
+      @keydown.esc.capture="onAdjustEscape"
     >
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="min-w-0">
@@ -246,6 +246,7 @@
 
 <script>
 import { computed, nextTick, ref, watch } from 'vue';
+import { handFocus } from '../utils/focusHandOff.js';
 import { Button, Combobox, FeatherIcon } from 'frappe-ui';
 import BlockTasksSection from '../drawers/BlockTasksSection.vue';
 import DayTimeFields from '../components/common/DayTimeFields.vue';
@@ -281,13 +282,23 @@ export default {
       if (!f || !(adjustMins.value > 0)) return false;
       return entryEndMs(f.session_date, f.from_time, adjustMins.value) > Date.now() + 60000;
     });
-    // One Escape, one step back: an open time or day list closes first, then the times
+    // One Escape, one step back: an open time or day list closes first, then the times. Caught on
+    // the way down, because frappe-ui's TimePicker takes every Escape: it blurs its field, focus
+    // falls to the page and the times stay open. It still closes its own open list, and the
+    // field it blurred gets focus back.
     const onAdjustEscape = (e) => {
-      if (e.defaultPrevented || popoverOpen()) return;
+      if (e.defaultPrevented) return;
+      if (popoverOpen()) {
+        const field = e.target;
+        setTimeout(() => { if (document.activeElement === document.body && field.isConnected) field.focus(); });
+        return;
+      }
       e.preventDefault();
+      e.stopPropagation();
       ws.cancelLiveAdjust();
     };
-    // Focus goes where the work is: the start time on open, back to Adjust on close
+    // Focus goes where the work is: the start time on open (the end, when an end was suggested),
+    // back to Adjust on close. handFocus keeps it there when a closing dialog takes it back.
     if (!box.isEntry.value) {
       watch(() => !!ws.liveAdjust.value, (open) => {
         const hadFocus = () => {
@@ -298,9 +309,12 @@ export default {
         nextTick(() => {
           if (open) {
             box.activeToolIndex.value = 2;
-            const inputs = adjustRef.value ? adjustRef.value.querySelectorAll('input') : [];
-            const start = inputs[1] || inputs[0];
-            if (start) start.focus();
+            const wantsEnd = ws.liveAdjust.value && ws.liveAdjust.value.focus === 'end';
+            handFocus(() => {
+              // The day, the start, the end
+              const inputs = adjustRef.value ? adjustRef.value.querySelectorAll('input') : [];
+              return (wantsEnd ? inputs[2] : inputs[1]) || inputs[0];
+            });
           } else if (inBox && box.toolbarRef.value) {
             const adjust = box.toolbarRef.value.querySelectorAll('[data-session-tool]')[1];
             if (adjust) { box.activeToolIndex.value = 1; adjust.focus(); }

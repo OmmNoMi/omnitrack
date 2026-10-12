@@ -5,7 +5,7 @@ import { ref, computed, watch } from "vue";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationPlannerDrag(w) {
-  const { PLANNER_HOUR_PX, _mins, _utc, addDays, assignedTasks, attentionTasks, blockHeight, blockStyle, blockTop, hhmm, hideBlockHover, isBlockLocked, pickedTask, plannerAnchor, plannerData, plannerDays, plannerDrag, plannerRange, plannerView, postJSON, selectedEmployee, todayISO, triggerHaptic } = w;
+  const { PLANNER_HOUR_PX, _mins, _utc, addDays, assignedTasks, attentionTasks, blockHeight, blockStyle, blockTop, hhmm, hideBlockHover, isBlockLocked, pickedTask, plannerAnchor, plannerData, plannerDays, plannerDrag, plannerRange, plannerView, postJSON, selectedEmployee, showToast, extractErrorMessage, todayISO, triggerHaptic } = w;
   const openBlockDrawer = (...args) => w.openBlockDrawer(...args);
 
   // ---- Drag to reschedule / resize a block ---------------------------------
@@ -80,8 +80,9 @@ export function useWorkstationPlannerDrag(w) {
       });
       await fetchPlannerData();
     } catch (e) {
+      // The block springs back to where it was; the page is not frozen by the browser's alert()
       await fetchPlannerData();
-      alert('Could not reschedule block: ' + (e && e.message || e));
+      showToast('Not moved. ' + extractErrorMessage(e, 'Try again.'), 'danger');
     }
   };
   // ---- Press and hold to grab -------------------------------------------

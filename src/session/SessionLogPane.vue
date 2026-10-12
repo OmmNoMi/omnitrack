@@ -41,7 +41,7 @@
             <span v-if="paneTab === 'details'" :class="INDICATOR" aria-hidden="true"></span>
           </button>
           <button
-            v-if="isRavenAvailable && !isEntry"
+            v-if="isRavenAvailable && connectedTaskId && !isEntry"
             ref="tabChatRef"
             type="button"
             role="tab"
@@ -215,12 +215,9 @@
         aria-labelledby="tab-task-chat"
         class="flex-1 flex flex-col min-h-0 justify-between"
       >
-        <div v-if="!connectedTaskId" class="flex-1 flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
-          <FeatherIcon name="message-circle" class="w-6 h-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-          <p class="text-sm text-gray-800 dark:text-gray-200">Pick a task to chat with the team about it.</p>
-        </div>
-
-        <div v-else class="flex-1 min-h-0 flex flex-col justify-between">
+        <div class="flex-1 min-h-0 flex flex-col justify-between">
+          <!-- Whose chat this is: the Task's, shared by everyone on it, not this block's or session's -->
+          <p class="pb-2 text-xs text-gray-700 dark:text-gray-300">With everyone on the task <span class="font-medium text-gray-900 dark:text-gray-100">{{ chatTaskSubject }}</span></p>
           <div ref="chatStreamRef" class="flex-1 min-h-0 max-h-[240px] space-y-2 overflow-y-auto pr-1">
             <p v-if="chatLoading && taskMessages.length === 0" class="py-6 text-center text-sm text-gray-700 dark:text-gray-300">Loading…</p>
             <p v-else-if="taskMessages.length === 0" class="py-6 text-center text-sm text-gray-700 dark:text-gray-300">No messages yet.</p>
@@ -260,14 +257,14 @@
               variant="solid"
               theme="blue"
               size="md"
-              tabindex="-1"
               :disabled="!chatInputText.trim() || chatSending"
               :loading="chatSending"
               @click="sendChatMessage"
               label="Send message"
-              class="!h-10 shrink-0"
+              class="!h-10 shrink-0 enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"
             >Send</Button>
           </div>
+          <p v-if="chatError" role="alert" class="pt-2 text-sm text-red-700 dark:text-red-200">{{ chatError }}</p>
         </div>
       </div>
     </div>
@@ -300,6 +297,8 @@ export default {
       'chatSending',
       'chatStreamRef',
       'connectedTaskId',
+      'chatTaskSubject',
+      'chatError',
       'emit',
       'formatMsgTime',
       'handleTextareaKey',

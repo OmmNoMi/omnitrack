@@ -15,6 +15,7 @@
       :project-options="comboboxProjectOptions"
       :partner-options="comboboxPairingPartnerOptions"
       :assignee-options="comboboxAssigneeOptions"
+      :error="bookError"
       @submit="$emit('submit-booking')"
     />
 
@@ -76,11 +77,9 @@
       :target-block="cancelTargetBlock"
       :cancel-form="cancelForm"
       :reasons="cancelReasons"
-      :is-tracking-this-block="isTrackingThisBlock"
-      :formatted-time="formattedTime"
       :busy="plannerBusy"
-      :is-dark-mode="isDarkMode"
-      @confirm="$emit('submit-cancel-block', $event)"
+      :error="cancelError"
+      @confirm="$emit('submit-cancel-block')"
     />
 
     <!-- Adding or editing a work session by hand is the session box people know from the
@@ -111,6 +110,7 @@ export default {
     // PlanWorkBlockDialog
     showBookModal: { type: Boolean, default: false },
     bookForm: { type: Object, default: () => ({}) },
+    bookError: { type: String, default: "" },
     comboboxAssigneeOptions: { type: Array, default: () => [] },
     comboboxBookTaskOptions: { type: Array, default: () => [] },
     comboboxProjectOptions: { type: Array, default: () => [] },
@@ -151,7 +151,7 @@ export default {
     cancelTargetBlock: { type: Object, default: null },
     cancelForm: { type: Object, default: () => ({}) },
     cancelReasons: { type: Array, default: () => [] },
-    isTrackingThisBlock: { type: Boolean, default: false },
+    cancelError: { type: String, default: "" },
 
     // WorkSessionEntry
     showEditSessionModal: { type: Boolean, default: false },

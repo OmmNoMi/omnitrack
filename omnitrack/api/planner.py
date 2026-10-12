@@ -512,10 +512,37 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 	}
 
 
+def cancel_reasons():
+	"""Planned Work Block.cancel_reason's options: the only reasons a block is cancelled for."""
+	field = frappe.get_meta("Planned Work Block").get_field("cancel_reason")
+	return [o for o in str((field and field.options) or "").split("\n") if o.strip()]
+
+
+def _check_cancellable(doc, cancel_reason):
+	"""A block is cancelled for a reason the person picked, never one picked for them; never in
+	the past; never twice; and never while a session is recording on it (stop or switch first,
+	so no recorded time is left on a cancelled block)."""
+	if doc.status in ("Cancelled", "Rescheduled"):
+		frappe.throw(_("This block is already {0}.").format(_(doc.status).lower()), frappe.ValidationError)
+	today = frappe.utils.getdate(frappe.utils.nowdate())
+	block_date = frappe.utils.getdate(doc.work_date) if doc.work_date else today
+	if block_date < today:
+		frappe.throw(_("Past planned work blocks cannot be retroactively cancelled. They are recorded as Missed."), frappe.ValidationError)
+	reasons = cancel_reasons()
+	if not cancel_reason:
+		frappe.throw(_("Say why it is cancelled: {0}.").format(", ".join(reasons)), frappe.ValidationError)
+	if cancel_reason not in reasons:
+		frappe.throw(_("{0} is not a reason a block is cancelled for. Pick one of: {1}.").format(cancel_reason, ", ".join(reasons)), frappe.ValidationError)
+	from omnitrack.api.stopwatch import get_active_session
+	active = get_active_session(doc.employee) or {}
+	if active.get("status") == "active" and active.get("trackerBlockName") == doc.name:
+		frappe.throw(_("A session is recording on this block. Stop it or switch to other work first."), frappe.ValidationError)
+
+
 @frappe.whitelist()
 def update_work_block(block_name, work_date=None, start_time=None, end_time=None,
 					  task=None, project=None, deliverable_notes=None, status=None,
-					  cancel_reason=None, work_item_label=None):
+					  cancel_reason=None, work_item_label=None, cancel_note=None):
 	"""Move / resize / re-target / retitle a planned block from the calendar or its drawer."""
 	from omnitrack.api.timesheet import sync_work_block_timesheet
 	doc = frappe.get_doc("Planned Work Block", block_name)
@@ -554,18 +581,19 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 		doc.project = project or None
 	if deliverable_notes is not None:
 		doc.deliverable_notes = deliverable_notes
+	if status == "Cancelled":
+		_check_cancellable(doc, cancel_reason)
 	if cancel_reason:
 		doc.cancel_reason = cancel_reason
 	if status:
-		if status == "Cancelled":
-			today = frappe.utils.getdate(frappe.utils.nowdate())
-			block_date = frappe.utils.getdate(doc.work_date) if doc.work_date else today
-			if block_date < today:
-				frappe.throw(_("Past planned work blocks cannot be retroactively cancelled. They are recorded as Missed."), frappe.ValidationError)
 		doc.status = status
 	doc.flags.ignore_permissions = True
 	doc.flags.ignore_links = True
 	doc.save()
+	# Why it was cancelled, in the person's own words, goes on the block's activity
+	note = str(cancel_note or "").strip()[:1000]
+	if status == "Cancelled" and note:
+		doc.add_comment("Comment", text=frappe.utils.escape_html(note))
 
 	# Synchronize reciprocal partner block if paired
 	if getattr(doc, "paired_block", None) and frappe.db.exists("Planned Work Block", doc.paired_block):

@@ -10,13 +10,11 @@ import { useCollaborationStore } from "../stores/collaborationStore.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationStoreBindings(w) {
-  const { addDays, assignedTasks, attentionTasks, filterEmployee, filterNature, filterStatus, getLocalTodayISO, isManager, isTracking, postJSON, selectedEmployee, sessionNotesList, timesheetHorizon, todayDate, todayISO, todayPlannedBlocks, trackerBlockName, trackerSeconds, triggerHaptic, workBlocks } = w;
-  const discardSession = (...args) => w.discardSession(...args);
+  const { addDays, assignedTasks, attentionTasks, filterEmployee, filterNature, filterStatus, getLocalTodayISO, isManager, postJSON, selectedEmployee, timesheetHorizon, todayDate, todayISO, todayPlannedBlocks, triggerHaptic, workBlocks } = w;
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
   const fetchWorkstationData = (...args) => w.fetchWorkstationData(...args);
   const isBlockLocked = (...args) => w.isBlockLocked(...args);
   const isPastBlock = (...args) => w.isPastBlock(...args);
-  const toggleTrack = (...args) => w.toggleTrack(...args);
   const syncActiveSession = lazy(w, 'syncActiveSession');
 
   // 5. Toast Notifications
@@ -125,12 +123,6 @@ export function useWorkstationStoreBindings(w) {
     sessionStore: null,
     isBlockLocked: (b) => { return typeof isBlockLocked === 'function' ? isBlockLocked(b) : false; },
     isPastBlock: (b) => { return typeof isPastBlock === 'function' ? isPastBlock(b) : false; },
-    isTracking,
-    trackerBlockName,
-    currentElapsedSeconds: trackerSeconds,
-    sessionNotesList,
-    stopSessionRemote: async () => { if (typeof toggleTrack === 'function') await toggleTrack(); },
-    discardSession: () => { if (typeof discardSession === 'function') discardSession(); },
     assignedTasks
   });
   const {
@@ -140,10 +132,12 @@ export function useWorkstationStoreBindings(w) {
     calendarDays,
     showBookModal,
     bookForm,
+    bookError,
     showCancelModal,
     cancelTargetBlock,
     cancelForm,
-    cancelReasons
+    cancelReasons,
+    cancelError
   } = workBlockStore;
   // Declarations hoisted above the first composable call (const TDZ: composables read these eagerly)
   // Dynamic Filtering of Work Blocks based on employee, nature, and status
@@ -291,10 +285,12 @@ export function useWorkstationStoreBindings(w) {
     calendarDays,
     showBookModal,
     bookForm,
+    bookError,
     showCancelModal,
     cancelTargetBlock,
     cancelForm,
     cancelReasons,
+    cancelError,
     filteredWorkBlocks,
     _minsOf,
     sessionNotesScroll,

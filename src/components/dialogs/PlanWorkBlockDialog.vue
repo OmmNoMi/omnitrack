@@ -161,6 +161,8 @@
         </div>
       </div>
 
+      <!-- Why it was not saved; the dialog stays open as filled in, never a toast behind it -->
+      <p v-if="error" role="alert" class="text-sm text-ink-red-4">Not planned. {{ error }}</p>
     </form>
 
     <template #actions>
@@ -205,6 +207,8 @@ export default {
     projectOptions: { type: Array, default: () => [] },
     partnerOptions: { type: Array, default: () => [] },
     assigneeOptions: { type: Array, default: () => [] },
+    // Why the server refused; the plan is not saved
+    error: { type: String, default: "" },
   },
   emits: ["update:modelValue", "submit"],
   data() {

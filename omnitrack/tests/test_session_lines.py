@@ -82,5 +82,16 @@ class TestKeepNewerLines(unittest.TestCase):
 		self.assertIn("sync_active_session(None)", body[:body.find("\ndef ", 1)])
 
 
+class TestComposeWrapNote(unittest.TestCase):
+	"""An assistant's Stop or Switch saves a session as the page does: its title, its log lines,
+	then the last line. It once saved only what the assistant sent, and the log was gone."""
+
+	def test_same_notes_as_the_page(self):
+		# The same cases scripts/check_fac_tools.mjs runs through composeWrapNote
+		cases = json.load(open(os.path.join(APP_DIR, "tests", "fixtures", "wrap_notes.json")))
+		for c in cases:
+			self.assertEqual(session_lines.compose_wrap_note(c["title"], c["lines"], c["last"]), c["want"], c)
+
+
 if __name__ == "__main__":
 	unittest.main()

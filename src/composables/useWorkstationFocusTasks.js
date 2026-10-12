@@ -255,14 +255,14 @@ export function useWorkstationFocusTasks(w) {
     sessionEntry.value = { block, session };
     showSessionDrawer.value = true;
   };
-  // Same endpoint the planner drag uses, typed instead of dragged. The drawer's Reschedule
-  // dialog sends its own form; the block is the drawer's (workBlockStore keeps a separate
-  // activeBlock that the drawer never sets, so its submitReschedule was a silent no-op).
+  // Same endpoint the planner drag uses, typed instead of dragged. RescheduleBlockDialog sends
+  // its own form and the block is the drawer's. Returns '' once moved, or why it was not, which
+  // the dialog shows inside itself and stays open.
   const submitReschedule = async (form) => {
     const b = activeBlock.value;
     const f = form || rescheduleForm.value;
-    if (!b || !f || !f.work_date || !f.start_time || !f.end_time) return false;
-    if (spanMins(f.start_time, f.end_time) <= 0) { showToast('Set an end time that differs from the start', 'danger'); return false; }
+    if (!b || !f || !f.work_date || !f.start_time || !f.end_time) return 'Pick a day, a start and an end.';
+    if (spanMins(f.start_time, f.end_time) <= 0) return 'Set an end time that differs from the start.';
     plannerBusy.value = true;
     try {
       await postJSON('reschedule_work_block', {
@@ -276,10 +276,9 @@ export function useWorkstationFocusTasks(w) {
       showBlockDrawer.value = false;
       fetchPlannerData();
       fetchWorkstationData(w.selectedEmployee ? w.selectedEmployee.value : undefined);
-      return true;
+      return '';
     } catch (e) {
-      showToast('Could not reschedule block: ' + (e && e.message || e), 'danger');
-      return false;
+      return w.extractErrorMessage(e, 'Try again.');
     } finally {
       plannerBusy.value = false;
     }
@@ -288,23 +287,9 @@ export function useWorkstationFocusTasks(w) {
   const openCancelModal = (block) => {
     workBlockStore.openCancelModal(block);
   };
-  const openCancelModalForActive = () => {
-    if (trackerBoundBlock.value) {
-      openCancelModal(trackerBoundBlock.value);
-    } else if (trackerBlockName.value) {
-      const b = (plannerData.value.blocks || []).find(x => x.name === trackerBlockName.value);
-      if (b) openCancelModal(b);
-    }
-  };
+  // A block that is recording is never cancelled (isBlockCancellable), so the session is untouched
   const submitCancelBlock = async () => {
     await workBlockStore.submitCancelBlock();
-    if (trackerBlockName.value && cancelTargetBlock.value && trackerBlockName.value === cancelTargetBlock.value.name) {
-      trackerBlockName.value = '';
-      trackerBoundBlock.value = null;
-    }
-  };
-  const cancelActiveBlock = async () => {
-    workBlockStore.cancelActiveBlock();
   };
 
   Object.assign(w, {
@@ -335,8 +320,6 @@ export function useWorkstationFocusTasks(w) {
     openSessionDrawer,
     submitReschedule,
     openCancelModal,
-    openCancelModalForActive,
     submitCancelBlock,
-    cancelActiveBlock,
   });
 }

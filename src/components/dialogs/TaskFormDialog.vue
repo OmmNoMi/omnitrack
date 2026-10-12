@@ -49,6 +49,7 @@
           {{ confirming.action }}? It moves to <span class="font-medium">{{ confirming.next_state }}</span>.
         </p>
         <Textarea v-model="comment" variant="outline" size="md" :rows="2" label="Comment (optional)" placeholder="Why, for whoever reads it next" class="[&_textarea]:resize-none" :disabled="busy === 'move'" />
+        <p v-if="error" role="alert" class="text-sm text-ink-red-4">{{ error }}</p>
         <div class="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" label="Back" :disabled="busy === 'move'" @click="back">Back</Button>
           <Button
@@ -64,6 +65,11 @@
       </div>
 
       <p v-if="loaded && !detail.can_edit" class="text-sm" :class="mutedText">Only its owner can edit this task.</p>
+      <!-- Why it did not work, inside the form and kept open, never a toast behind it -->
+      <div v-if="error && !confirming" class="flex flex-wrap items-center gap-2">
+        <p role="alert" class="text-sm text-ink-red-4">{{ error }}</p>
+        <Button v-if="!loaded" variant="ghost" label="Try again" @click="load">Try again</Button>
+      </div>
     </form>
 
     <template #actions>
@@ -95,12 +101,12 @@ export default {
   setup() {
     const ctx = useWorkstationContext([
       'postJSON', 'showToast', 'fetchPlannerData', 'fetchWorkstationData', 'selectedEmployee',
-      'openTaskRavenDrawer', 'getTaskDeskUrl', 'isDarkMode',
+      'openTaskRavenDrawer', 'getTaskDeskUrl', 'isDarkMode', 'extractErrorMessage',
     ]);
     return { ...ctx, taskForm, closeTaskForm, isDangerMove, moveIcon };
   },
   data() {
-    return { loaded: false, busy: '', detail: emptyDetail(), form: blank(), saved: blank(), confirming: null, comment: '' };
+    return { loaded: false, busy: '', detail: emptyDetail(), form: blank(), saved: blank(), confirming: null, comment: '', error: '' };
   },
   computed: {
     task() { return taskForm.task; },
@@ -204,7 +210,7 @@ export default {
       const t = this.task;
       if (!t) return;
       // The name shows at once; the rest arrives with the task
-      Object.assign(this, { loaded: false, busy: '', confirming: null, comment: '', detail: emptyDetail() });
+      Object.assign(this, { loaded: false, busy: '', confirming: null, comment: '', error: '', detail: emptyDetail() });
       this.form = { ...blank(), subject: t.subject || '' };
       this.saved = { ...this.form };
       try {
@@ -217,10 +223,10 @@ export default {
         taskForm.ask = null;
         const a = wanted && this.detail.actions.find((x) => x.action === wanted);
         if (a) this.ask(a);
-        else if (wanted) this.showToast(wanted + ' is no longer open for this task', 'warning');
+        else if (wanted) this.error = wanted + ' is no longer open for this task.';
       } catch (e) {
-        this.showToast('Could not open this task: ' + (e && e.message || e), 'danger');
-        closeTaskForm();
+        if (!taskForm.open || this.task !== t) return;
+        this.error = 'Could not open this task. ' + this.extractErrorMessage(e, 'Try again.');
       }
     },
     refreshAll() {
@@ -244,6 +250,7 @@ export default {
     async save() {
       if (!this.canSave) return;
       this.busy = 'save';
+      this.error = '';
       try {
         const res = this.block
           ? await this.postJSON('update_block_task', { block_name: this.block.name, task_ref: this.task.ref, ...this.changes })
@@ -253,7 +260,7 @@ export default {
         this.showToast('Task saved', 'success');
         closeTaskForm();
       } catch (e) {
-        this.showToast('Could not save this task: ' + (e && e.message || e), 'danger');
+        this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');
       } finally {
         this.busy = '';
       }
@@ -267,6 +274,7 @@ export default {
     ask(a) {
       this.confirming = a;
       this.comment = '';
+      this.error = '';
       const toComment = () => {
         const el = this.confirming === a && this.$refs.confirm && this.$refs.confirm.querySelector('textarea');
         if (el) el.focus();
@@ -282,12 +290,14 @@ export default {
     back() {
       if (!this.confirming || this.busy === 'move') return;
       this.confirming = null;
+      this.error = '';
       this.$nextTick(() => this.focusState());
     },
     async move() {
       const a = this.confirming;
       if (!a || this.busy) return;
       this.busy = 'move';
+      this.error = '';
       try {
         const res = await this.postJSON('execute_task_workflow_action', {
           doctype: this.detail.doctype, docname: this.detail.name, action: a.action, comment: this.comment.trim(),
@@ -300,7 +310,7 @@ export default {
         this.showToast('Now ' + ((res && res.new_state) || d.state || a.next_state), 'success');
         this.$nextTick(() => this.focusState());
       } catch (e) {
-        this.showToast('Could not move this task: ' + (e && e.message || e), 'danger');
+        this.error = 'Not moved. ' + this.extractErrorMessage(e, 'Try again.');
       } finally {
         this.busy = '';
       }
@@ -320,6 +330,7 @@ export default {
         return;
       }
       this.busy = 'remove';
+      this.error = '';
       try {
         const res = await this.postJSON('remove_block_task', { block_name: this.block.name, task_ref: this.task.ref });
         this.apply(res);
@@ -327,7 +338,7 @@ export default {
         this.showToast('Taken off this block. The task itself is kept.', 'success');
         closeTaskForm();
       } catch (e) {
-        this.showToast('Could not take this task off: ' + (e && e.message || e), 'danger');
+        this.error = 'Not taken off. ' + this.extractErrorMessage(e, 'Try again.');
       } finally {
         this.busy = '';
       }

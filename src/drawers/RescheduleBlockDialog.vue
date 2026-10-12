@@ -17,6 +17,7 @@
         day-label="Move to"
         :is-dark-mode="isDarkMode"
       />
+      <p v-if="error" role="alert" class="text-sm text-ink-red-4">Not moved. {{ error }}</p>
     </form>
 
     <template #actions>
@@ -30,6 +31,7 @@
 
 <script>
 import DayTimeFields from '../components/common/DayTimeFields.vue';
+import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import { whenLine, toMin, toHHMM, spanMins, localISO } from '../utils/clockTime.js';
 
 const hhmm = (t) => (t ? toHHMM(toMin(t)) : '');
@@ -44,10 +46,13 @@ export default {
     busy: { type: Boolean, default: false },
     isDarkMode: { type: Boolean, default: false },
   },
-  // submit({ work_date, start_time, end_time }): the drawer hands it to submitReschedule
-  emits: ['update:modelValue', 'submit'],
+  emits: ['update:modelValue'],
+  setup() {
+    return useWorkstationContext(['submitReschedule']);
+  },
   data() {
-    return { form: { work_date: '', start_time: '', end_time: '' } };
+    // error: why it was not moved, shown here; the dialog stays open with the form as typed
+    return { form: { work_date: '', start_time: '', end_time: '' }, error: '' };
   },
   computed: {
     now() {
@@ -70,14 +75,17 @@ export default {
         const b = this.block;
         const day = String(b.work_date || '').slice(0, 10);
         const today = localISO(new Date());
+        this.error = '';
         // A missed block is moved forward, so it starts from today rather than the day it missed
         this.form = { work_date: day && day < today ? today : day, start_time: hhmm(b.start_time), end_time: hhmm(b.end_time) };
       },
     },
   },
   methods: {
-    submit() {
-      if (this.canMove) this.$emit('submit', { ...this.form });
+    async submit() {
+      if (!this.canMove) return;
+      this.error = '';
+      this.error = await this.submitReschedule({ ...this.form });
     },
   },
 };

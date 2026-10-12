@@ -103,5 +103,6 @@ assistant_tools = [
 	"omnitrack.fac.OmniTrackCompleteBlockTaskTool",
 	"omnitrack.fac.OmniTrackGetPlanVsActualTool",
 	"omnitrack.fac.OmniTrackApproveWorkBlocksTool",
+	"omnitrack.fac.OmniTrackCancelWorkBlockTool",
 ]
 fac_tools = "omnitrack.fac.get_fac_tools"

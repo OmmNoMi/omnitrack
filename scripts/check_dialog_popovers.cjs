@@ -119,7 +119,7 @@ const addDialog = read('src/drawers/AddBlockTasksDialog.vue');
 const resched = whenForms['src/drawers/RescheduleBlockDialog.vue'];
 if (/<DayTimeFields\b|<form[^>]*aria-label="Reschedule"/.test(drawer)) problems.push('BlockDetailDrawer.vue: no inline reschedule form; Reschedule opens RescheduleBlockDialog');
 if (!/<RescheduleBlockDialog\b[^>]*v-model="showReschedule"/.test(drawer) || !/@click="showReschedule = true"/.test(drawer)) problems.push('BlockDetailDrawer.vue: Reschedule must open RescheduleBlockDialog');
-if (!/title="Reschedule"/.test(resched) || !/\$emit\('submit', \{ \.\.\.this\.form \}\)/.test(resched)) problems.push('RescheduleBlockDialog.vue: a dialog titled Reschedule that submits its own form');
+if (!/title="Reschedule"/.test(resched) || !/this\.error = await this\.submitReschedule\(\{ \.\.\.this\.form \}\)/.test(resched)) problems.push('RescheduleBlockDialog.vue: a dialog titled Reschedule that submits its own form and keeps the refusal');
 if (!/<Dropdown v-if="moreActions\.length"[\s\S]*?label="More"[^>]*>More<\/Button>/.test(drawer)) problems.push('BlockDetailDrawer.vue: rarer actions live in a menu behind a visible "More" button, not an unlabelled "..." icon');
 const more = (drawer.match(/moreActions\(\)\s*\{[\s\S]*?return [^;]*;/) || [''])[0];
 if (!/'Add work session'[\s\S]*?\$emit\('log-session'/.test(more)) problems.push('BlockDetailDrawer.vue: More actions must hold "Add work session" (log-session)');
@@ -258,7 +258,11 @@ if (/tracker|startTime|syncActiveSession|toggleTrack/.test(fnBody('writeEntry'))
   if (!/if \(liveAdjust\.value\) cancelLiveAdjust\(\);\s*else isSessionElevated\.value = false;/.test(keys)) problems.push('useWorkstationShortcuts.js: Escape closes the open times before it minimizes the popup');
   if (!/if \(isTracking\.value && liveAdjust\.value\) stopAndLogSession\(\);\s*else if \(isTracking\.value\) toggleTrack\(\);/.test(keys)) problems.push('useWorkstationShortcuts.js: Cmd+S with the times open stops at the end they show');
   if (!/if \(ev\.key === 'Escape' && liveAdjust\.value\) \{\s*if \(ev\.defaultPrevented \|\| popoverOpen\(\) \|\| document\.querySelector\('\[role="dialog"\]\[aria-modal="true"\]'\)\) return;\s*ev\.preventDefault\(\);\s*cancelLiveAdjust\(\);/.test(keys)) problems.push('useWorkstationShortcuts.js: inline, Escape closes the open times wherever focus is, unless a dialog or list above takes it');
-  if (!/@keydown\.esc="onAdjustEscape"/.test(read('src/session/SessionControlsPane.vue'))) problems.push('SessionControlsPane.vue: Escape inside the open times closes them (inline on the dashboard too)');
+  const scp = read('src/session/SessionControlsPane.vue');
+  if (!/@keydown\.esc\.capture="onAdjustEscape"/.test(scp)) problems.push('SessionControlsPane.vue: Escape inside the open times closes them (inline on the dashboard too), caught before the TimePicker swallows it');
+  // frappe-ui's TimePicker prevents and blurs on every Escape: the times stayed open and focus fell to the page
+  if (!/e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*ws\.cancelLiveAdjust\(\);/.test(scp)) problems.push('SessionControlsPane.vue: the times take the Escape that closes them, so the TimePicker never blurs its field');
+  if (!/if \(popoverOpen\(\)\) \{\s*const field = e\.target;\s*setTimeout\(\(\) => \{ if \(document\.activeElement === document\.body && field\.isConnected\) field\.focus\(\); \}\);\s*return;/.test(scp)) problems.push('SessionControlsPane.vue: Escape on an open time list closes only the list, and focus stays on its field');
 }
 if (!/<section\s+v-else-if="liveAdjust"/.test(read('src/session/SessionControlsPane.vue'))) problems.push('SessionControlsPane.vue: the running session\'s clock turns into its start and end while Adjust is open');
 
