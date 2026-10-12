@@ -10,14 +10,12 @@ import SessionBox from "./session/SessionBox.vue";
 import FDialog from "./components/common/FDialog.vue";
 import PlanWorkBlockDialog from "./components/dialogs/PlanWorkBlockDialog.vue";
 import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
-import EmptyStopModal from "./components/dialogs/EmptyStopModal.vue";
 import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
 import RunawayTimerModal from "./components/dialogs/RunawayTimerModal.vue";
 import EODWrapUpModal from "./components/dialogs/EODWrapUpModal.vue";
 import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
-import TimesheetEntryDialog from "./components/dialogs/TimesheetEntryDialog.vue";
 import WorkSessionEntry from "./components/dialogs/WorkSessionEntry.vue";
 import TaskFormDialog from "./components/dialogs/TaskFormDialog.vue";
 import TaskDetailDrawer from "./drawers/TaskDetailDrawer.vue";
@@ -56,14 +54,12 @@ if (typeof window !== "undefined") {
 		FDialog,
 		PlanWorkBlockDialog,
 		InactivityGovernorModal,
-		EmptyStopModal,
 		StartTimeChoiceModal,
 		RunawayTimerModal,
 		EODWrapUpModal,
 		SwitchTaskModal,
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
-		TimesheetEntryDialog,
 		WorkSessionEntry,
 		BlockDetailDrawer,
 		SessionDetailDrawer,
@@ -102,14 +98,12 @@ function mountApp(target = "#app") {
 	app.component("SessionBox", SessionBox);
 	app.component("PlanWorkBlockDialog", PlanWorkBlockDialog);
 	app.component("InactivityGovernorModal", InactivityGovernorModal);
-	app.component("EmptyStopModal", EmptyStopModal);
 	app.component("StartTimeChoiceModal", StartTimeChoiceModal);
 	app.component("RunawayTimerModal", RunawayTimerModal);
 	app.component("EODWrapUpModal", EODWrapUpModal);
 	app.component("SwitchTaskModal", SwitchTaskModal);
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
-	app.component("TimesheetEntryDialog", TimesheetEntryDialog);
 	app.component("WorkSessionEntry", WorkSessionEntry);
 	app.component("TaskFormDialog", TaskFormDialog);
 	app.component("TaskDetailDrawer", TaskDetailDrawer);

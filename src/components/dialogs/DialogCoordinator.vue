@@ -18,19 +18,6 @@
       @submit="$emit('submit-booking')"
     />
 
-    <EmptyStopModal
-      :model-value="showEmptyStopModal"
-      @update:model-value="$emit('update:showEmptyStopModal', $event)"
-      :quick-note="emptyStopQuickNote"
-      @update:quick-note="$emit('update:emptyStopQuickNote', $event)"
-      :elapsed-hours="emptyStopElapsedHrs"
-      :logged-words="emptyStopLoggedWords"
-      :min-words="sessionMinWords"
-      :is-dark-mode="isDarkMode"
-      @save="$emit('confirm-empty-stop-save')"
-      @discard="$emit('confirm-empty-stop-discard')"
-    />
-
     <StartTimeChoiceModal
       :model-value="showStartTimeChoiceModal"
       @update:model-value="$emit('update:showStartTimeChoiceModal', $event)"
@@ -47,14 +34,10 @@
       :inactivity-minutes="inactivityMinutes"
       :is-dark-mode="isDarkMode"
       :active-task-label="activeTaskLabel"
-      :session-start="sessionStart"
-      :last-activity-time-h-h-m-m="lastActivityTimeHHMM"
-      :suggested-stop-h-h-m-m="suggestedStopHHMM"
+      :idle-since-ms="idleSinceMs"
       :formatted-time="formattedTime"
       @confirm-working="$emit('confirm-still-working')"
-      @stop-now="$emit('stop-inactivity-now')"
-      @stop-at-last-edit="$emit('stop-inactivity-at-last-edit')"
-      @discard="$emit('discard-inactivity')"
+      @adjust="$emit('adjust-inactivity')"
     />
 
     <!-- ========================================== -->
@@ -121,25 +104,16 @@
     />
 
     <!-- Adding or editing a work session by hand is the session box people know from the
-         timer (add, edit, a free window). Correcting the running session's start stays a sheet. -->
+         timer (add, edit, a free window). The running session is corrected in its own box
+         (Adjust, SessionControlsPane), never here. -->
     <WorkSessionEntry
-      :model-value="showEditSessionModal && editSessionForm.mode !== 'live'"
+      :model-value="showEditSessionModal"
       @update:model-value="$emit('update:showEditSessionModal', $event)"
       :form="editSessionForm"
       :is-saving="isSavingEditSession"
       :is-dark-mode="isDarkMode"
       :day-offsets="entryDayOffsets"
       @save="$emit('save-edit-session')"
-    />
-    <TimesheetEntryDialog
-      :model-value="showEditSessionModal && editSessionForm.mode === 'live'"
-      @update:model-value="$emit('update:showEditSessionModal', $event)"
-      :form="editSessionForm"
-      :is-saving="isSavingEditSession"
-      :is-dark-mode="isDarkMode"
-      :day-offsets="entryDayOffsets"
-      @save="$emit('save-edit-session')"
-      @keep-running="$emit('keep-session-running')"
     />
   </div>
 </template>
@@ -162,13 +136,6 @@ export default {
     comboboxProjectOptions: { type: Array, default: () => [] },
     comboboxPairingPartnerOptions: { type: Array, default: () => [] },
 
-    // EmptyStopModal
-    showEmptyStopModal: { type: Boolean, default: false },
-    emptyStopQuickNote: { type: String, default: "" },
-    emptyStopElapsedHrs: { type: [Number, String], default: 0 },
-    emptyStopLoggedWords: { type: Number, default: 0 },
-    sessionMinWords: { type: Number, default: 15 },
-
     // StartTimeChoiceModal
     showStartTimeChoiceModal: { type: Boolean, default: false },
     pendingStartBlock: { type: Object, default: null },
@@ -178,9 +145,7 @@ export default {
     showInactivityModal: { type: Boolean, default: false },
     inactivityMinutes: { type: Number, default: 0 },
     activeTaskLabel: { type: String, default: "" },
-    sessionStart: { type: [String, Number, Date], default: null },
-    lastActivityTimeHHMM: { type: String, default: "" },
-    suggestedStopHHMM: { type: String, default: "" },
+    idleSinceMs: { type: Number, default: 0 },
 
     // RunawayTimerModal
     showRunawayAlertModal: { type: Boolean, default: false },
@@ -214,7 +179,7 @@ export default {
     cancelReasons: { type: Array, default: () => [] },
     isTrackingThisBlock: { type: Boolean, default: false },
 
-    // TimesheetEntryDialog
+    // WorkSessionEntry
     showEditSessionModal: { type: Boolean, default: false },
     editSessionForm: { type: Object, default: () => ({}) },
     isSavingEditSession: { type: Boolean, default: false },
@@ -223,18 +188,12 @@ export default {
   emits: [
     "update:showBookModal",
     "submit-booking",
-    "update:showEmptyStopModal",
-    "update:emptyStopQuickNote",
-    "confirm-empty-stop-save",
-    "confirm-empty-stop-discard",
     "update:showStartTimeChoiceModal",
     "select-start-time-choice",
     "cancel-start-time-choice",
     "update:showInactivityModal",
     "confirm-still-working",
-    "stop-inactivity-now",
-    "stop-inactivity-at-last-edit",
-    "discard-inactivity",
+    "adjust-inactivity",
     "update:showRunawayAlertModal",
     "select-runaway-option",
     "confirm-runaway-resolution",
@@ -251,8 +210,7 @@ export default {
     "update:showCancelModal",
     "submit-cancel-block",
     "update:showEditSessionModal",
-    "save-edit-session",
-    "keep-session-running"
+    "save-edit-session"
   ]
 };
 </script>

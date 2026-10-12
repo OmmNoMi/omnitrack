@@ -330,9 +330,9 @@ runMutationTest(
   'must list every task'
 );
 runMutationTest(
-  'Logging a session goes back to a native time input',
-  path.resolve(omnitrackDir,'src/components/dialogs/TimesheetEntryDialog.vue'),
-  (code) => code.replace('<DayTimeFields', '<input type="time" /><DayTimeFieldz'),
+  'Adjusting a session goes back to a native time input',
+  path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
+  (code) => code.replace(/<DayTimeFields/g, '<input type="time" /><DayTimeFieldz'),
   'node scripts/check_dialog_popovers.cjs',
   'shared DayTimeFields'
 );
@@ -341,14 +341,42 @@ runMutationTest(
   path.resolve(omnitrackDir,'src/drawers/RescheduleBlockDialog.vue'),
   (code) => code.replace('title="Reschedule"', 'title="Adjust timesheet timing"'),
   'node scripts/check_dialog_popovers.cjs',
-  'a timesheet dialog of its own'
+  'a session dialog of its own'
 );
 runMutationTest(
-  'The timesheet panel stops being rendered',
-  path.resolve(omnitrackDir,'src/components/dialogs/DialogCoordinator.vue'),
-  (code) => code.replace('<TimesheetEntryDialog', '<TimesheetEntryDialogx'),
+  'Adjust on the running session opens a panel again',
+  path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('    if (!(opt && opt.inPlace)) showSessionBox();\n', "    if (!(opt && opt.inPlace)) showSessionBox();\n    openPanel({ mode: 'free', ...liveAdjust.value });\n"),
   'node scripts/check_dialog_popovers.cjs',
-  'renders TimesheetEntryDialog exactly once'
+  'never a panel'
+);
+runMutationTest(
+  'Escape minimizes the popup with the times still open',
+  path.resolve(omnitrackDir,'src/composables/useWorkstationShortcuts.js'),
+  (code) => code.replace('if (liveAdjust.value) cancelLiveAdjust();\n      else isSessionElevated.value = false;', 'isSessionElevated.value = false;'),
+  'node scripts/check_dialog_popovers.cjs',
+  'closes the open times before'
+);
+runMutationTest(
+  'Inline, Escape with focus outside the box leaves the times open',
+  path.resolve(omnitrackDir,'src/composables/useWorkstationShortcuts.js'),
+  (code) => code.replace("if (ev.key === 'Escape' && liveAdjust.value) {", "if (false) {"),
+  'node scripts/check_dialog_popovers.cjs',
+  'wherever focus is'
+);
+runMutationTest(
+  'Cmd+S with the times open stops at now',
+  path.resolve(omnitrackDir,'src/composables/useWorkstationShortcuts.js'),
+  (code) => code.replace('if (isTracking.value && liveAdjust.value) stopAndLogSession();\n      else if', 'if'),
+  'node scripts/check_dialog_popovers.cjs',
+  'stops at the end they show'
+);
+runMutationTest(
+  'Escape inside the inline times does nothing',
+  path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue'),
+  (code) => code.replace('@keydown.esc="onAdjustEscape"', ''),
+  'node scripts/check_dialog_popovers.cjs',
+  'Escape inside the open times closes them'
 );
 runMutationTest(
   'Keep running sets the start only in localStorage (the next sync reverts it)',
@@ -372,18 +400,11 @@ runMutationTest(
   'never touches the running session'
 );
 runMutationTest(
-  'The running session panel copies its lines into the notes (logged twice)',
+  'Moving the start rewrites the session title',
   path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
-  (code) => code.replace("notes: notesWithoutLines(trackerNotes.value || '', lines),", "notes: [trackerNotes.value, ...lines].join('\\n'),"),
+  (code) => code.replace('    startTime.value = ms;\n', "    startTime.value = ms;\n    trackerNotes.value = trackerNotes.value || 'Focus work session';\n"),
   'node scripts/check_dialog_popovers.cjs',
-  'edits its notes only'
-);
-runMutationTest(
-  'Notes that repeat a session line are kept (logged twice)',
-  path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
-  (code) => code.replace('filter(l => bare(l) && !known.has(bare(l)))', 'filter(l => bare(l))'),
-  'node scripts/check_dialog_popovers.cjs',
-  'must drop notes that repeat a session line'
+  "never rewrites the session's title"
 );
 runMutationTest(
   'The drawer grows its own manual-log form again',
@@ -518,13 +539,15 @@ runMutationTest('Add work session draws a pencil again', drawerDir('BlockDetailD
 runMutationTest('Two menu items share a picture', path.resolve(omnitrackDir,'src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace("label: 'Raven chat', icon: 'message-circle'", "label: 'Raven chat', icon: 'external-link'"), MI, 'look alike');
 const EW = 'node scripts/check_entry_is_worked.mjs';
-const ES = path.resolve(omnitrackDir,'src/components/dialogs/TimesheetEntryDialog.vue');
-runMutationTest('An entry can end after now', ES,
-  (code) => code.replace('this.mins > 0 && !this.ahead && said;', 'this.mins > 0 && said;'), EW, 'cannot be saved');
-runMutationTest('Future time is measured against the start', ES,
-  (code) => code.replace('return end != null && this.mins > 0 && end > this.now + 60000;', 'return end != null && this.mins > 0 && end - this.mins * 60000 > this.now + 60000;'), EW, 'is ahead');
-runMutationTest('Why an entry cannot be saved goes unsaid', ES,
-  (code) => code.replace(':class="lateText" role="alert">{{ aheadText }}', ':class="lateText">{{ aheadText }}'), EW, 'says why');
+const ES = path.resolve(omnitrackDir,'src/session/SessionControlsPane.vue');
+runMutationTest('Stop and log is ready for an end after now', ES,
+  (code) => code.replace(':disabled="adjustAhead || !(adjustMins > 0)"', ':disabled="!(adjustMins > 0)"'), EW, 'waits for an end that is not ahead');
+runMutationTest('An adjusted end is measured against the start', ES,
+  (code) => code.replace('return entryEndMs(f.session_date, f.from_time, adjustMins.value) > Date.now() + 60000;', 'return entryEndMs(f.session_date, f.from_time, 0) > Date.now() + 60000;'), EW, 'is ahead');
+runMutationTest('Why the times cannot be logged goes unsaid', ES,
+  (code) => code.replace('role="alert">The end is after now.', '>The end is after now.'), EW, 'says why it cannot be logged');
+runMutationTest('Stop and log logs an end after now', path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);\n    if (end > Date.now() + 60000) {', 'const end = entryEndMs(f.session_date, f.from_time, mins);\n    if (false) {'), EW, 'Stop and log refuses an end after now');
 // Adding or editing a work session is the timer's session box (WorkSessionEntry hosting SessionBox)
 const WSE = path.resolve(omnitrackDir,'src/components/dialogs/WorkSessionEntry.vue');
 const USE = path.resolve(omnitrackDir,'src/session/useSessionEntry.js');
@@ -544,7 +567,7 @@ runMutationTest('The entry keeps quiet about why it cannot save', SCP,
 runMutationTest('Cancel drops out of Tab while Add session waits', SCP,
   (code) => code.replace(':tabindex="activeToolIndex === 0 || !entryCanSave ? 0 : -1"', ':tabindex="activeToolIndex === 0 ? 0 : -1"'), EW, 'Cancel stays reachable');
 runMutationTest('Adding a session opens the sheet, not the session box', path.resolve(omnitrackDir,'src/components/dialogs/DialogCoordinator.vue'),
-  (code) => code.replace(":model-value=\"showEditSessionModal && editSessionForm.mode !== 'live'\"", ':model-value="false"'), EW, 'open WorkSessionEntry');
+  (code) => code.replace('<WorkSessionEntry\n      :model-value="showEditSessionModal"', '<WorkSessionEntry\n      :model-value="false"'), EW, 'open WorkSessionEntry');
 runMutationTest('The entry is not a modal', WSE,
   (code) => code.replace('aria-modal="true"', ''), EW, 'named modal');
 runMutationTest('Escape for an open list closes the entry', WSE,
@@ -689,11 +712,11 @@ runMutationTest('Every re-save rewrites the stored times', PWB,
 runMutationTest('A menu item stands in for its button', path.resolve(omnitrackDir,'src/utils/popover.js'),
   (code) => code.replace('return (id && document.getElementById(id)) || el;', 'return el;'), EW, 'menuTrigger finds');
 runMutationTest('A disabled Add session looks ready', ES,
-  (code) => code.replace('class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"', 'class="!bg-blue-700 hover:!bg-blue-800 enabled:!text-white"'), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
+  (code) => code.replace("'enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white'", "'!bg-blue-700 hover:!bg-blue-800 enabled:!text-white'"), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
 runMutationTest('An empty comment looks ready to post', path.resolve(omnitrackDir,'src/components/common/DocActivity.vue'),
   (code) => code.replace('enabled:!bg-blue-700 enabled:hover:!bg-blue-800', 'enabled:!bg-blue-700 hover:!bg-blue-800'), 'node scripts/check_contrast_tokens.cjs', 'looks pressable');
 runMutationTest('An overnight entry ends on its start day', path.resolve(omnitrackDir,'src/utils/timesheetEntry.js'),
-  (code) => code.replace('(toMin(from) + mins) * 60000', '((toMin(from) + mins) % 1440) * 60000'), EW, 'overnight');
+  (code) => code.replace('0, toMin(from) + mins)', '0, (toMin(from) + mins) % 1440)'), EW, 'overnight');
 runMutationTest('The save path takes time not worked yet', path.resolve(omnitrackDir,'src/composables/useWorkstationSessionModals.js'),
   (code) => code.replace('if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) { showToast(', 'if (false) { showToast('), EW, 'saveEditSession refuses');
 const TSP = path.resolve(omnitrackDir,'omnitrack/api/timesheet.py');
@@ -846,8 +869,8 @@ runMutationTest('Served sessions lose their names', SRC('omnitrack/api/planner.p
   (code) => code.replace('"name": s.name,\n', ''), BR, 'carries its name');
 runMutationTest('A logged bar opens the edit form again', SRC('src/views/dashboard/DashboardTimeline.vue'),
   (code) => code.replace('this.openSessionDrawer(r.block, r.session)', 'this.openEditSessionModal(r.block, r.session)'), BR, "entry's details sheet");
-runMutationTest('The entry form grows a view mode again', SRC('src/components/dialogs/TimesheetEntryDialog.vue'),
-  (code) => code.replace('<form class="px-6 pt-4 pb-6 space-y-6"', '<div v-if="form.viewing" data-entry-view></div><form v-else class="px-6 pt-4 pb-6 space-y-6"'), BR, 'the one entry form is only a form');
+runMutationTest('The entry form grows a view mode again', SRC('src/components/dialogs/WorkSessionEntry.vue'),
+  (code) => code.replace('<SessionBox', '<div data-entry-view></div><SessionBox'), BR, 'the one entry form is only a form');
 runMutationTest('The entry sheet loses its dialog role', SRC('src/drawers/SessionDetailDrawer.vue'),
   (code) => code.replace('role="dialog" aria-modal="true" ', ''), BR, 'a modal dialog named by its kind and title');
 runMutationTest('The entry sheet drops the task moves', SRC('src/drawers/SessionDetailDrawer.vue'),
@@ -962,8 +985,15 @@ runMutationTest('A failed stop says it was saved', SRC('src/composables/useWorks
   (code) => code.replace("showToast('Not saved, the session is still running. ' + _errText(err), 'danger');", "showToast('Timer punch recorded locally.', 'success');"), ON, 'reported as saved');
 runMutationTest('An end before the start is refused again', SRC('src/utils/clockTime.js'),
   (code) => code.replace('  return d < 0 ? d + 24 * 60 : d;', '  return d < 0 ? 0 : d;'), ON, 'spanMins(23:00, 04:00)');
-runMutationTest('The Timesheet dialog stops measuring past midnight', SRC('src/components/dialogs/TimesheetEntryDialog.vue'),
-  (code) => code.replace('return spanMins(this.form.from_time, this.form.to_time);', 'return Math.max(0, toMin(this.form.to_time) - toMin(this.form.from_time));'), ON, 'TimesheetEntryDialog.vue');
+runMutationTest('Adjust stops measuring past midnight', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('spanMins(ws.liveAdjust.value.from_time, ws.liveAdjust.value.to_time)', 'Math.max(0, toMin(ws.liveAdjust.value.to_time) - toMin(ws.liveAdjust.value.from_time))'), ON, 'SessionControlsPane.vue');
+runMutationTest('An overnight end is an hour off the night the clocks change', SRC('src/utils/timesheetEntry.js'),
+  (code) => code.replace('return new Date(y, m - 1, d, 0, toMin(from) + mins).getTime();', 'return new Date(y, m - 1, d, 0, 0, 0).getTime() + (toMin(from) + mins) * 60000;'), ON, 'the clocks change that night');
+runMutationTest('An overnight end lands on its start day', SRC('src/utils/timesheetEntry.js'),
+  (code) => code.replace('0, toMin(from) + mins)', '0, (toMin(from) + mins) % 1440)'), ON, 'a session from 20:19 stopped at 01:10');
+
+runMutationTest('A day with only a running session says Nothing planned', SRC('src/views/DashboardView.vue'),
+  (code) => code.replace('<div v-if="dayFocusBlocks.length > 0 || dayTimeline" class="space-y-4">', '<div v-if="dayFocusBlocks.length > 0" class="space-y-4">'), DH, 'whenever the day has anything on it');
 
 const RS = 'node scripts/check_reschedule.mjs';
 runMutationTest('A missed plan cannot be rescheduled', SRC('src/App.vue'),
@@ -1107,8 +1137,8 @@ runMutationTest('Entry sheet misses a task moved from it', SRC('src/drawers/Sess
 const VO = 'node scripts/check_vocabulary.cjs';
 runMutationTest('A menu says timesheet entry again', SRC('src/drawers/BlockDetailDrawer.vue'),
   (code) => code.replace("label: 'Add work session'", "label: 'Add timesheet entry'"), VO, 'bare "timesheet"');
-runMutationTest('Template text says timesheet again', SRC('src/components/dialogs/EmptyStopModal.vue'),
-  (code) => code.replace('Discard session', 'Discard (No Timesheet)'), VO, 'bare "timesheet"');
+runMutationTest('Template text says timesheet again', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('>Keep running</Button>', '>Keep running (no timesheet)</Button>'), VO, 'bare "timesheet"');
 runMutationTest('A toast says timesheet again', SRC('src/composables/useWorkstationApi.js'),
   (code) => code.replace("'Session discarded. Nothing was logged.'", "'Session discarded, no timesheet was created'"), VO, 'bare "timesheet"');
 
@@ -1182,10 +1212,18 @@ runMutationTest('A day-old session is silently ignored again', SRC('src/composab
   (code) => code.replace('    const elapsed = Math.max(0, Math.max(serverElapsed, localElapsed));\n', '    const elapsed = Math.max(0, Math.max(serverElapsed, localElapsed));\n    if (elapsed >= 86400) return false;\n'), SR, 'no age limit drops a session');
 runMutationTest('Reading the session deletes a day-old one again', SRC('omnitrack/api/stopwatch.py'),
   (code) => code.replace('\tif not data or not isinstance(data, dict):\n\t\treturn None\n\n\t# A start more than', '\tif not data or not isinstance(data, dict):\n\t\treturn None\n\tfrappe.cache.hdel("omnitrack:active_session", target_user)\n\n\t# A start more than'), SR, 'reading the session never deletes it');
-runMutationTest("The dialog's time hides that it was yesterday", SRC('src/composables/useWorkstationSessionClock.js'),
-  (code) => code.replace("if (daysAgo === 1) return hhmm + ' yesterday';", 'if (daysAgo === 1) return hhmm;'), SR, 'a time from yesterday says so');
-runMutationTest('The still-working dialog loses Discard', SRC('src/components/dialogs/InactivityGovernorModal.vue'),
-  (code) => code.replace("@click=\"$emit('discard')\"", '@click="$emit(\'update:modelValue\', false)"'), SR, 'offers to discard it');
+runMutationTest("The dialog's time hides that it was yesterday", SRC('src/utils/clockTime.js'),
+  (code) => code.replace('if (daysAgo === 1) return at + " yesterday";', 'if (daysAgo === 1) return at;'), SR, 'a time from yesterday was yesterday');
+runMutationTest('The still-working dialog stops the session in one press', SRC('src/components/dialogs/InactivityGovernorModal.vue'),
+  (code) => code.replace("@click=\"$emit('adjust')\"", "@click=\"$emit('stop-at-last-edit')\""), SR, 'never stops or discards');
+runMutationTest('A click on the page answers the still-working dialog', SRC('src/composables/useWorkstationSessionClock.js'),
+  (code) => code.replace('  const recordUserActivity = () => {\n    lastActivityTime.value = Date.now();\n', '  const recordUserActivity = () => {\n    lastActivityTime.value = Date.now();\n    showInactivityModal.value = false;\n'), SR, 'never answers the dialog');
+runMutationTest('Adjust times opens at now, not the suggested stop', SRC('src/composables/useWorkstationSessionClock.js'),
+  (code) => code.replace('w.openAdjustModal({ endMs });', 'w.openAdjustModal();'), SR, 'its end at the held suggested stop');
+runMutationTest('The Adjust box ignores the end it was given', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('const cap = opt && opt.endMs ?', 'const cap = false ?'), SR, 'starts the end where it was asked to');
+runMutationTest('The still-working question moves with each answer', SRC('src/composables/useWorkstationSessionClock.js'),
+  (code) => code.replace('idleSinceMs.value = act;\n', ''), SR, 'holding the moment');
 
 const OA = 'node scripts/check_optional_apps.mjs';
 runMutationTest('A block cannot be saved on a site without ERPNext', SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py'),
@@ -1299,14 +1337,34 @@ runMutationTest('A restore takes an older log', WSYNC,
   (code) => code.replace('const keepLocalLines = sameSession && !remoteLinesWin(sessionData.linesRev, _linesRev);', 'const keepLocalLines = false;'), SLN, 'keeps a newer log');
 runMutationTest('A poll takes an older log', WSYNC,
   (code) => code.replace('const keptLocal = !remoteLinesWin(remote.linesRev, _linesRev);', 'const keptLocal = false;'), SLN, 'keeps a newer log');
-runMutationTest('The short-session dialog fills in a note', WSM,
-  (code) => code.replace("emptyStopQuickNote.value = '';", "emptyStopQuickNote.value = 'Focus work session';"), SLN, 'no invented note');
-runMutationTest('The short-session dialog saves too few words', WSM,
-  (code) => code.replace('if (emptyStopLoggedWords.value + countSessionWords(note) < sessionMinWords) return;', ''), SLN, 'needs enough words');
-runMutationTest('Save in the short-session dialog never waits', SRC('src/components/dialogs/EmptyStopModal.vue'),
-  (code) => code.replace(':disabled="!enough"', ''), SLN, 'Save waits for enough words');
-runMutationTest('A session with a log can be discarded', SRC('src/components/dialogs/EmptyStopModal.vue'),
-  (code) => code.replace('<Button v-if="!loggedWords"', '<Button'), SLN, 'can be discarded');
+runMutationTest('A short Stop opens a dialog again', WSM,
+  (code) => code.replace('    stopNeedsWords.value = true;\n    showSessionBox();', '    stopNeedsWords.value = true;\n    showEditSessionModal.value = true;'), SLN, 'shows the session box and asks there');
+runMutationTest('Stop and log moves the start before the words are checked', WSM,
+  (code) => code.replace('    if (!logIsEnough()) { refuseEmptySession(); return; }\n    if (restartClockAt(f) == null) return;', '    if (restartClockAt(f) == null) return;\n    if (!logIsEnough()) { refuseEmptySession(); return; }'), SLN, 'checks the words before the start moves');
+runMutationTest('The line still in the field is left out of the count', WSM,
+  (code) => code.replace('const lines = [...(sessionNotesList.value || []), ...(draft ? [draft] : [])];', 'const lines = [...(sessionNotesList.value || [])];'), SLN, 'the line still in the field');
+runMutationTest('The word prompt is not announced', SLP,
+  (code) => code.replace(/id="session-stop-words"\s*role="status"/, 'id="session-stop-words"'), SLN, 'announced as it changes');
+runMutationTest('The word prompt stops saying how many words there are', SLP,
+  (code) => code.replace('(you wrote {{ stopWordsNow }})', ''), SLN, 'how many there are');
+runMutationTest('The session field stops sharing its line with Stop', SRC('src/session/SessionBox.vue'),
+  (code) => code.replace('watch(notes.localLineText, (t) => { if (newSessionPoint.value !== t) newSessionPoint.value = t; });', ''), SLN, 'so Stop keeps it and the count sees it');
+// Behaviour of the running session's own box, driven against the real composable
+const LA = 'node scripts/check_live_adjust.mjs';
+runMutationTest('Stop puts an overnight end on the start day again', WSM,
+  (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const end = msOf(f.session_date, f.to_time);'), LA, 'an overnight Stop');
+runMutationTest('Stop puts an overnight end on the start day, spelt another way', WSM,
+  (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const { session_date: day, to_time: until } = f;\n    const end = mins >= 0 ? msOf(day, until) : 0;'), LA, 'an overnight Stop');
+runMutationTest('Adjust from the box itself pops the box up', WSM,
+  (code) => code.replace('    if (!(opt && opt.inPlace)) showSessionBox();\n', '    showSessionBox();\n'), LA, 'leaves the box where it is');
+runMutationTest('Adjust from elsewhere leaves the box hidden', WSM,
+  (code) => code.replace('    if (!(opt && opt.inPlace)) showSessionBox();\n', ''), LA, 'brings the session box up');
+runMutationTest('Keep running leaves its times open', WSM,
+  (code) => code.replace("    liveAdjust.value = null;\n    showToast(`Start set to", "    showToast(`Start set to"), LA, 'Keep running closes the box');
+runMutationTest('An ended session keeps its word prompt', WSM,
+  (code) => code.replace('    liveAdjust.value = null;\n    stopNeedsWords.value = false;\n  });', '    liveAdjust.value = null;\n  });'), LA, 'takes its open box and prompt with it');
+runMutationTest('Stop and log stops at now, not the end picked', WSM,
+  (code) => code.replace('await toggleTrack(end < Date.now() ? end : null);', 'await toggleTrack(null);'), LA, 'ends at the end picked');
 runMutationTest('The server counts a hyphen as part of a word', SRC('omnitrack/utils/validators.py'),
   (code) => code.replace('("\\u2022", "-", "*",', '("\\u2022", "*",'), SLT, 'test_counted_as_the_page_counts_them');
 runMutationTest('The server lets an older copy replace the log', SRC('omnitrack/utils/session_lines.py'),

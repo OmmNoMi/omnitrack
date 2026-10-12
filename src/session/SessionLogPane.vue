@@ -117,6 +117,21 @@
              are one pill (a half circle at each end) so they read as a single control. A line
              must be at least minLineChars long (OmniTrack Settings); the counter says so. -->
         <div :class="isEntry && !(sessionNotesList || []).length ? '' : 'mt-auto pt-3'">
+          <!-- A Stop the log cannot carry yet asks for it here, not in a dialog over the box:
+               how many words a saved session needs and how many there are, counted as typed.
+               The session keeps running; Stop again saves it. -->
+          <p
+            v-if="!isEntry && stopNeedsWords"
+            id="session-stop-words"
+            role="status"
+            aria-live="polite"
+            class="mb-2 flex items-start gap-2 rounded-xl px-3 py-2 text-sm"
+            :class="stopWordsEnough ? 'bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100'"
+          >
+            <FeatherIcon :name="stopWordsEnough ? 'check-circle' : 'edit-3'" class="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+            <span v-if="stopWordsEnough">That is enough to save. Stop when you are ready.</span>
+            <span v-else>Describe what you did in at least {{ sessionMinWords }} words (you wrote {{ stopWordsNow }}).</span>
+          </p>
           <div class="flex items-stretch overflow-hidden rounded-[20px] border transition-colors bg-gray-50 focus-within:bg-white focus-within:ring-2 dark:bg-[#2B2D30]"
             :class="lineHint ? 'border-red-600 focus-within:ring-red-600/20 dark:border-red-400' : 'border-gray-200 focus-within:border-blue-500 focus-within:ring-blue-500/20 dark:border-gray-700'">
             <textarea
@@ -130,7 +145,7 @@
               aria-label="Add a line to the session log"
               :aria-keyshortcuts="isEntry ? null : '/'"
               :aria-invalid="lineHint ? 'true' : null"
-              :aria-describedby="lineChars > 0 && lineTooShort ? idp + 'session-line-hint' : null"
+              :aria-describedby="[lineChars > 0 && lineTooShort ? idp + 'session-line-hint' : '', !isEntry && stopNeedsWords ? 'session-stop-words' : ''].filter(Boolean).join(' ') || null"
               :placeholder="isEntry ? 'What did you get done?' : 'What did you just finish?'"
               class="peer flex-1 min-w-0 min-h-[38px] max-h-36 block resize-none overflow-y-auto bg-transparent border-0 shadow-none pl-4 pr-2 py-2.5 text-sm leading-5 outline-none focus:outline-none focus:ring-0 text-gray-900 placeholder-gray-600 dark:text-white dark:placeholder-gray-400"
             ></textarea>
@@ -263,6 +278,7 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { Button, Badge, FeatherIcon } from 'frappe-ui';
 import { useSessionContext } from './useSessionContext.js';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
@@ -316,8 +332,9 @@ export default {
       'tabDetailsRef',
       'trackerBoundBlock'
     ]);
-    const ws = useWorkstationContext(['isBlockCompleted', 'openBlockDrawer', 'isSessionElevated']);
-    return { ...session, ...ws, TAB, INDICATOR, COUNT, DISABLED_SOLID, countTone };
+    const ws = useWorkstationContext(['isBlockCompleted', 'openBlockDrawer', 'isSessionElevated', 'sessionMinWords', 'stopNeedsWords', 'stopWordsNow']);
+    const stopWordsEnough = computed(() => ws.stopWordsNow.value >= ws.sessionMinWords);
+    return { ...session, ...ws, stopWordsEnough, TAB, INDICATOR, COUNT, DISABLED_SOLID, countTone };
   },
   methods: {
     tabTone(id) { return tabTone(this.paneTab === id); },

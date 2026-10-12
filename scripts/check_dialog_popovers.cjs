@@ -103,7 +103,7 @@ else if (!/:options="endOptions"/.test(endPicker[0])) {
 //    and none of them falls back to a native date/time input.
 const whenForms = {
   'src/components/dialogs/PlanWorkBlockDialog.vue': plan,
-  'src/components/dialogs/TimesheetEntryDialog.vue': read('src/components/dialogs/TimesheetEntryDialog.vue'),
+  'src/session/SessionControlsPane.vue': read('src/session/SessionControlsPane.vue'),
   'src/drawers/RescheduleBlockDialog.vue': read('src/drawers/RescheduleBlockDialog.vue'),
 };
 for (const [file, src] of Object.entries(whenForms)) {
@@ -229,31 +229,38 @@ for (const f of fs.readdirSync(path.join(root, 'src/drawers')).filter((n) => n.e
   }
 }
 
-// 10. One timesheet panel. Adding, editing, logging a free window and correcting or stopping
-//     the running session are the same form (TimesheetEntryDialog, form.mode). A second
-//     dialog for any of them is the duplicate the owner asked to be rid of.
-for (const gone of ['AdjustTimingModal.vue', 'EditSessionModal.vue']) {
-  if (fs.existsSync(path.join(root, 'src/components/dialogs', gone))) problems.push(`src/components/dialogs/${gone}: removed; the one timesheet panel is TimesheetEntryDialog.vue`);
+// 10. One session box. Adding, editing and logging a free window are the session box
+//     (WorkSessionEntry, SessionBox mode="entry"). The running session is corrected in its own
+//     box: Adjust turns its clock into start and end (SessionControlsPane, w.liveAdjust). A
+//     second sheet for it read as a work block's form, and people took it for one.
+for (const gone of ['AdjustTimingModal.vue', 'EditSessionModal.vue', 'TimesheetEntryDialog.vue', 'EmptyStopModal.vue']) {
+  if (fs.existsSync(path.join(root, 'src/components/dialogs', gone))) problems.push(`src/components/dialogs/${gone}: removed; work sessions are the session box, and the running one is adjusted in place`);
 }
 for (const file of walkVue(path.join(root, 'src'))) {
-  if (file.endsWith('TimesheetEntryDialog.vue')) continue;
   const src = fs.readFileSync(file, 'utf8');
-  if (/<(f-dialog|Dialog)\b[^>]*\btitle="[^"]*(timesheet|adjust)[^"]*"/i.test(src)) problems.push(`${path.relative(root, file)}: a timesheet dialog of its own; open TimesheetEntryDialog (openEditSessionModal / openAdjustModal) instead`);
+  if (/<(f-dialog|Dialog)\b[^>]*\btitle="[^"]*(timesheet|adjust|running session|work session)[^"]*"/i.test(src)) problems.push(`${path.relative(root, file)}: a session dialog of its own; use the session box (openEditSessionModal / openAdjustModal) instead`);
 }
-if ((appVue.match(/<TimesheetEntryDialog\b/g) || []).length + (read('src/components/dialogs/DialogCoordinator.vue').match(/<TimesheetEntryDialog\b/g) || []).length !== 1) problems.push('DialogCoordinator.vue: renders TimesheetEntryDialog exactly once');
 const modals = read('src/composables/useWorkstationSessionModals.js');
 const fnBody = (name) => (modals.match(new RegExp(`const ${name} = [\\s\\S]*?\\n  };`)) || [''])[0];
 if (!/startTime\.value = ms;/.test(fnBody('restartClockAt'))) problems.push('useWorkstationSessionModals.js: restartClockAt sets startTime itself (syncActiveSession writes startTime back over a start kept only in localStorage)');
+if (/trackerNotes/.test(fnBody('restartClockAt'))) problems.push('useWorkstationSessionModals.js: moving the start never rewrites the session\'s title');
 if (!/await toggleTrack\(/.test(fnBody('stopAndLogSession'))) problems.push('useWorkstationSessionModals.js: Stop and log goes through the one stop path (toggleTrack)');
 if (/tracker|startTime|syncActiveSession|toggleTrack/.test(fnBody('writeEntry'))) problems.push('useWorkstationSessionModals.js: a saved entry never touches the running session');
-if (!/notes: notesWithoutLines\(trackerNotes\.value \|\| '', lines\)/.test(fnBody('openAdjustModal'))) problems.push('useWorkstationSessionModals.js: the running session panel edits its notes only; its lines are added once, when it is logged');
-
 {
-  const helper = (modals.match(/const bare = [^\n]*\n  const notesWithoutLines = [\s\S]*?\n  };/) || [''])[0];
-  let got = null;
-  try { got = new Function(helper + '\nreturn notesWithoutLines;')()('Fixed the export\n\u2713 Completed: Review OTC\n\u2022 Called Sam', ['Completed: Review OTC', 'Called Sam']); } catch (e) { got = String(e); }
-  if (got !== 'Fixed the export') problems.push(`useWorkstationSessionModals.js: notesWithoutLines must drop notes that repeat a session line (got ${JSON.stringify(got)})`);
+  const adjust = fnBody('openAdjustModal');
+  const live = adjust.slice(adjust.indexOf('if (!isTracking.value)') + 1);
+  if (!/liveAdjust\.value = \{/.test(adjust) || /openPanel\(/.test(live.slice(live.indexOf('}')))) problems.push('useWorkstationSessionModals.js: Adjust on the running session opens its own box (liveAdjust), never a panel');
+  if (!/if \(!\(opt && opt\.inPlace\)\) showSessionBox\(\);/.test(adjust)) problems.push('useWorkstationSessionModals.js: Adjust from elsewhere (Cmd+E, the timeline) brings the session box up');
 }
+{
+  // One Escape, one step back: the open times close first, then the popup; Cmd+S stops at the end shown
+  const keys = read('src/composables/useWorkstationShortcuts.js');
+  if (!/if \(liveAdjust\.value\) cancelLiveAdjust\(\);\s*else isSessionElevated\.value = false;/.test(keys)) problems.push('useWorkstationShortcuts.js: Escape closes the open times before it minimizes the popup');
+  if (!/if \(isTracking\.value && liveAdjust\.value\) stopAndLogSession\(\);\s*else if \(isTracking\.value\) toggleTrack\(\);/.test(keys)) problems.push('useWorkstationShortcuts.js: Cmd+S with the times open stops at the end they show');
+  if (!/if \(ev\.key === 'Escape' && liveAdjust\.value\) \{\s*if \(ev\.defaultPrevented \|\| popoverOpen\(\) \|\| document\.querySelector\('\[role="dialog"\]\[aria-modal="true"\]'\)\) return;\s*ev\.preventDefault\(\);\s*cancelLiveAdjust\(\);/.test(keys)) problems.push('useWorkstationShortcuts.js: inline, Escape closes the open times wherever focus is, unless a dialog or list above takes it');
+  if (!/@keydown\.esc="onAdjustEscape"/.test(read('src/session/SessionControlsPane.vue'))) problems.push('SessionControlsPane.vue: Escape inside the open times closes them (inline on the dashboard too)');
+}
+if (!/<section\s+v-else-if="liveAdjust"/.test(read('src/session/SessionControlsPane.vue'))) problems.push('SessionControlsPane.vue: the running session\'s clock turns into its start and end while Adjust is open');
 
 // 12c. A solid button that waits for input greys out legibly (DISABLED_SOLID), never frappe-ui's
 //      pale blue under white text: the entry's Add session and the Log's Add

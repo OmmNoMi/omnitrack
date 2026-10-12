@@ -86,7 +86,7 @@
       :discard-confirm="discardConfirm"
       @trap-tab="trapSessionPopupTab"
       @stop="toggleTrack"
-      @adjust="openAdjustModal"
+      @adjust="openAdjustModal({ inPlace: true })"
       @discard="discardSession"
       @add-line="appendSessionLine($event)"
       @remove-line="removeSessionPoint($event)"
@@ -191,14 +191,6 @@
     :combobox-pairing-partner-options="comboboxPairingPartnerOptions"
     @submit-booking="submitBooking"
 
-    v-model:show-empty-stop-modal="showEmptyStopModal"
-    v-model:empty-stop-quick-note="emptyStopQuickNote"
-    :empty-stop-elapsed-hrs="emptyStopElapsedHrs"
-    :empty-stop-logged-words="emptyStopLoggedWords"
-    :session-min-words="sessionMinWords"
-    @confirm-empty-stop-save="confirmEmptyStopSave"
-    @confirm-empty-stop-discard="confirmEmptyStopDiscard"
-
     v-model:show-start-time-choice-modal="showStartTimeChoiceModal"
     :pending-block="pendingStartBlock"
     :pending-start-time-options="pendingStartTimeOptions"
@@ -207,14 +199,10 @@
 
     v-model:show-inactivity-modal="showInactivityModal"
     :inactivity-minutes="inactivityMinutes"
-    :active-task-label="trackerBoundBlock ? blockTitle(trackerBoundBlock, '') : ''"
-    :session-start="sessionStart"
-    :last-activity-time-h-h-m-m="lastActivityTimeHHMM"
-    :suggested-stop-h-h-m-m="suggestedStopHHMM"
+    :active-task-label="(trackerBoundBlock && blockTitle(trackerBoundBlock, '')) || trackerNotes || (sessionNotesList && sessionNotesList[0]) || ''"
+    :idle-since-ms="inactivityIdleSince"
     @confirm-still-working="confirmStillWorking"
-    @stop-inactivity-now="stopInactivitySessionNow"
-    @stop-inactivity-at-last-edit="stopInactivitySessionAtLastEditPlus15"
-    @discard-inactivity="discardInactivitySession"
+    @adjust-inactivity="adjustInactivitySession"
 
     v-model:show-runaway-alert-modal="showRunawayAlertModal"
     :runaway-guard-data="runawayGuardData"
@@ -256,7 +244,6 @@
     :entry-day-offsets="entryDayOffsets"
     :is-saving-edit-session="isSavingEditSession"
     @save-edit-session="saveEditSession"
-    @keep-session-running="applyAdjustedStartTime"
   />
 
   <!-- A task's details, opened by clicking it anywhere; its Edit opens the one task form -->

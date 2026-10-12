@@ -99,6 +99,9 @@ export default {
       this.escOwnedByPopover = popoverOpen();
       if (this.escOwnedByPopover) setTimeout(() => { this.escOwnedByPopover = false; }, 0);
       else if (this.escBack) {
+        // This Escape steps back inside the dialog; the page's own Escape handlers skip a
+        // handled key, so none of them closes the dialog around the step
+        e.preventDefault();
         this.escHeld = true;
         setTimeout(() => { this.escHeld = false; }, 0);
         this.$emit('back');

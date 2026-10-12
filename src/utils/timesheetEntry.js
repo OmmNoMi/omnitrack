@@ -27,9 +27,11 @@ export function newEntryTimes(block, now = new Date()) {
 }
 
 // When an entry ends, as a moment: its day and start, plus its length (past midnight included).
+// The length is clock minutes (spanMins), so it is added on the clock, never as elapsed ms: on
+// the night the clocks change, 23:00 to 04:00 still ends at 04:00, not an hour off.
 // An entry may not end after now; time still ahead is logged by running a session.
 export function entryEndMs(date, from, mins) {
   const [y, m, d] = String(date || "").split("-").map(Number);
   if (!y || !m || !d || !from) return null;
-  return new Date(y, m - 1, d, 0, 0, 0).getTime() + (toMin(from) + mins) * 60000;
+  return new Date(y, m - 1, d, 0, toMin(from) + mins).getTime();
 }

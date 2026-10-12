@@ -61,14 +61,24 @@ for (const [re, why] of [
 ]) if (!re.test(sync)) problems.push(`src/composables/useWorkstationSessionSync.js: ${why}`);
 if (/sessionNotesList\.value = \[\.\.\.remoteLines\];/.test(sync) && !/adoptRemoteLines\(\(\) => \{\s*if \(linesChanged\) sessionNotesList\.value = \[\.\.\.remoteLines\];/.test(sync)) problems.push("src/composables/useWorkstationSessionSync.js: remote lines only arrive through adoptRemoteLines");
 
-// 5. The dialog asks for words; it never fills them in
+// 5. A short Stop asks in the Log itself, live; never a dialog, and it never fills words in
 const modals = read("src/composables/useWorkstationSessionModals.js");
 if (/Focus work session/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: no invented note when a session is short");
-if (!/if \(emptyStopLoggedWords\.value \+ countSessionWords\(note\) < sessionMinWords\) return;/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: Save from the dialog needs enough words");
-const dialog = read("src/components/dialogs/EmptyStopModal.vue");
-if (!/:disabled="!enough"/.test(dialog) || !/aria-describedby="empty-stop-count"/.test(dialog) || !/id="empty-stop-count"[^>]*aria-live="polite"/.test(dialog)) problems.push("src/components/dialogs/EmptyStopModal.vue: Save waits for enough words, and the count is announced and tied to the field");
-if (!/label="Keep running" @click="\$emit\('update:modelValue', false\)"/.test(dialog)) problems.push("src/components/dialogs/EmptyStopModal.vue: Keep running closes the dialog and leaves the session running");
-if (!/<Button v-if="!loggedWords"[^>]*label="Discard session"/.test(dialog)) problems.push("src/components/dialogs/EmptyStopModal.vue: only a session with nothing written can be discarded here");
+if (!/const refuseEmptySession = \(\) => \{\s*stopNeedsWords\.value = true;\s*showSessionBox\(\);/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: a short Stop shows the session box and asks there");
+if (/showEmptyStopModal|EmptyStopModal/.test(modals) || fs.existsSync(path.join(root, "src/components/dialogs/EmptyStopModal.vue"))) problems.push("src/components/dialogs/EmptyStopModal.vue: removed; a dialog stacked on the Recording popup asked what the Log already asks");
+if (!/const lines = \[\.\.\.\(sessionNotesList\.value \|\| \[\]\), \.\.\.\(draft \? \[draft\] : \[\]\)\];\s*return countSessionWords\(composeWrapNote\(trackerNotes\.value, lines\)\);/.test(modals)) problems.push("src/composables/useWorkstationSessionModals.js: the live count counts the title, the lines and the line still in the field, as Stop will");
+{
+  const fn = modals.slice(modals.indexOf("const stopAndLogSession = async () => {"));
+  const check = fn.indexOf("if (!logIsEnough()) { refuseEmptySession(); return; }");
+  const move = fn.indexOf("restartClockAt(f)");
+  if (check === -1 || move === -1 || check > move) problems.push("src/composables/useWorkstationSessionModals.js: Stop and log checks the words before the start moves");
+}
+const logPane = read("src/session/SessionLogPane.vue");
+if (!/v-if="!isEntry && stopNeedsWords"\s*id="session-stop-words"\s*role="status"\s*aria-live="polite"/.test(logPane)) problems.push("src/session/SessionLogPane.vue: the word prompt is announced as it changes");
+if (!/Describe what you did in at least \{\{ sessionMinWords \}\} words \(you wrote \{\{ stopWordsNow \}\}\)\./.test(logPane)) problems.push("src/session/SessionLogPane.vue: the prompt says how many words are needed and how many there are");
+if (!/!isEntry && stopNeedsWords \? 'session-stop-words' : ''/.test(logPane)) problems.push("src/session/SessionLogPane.vue: the Log's field is described by the word prompt");
+const box = read("src/session/SessionBox.vue");
+if (!/watch\(notes\.localLineText, \(t\) => \{ if \(newSessionPoint\.value !== t\) newSessionPoint\.value = t; \}\);/.test(box)) problems.push("src/session/SessionBox.vue: the line in the field is the workstation's newSessionPoint, so Stop keeps it and the count sees it");
 if (!/min_session_words: \{\{ min_session_words \| int \}\},/.test(read("omnitrack/www/omnitrack.html"))) problems.push("omnitrack/www/omnitrack.html: the page gets the word minimum from OmniTrack Settings");
 
 if (problems.length) {

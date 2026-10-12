@@ -26,6 +26,7 @@ import { useSessionDisplay } from './useSessionDisplay.js';
 import { useSessionNotes } from './useSessionNotes.js';
 import { useSessionEntry } from './useSessionEntry.js';
 import { blockTitle } from '../utils/blockTitle.js';
+import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 
 const props = defineProps({
   isTracking: { type: Boolean, default: false },
@@ -77,6 +78,15 @@ const entry = useSessionEntry(props, emit, notes);
 // Ids and the "/" target belong to the running session; an entry open beside it has its own
 const idp = props.mode === 'entry' ? 'entry-' : '';
 provide(SESSION_KEY, { ...toRefs(props), emit, ...chat, ...display, ...notes, ...entry, idp });
+
+// The running session's line still in the field is the workstation's newSessionPoint too: Stop
+// adds it to the log rather than dropping it, and the word count asked for on a refused Stop
+// counts it as it is typed. An entry's field is its own.
+if (props.mode !== 'entry') {
+  const { newSessionPoint } = useWorkstationContext(['newSessionPoint']);
+  watch(notes.localLineText, (t) => { if (newSessionPoint.value !== t) newSessionPoint.value = t; });
+  watch(newSessionPoint, (t) => { if (notes.localLineText.value !== (t || '')) notes.localLineText.value = t || ''; });
+}
 
 function onFocusSessionInput() {
   chat.activePaneTab.value = 'notes';

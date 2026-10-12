@@ -66,8 +66,8 @@ need(/@click="openLogged\(r\)"/.test(loggedLane) && /@keydown\.enter\.prevent="o
   "DashboardTimeline.vue: a logged bar opens its session, not the block");
 need(/this\.openSessionDrawer\(r\.block, r\.session\)/.test(tl) && !/openEditSessionModal/.test(tl), "DashboardTimeline.vue: a logged bar opens that entry's details sheet, never the entry form");
 // One entry form: the form has no read-only mode of its own; details live in the sheet.
-const entry = read("src/components/dialogs/TimesheetEntryDialog.vue");
-need(!/viewing|isViewing|data-entry-view/.test(entry), "TimesheetEntryDialog.vue: the one entry form is only a form; details belong in SessionDetailDrawer");
+const entry = read("src/components/dialogs/WorkSessionEntry.vue") + read("src/session/useSessionEntry.js");
+need(!/viewing|isViewing|data-entry-view/.test(entry), "WorkSessionEntry.vue: the one entry form is only a form; details belong in SessionDetailDrawer");
 const modals = read("src/composables/useWorkstationSessionModals.js");
 need(/const openEditSessionModal = \(block, session = \{\}\) => \{/.test(modals) && !/viewing:/.test(modals), "useWorkstationSessionModals.js: openEditSessionModal only opens the form");
 // The sheet: a modal dialog that reads the entry from the server, shows the task moves and

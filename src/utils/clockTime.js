@@ -44,3 +44,21 @@ export function whenLine(date, start, end) {
   const mins = s != null && e != null ? spanMins(start, end) : 0;
   return [day, time, mins > 0 ? durationLabel(mins) : ""].filter(Boolean).join(" · ");
 }
+
+// A moment as a person reads it: "11:46 am" today, "11:46 pm yesterday", "11:46 am, 5 Oct" before
+// that. A session restored after midnight is asked about with these; a bare time would point at
+// the wrong day.
+export const momentLabel = (ms, nowMs = Date.now()) => {
+  const t = new Date(ms), now = new Date(nowMs);
+  const at = clock(t.getHours() * 60 + t.getMinutes());
+  const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.round((day(now) - day(t)) / 86400000);
+  if (daysAgo <= 0) return at;
+  if (daysAgo === 1) return at + " yesterday";
+  return at + ", " + t.getDate() + " " + t.toLocaleString("en", { month: "short" });
+};
+// 47 → "47 min", 72 → "1 h 12 min", 120 → "2 h"
+export const hoursMinutes = (mins) => {
+  const n = Math.max(0, Math.floor(mins)), h = Math.floor(n / 60), m = n % 60;
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+};

@@ -22,8 +22,8 @@ if (entryEndMs("", "10:00", 60) !== null) problems.push("src/utils/timesheetEntr
 
 // 2. The entry: nothing after now, said out loud. Adding or editing a work session by hand is the
 //    session box the timer uses (SessionBox mode="entry", hosted by WorkSessionEntry), so it reads
-//    as the session it will become. The running session's own correction (Adjust) is still the
-//    sheet in TimesheetEntryDialog, and keeps the same rule.
+//    as the session it will become. The running session's own correction (Adjust) happens in its
+//    own box (SessionControlsPane, liveAdjust), and keeps the same rule.
 const FILES = {
   "src/session/useSessionEntry.js": [
     [/const entryAhead = computed\(\(\) => \{\s*const end = entryEndMs\(entry\.value\.session_date, entry\.value\.from_time, entryMins\.value\);\s*return end != null && entryMins\.value > 0 && end > now\.value \+ 60000;/, "an entry ending after now is ahead"],
@@ -50,19 +50,23 @@ const FILES = {
     [/if \(e\.metaKey \|\| e\.ctrlKey \|\| e\.altKey \|\| e\.key === "\/" \|\| \(e\.shiftKey && e\.key\.length === 1\)\) e\.stopPropagation\(\);/, "keeps the app's shortcuts from acting on the running session behind it"],
     [/if \(\(e\.metaKey \|\| e\.ctrlKey\) && e\.key === "Enter"\) \{\s*e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*if \(this\.\$refs\.box\) this\.\$refs\.box\.entrySave\(\);/, "Cmd/Ctrl+Enter saves"],
   ],
-  "src/components/dialogs/TimesheetEntryDialog.vue": [
-    [/ahead\(\) \{\s*const end = entryEndMs\(this\.form\.session_date, this\.form\.from_time, this\.mins\);\s*return end != null && this\.mins > 0 && end > this\.now \+ 60000;/, "an end after now is ahead"],
-    [/return !this\.isSaving && !!f\.session_date && this\.mins > 0 && !this\.ahead && said;/, "an end after now cannot be saved"],
-    [/<p v-if="ahead" class="text-sm" :class="lateText" role="alert">\{\{ aheadText \}\}<\/p>/, "says why it cannot be saved"],
+  "src/session/SessionControlsPane.vue#adjust": [
+    [/const adjustAhead = computed\(\(\) => \{\s*const f = ws\.liveAdjust\.value;\s*if \(!f \|\| !\(adjustMins\.value > 0\)\) return false;\s*return entryEndMs\(f\.session_date, f\.from_time, adjustMins\.value\) > Date\.now\(\) \+ 60000;/, "an adjusted end after now is ahead"],
+    [/:disabled="adjustAhead \|\| !\(adjustMins > 0\)"/, "Stop and log waits for an end that is not ahead"],
+    [/<p v-if="adjustAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">/, "says why it cannot be logged"],
+  ],
+  "src/composables/useWorkstationSessionModals.js": [
+    [/const end = entryEndMs\(f\.session_date, f\.from_time, mins\);\s*if \(end > Date\.now\(\) \+ 60000\) \{/, "Stop and log refuses an end after now"],
   ],
 };
 for (const [f, need] of Object.entries(FILES)) {
-  const src = read(f);
+  const src = read(f.split("#")[0]);
   for (const [re, what] of need) if (!re.test(src)) problems.push(`${f}: ${what}`);
 }
-// Only the running session opens the sheet; every other entry is the session box
+// Every entry is the session box; the running session has no sheet of its own
 const coord = read("src/components/dialogs/DialogCoordinator.vue");
-if (!/<WorkSessionEntry\s+:model-value="showEditSessionModal && editSessionForm\.mode !== 'live'"/.test(coord) || !/<TimesheetEntryDialog\s+:model-value="showEditSessionModal && editSessionForm\.mode === 'live'"/.test(coord)) problems.push("src/components/dialogs/DialogCoordinator.vue: add, edit and free open WorkSessionEntry; only the running session opens TimesheetEntryDialog");
+if (!/<WorkSessionEntry\s+:model-value="showEditSessionModal"/.test(coord) || /TimesheetEntryDialog/.test(coord)) problems.push("src/components/dialogs/DialogCoordinator.vue: add, edit and free open WorkSessionEntry; the running session is adjusted in its own box, never a sheet");
+if (fs.existsSync(path.join(root, "src/components/dialogs/TimesheetEntryDialog.vue"))) problems.push("src/components/dialogs/TimesheetEntryDialog.vue: removed; a second form for the running session read as a work block's");
 
 // The Log's lines are saved as a stopped session saves them, and read back the same way to edit
 const { composeWrapNote, logLines } = await import(pathToFileURL(path.join(root, "src/utils/wrapNote.js")).href);

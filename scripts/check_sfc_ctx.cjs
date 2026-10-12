@@ -35,8 +35,10 @@ function declared(script) {
       if (ret && ret.argument && ret.argument.type === 'ObjectExpression') {
         for (const q of ret.argument.properties) {
           if (q.type === 'SpreadElement') {
+            // ...useXContext([...]) or ...ws where const ws = useXContext([...]); its list is above
             const callee = q.argument.type === 'CallExpression' && q.argument.callee.name;
-            if (!/^use(?:Workstation|Session)Context$/.test(callee || '')) return null;
+            const bound = q.argument.type === 'Identifier' && new RegExp(`const\\s+${q.argument.name}\\s*=\\s*use(?:Workstation|Session)Context\\(\\[`).test(script);
+            if (!bound && !/^use(?:Workstation|Session)Context$/.test(callee || '')) return null;
           } else if (q.key) names.add(q.key.name || q.key.value);
         }
       }

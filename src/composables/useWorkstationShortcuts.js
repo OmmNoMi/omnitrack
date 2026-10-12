@@ -82,16 +82,28 @@ export function useWorkstationShortcuts(w) {
     // Esc minimizes elevated session popup, unless an open list inside it (Activity, Project)
     // takes this Escape to close itself: one Escape, one step back. reka's Combobox closes
     // without preventDefault, so an open list is checked as well.
+    // While its times are open, Escape closes those first, and the popup stays.
     if (ev.key === 'Escape' && isSessionElevated.value) {
       if (ev.defaultPrevented || popoverOpen()) return;
       ev.preventDefault();
-      isSessionElevated.value = false;
+      if (liveAdjust.value) cancelLiveAdjust();
+      else isSessionElevated.value = false;
       return;
     }
-    // Cmd/Ctrl+S stops the session instead of saving the browser page.
+    // Inline on the dashboard the open times close on Escape wherever focus is (the box's own
+    // handler only hears it from inside), unless a dialog or list above takes this Escape.
+    if (ev.key === 'Escape' && liveAdjust.value) {
+      if (ev.defaultPrevented || popoverOpen() || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      ev.preventDefault();
+      cancelLiveAdjust();
+      return;
+    }
+    // Cmd/Ctrl+S stops the session instead of saving the browser page; with its times open,
+    // at the end time they show.
     if ((ev.metaKey || ev.ctrlKey) && String(ev.key || '').toLowerCase() === 's') {
       ev.preventDefault();
-      if (isTracking.value) toggleTrack();
+      if (isTracking.value && liveAdjust.value) stopAndLogSession();
+      else if (isTracking.value) toggleTrack();
       else showToast('No session is running', 'info');
       return;
     }
@@ -177,6 +189,7 @@ export function useWorkstationShortcuts(w) {
     todayDate,
     todayISO,
     isSessionElevated,
+    activeTab,
     isManager,
     activeBlock,
     selectedEmployee,
@@ -202,34 +215,20 @@ export function useWorkstationShortcuts(w) {
     _errText
   });
   const {
-    showEmptyStopModal,
-    emptyStopQuickNote,
-    emptyStopElapsedHrs,
-    emptyStopLoggedWords,
     sessionMinWords,
-    openEmptyStopModal,
-    confirmEmptyStopDiscard,
-    confirmEmptyStopSave,
+    stopNeedsWords,
+    stopWordsNow,
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
     pendingStartTimeOptions,
     parseBlockStartEpoch,
     selectStartTimeChoice,
-    showAdjustModal,
-    adjustMode,
-    originalStartTimeFormatted,
-    adjustForm,
-    minTimesheetDate,
-    adjustDurationMinutes,
-    adjustDurationShort,
-    adjustDurationFormatted,
-    keepRunningElapsedFormatted,
     openAdjustModal,
-    nudgeAdjustTime,
-    setAdjustEndNow,
-    applyAdjustedStartTime,
-    submitAdjustedTimesheet,
+    liveAdjust,
+    cancelLiveAdjust,
+    keepSessionRunning,
+    stopAndLogSession,
     showRunawayAlertModal,
     runawayGuardData,
     runawayChoice,
@@ -241,14 +240,12 @@ export function useWorkstationShortcuts(w) {
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
-    editSessionDuration,
     openEditSessionModal,
     saveEditSession,
     confirmDeleteSession
   } = sessionModalsStore;
+  // A Stop the log cannot carry yet is refused in toggleTrack, which asks for it in the box
   const requestStopFocusBlock = (b) => {
-    const running = isTracking.value && trackerBlockName.value === b.name;
-    if (running && !sessionHasLines.value) { openEmptyStopModal(); return; }
     stopConfirmName.value = '';
     startFocusBlock(b);
   };
@@ -318,33 +315,19 @@ export function useWorkstationShortcuts(w) {
     _slashFocus,
     removeSessionPoint,
     sessionHasLines,
-    showEmptyStopModal,
-    emptyStopQuickNote,
-    emptyStopElapsedHrs,
-    emptyStopLoggedWords,
     sessionMinWords,
-    openEmptyStopModal,
-    confirmEmptyStopDiscard,
-    confirmEmptyStopSave,
+    stopNeedsWords,
+    stopWordsNow,
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
     pendingStartTimeOptions,
     selectStartTimeChoice,
-    showAdjustModal,
-    adjustMode,
-    originalStartTimeFormatted,
-    adjustForm,
-    minTimesheetDate,
-    adjustDurationMinutes,
-    adjustDurationShort,
-    adjustDurationFormatted,
-    keepRunningElapsedFormatted,
     openAdjustModal,
-    nudgeAdjustTime,
-    setAdjustEndNow,
-    applyAdjustedStartTime,
-    submitAdjustedTimesheet,
+    liveAdjust,
+    cancelLiveAdjust,
+    keepSessionRunning,
+    stopAndLogSession,
     showRunawayAlertModal,
     runawayGuardData,
     runawayChoice,
@@ -356,7 +339,6 @@ export function useWorkstationShortcuts(w) {
     isSavingEditSession,
     editSessionTargetBlock,
     editSessionForm,
-    editSessionDuration,
     openEditSessionModal,
     saveEditSession,
     confirmDeleteSession,

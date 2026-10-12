@@ -311,15 +311,16 @@ assert.ok(content.includes('prefers-reduced-motion: reduce'), 'FAIL: scrollIntoV
 
 console.log('✓ Test 12: Daily Accomplishments roving tabindex grid, arrow navigation & show more/less focus retention verified.');
 
-// Test 13: The running session is corrected in the one timesheet panel (TimesheetEntryDialog,
-// mode 'live'): Keep running moves its start, Stop and log ends it through the stop path.
-const entryPanel = fs.readFileSync(path.join(dialogsDir, 'TimesheetEntryDialog.vue'), 'utf8');
-assert.ok(/if \(this\.isLive\) return "Running session";/.test(entryPanel), 'FAIL: the live panel is titled Running session');
-assert.ok(entryPanel.includes('v-if="isLive"') && entryPanel.includes("@click=\"$emit('keep-running')\""), 'FAIL: only the live panel offers Keep running');
-assert.ok(entryPanel.includes('`Stop and log ${durationLabel(this.mins)}`'), 'FAIL: the live primary says how much it will log');
-assert.ok(/this\.isLive && f\.lines > 0/.test(entryPanel), 'FAIL: a running session with lines may be logged without extra notes');
-assert.ok(!/-30m|-15m|Live Stopwatch Preview/.test(entryPanel), 'FAIL: no nudge chips or stopwatch preview; DayTimeFields owns the times');
-console.log('✓ Test 13: the running session is corrected in the one timesheet panel.');
+// Test 13: The running session is corrected in its own box (SessionControlsPane, w.liveAdjust):
+// its clock turns into start and end, with Cancel, Keep running and Stop and log. No second sheet.
+// Behaviour is driven against the real composable in check_live_adjust.mjs.
+const controlsPane = fs.readFileSync(path.join(__dirname, '..', 'src/session/SessionControlsPane.vue'), 'utf8');
+assert.ok(/<section\s+v-else-if="liveAdjust"/.test(controlsPane), 'FAIL: Adjust turns the running clock into its start and end, in the same box');
+assert.ok(/<DayTimeFields\b/.test(controlsPane), 'FAIL: the box takes its times through DayTimeFields');
+assert.ok(controlsPane.includes(':disabled="adjustAhead || !(adjustMins > 0)"'), 'FAIL: Stop and log waits for an end after the start and not after now');
+assert.ok(!fs.existsSync(path.join(dialogsDir, 'TimesheetEntryDialog.vue')), 'FAIL: no second sheet for the running session');
+assert.ok(!/-30m|-15m|Live Stopwatch Preview/.test(controlsPane), 'FAIL: no nudge chips or stopwatch preview; DayTimeFields owns the times');
+console.log('✓ Test 13: the running session is corrected in its own box.');
 
 // --- TEST 14: Midnight continuation inclusion in dayFocusBlocks & show-more threshold ---
 assert.strictEqual(content.includes('_blockEffectiveStartMins'), true, 'FAIL: _blockEffectiveStartMins helper missing from omnitrack.html');
@@ -614,7 +615,7 @@ assert.strictEqual(syncInst.reloadResurrectionPrevented, true, 'FAIL: When serve
 // ---------------------------------------------------------------------------
 // TEST 18: Empty Session Stop Modal & Completed Block Ghost Prevention
 // ---------------------------------------------------------------------------
-const emptyStopSandbox = {
+const ghostSandbox = {
   ref: (val) => ({ value: val }),
   computed: (fn) => ({ get value() { return fn(); } }),
   localStorage: {
@@ -624,87 +625,10 @@ const emptyStopSandbox = {
     removeItem(k) { delete this._data[k]; }
   }
 };
-vm.createContext(emptyStopSandbox);
-const emptyStopCode = `
-  const isTracking = ref(true);
-  const trackerSeconds = ref(3600); // 1 hr
-  const trackerNotes = ref('');
-  const sessionNotesList = ref([]);
-  const trackerBlockName = ref(null);
-  const trackerBoundBlock = ref(null);
-  const discardConfirm = ref(false);
-  const showEmptyStopModal = ref(false);
-  const emptyStopQuickNote = ref('');
-  const emptyStopElapsedHrs = ref(0);
-
-  const sessionHasLines = computed(() =>
-    (sessionNotesList.value || []).some(p => String(p || '').trim().length >= 3) ||
-    String(trackerNotes.value || '').trim().length >= 3 ||
-    !!trackerBlockName.value ||
-    !!trackerBoundBlock.value
-  );
-
-  const openEmptyStopModal = () => {
-    const elapsedSecs = trackerSeconds.value;
-    emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
-    const defaultNote = String(trackerNotes.value || '').trim() ||
-      (trackerBoundBlock.value ? (trackerBoundBlock.value.work_item_label || trackerBoundBlock.value.task_subject || trackerBoundBlock.value.name) : '') ||
-      'Focus work session';
-    emptyStopQuickNote.value = defaultNote;
-    showEmptyStopModal.value = true;
-  };
-
-  let sessionDiscarded = false;
-  const discardSession = () => {
-    sessionDiscarded = true;
-    isTracking.value = false;
-    trackerSeconds.value = 0;
-    localStorage.removeItem('omnitrack_active_session');
-  };
-
-  const confirmEmptyStopDiscard = () => {
-    showEmptyStopModal.value = false;
-    discardConfirm.value = true;
-    discardSession();
-  };
-
-  let timesheetSaved = false;
-  const toggleTrack = () => {
-    if (!sessionHasLines.value) {
-      openEmptyStopModal();
-      return;
-    }
-    timesheetSaved = true;
-    isTracking.value = false;
-    trackerSeconds.value = 0;
-  };
-
-  const confirmEmptyStopSave = () => {
-    const note = String(emptyStopQuickNote.value || '').trim() || 'Focus work session';
-    showEmptyStopModal.value = false;
-    sessionNotesList.value.push(note);
-    toggleTrack();
-  };
-
-  // 1. Attempt stop with empty notes -> must open modal with fallback title and calculated hours
-  toggleTrack();
-  const modalOpenedOnEmpty = showEmptyStopModal.value === true &&
-    emptyStopElapsedHrs.value === 1.0 &&
-    emptyStopQuickNote.value === 'Focus work session';
-
-  // 2. Discard branch -> wipes session cleanly
-  confirmEmptyStopDiscard();
-  const discardClean = !isTracking.value && sessionDiscarded && !showEmptyStopModal.value;
-
-  // 3. Save branch -> fills note and completes timesheet save
-  isTracking.value = true;
-  trackerSeconds.value = 1800; // 0.5h
-  openEmptyStopModal();
-  emptyStopQuickNote.value = 'Custom wrap-up';
-  confirmEmptyStopSave();
-  const saveClean = !isTracking.value && timesheetSaved && sessionNotesList.value.includes('Custom wrap-up');
-
-  // 4. Completed block ghost prevention in restoreActiveSession
+vm.createContext(ghostSandbox);
+const ghostCode = `
+  const isTracking = ref(false);
+  // Completed block ghost prevention in restoreActiveSession
   const workFocusBlocks = ref([
     { name: 'PWB-COMPLETED', status: 'Logged (Full)' },
     { name: 'PWB-ACTIVE', status: 'Planned' }
@@ -735,13 +659,10 @@ const emptyStopCode = `
     sessionEndedMarked &&
     localStorage.getItem('omnitrack_active_session') === null;
 
-  ({ modalOpenedOnEmpty, discardClean, saveClean, completedGhostPurged });
+  ({ completedGhostPurged });
 `;
-const emptyStopInst = vm.runInContext(emptyStopCode, emptyStopSandbox);
-assert.strictEqual(emptyStopInst.modalOpenedOnEmpty, true, 'FAIL: Empty session stop must trigger interactive modal with fallback title');
-assert.strictEqual(emptyStopInst.discardClean, true, 'FAIL: Discard branch must wipe in-flight session and reset tracking state');
-assert.strictEqual(emptyStopInst.saveClean, true, 'FAIL: Save branch must file timesheet with quick note and stop tracking cleanly');
-assert.strictEqual(emptyStopInst.completedGhostPurged, true, 'FAIL: Completed block in Logged (Full) status must refuse session restoration and purge localStorage');
+const ghostInst = vm.runInContext(ghostCode, ghostSandbox);
+assert.strictEqual(ghostInst.completedGhostPurged, true, 'FAIL: Completed block in Logged (Full) status must refuse session restoration and purge localStorage');
 
 console.log('✓ Test 18: Empty session stop modal & completed block ghost prevention verified.');
 
@@ -766,9 +687,8 @@ console.log('✓ Test 20: Bottom navigation bar dynamic timer invariants (<1h mi
 // ---------------------------------------------------------------------------
 // 1. Template & structural invariants
 assert.ok(content.includes('v-model="showInactivityModal"') || content.includes(':model-value="showInactivityModal"') || content.includes('v-model:show-inactivity-modal="showInactivityModal"'), 'FAIL: showInactivityModal dialog must be rendered in template');
-assert.ok(content.includes('stopInactivitySessionAtLastEditPlus15'), 'FAIL: 15-minute stop button must be present');
+assert.ok(content.includes('adjustInactivitySession'), 'FAIL: Adjust times (end at 15m after the last note) must be present');
 assert.ok(content.includes('confirmStillWorking'), 'FAIL: confirmStillWorking button must be present');
-assert.ok(content.includes('stopInactivitySessionNow'), 'FAIL: stopInactivitySessionNow button must be present');
 assert.ok(content.includes('lastActivityTime'), 'FAIL: lastActivityTime must be tracked');
 assert.ok(content.includes('checkInactivity'), 'FAIL: checkInactivity must be present');
 
@@ -807,9 +727,9 @@ const inactivityCode = `
     new Notification('OmniTrack: Are you still working?', { body: msg, tag: 'omnitrack-inactivity' });
   };
 
+  // Activity on the page moves the clock on but never answers the question
   const recordUserActivity = () => {
     lastActivityTime.value = Date.now();
-    if (showInactivityModal.value) showInactivityModal.value = false;
   };
 
   const checkInactivity = () => {
@@ -839,9 +759,9 @@ const inactivityCode = `
   checkInactivity();
   const throttledClean = notificationsDispatched.length === 1;
 
-  // Test 3: User confirms still working -> modal closes and activity resets
+  // Test 3: a click or key on the page resets activity but leaves the question open
   recordUserActivity();
-  const resetAfterActive = showInactivityModal.value === false && (Date.now() - lastActivityTime.value) < 1000;
+  const resetAfterActive = showInactivityModal.value === true && (Date.now() - lastActivityTime.value) < 1000;
 
   // Test 4: Stop at 15m after last edit calculation
   // Set last edit to 45 minutes ago, start time 60 minutes ago
@@ -865,13 +785,13 @@ const inactivityCode = `
     };
   };
 
-  const stopInactivitySessionAtLastEditPlus15 = () => {
+  const logUntilSuggestedStop = () => {
     const base = lastActivityTime.value || fakeNow;
     const cappedEndMs = Math.min(fakeNow, base + 15 * 60 * 1000);
     toggleTrack(cappedEndMs);
   };
 
-  stopInactivitySessionAtLastEditPlus15();
+  logUntilSuggestedStop();
 
   // fakeLastEdit was 45m ago (-45m), + 15m means cappedEndMs was 30m ago (-30m from fakeNow).
   // Total elapsed from sTime (-60m) to cappedEndMs (-30m) must be exactly 30 minutes (1800s / 0.5 hrs),
@@ -885,7 +805,7 @@ const inactivityCode = `
 const inactInst = vm.runInContext(inactivityCode, inactivitySandbox);
 assert.strictEqual(inactInst.alertTriggered, true, 'FAIL: Inactivity check must trigger modal and notification at 30m inactivity');
 assert.strictEqual(inactInst.throttledClean, true, 'FAIL: Inactivity notification must throttle and repeat every 30m rather than spamming every tick');
-assert.strictEqual(inactInst.resetAfterActive, true, 'FAIL: User activity must reset inactivity timer and dismiss modal');
+assert.strictEqual(inactInst.resetAfterActive, true, 'FAIL: User activity must reset the inactivity timer and leave the question open');
 assert.strictEqual(inactInst.governorCappedElapsedSecs, true, 'FAIL: 15m stop governor must cap elapsed time exactly to lastActivityTime + 15m');
 assert.strictEqual(inactInst.governorCappedHrs, true, 'FAIL: 15m stop governor must save exact hours without idle ghost time');
 
@@ -906,7 +826,7 @@ assert.ok(content.includes('Notification.permission === \'default\'') && content
 assert.ok(content.includes('notif.onclick'), 'FAIL: Notification must attach onclick handler to focus window and surface modal');
 
 // 4. Reactive clock ticker tracking in inactivity computed properties
-assert.ok(content.includes('const _ = trackerSeconds.value;'), 'FAIL: inactivityMinutes and suggestedStopHHMM must read trackerSeconds.value to ensure continuous reactive updates');
+assert.ok(content.includes('const _ = trackerSeconds.value;'), 'FAIL: inactivityMinutes and inactivityStopAt must read trackerSeconds.value to ensure continuous reactive updates');
 
 console.log('✓ Test 22: Overnight session date & notification gesture governance invariants verified.');
 
@@ -922,11 +842,10 @@ assert.ok(!content.includes('document.body.style.overflow'), 'FAIL: never write 
 assert.ok(content.includes('window.__omnitrackDialogDepth = 0'), 'FAIL: Root watcher must reset __omnitrackDialogDepth to 0 when all modals close');
 
 // 3. Dropdowns excluded from page scroll locking
-assert.ok(!content.includes('watch([showInactivityModal, showBookModal, showAdjustModal, showEmptyStopModal, showCancelModal, showNewTaskModal, showWorkflowModal, showBlockDrawer, showTrackerPopup, showNatureFilter'), 'FAIL: In-page dropdowns showTrackerPopup and showNatureFilter must NOT lock scroll');
+assert.ok(!/watch\(\[[^\]]*\b(showTrackerPopup|showNatureFilter)\b[^\]]*\][\s\S]{0,400}setScrollLock/.test(content), 'FAIL: In-page dropdowns showTrackerPopup and showNatureFilter must NOT lock scroll');
 
-// 4. Inactivity modal discard button and prolonged inactivity warning
-assert.ok(content.includes('discardInactivitySession'), 'FAIL: Inactivity modal must support discardInactivitySession action');
-assert.ok(content.includes("long() { return this.inactivityMinutes >= 60; }") && /v-if="long"\s+variant="ghost"\s+theme="red"[\s\S]{0,300}\$emit\('discard'\)/.test(content), 'FAIL: Inactivity modal must offer Discard once a session has gone 60m without a note');
+// 4. The still-working question never ends the session in one press; Discard is the session bar's
+assert.ok(!content.includes('discardInactivitySession') && !content.includes('stopInactivitySessionNow'), 'FAIL: the still-working question must not stop or discard the session itself');
 
 // 5. WorkBlocks lookup for past-day completed blocks in restoreActiveSession
 assert.ok(content.includes('(workBlocks.value || []).find(b => b.name === sessionData.trackerBlockName)'), 'FAIL: restoreActiveSession must look up workBlocks to catch completed blocks from past dates');
@@ -1011,15 +930,13 @@ assert.ok(
   'FAIL: the timesheet panel (openPanel) must de-elevate isSessionElevated to prevent dialog occlusion'
 );
 
-// 2. The timesheet panel is the Work Session sheet: above the block, session and task sheets
-//    (z-45..47), below the date and time lists it opens (popper z-60, main.css), or they open
-//    behind it. The elevated session card (z-70) is lowered by openPanel above.
-const entrySheet = fs.readFileSync(path.join(dialogsDir, 'TimesheetEntryDialog.vue'), 'utf8');
-const sheetZ = Number((entrySheet.match(/ref="sheet" class="fixed inset-y-0 right-0 z-\[(\d+)\]/) || [])[1]);
-const popperZ = Number((fs.readFileSync(path.join(__dirname, '..', 'src/styles/main.css'), 'utf8').match(/\[data-reka-popper-content-wrapper\] \{ z-index: (\d+) !important; \}/) || [])[1]);
-assert.ok(sheetZ > 47 && popperZ > sheetZ, `FAIL: the timesheet sheet (z-${sheetZ}) sits above the other sheets (z-47) and below popovers (z-${popperZ})`);
-assert.ok(/<DetailKind id="entry-sheet-kind" kind="session"/.test(entrySheet), 'FAIL: the timesheet panel opens as the Work Session sheet (DetailKind session)');
-assert.ok(!/<f-dialog|<Dialog\b/.test(entrySheet), 'FAIL: the timesheet panel is a side sheet, not a centred dialog');
+// 2. The entry panel is the session box (WorkSessionEntry) and the running session has no panel:
+//    nothing for the elevated card to cover, and nothing stacked on it.
+const coordinator = fs.readFileSync(path.join(__dirname, '..', 'src/components/dialogs/DialogCoordinator.vue'), 'utf8');
+assert.ok(/<WorkSessionEntry\s+:model-value="showEditSessionModal"/.test(coordinator), 'FAIL: the entry panel is the session box (WorkSessionEntry)');
+for (const gone of ['TimesheetEntryDialog.vue', 'EmptyStopModal.vue', 'AdjustTimingModal.vue']) {
+  assert.ok(!fs.existsSync(path.join(dialogsDir, gone)), `FAIL: ${gone} is gone; the running session is adjusted and refused in its own box`);
+}
 
 console.log('✓ Test 26: Adjust dialog stacking & de-elevation invariants verified.');
 

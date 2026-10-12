@@ -1,8 +1,8 @@
 /**
  * useWorkstationSessionModals Composable
- * Encapsulates modal dialogs: Empty session guard, Start time choice,
- * the one timesheet panel (add / edit / adjust / stop and log), Runaway timer guard,
- * and deleting a logged entry.
+ * The running session's guards and corrections, and writing time by hand: a Stop the log
+ * cannot carry yet, Start time choice, the running session's Adjust, the entry panel (add /
+ * edit / free), Runaway timer guard, and deleting a logged entry.
  */
 import * as Vue from "vue";
 import { whenLine, spanMins } from "../utils/clockTime.js";
@@ -10,14 +10,14 @@ import { newEntryTimes, entryEndMs } from "../utils/timesheetEntry.js";
 import { composeWrapNote, logLines } from "../utils/wrapNote.js";
 import { blockTitle } from '../utils/blockTitle.js';
 import { countSessionWords, minSessionWords } from '../utils/sessionWords.js';
-const { ref, computed } = Vue;
+const { ref, computed, watch, nextTick } = Vue;
 
 export function useWorkstationSessionModals(opts) {
   const {
     postJSON, showToast, isTracking, startTime, trackerSeconds, trackerTimer,
     trackerNotes, trackerBoundBlock, trackerBlockName, sessionNotesList,
     sessionHasLines, selectedNature, selectedProject, todayDate, todayISO,
-    isSessionElevated, isManager, activeBlock, selectedEmployee,
+    isSessionElevated, activeTab, isManager, activeBlock, selectedEmployee,
     selectedDashboardDate, newSessionPoint, stopConfirmName, discardConfirm,
     toggleTrack, discardSession, appendSessionLine, syncActiveSession,
     recordUserActivity, checkInactivity, markSessionEnded, trackBlock,
@@ -25,38 +25,36 @@ export function useWorkstationSessionModals(opts) {
     fmtHrs, flt, extractErrorMessage, _errText
   } = opts;
 
-  // 1. Empty Session Stop Guard
-  const showEmptyStopModal = ref(false);
-  const emptyStopQuickNote = ref('');
-  const emptyStopElapsedHrs = ref(0);
-  // Words the session's title and log already hold, and how many a saved session needs
-  const emptyStopLoggedWords = ref(0);
+  // 1. A Stop the log cannot carry yet. toggleTrack checks it before anything is torn down,
+  //    and the session box asks for what is missing in place: its Log says how many words a
+  //    saved session needs and how many there are, live, and the session keeps running until
+  //    Stop is pressed again. Never a dialog over the box: one stacked on the Recording popup
+  //    asked the same question the Log already asks.
   const sessionMinWords = minSessionWords(typeof window !== 'undefined' ? window.OMNITRACK_SESSION : null);
-
-  const openEmptyStopModal = () => {
-    const elapsedSecs = trackerSeconds.value;
-    emptyStopElapsedHrs.value = Math.max(0.01, Math.round(((elapsedSecs / 3600) || 0.01) * 100) / 100);
-    emptyStopLoggedWords.value = countSessionWords(composeWrapNote(trackerNotes.value, sessionNotesList.value));
-    // Never an invented note: the person says what they did
-    emptyStopQuickNote.value = '';
-    showEmptyStopModal.value = true;
+  const stopNeedsWords = ref(false);
+  // Words the session holds now: its title, its lines, and a line still in the field (Stop adds it)
+  const stopWordsNow = computed(() => {
+    const draft = String((newSessionPoint && newSessionPoint.value) || '').trim();
+    const lines = [...(sessionNotesList.value || []), ...(draft ? [draft] : [])];
+    return countSessionWords(composeWrapNote(trackerNotes.value, lines));
+  });
+  const logIsEnough = () => {
+    const draft = String((newSessionPoint && newSessionPoint.value) || '').trim();
+    return (sessionHasLines.value || !!draft) && stopWordsNow.value >= sessionMinWords;
   };
 
-  const confirmEmptyStopDiscard = () => {
-    showEmptyStopModal.value = false;
-    discardConfirm.value = true;
-    discardSession();
+  // The box is on screen inline on the dashboard and as the popup anywhere else
+  const showSessionBox = () => {
+    if (!isSessionElevated.value && !(activeTab && activeTab.value === 'dashboard')) isSessionElevated.value = true;
   };
-
-  const confirmEmptyStopSave = () => {
-    const note = String(emptyStopQuickNote.value || '').trim();
-    if (emptyStopLoggedWords.value + countSessionWords(note) < sessionMinWords) return;
-    showEmptyStopModal.value = false;
-    appendSessionLine(note);
-    toggleTrack();
+  const refuseEmptySession = () => {
+    stopNeedsWords.value = true;
+    showSessionBox();
+    // The Log tab, its field focused (and scrolled to): the words go there
+    nextTick(() => {
+      try { window.dispatchEvent(new CustomEvent('omnitrack:focus-session-input')); } catch (_) {}
+    });
   };
-
-  const refuseEmptySession = () => { openEmptyStopModal(); };
 
   // 2. Start Time Choice Modal (Early / On-Time Protection)
   const showStartTimeChoiceModal = ref(false);
@@ -83,12 +81,12 @@ export function useWorkstationSessionModals(opts) {
     }
   };
 
-  // 3. Writing time by hand. add, edit and free open the session box people know from the timer
-  //    (WorkSessionEntry), with its Log lines in form.log; live opens TimesheetEntryDialog:
+  // 3. Writing time by hand opens the session box people know from the timer
+  //    (WorkSessionEntry), with its Log lines in form.log:
   //    'add'  an entry against a block, for time already worked (never the block's future slot)
   //    'edit' a logged entry
   //    'free' a window with no block (a timeline gap, or Adjust with no clock running)
-  //    'live' the running session: correct its start and keep going, or stop and log it
+  //    The running session is never one of these: it is corrected in its own box (liveAdjust).
   const showEditSessionModal = ref(false);
   const isSavingEditSession = ref(false);
   const editSessionTargetBlock = ref(null);
@@ -103,13 +101,6 @@ export function useWorkstationSessionModals(opts) {
     return new Date(y, m - 1, d, h, mi, 0).getTime();
   };
   const withSeconds = (t) => (t && t.length === 5 ? t + ':00' : t);
-  // The old Adjust dialog saved the session's lines back into its notes (with a bullet or a
-  // tick), so the stop path logged them twice. Notes never repeat a line.
-  const bare = (l) => String(l).replace(/^[\s•\u2713*-]+/, '').trim();
-  const notesWithoutLines = (notes, lines) => {
-    const known = new Set(lines.map(bare));
-    return String(notes).split('\n').filter(l => bare(l) && !known.has(bare(l))).join('\n');
-  };
 
   const openPanel = (form, block = null) => {
     // The elevated session card sits above dialogs; lower it so the panel is never covered
@@ -142,8 +133,17 @@ export function useWorkstationSessionModals(opts) {
     }, block);
   };
 
-  // The session box's Adjust: the running session, or the last hour when nothing runs.
+  // The running session's times, corrected where its clock is: Adjust turns the session box's
+  // clock into the session's start and end (SessionControlsPane), with Cancel, Keep running
+  // and Stop and log where Discard, Adjust and Stop sit. Never a second form: a sheet with its
+  // own "What did you get done?" read as a work block's, and people took it for one.
+  // { session_date, from_time, to_time, started_at } while open, null otherwise.
+  const liveAdjust = ref(null);
+  const cancelLiveAdjust = () => { liveAdjust.value = null; };
+
+  // Adjust: the running session in its own box, or the last hour when nothing runs.
   // capMinutes (the runaway guard) proposes an end that many minutes after the start.
+  // inPlace: asked from the box itself, which is already where the person is looking.
   const openAdjustModal = (opt = {}) => {
     const now = new Date();
     if (!isTracking.value) {
@@ -152,20 +152,16 @@ export function useWorkstationSessionModals(opts) {
       return;
     }
     const start = new Date(Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000));
-    const cap = opt && opt.capMinutes ? new Date(Math.min(now.getTime(), start.getTime() + opt.capMinutes * 60000)) : now;
-    const block = trackerBoundBlock.value;
-    const lines = (sessionNotesList.value || []).filter(p => String(p).trim());
-    openPanel({
-      mode: 'live',
-      block_title: block ? blockTitle(block, '') : '',
-      started_at: clockOf(start),
+    // endMs: an end already suggested (the still-working question's "15 min after your last activity")
+    const cap = opt && opt.endMs ? new Date(Math.min(now.getTime(), Math.max(start.getTime(), opt.endMs)))
+      : opt && opt.capMinutes ? new Date(Math.min(now.getTime(), start.getTime() + opt.capMinutes * 60000)) : now;
+    liveAdjust.value = {
       session_date: dayOf(start),
       from_time: clockOf(start),
       to_time: clockOf(cap),
-      // The session's own lines stay as they are and are added when it is logged
-      notes: notesWithoutLines(trackerNotes.value || '', lines),
-      lines: lines.length
-    }, block);
+      started_at: clockOf(start)
+    };
+    if (!(opt && opt.inPlace)) showSessionBox();
   };
 
   const quickLogTimelineGap = (gap) => {
@@ -178,7 +174,7 @@ export function useWorkstationSessionModals(opts) {
     });
   };
 
-  // Moves the running clock's start (and its notes) without stopping it. The start goes on
+  // Moves the running clock's start without stopping it. The start goes on
   // startTime itself: syncActiveSession writes startTime back, so a start set only in
   // localStorage was overwritten by the very sync that followed it.
   const restartClockAt = (f) => {
@@ -191,29 +187,42 @@ export function useWorkstationSessionModals(opts) {
       trackerSeconds.value = Math.max(0, Math.floor((Date.now() - ms) / 1000));
       checkInactivity();
     }, 1000);
-    trackerNotes.value = String(f.notes || '').trim();
     recordUserActivity();
     syncActiveSession(true);
     return ms;
   };
 
   const keepSessionRunning = () => {
-    const f = editSessionForm.value;
-    if (f.mode !== 'live' || !isTracking.value) return;
+    const f = liveAdjust.value;
+    if (!f || !isTracking.value) return;
     if (restartClockAt(f) == null) return;
-    showEditSessionModal.value = false;
+    liveAdjust.value = null;
     showToast(`Start set to ${f.from_time}. The clock keeps running.`, 'success');
   };
 
   // Stopping goes through the one stop path (toggleTrack), which logs against the bound
-  // block or as a free entry, with the session's lines.
-  const stopAndLogSession = async (f) => {
-    if (!isTracking.value) return;
+  // block or as a free entry, with the session's lines. Everything that can refuse is checked
+  // before the start moves, so a refusal leaves the session and the open times as they were.
+  const stopAndLogSession = async () => {
+    const f = liveAdjust.value;
+    if (!f || !isTracking.value) return;
+    const mins = f.from_time && f.to_time ? spanMins(f.from_time, f.to_time) : 0;
+    if (!(mins > 0)) { showToast('The end must be after the start', 'warning'); return; }
+    const end = entryEndMs(f.session_date, f.from_time, mins);
+    if (end > Date.now() + 60000) { showToast('The end is after now. Keep running instead, or pick an earlier end.', 'warning'); return; }
+    if (!logIsEnough()) { refuseEmptySession(); return; }
     if (restartClockAt(f) == null) return;
-    const end = msOf(f.session_date, f.to_time);
-    showEditSessionModal.value = false;
+    liveAdjust.value = null;
     await toggleTrack(end < Date.now() ? end : null);
   };
+
+  // A session that ends (stopped, discarded, or stopped on another device) takes its open
+  // corrections with it
+  watch(isTracking, (on) => {
+    if (on) return;
+    liveAdjust.value = null;
+    stopNeedsWords.value = false;
+  });
 
   const applyBlockTotals = (res) => {
     if (!res || !activeBlock.value || res.name !== activeBlock.value.name) return;
@@ -269,7 +278,6 @@ export function useWorkstationSessionModals(opts) {
     if (!(mins > 0)) { showToast('The end must be after the start', 'warning'); return; }
     // Time not worked yet is not a work session: it would be charged before it happened
     if (entryEndMs(f.session_date, f.from_time, mins) > Date.now() + 60000) { showToast('A work session cannot end after now. Start a session when the work begins.', 'warning'); return; }
-    if (f.mode === 'live') return stopAndLogSession(f);
     if (!(f.log || []).length) { showToast('Add a line about what you got done', 'warning'); return; }
     isSavingEditSession.value = true;
     try {
@@ -313,7 +321,7 @@ export function useWorkstationSessionModals(opts) {
     if (runawayChoice.value === 'keep') {
       showToast('Timer kept running. Remember to stop when done!', 'info');
     } else if (runawayChoice.value === 'cap') {
-      // The panel opens on the running session with its end at the suggested cap
+      // The running session's box opens on its times, with the end at the suggested cap
       openAdjustModal({ capMinutes: Math.round(flt(runawayGuardData.value.suggested_cap_hours || 2.0) * 60) });
     } else if (runawayChoice.value === 'custom') {
       openAdjustModal();
@@ -344,14 +352,9 @@ export function useWorkstationSessionModals(opts) {
   };
 
   return {
-    showEmptyStopModal,
-    emptyStopQuickNote,
-    emptyStopElapsedHrs,
-    emptyStopLoggedWords,
     sessionMinWords,
-    openEmptyStopModal,
-    confirmEmptyStopDiscard,
-    confirmEmptyStopSave,
+    stopNeedsWords,
+    stopWordsNow,
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
@@ -370,14 +373,12 @@ export function useWorkstationSessionModals(opts) {
     editSessionForm,
     openEditSessionModal,
     openAdjustModal,
-    quickLogTimelineGap,
+    liveAdjust,
+    cancelLiveAdjust,
     keepSessionRunning,
+    stopAndLogSession,
+    quickLogTimelineGap,
     saveEditSession,
-    // Older names for the same panel, kept for callers outside this file
-    showAdjustModal: showEditSessionModal,
-    adjustForm: editSessionForm,
-    applyAdjustedStartTime: keepSessionRunning,
-    submitAdjustedTimesheet: saveEditSession,
     confirmDeleteSession
   };
 }

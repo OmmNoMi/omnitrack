@@ -76,12 +76,31 @@ const four = late.find((o) => o.value === "04:00");
 if (!four || !/next day/.test(four.label) || !/6 hrs/.test(four.label)) problems.push(`endTimeOptions("22:00") offers no "4:00 am next day (6 hrs)"; got ${four ? four.label : "nothing"}`);
 if (late.some((o) => o.value === "22:00")) problems.push(`endTimeOptions("22:00") offers the start itself as an end`);
 if (!/· 5h$/.test(whenLine("2026-10-06", "23:00", "04:00"))) problems.push(`whenLine of 23:00-04:00 shows no 5h: ${whenLine("2026-10-06", "23:00", "04:00")}`);
-const DIALOGS = ["src/components/common/DayTimeFields.vue", "src/components/dialogs/TimesheetEntryDialog.vue", "src/components/dialogs/PlanWorkBlockDialog.vue", "src/drawers/RescheduleBlockDialog.vue", "src/stores/workBlockStore.js", "src/composables/useWorkstationFocusTasks.js"];
+const DIALOGS = ["src/components/common/DayTimeFields.vue", "src/session/SessionControlsPane.vue", "src/components/dialogs/PlanWorkBlockDialog.vue", "src/drawers/RescheduleBlockDialog.vue", "src/stores/workBlockStore.js", "src/composables/useWorkstationFocusTasks.js"];
 for (const f of DIALOGS) {
   const src = read(f);
   if (!/spanMins\(/.test(src)) problems.push(`${f}: measure start to end with spanMins`);
   if (/toMin\([^)]*(?:end|to_time)[^)]*\)\s*[->]\s*toMin\(|end_time\s*<=\s*f\.start_time/.test(src)) problems.push(`${f}: an end before the start is refused; it is the next morning`);
 }
+
+// 6. An overnight end is the next morning, on the clock. entryEndMs adds clock minutes, so
+// 20:19 to 01:10 ends at 01:10 the next day, and on the night the clocks change 23:00 to 04:00
+// still ends at 04:00 (adding the minutes as elapsed time lands an hour off). The Stop that
+// uses it is driven in check_live_adjust.mjs.
+const { entryEndMs } = await import("../src/utils/timesheetEntry.js");
+const at = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi).getTime();
+const show = (ms) => new Date(ms).toString().slice(0, 24);
+const overnight = entryEndMs("2026-10-07", "20:19", spanMins("20:19", "01:10"));
+if (overnight !== at(2026, 10, 8, 1, 10)) problems.push(`a session from 20:19 stopped at 01:10 ends at ${show(overnight)}, want Oct 8 01:10`);
+const tz = process.env.TZ;
+for (const [zone, day, to] of [["America/New_York", "2026-10-31", "04:00"], ["America/New_York", "2026-03-07", "04:00"], ["Europe/London", "2026-10-24", "04:00"]]) {
+  process.env.TZ = zone;
+  const [y, mo, d] = day.split("-").map(Number);
+  const got = entryEndMs(day, "23:00", spanMins("23:00", to));
+  const want = new Date(y, mo - 1, d + 1, 4, 0).getTime();
+  if (got !== want) problems.push(`in ${zone}, 23:00 on ${day} to 04:00 (the clocks change that night) ends at ${show(got)}, want ${show(want)}`);
+}
+if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
 
 if (problems.length) {
   console.error("FAIL: overnight work\n  " + problems.join("\n  "));

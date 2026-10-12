@@ -1143,3 +1143,30 @@ Open:
 - `linesRev` is the device's clock. Two devices with clocks far apart could still pick the wrong copy. A server-issued counter would not.
 - Switching to another block (`switch_active_session`) is refused by the same word rule, and when the person wrote nothing the server invents "Session completed before switching to …". The switch is atomic, so nothing is lost, but it should ask for words first, as Stop now does, and never invent a note.
 - `src/stores/workSessionStore.js` repeats the session sync with none of this (no `linesRev`, and it clears the server copy before saving). Nothing imports it; it is on the list to delete.
+
+## OmniTrack tile missing from the ommnomi.in desk (found 2026-10-12)
+
+OmniTrack is installed on ommnomi.in and `/desk/omnitrack` opens, but its tile was not on `/desk`; OmniDesk and OmniQuery's were. Locally the tile shows. The likely cause is Frappe's saved per-user `Desktop Layout`, which draws only the icons it already lists (see AGENTS.md, Deployment-Specific Gotchas).
+
+Open:
+- Confirm on ommnomi.in: right-click an empty spot on `/desk` → Reset Layout, and check that the tile appears. If it still doesn't, open `/desk/desktop-icon/OmniTrack` and check that the row exists and is not hidden.
+- Upstream fix candidate (nomeshwer/frappe): `frappe.desktop_utils.arrange_layout` should append permitted boot icons that the saved layout doesn't mention, so a newly installed app's tile appears without a reset.
+
+## One question at a time: the session prompts (2026-10-12)
+
+The owner: the app "keeps showing multiple popups", and the still-working prompt was "not at all readable".
+
+Done:
+- The running session is corrected in its own box (Adjust: Cancel, Keep running, Stop and log). `TimesheetEntryDialog` and `EmptyStopModal` are gone. A Stop the log cannot carry (Minimum Words per Session, default 15, server-enforced) is asked for in the Log, not a popup.
+- The still-working prompt is one sentence and two buttons: Keep working (focused) and Adjust times. Adjust opens the session box with the end at 15 min after the last activity. Nothing is stopped or discarded from the prompt itself, since the person may still be working. Discard stays on the session bar.
+- Fixed: any click on the page (including the click on "Stop at") closed the prompt first, so the answer was lost. "Stop at" also ended the session at the time of the click, not at the time it named. The prompt now holds the moment it asked about.
+- Fixed: the dashboard's day showed nothing while the calendar had the session (timeline gated on planned blocks only).
+- Carried in from PR 21 (closed): Stop and log on a session past midnight ends the next morning (20:19 to 01:10 had logged 1 minute's worth on the wrong day). `entryEndMs` now adds clock minutes, so the night the clocks change is no longer an hour off. Both are behaviour tests (`check_live_adjust.mjs` 8, `check_overnight_log.mjs` 6, three time zones), not a ban on a function name.
+
+Open:
+- The other prompts that open by themselves still read the old way: the runaway "Timer Overflow Check", block overrun, StartTimeChoice, end of day and SwitchConfirm. Give each the same treatment: one question, each answer says what it does, nothing stacked.
+- `workSessionStore.js` looks dead; `useWorkstationApi` still exports an unused `sessionStart`.
+- The Live session bar is named from the block title only; with no block it should use the first Log line, as the prompt does.
+- The hash once jumped to `#/planner` after the prompt closed; not reproduced since. Watch for it.
+- Console showed `Uncaught (in promise) TypeError: e.focus is not a function` (twice, from an earlier bundle, 2026-10-12): some focus-return calls `.focus()` on a component ref, not its element. Find the `$refs`/ref `.focus()` calls that can hold a frappe-ui component and use `$el` or a guard.
+- Maybe: show a passive word count in the Log once a minimum is set, so the refusal is never a surprise.

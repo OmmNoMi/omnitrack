@@ -10,8 +10,7 @@ import { useWorkstationSessionSync } from "./useWorkstationSessionSync.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationSessionClock(w) {
-  const { _minToHHMM, _minsOf, activeTab, discardConfirm, filteredWorkBlocks, getLocalTodayISO, isTracking, newSessionPoint, nowMinute, postJSON, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionNotesScroll, showToast, startTime, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNature, trackerNotes, trackerProject, trackerSeconds, trackerTimer, triggerHaptic, workBlocks, workFocusBlocks } = w;
-  const discardSession = (...args) => w.discardSession(...args);
+  const { _minToHHMM, _minsOf, activeTab, filteredWorkBlocks, getLocalTodayISO, isTracking, newSessionPoint, nowMinute, postJSON, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionNotesScroll, showToast, startTime, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNature, trackerNotes, trackerProject, trackerSeconds, trackerTimer, triggerHaptic, workBlocks, workFocusBlocks } = w;
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
   const fetchWorkstationData = (...args) => w.fetchWorkstationData(...args);
   const focusLogRow = (...args) => w.focusLogRow(...args);
@@ -101,11 +100,11 @@ export function useWorkstationSessionClock(w) {
   const lastActivityTime = ref(Date.now());
   const lastInactivityAlertTime = ref(0);
   const showInactivityModal = ref(false);
+  // Activity moves the clock on, but never answers the still-working question: a click or a Tab
+  // inside it is the person choosing an answer, and closing on it lost the question (and moved
+  // the time its Stop was going to use to now).
   const recordUserActivity = () => {
     lastActivityTime.value = Date.now();
-    if (showInactivityModal.value) {
-      showInactivityModal.value = false;
-    }
   };
   // Multi-Device Audio Synthesizer, Mobile Notifications & Block Overrun Engine
   const audioSyncStore = useWorkstationAudioSync({
@@ -190,39 +189,27 @@ export function useWorkstationSessionClock(w) {
     toggleTrack();
     showToast('Started an unplanned session', 'warning');
   };
+  const lastNoteMs = () => Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
+  // The moment the still-working question is about, held from when it was asked: what the
+  // person does while answering is not the time they stepped away.
+  const idleSinceMs = ref(0);
+  const inactivityIdleSince = computed(() => {
+    const _ = trackerSeconds.value;
+    return showInactivityModal.value && idleSinceMs.value ? idleSinceMs.value : lastNoteMs();
+  });
   const inactivityMinutes = computed(() => {
     const _ = trackerSeconds.value;
-    const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
-    const ms = Date.now() - act;
-    return Math.max(1, Math.floor(ms / 60000));
+    return Math.max(1, Math.floor((Date.now() - inactivityIdleSince.value) / 60000));
   });
-  // "20:39" today, "20:39 yesterday", "20:39, 5 Oct" before that. A session restored after
-  // midnight is asked about with these, and a bare time would point at the wrong day.
-  const clockLabel = (ms) => {
-    const t = new Date(ms), now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const hhmm = pad(t.getHours()) + ':' + pad(t.getMinutes());
-    const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const daysAgo = Math.round((day(now) - day(t)) / 86400000);
-    if (daysAgo <= 0) return hhmm;
-    if (daysAgo === 1) return hhmm + ' yesterday';
-    return hhmm + ', ' + t.getDate() + ' ' + t.toLocaleString('en', { month: 'short' });
-  };
-  const lastActivityTimeHHMM = computed(() => {
+  // "Log until": 15 minutes after the last activity, never after now
+  const inactivityStopAt = computed(() => {
     const _ = trackerSeconds.value;
-    const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
-    return clockLabel(act);
-  });
-  const suggestedStopHHMM = computed(() => {
-    const _ = trackerSeconds.value;
-    const base = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || Date.now();
-    const targetMs = Math.min(Date.now(), base + 15 * 60 * 1000);
-    return clockLabel(targetMs);
+    return Math.min(Date.now(), inactivityIdleSince.value + 15 * 60 * 1000);
   });
   const checkInactivity = () => {
     if (!isTracking.value) return;
     const now = Date.now();
-    const act = Math.max(lastActivityTime.value || 0, getLastLocalUpdate() || 0) || now;
+    const act = lastNoteMs();
     const idleMs = now - act;
     const INACTIVITY_MS = 30 * 60 * 1000;
     const REPEAT_MS = 30 * 60 * 1000;
@@ -231,6 +218,7 @@ export function useWorkstationSessionClock(w) {
       const timeSinceAlert = now - (lastInactivityAlertTime.value || 0);
       if (!lastInactivityAlertTime.value || timeSinceAlert >= REPEAT_MS) {
         lastInactivityAlertTime.value = now;
+        idleSinceMs.value = act;
         showInactivityModal.value = true;
         playInactivityChime();
         dispatchInactivityNotification(`No notes logged for ${Math.floor(idleMs / 60000)}m on "${trackerNotes.value || 'Active Work'}". Are you still working?`);
@@ -251,24 +239,14 @@ export function useWorkstationSessionClock(w) {
       Notification.requestPermission().then(p => { notificationPermission.value = p; }).catch(() => {});
     }
   };
-  const stopInactivitySessionNow = () => {
+  // The prompt never stops a session itself: Adjust opens the running session's own box, its end
+  // already at the suggested stop (held from when the question was asked), and the person
+  // stops it there, or keeps it running
+  const adjustInactivitySession = () => {
+    const endMs = inactivityStopAt.value;
     showInactivityModal.value = false;
-    toggleTrack();
-  };
-  const stopInactivitySessionAtLastEditPlus15 = async () => {
-    showInactivityModal.value = false;
-    const base = lastActivityTime.value || Date.now();
-    const cappedEndMs = Math.min(Date.now(), base + 15 * 60 * 1000);
-    await toggleTrack(cappedEndMs);
-  };
-  const discardInactivitySession = () => {
-    if (typeof window !== 'undefined' && window.confirm && !window.confirm('Are you sure you want to discard this session? All untracked time will be thrown away.')) {
-      return;
-    }
-    showInactivityModal.value = false;
-    discardConfirm.value = true;
-    discardSession();
-    showToast('Abandoned session discarded. Nothing was logged.', 'info');
+    recordUserActivity();
+    w.openAdjustModal({ endMs });
   };
   // Multi-Device Cross-Tab Session Synchronization
   const sessionSyncStore = useWorkstationSessionSync({
@@ -399,13 +377,11 @@ const plannerAnchor = ref('');
     quickExtendActiveBlock,
     startUnplannedEscalation,
     inactivityMinutes,
-    lastActivityTimeHHMM,
-    suggestedStopHHMM,
+    inactivityIdleSince,
+    inactivityStopAt,
     checkInactivity,
     confirmStillWorking,
-    stopInactivitySessionNow,
-    stopInactivitySessionAtLastEditPlus15,
-    discardInactivitySession,
+    adjustInactivitySession,
     syncActiveSession,
     restoreActiveSession,
     reconcileActiveSession,

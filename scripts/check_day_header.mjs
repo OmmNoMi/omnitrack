@@ -23,6 +23,8 @@ const dash = read("src/composables/useWorkstationDashboard.js");
 const summary = dash.slice(dash.indexOf("const dashboardDaySummary"), dash.indexOf("});", dash.indexOf("const dashboardDaySummary")));
 need(summary.length > 0 && !/toLocaleDateString|weekday|selectedDashboardDate/.test(summary), "the summary under the title never repeats the date");
 need(!/selectedDashboardDateLabel/.test(read("src/views/DashboardView.vue")), "DashboardView.vue: the empty state does not name the date again");
+// A session running or logged with no block is on the calendar; the day shows it too
+need(/<div v-if="dayFocusBlocks\.length > 0 \|\| dayTimeline" class="space-y-4">/.test(read("src/views/DashboardView.vue")), "DashboardView.vue: the day's timeline shows whenever the day has anything on it, not only planned blocks");
 
 if (problems.length) {
   console.error("FAIL: day header\n  " + problems.join("\n  "));

@@ -11,10 +11,16 @@
       <div class="space-y-4">
         <DashboardDateSelector />
 
-        <!-- Focus blocks for the day, grouped now / upcoming / past / away -->
-        <div v-if="dayFocusBlocks.length > 0" class="space-y-4">
+        <!-- Focus blocks for the day, grouped now / upcoming / past / away. The timeline shows
+             whenever the day has anything on it: a session running or logged with no block is
+             on the calendar, so the day showed "Nothing planned" beside it. -->
+        <div v-if="dayFocusBlocks.length > 0 || dayTimeline" class="space-y-4">
 
           <DashboardTimeline v-if="dayTimeline" />
+          <p v-if="dayFocusBlocks.length === 0" class="flex items-center justify-between gap-3 text-xs" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">
+            <span>Nothing planned for this day.</span>
+            <Button variant="ghost" icon-right="arrow-right" label="Open week planner" @click="activeTab = 'planner'">Week planner</Button>
+          </p>
           <DashboardUpcomingBlocks v-if="upcomingFocusBlocks.length > 0" />
           <DashboardPastBlocks v-if="pastFocusBlocks.length > 0" />
 

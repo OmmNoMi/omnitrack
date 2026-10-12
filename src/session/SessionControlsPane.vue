@@ -58,6 +58,77 @@
       <p v-if="entryAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">{{ entryAheadText }}</p>
     </section>
 
+    <!-- Adjust: the running session's own times, where its clock is. Its buttons stand where
+         Discard, Adjust and Stop sit, and nothing else in the box changes: the Log, the tasks,
+         Project and Activity stay the session's. Never a second form for the same session:
+         one with its own "What did you get done?" read as a work block's. -->
+    <section
+      v-else-if="liveAdjust"
+      ref="adjustRef"
+      class="rounded-2xl px-4 py-4 border space-y-4 bg-gradient-to-br from-red-50 via-white to-blue-50 border-red-100 dark:from-red-950/40 dark:via-[#1E1F22] dark:to-blue-950/30 dark:border-red-900/40"
+      aria-label="Adjust this session's times"
+      @keydown.esc="onAdjustEscape"
+    >
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+          <div class="font-mono text-3xl sm:text-4xl font-semibold tracking-tight tabular-nums leading-none text-gray-900 dark:text-white">
+            <span aria-hidden="true">{{ adjustLength }}</span><span class="sr-only">Length {{ adjustLengthWords }}</span>
+          </div>
+          <p class="mt-1.5 text-xs text-gray-700 dark:text-gray-300">Started {{ liveAdjust.started_at }} · still running</p>
+        </div>
+        <div
+          ref="toolbarRef"
+          class="flex items-center gap-1.5 shrink-0 ml-auto"
+          role="toolbar"
+          aria-orientation="horizontal"
+          aria-label="Adjust actions"
+          @keydown="onToolbarKey"
+        >
+          <Button
+            data-session-tool
+            :tabindex="activeToolIndex === 0 ? 0 : -1"
+            variant="ghost"
+            label="Cancel"
+            tooltip="Esc"
+            aria-keyshortcuts="Escape"
+            @click="cancelLiveAdjust"
+          >Cancel</Button>
+          <Button
+            data-session-tool
+            :tabindex="activeToolIndex === 1 ? 0 : -1"
+            variant="subtle"
+            label="Keep running"
+            tooltip="Use the new start, keep the clock going"
+            @click="keepSessionRunning"
+          >Keep running</Button>
+          <Button
+            data-session-tool
+            :tabindex="activeToolIndex === 2 ? 0 : -1"
+            variant="solid"
+            theme="red"
+            label="Stop and log"
+            :tooltip="'Stop at the end time · ' + (modKey || '⌘') + 'S'"
+            aria-keyshortcuts="Control+S Meta+S"
+            :disabled="adjustAhead || !(adjustMins > 0)"
+            :class="DISABLED_SOLID"
+            @click="stopAndLogSession"
+          >Stop and log</Button>
+        </div>
+      </div>
+      <DayTimeFields
+        v-model:date="liveAdjust.session_date"
+        v-model:start="liveAdjust.from_time"
+        v-model:end="liveAdjust.to_time"
+        day-label="Started on"
+        time-label="Start – end"
+        :day-offsets="[0, -1]"
+        :durations="[30, 60, 120, 240]"
+        :is-dark-mode="isDarkMode"
+      />
+      <!-- Time not worked yet cannot be logged; Keep running is how the clock goes on -->
+      <p v-if="adjustAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">The end is after now. Keep running, or pick an earlier end.</p>
+    </section>
+
     <!-- The clock: a soft red-to-blue wash marks it as live without shouting -->
     <section
       v-else
@@ -98,7 +169,7 @@
             :tabindex="activeToolIndex === 1 ? 0 : -1"
             variant="subtle"
             icon-left="clock"
-            :tooltip="'Adjust times · ' + (modKey || '⌘') + 'E'"
+            :tooltip="'Adjust start or end · ' + (modKey || '⌘') + 'E'"
             label="Adjust start or end time"
             @click="emit('adjust')"
           >
@@ -172,6 +243,7 @@
 </template>
 
 <script>
+import { computed, nextTick, ref, watch } from 'vue';
 import { Button, Combobox, FeatherIcon } from 'frappe-ui';
 import BlockTasksSection from '../drawers/BlockTasksSection.vue';
 import DayTimeFields from '../components/common/DayTimeFields.vue';
@@ -179,6 +251,9 @@ import { useSessionContext } from './useSessionContext.js';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import { blockTitle } from '../utils/blockTitle.js';
 import { DISABLED_SOLID } from '../utils/sessionFrame.js';
+import { spanMins, durationLabel } from '../utils/clockTime.js';
+import { entryEndMs } from '../utils/timesheetEntry.js';
+import { popoverOpen } from '../utils/popover.js';
 
 // Under 480px the toolbar buttons are icon only. frappe-ui still renders their (hidden)
 // label's wrapper and the 8px gap, which pushed each icon off centre: square them up.
@@ -189,10 +264,58 @@ export default {
   components: { BlockTasksSection, Button, Combobox, DayTimeFields, FeatherIcon },
   methods: { blockTitle },
   setup() {
+    const ws = useWorkstationContext(['cancelLiveAdjust', 'keepSessionRunning', 'liveAdjust', 'liveSessionBlock', 'stopAndLogSession']);
+    const box = useSessionContext(['activeToolIndex', 'isEntry', 'toolbarRef']);
+    const adjustRef = ref(null);
+    const adjustMins = computed(() => (ws.liveAdjust.value ? spanMins(ws.liveAdjust.value.from_time, ws.liveAdjust.value.to_time) : 0));
+    // The clock's own face, as an entry shows it
+    const adjustLength = computed(() => {
+      const m = Math.max(0, adjustMins.value);
+      return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00`;
+    });
+    const adjustLengthWords = computed(() => (adjustMins.value > 0 ? durationLabel(adjustMins.value) : 'No time yet'));
+    const adjustAhead = computed(() => {
+      const f = ws.liveAdjust.value;
+      if (!f || !(adjustMins.value > 0)) return false;
+      return entryEndMs(f.session_date, f.from_time, adjustMins.value) > Date.now() + 60000;
+    });
+    // One Escape, one step back: an open time or day list closes first, then the times
+    const onAdjustEscape = (e) => {
+      if (e.defaultPrevented || popoverOpen()) return;
+      e.preventDefault();
+      ws.cancelLiveAdjust();
+    };
+    // Focus goes where the work is: the start time on open, back to Adjust on close
+    if (!box.isEntry.value) {
+      watch(() => !!ws.liveAdjust.value, (open) => {
+        const hadFocus = () => {
+          const a = document.activeElement;
+          return !a || a === document.body || !!(box.toolbarRef.value && box.toolbarRef.value.closest('.frappe-ui-session-hud')?.contains(a));
+        };
+        const inBox = hadFocus();
+        nextTick(() => {
+          if (open) {
+            box.activeToolIndex.value = 2;
+            const inputs = adjustRef.value ? adjustRef.value.querySelectorAll('input') : [];
+            const start = inputs[1] || inputs[0];
+            if (start) start.focus();
+          } else if (inBox && box.toolbarRef.value) {
+            const adjust = box.toolbarRef.value.querySelectorAll('[data-session-tool]')[1];
+            if (adjust) { box.activeToolIndex.value = 1; adjust.focus(); }
+          }
+        });
+      });
+    }
     return {
       TOOL_SQUARE,
       DISABLED_SOLID,
-      ...useWorkstationContext(['liveSessionBlock']),
+      adjustRef,
+      adjustMins,
+      adjustLength,
+      adjustLengthWords,
+      adjustAhead,
+      onAdjustEscape,
+      ...ws,
       ...useSessionContext([
         'activeToolIndex',
         'connectedTaskName',
