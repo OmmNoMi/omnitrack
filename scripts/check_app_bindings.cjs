@@ -39,4 +39,24 @@ if (missing.length) {
   console.error(`App.vue uses names that nothing defines (silent no-ops at runtime):\n  ${missing.join('\n  ')}`);
   process.exit(1);
 }
+// Every binding App.vue hands DialogCoordinator is one it declares. A misspelt prop is only a
+// stray attribute, so the dialog quietly gets its default (the start-time question lost its
+// block's name to :pending-block for a prop named pendingStartBlock).
+const coord = fs.readFileSync(path.join(src, 'components/dialogs/DialogCoordinator.vue'), 'utf8');
+const coordScript = coord.slice(coord.indexOf('<script>'));
+const coordProps = new Set([...coordScript.slice(coordScript.indexOf('props:'), coordScript.indexOf('emits:')).matchAll(/^\s+(\w+):\s*\{/gm)].map((m) => m[1]));
+const coordEmits = new Set([...coordScript.slice(coordScript.indexOf('emits:')).matchAll(/"([\w:-]+)"/g)].map((m) => m[1]));
+const coordTag = (d.template.content.match(/<DialogCoordinator\b([\s\S]*?)\/>/) || [, ''])[1];
+const camel = (n) => n.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+const undeclared = [];
+for (const [, kind, name] of coordTag.matchAll(/(?:^|\s)(v-model:|:|@)([\w-]+)=/g)) {
+  if (kind === '@') { if (!coordEmits.has(name)) undeclared.push('@' + name); continue; }
+  if (!coordProps.has(camel(name))) undeclared.push(kind + name);
+  if (kind === 'v-model:' && !coordEmits.has('update:' + camel(name))) undeclared.push('update:' + camel(name));
+}
+if (coordProps.size < 20 || !coordTag) { console.error('could not read DialogCoordinator\'s props or App.vue\'s <DialogCoordinator>'); process.exit(1); }
+if (undeclared.length) {
+  console.error(`App.vue hands DialogCoordinator bindings it does not declare (they never arrive):\n  ${undeclared.join('\n  ')}`);
+  process.exit(1);
+}
 console.log(`OK: all ${used.length} App.vue template names are defined`);

@@ -1,6 +1,7 @@
 import { lazy } from "./workstationBag.js";
 import { ref, computed, nextTick } from "vue";
 import { WORK } from "../utils/activity.js";
+import { hoursMinutes } from "../utils/clockTime.js";
 import { useWorkstationTimeline } from "./useWorkstationTimeline.js";
 import { useWorkstationAudioSync } from "./useWorkstationAudioSync.js";
 import { useWorkstationSessionSync } from "./useWorkstationSessionSync.js";
@@ -111,8 +112,7 @@ export function useWorkstationSessionClock(w) {
     postJSON,
     showToast,
     isTracking,
-    trackerBoundBlock,
-    confirmStillWorking: () => { if (typeof confirmStillWorking === 'function') confirmStillWorking(); }
+    trackerBoundBlock
   });
   const {
     playUpcoming10mChime,
@@ -221,7 +221,7 @@ export function useWorkstationSessionClock(w) {
         idleSinceMs.value = act;
         showInactivityModal.value = true;
         playInactivityChime();
-        dispatchInactivityNotification(`No notes logged for ${Math.floor(idleMs / 60000)}m on "${trackerNotes.value || 'Active Work'}". Are you still working?`);
+        dispatchInactivityNotification(`Nothing logged on "${trackerNotes.value || 'the running session'}" for ${hoursMinutes(Math.floor(idleMs / 60000))}.`);
       }
     }
   };

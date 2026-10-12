@@ -1,75 +1,64 @@
 <template>
+  <!-- Asked when a planned block is started late. One question, two answers: the session runs
+       from the planned start, or from now. Now is where focus starts: it claims no time that was
+       not tracked. Escape or the close button starts nothing. -->
   <f-dialog
     :model-value="modelValue"
-    title="Choose Session Start Time"
-    :dismissable="true"
-    size="sm"
+    title="When did you start?"
+    :subtitle="pendingBlockLabel || null"
+    size="md"
     z-index="z-[60]"
     @update:model-value="$emit('update:modelValue', $event)"
     @close="$emit('cancel')"
   >
-    <div class="space-y-3 py-2">
-      <div class="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-        You are starting work on
-        <span class="font-bold text-gray-900 dark:text-white">{{ pendingBlockLabel }}</span>,
-        which was scheduled earlier today. How would you like to anchor your session start?
-      </div>
+    <template #header-icon>
+      <FeatherIcon name="clock" class="h-5 w-5" aria-hidden="true" />
+    </template>
 
-      <div class="space-y-2 mt-2">
-        <button
-          v-for="opt in options"
-          :key="opt.label"
-          type="button"
-          @click="$emit('select', opt.epoch)"
-          class="w-full text-left p-3.5 rounded-2xl border transition-all flex items-start gap-3 cursor-pointer group"
-          :class="opt.isOntime
-            ? (isDarkMode ? 'bg-emerald-950/40 border-emerald-800 hover:bg-emerald-950/70 hover:border-emerald-700' : 'bg-emerald-50/70 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300')
-            : (isDarkMode ? 'bg-[#252528] border-gray-700 hover:bg-[#2b2b2f]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100')"
-        >
-          <div
-            class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-            :class="opt.isOntime ? 'bg-emerald-500 text-white shadow-xs' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
-          >
-            <FeatherIcon :name="opt.isOntime ? 'target' : 'clock'" class="w-4 h-4" aria-hidden="true" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div
-              class="text-xs font-bold leading-tight"
-              :class="opt.isOntime ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-800 dark:text-gray-200'"
-            >
-              {{ opt.label }}
-            </div>
-            <div class="text-[11px] mt-0.5 text-gray-700 dark:text-gray-300">
-              {{ opt.sublabel }}
-            </div>
-          </div>
-        </button>
-      </div>
-    </div>
+    <p class="text-base leading-relaxed text-ink-gray-8">
+      It was planned for <span class="font-semibold text-ink-gray-9 tabular-nums">{{ plannedLabel }}</span>, {{ lateText }} ago.
+    </p>
 
     <template #actions>
-      <div class="flex justify-end gap-2 w-full">
-        <Button variant="ghost" theme="gray" size="sm" @click="$emit('cancel')">Cancel</Button>
+      <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <Button variant="subtle" size="md" :label="'At ' + plannedLabel" data-start-planned @click="$emit('select', plannedStartMs)">At {{ plannedLabel }}</Button>
+        <Button
+          variant="solid"
+          size="md"
+          label="Just now"
+          data-autofocus
+          data-start-now
+          @click="$emit('select', null)"
+        >Just now</Button>
       </div>
     </template>
   </f-dialog>
 </template>
 
 <script>
-import { blockTitle } from '../../utils/blockTitle.js';
+import { blockTitle } from "../../utils/blockTitle.js";
+import { momentLabel, hoursMinutes } from "../../utils/clockTime.js";
+
 export default {
   name: "StartTimeChoiceModal",
   props: {
     modelValue: { type: Boolean, default: false },
     pendingBlock: { type: Object, default: null },
-    options: { type: Array, default: () => [] },
-    isDarkMode: { type: Boolean, default: false },
+    // The block's planned start today, in ms
+    plannedStartMs: { type: Number, default: 0 },
   },
   emits: ["update:modelValue", "select", "cancel"],
   computed: {
     pendingBlockLabel() {
-      if (!this.pendingBlock) return "this block";
-      return blockTitle(this.pendingBlock, this.pendingBlock.name || "this block");
+      return this.pendingBlock ? blockTitle(this.pendingBlock, "") : "";
+    },
+    plannedLabel() {
+      return this.plannedStartMs ? momentLabel(this.plannedStartMs) : "";
+    },
+    // Read again each time the question opens
+    lateText() {
+      void this.modelValue;
+      return hoursMinutes((Date.now() - this.plannedStartMs) / 60000);
     },
   },
 };

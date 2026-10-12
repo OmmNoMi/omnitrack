@@ -371,3 +371,13 @@ The active session is kept in three places (the page, localStorage, the server) 
 
 ## Gotcha: `npm test` reads the built bundle
 `test_spa_smoke.cjs` checks `omnitrack/public/dist/omnitrack.bundle.js`, so a source change tested without `npm run build` first is tested against the old bundle. Build, then test.
+
+## Gotcha: a misspelt prop is only a stray attribute
+Vue takes a kebab binding that matches no declared prop as a fallthrough attribute: no warning in the production bundle, and the child gets its default. App.vue passed `:pending-block` to DialogCoordinator, whose prop is `pendingStartBlock`, so "When did you start?" never named its block. `check_app_bindings.cjs` compares every `:prop`, `v-model:x` and `@event` on App.vue's `<DialogCoordinator>` with the props and emits it declares. In the browser, a non-empty `instance.attrs` on a component that declares its props is the tell.
+
+## Gotcha: a notification cannot take an answer
+A desktop notification's `onclick` only brings the page forward (`window.focus()`). It used to call `confirmStillWorking`, so clicking "Are you still working?" to read it answered Keep working. A notification states what happened; any question it raises is asked by a dialog on the page, where the answers are buttons. The service worker's explicit `still_working` action button is a real answer and stays. `check_prompts.mjs` guards it.
+
+## Gotcha: a hash-only navigate does not reload
+`navigate` (or `location.href =`) to the same URL with only a `#/route` changes the hash; the page keeps running the old bundle. After `npm run build`, use `location.reload()` and check `performance.getEntriesByType('resource')` for the new bundle size before judging a fix.
+

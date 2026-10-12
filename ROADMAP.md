@@ -1163,8 +1163,20 @@ Done:
 - Fixed: the dashboard's day showed nothing while the calendar had the session (timeline gated on planned blocks only).
 - Carried in from PR 21 (closed): Stop and log on a session past midnight ends the next morning (20:19 to 01:10 had logged 1 minute's worth on the wrong day). `entryEndMs` now adds clock minutes, so the night the clocks change is no longer an hour off. Both are behaviour tests (`check_live_adjust.mjs` 8, `check_overnight_log.mjs` 6, three time zones), not a ban on a function name.
 
+- The rest of the prompts that open by themselves:
+  - The runaway "Timer Overflow Check" (three option rows plus an Apply button) is deleted. Nothing ever opened it: `checkRunawayStopwatch` had no caller. The still-working prompt already asks whether a long session goes on. The server's `check_runaway_timer_guard` stays, with its tests.
+  - Starting a planned block late asks "When did you start?". The subtitle names the block, there is one sentence ("It was planned for 4:17 pm, 25 min ago."), and two answers: At 4:17 pm, or Just now. Focus starts on Just now, because it claims no time that was not tracked. Escape starts nothing.
+  - Fixed: that question never showed which block it was about. App.vue passed `:pending-block` to DialogCoordinator, whose prop is `pendingStartBlock`, so the block arrived as a stray attribute. `check_app_bindings.cjs` now refuses any binding App.vue hands DialogCoordinator that it does not declare.
+  - Wrap up the day is one sentence ("You logged 1 h 12 min today. 2 planned blocks are not logged yet.") and the blocks left. Each block's Log closes the review and opens that block's own entry box, where the person says what they did. Done closes it. Gone: "Log all", which wrote every plan in as the work under "Completed as scheduled.", and "Finish", which only showed a toast.
+  - The block-overrun notification says what happened and asks nothing: "\"Reconcile March invoices\" was planned to end at 4:30 pm. The session is still running." It has its own heading. Clicking any notification only brings the page forward. It used to answer the still-working question with Keep working.
+  - The still-working notification states the gap ("Nothing logged on … for 25 min."); its heading carries the question.
+  - The switch confirm (`WrapAndStartNextModal`) already fits: one question, its buttons are the answers.
+  - Guarded by `check_prompts.mjs` (in `test:static`) and 12 mutants.
+
 Open:
-- The other prompts that open by themselves still read the old way: the runaway "Timer Overflow Check", block overrun, StartTimeChoice, end of day and SwitchConfirm. Give each the same treatment: one question, each answer says what it does, nothing stacked.
+- `SwitchTaskModal` (opened by the switch shortcut, not on its own) still reads the old way: "Switch Active Task", "Active Clock", "Bound to Block / Unbound Focus" badges, raw `<input>`s instead of frappe-ui fields, and a free-text wrap-up note that skips the Log's word rule.
+- `convert_plan_to_actual` (server) still accepts a block with any notes, and its docstring still says "Pillar 1". Nothing in the page calls it now. Either delete it or make it refuse a note under Minimum Words per Session, like Stop does.
+- Maybe: the day review counts only logged sessions, so a running session reads as "You logged 0 min today". Say "and one session is still running" when one is.
 - `workSessionStore.js` looks dead; `useWorkstationApi` still exports an unused `sessionStart`.
 - The Live session bar is named from the block title only; with no block it should use the first Log line, as the prompt does.
 - The hash once jumped to `#/planner` after the prompt closed; not reproduced since. Watch for it.

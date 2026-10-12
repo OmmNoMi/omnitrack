@@ -22,8 +22,7 @@
       :model-value="showStartTimeChoiceModal"
       @update:model-value="$emit('update:showStartTimeChoiceModal', $event)"
       :pending-block="pendingStartBlock"
-      :options="pendingStartTimeOptions"
-      :is-dark-mode="isDarkMode"
+      :planned-start-ms="pendingStartMs"
       @select="$emit('select-start-time-choice', $event)"
       @cancel="$emit('cancel-start-time-choice')"
     />
@@ -43,24 +42,12 @@
     <!-- ========================================== -->
     <!-- MODULAR DIALOGS (Part 2: Planning & Lifecycles) -->
     <!-- ========================================== -->
-    <RunawayTimerModal
-      :model-value="showRunawayAlertModal"
-      @update:model-value="$emit('update:showRunawayAlertModal', $event)"
-      :guard-data="runawayGuardData"
-      :choice="runawayChoice"
-      :is-dark-mode="isDarkMode"
-      @select-option="$emit('select-runaway-option', $event)"
-      @confirm="$emit('confirm-runaway-resolution')"
-    />
-
     <EODWrapUpModal
       :model-value="showEODModal"
       @update:model-value="$emit('update:showEODModal', $event)"
       :summary="eodSummary"
       :pending-blocks="eodPendingBlocks"
-      @convert-all="$emit('convert-all-pending-blocks')"
-      @convert-block="$emit('convert-pending-block', $event)"
-      @complete="$emit('complete-eod')"
+      @log-block="$emit('log-pending-block', $event)"
     />
 
     <SwitchTaskModal
@@ -139,18 +126,13 @@ export default {
     // StartTimeChoiceModal
     showStartTimeChoiceModal: { type: Boolean, default: false },
     pendingStartBlock: { type: Object, default: null },
-    pendingStartTimeOptions: { type: Array, default: () => [] },
+    pendingStartMs: { type: Number, default: 0 },
 
     // InactivityGovernorModal
     showInactivityModal: { type: Boolean, default: false },
     inactivityMinutes: { type: Number, default: 0 },
     activeTaskLabel: { type: String, default: "" },
     idleSinceMs: { type: Number, default: 0 },
-
-    // RunawayTimerModal
-    showRunawayAlertModal: { type: Boolean, default: false },
-    runawayGuardData: { type: Object, default: null },
-    runawayChoice: { type: String, default: "stop_at_eod" },
 
     // EODWrapUpModal
     showEODModal: { type: Boolean, default: false },
@@ -194,13 +176,8 @@ export default {
     "update:showInactivityModal",
     "confirm-still-working",
     "adjust-inactivity",
-    "update:showRunawayAlertModal",
-    "select-runaway-option",
-    "confirm-runaway-resolution",
     "update:showEODModal",
-    "convert-all-pending-blocks",
-    "convert-pending-block",
-    "complete-eod",
+    "log-pending-block",
     "update:showSwitchTaskModal",
     "update:switchWrapUpNote",
     "update:switchSearchQuery",

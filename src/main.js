@@ -11,7 +11,6 @@ import FDialog from "./components/common/FDialog.vue";
 import PlanWorkBlockDialog from "./components/dialogs/PlanWorkBlockDialog.vue";
 import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
 import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
-import RunawayTimerModal from "./components/dialogs/RunawayTimerModal.vue";
 import EODWrapUpModal from "./components/dialogs/EODWrapUpModal.vue";
 import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
@@ -55,7 +54,6 @@ if (typeof window !== "undefined") {
 		PlanWorkBlockDialog,
 		InactivityGovernorModal,
 		StartTimeChoiceModal,
-		RunawayTimerModal,
 		EODWrapUpModal,
 		SwitchTaskModal,
 		WrapAndStartNextModal,
@@ -99,7 +97,6 @@ function mountApp(target = "#app") {
 	app.component("PlanWorkBlockDialog", PlanWorkBlockDialog);
 	app.component("InactivityGovernorModal", InactivityGovernorModal);
 	app.component("StartTimeChoiceModal", StartTimeChoiceModal);
-	app.component("RunawayTimerModal", RunawayTimerModal);
 	app.component("EODWrapUpModal", EODWrapUpModal);
 	app.component("SwitchTaskModal", SwitchTaskModal);
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);

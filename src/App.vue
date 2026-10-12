@@ -192,8 +192,8 @@
     @submit-booking="submitBooking"
 
     v-model:show-start-time-choice-modal="showStartTimeChoiceModal"
-    :pending-block="pendingStartBlock"
-    :pending-start-time-options="pendingStartTimeOptions"
+    :pending-start-block="pendingStartBlock"
+    :pending-start-ms="pendingStartMs"
     @select-start-time-choice="selectStartTimeChoice"
     @cancel-start-time-choice="showStartTimeChoiceModal = false; pendingStartBlock = null"
 
@@ -204,18 +204,10 @@
     @confirm-still-working="confirmStillWorking"
     @adjust-inactivity="adjustInactivitySession"
 
-    v-model:show-runaway-alert-modal="showRunawayAlertModal"
-    :runaway-guard-data="runawayGuardData"
-    :runaway-choice="runawayChoice"
-    @select-runaway-option="resolveRunawayOption"
-    @confirm-runaway-resolution="confirmRunawayResolution"
-
     v-model:show-e-o-d-modal="showEODModal"
     :eod-summary="eodSummary"
     :eod-pending-blocks="eodPendingBlocks"
-    @convert-all-pending-blocks="convertAllPendingPlannedBlocks"
-    @convert-pending-block="quickConvertPlanToActual"
-    @complete-eod="showEODModal = false; showToast('EOD review complete! Great work today.', 'success');"
+    @log-pending-block="logPendingBlock"
 
     v-model:show-switch-task-modal="showSwitchTaskModal"
     v-model:switch-wrap-up-note="switchWrapUpNote"

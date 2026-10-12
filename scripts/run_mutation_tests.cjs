@@ -1378,6 +1378,33 @@ runMutationTest('The server keeps an old log for a new session', SRC('omnitrack/
 runMutationTest('The sync skips the newer-log check', SRC('omnitrack/api/stopwatch.py'),
   (code) => code.replace('\tclean_data = keep_newer_lines(get_active_session(user=target_user), clean_data)\n', ''), SLT, 'test_every_sync_goes_through_it');
 
+const PR = 'node scripts/check_prompts.mjs';
+runMutationTest('When did you start? focuses the planned start', SRC('src/components/dialogs/StartTimeChoiceModal.vue'),
+  (code) => code.replace('          data-autofocus\n          data-start-now', '          data-start-now'), PR, 'Just now is the answer focus starts on');
+runMutationTest('Just now starts from the planned start', SRC('src/components/dialogs/StartTimeChoiceModal.vue'),
+  (code) => code.replace("@click=\"$emit('select', null)\"", "@click=\"$emit('select', plannedStartMs)\""), PR, 'Just now starts from the moment');
+runMutationTest('When did you start? grows its option cards back', SRC('src/components/dialogs/StartTimeChoiceModal.vue'),
+  (code) => code.replace('<template #actions>', '<button v-for="opt in [1]" :key="opt" type="button">Option</button>\n    <template #actions>'), PR, 'not a list of option cards');
+runMutationTest('An answer to When did you start? drops its time', WSM,
+  (code) => code.replace('if (typeof trackBlock === \'function\') trackBlock(blk, epoch);', 'if (typeof trackBlock === \'function\') trackBlock(blk);'), PR, 'At the planned start starts the block');
+runMutationTest('The day review grows Log all back', SRC('src/components/dialogs/EODWrapUpModal.vue'),
+  (code) => code.replace('emits: ["update:modelValue", "log-block"]', 'emits: ["update:modelValue", "log-block", "convert-all"]'), PR, 'its only answers are Done');
+runMutationTest('A block left unlogged is logged as its plan', SRC('src/composables/useWorkstationAttendance.js'),
+  (code) => code.replace('    w.openEditSessionModal(block);\n', "    postJSON('convert_plan_to_actual', { block_name: block.name, session_notes: block.deliverable_notes || 'Done' });\n"), PR, 'no plan written in as the work');
+runMutationTest('Log opens the entry box over the day review', SRC('src/composables/useWorkstationAttendance.js'),
+  (code) => code.replace('    showEODModal.value = false;\n    w.openEditSessionModal(block);', '    w.openEditSessionModal(block);'), PR, 'one dialog at a time');
+runMutationTest('Clicking a notification answers the still-working question', SRC('src/composables/useWorkstationAudioSync.js'),
+  (code) => code.replace('try { window.focus(); } catch (e) {}', "try { window.focus(); window.dispatchEvent(new CustomEvent('omnitrack:confirmStillWorking')); confirmStillWorking(); } catch (e) {}"), PR, 'never answers the still-working question');
+runMutationTest('The overrun notification asks what it cannot take an answer to', SRC('src/composables/useWorkstationAudioSync.js'),
+  (code) => code.replace('The session is still running.`;', 'Wrap up or continue?`;'), PR, 'it asks nothing');
+runMutationTest('The overrun notification reads as the still-working question', SRC('src/composables/useWorkstationAudioSync.js'),
+  (code) => code.replace("dispatchInactivityNotification(msg, 'omnitrack-block-overrun', 'OmniTrack: Planned block ended');", "dispatchInactivityNotification(msg, 'omnitrack-block-overrun');"), PR, 'its own heading');
+runMutationTest('The runaway options-plus-Apply dialog comes back', SRC('src/components/dialogs/DialogCoordinator.vue'),
+  (code) => code.replace('    <EODWrapUpModal\n', '    <RunawayTimerModal :model-value="false" />\n    <EODWrapUpModal\n'), PR, 'the runaway options-plus-Apply dialog is gone');
+
+runMutationTest('App.vue hands the start-time question its block under a name it does not declare', SRC('src/App.vue'),
+  (code) => code.replace(':pending-start-block="pendingStartBlock"', ':pending-block="pendingStartBlock"'), 'node scripts/check_app_bindings.cjs', 'bindings it does not declare');
+
 // Summary Report
 console.log('\n===========================================================');
 console.log(` Mutation Testing Summary:`);

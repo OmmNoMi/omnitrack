@@ -8,7 +8,7 @@ import { blockTitle } from '../utils/blockTitle.js';
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationShortcuts(w) {
-  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, flt, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, markSessionEnded, newSessionPoint, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
+  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, markSessionEnded, newSessionPoint, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
   const discardSession = (...args) => w.discardSession(...args);
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
   const fetchWorkstationData = (...args) => w.fetchWorkstationData(...args);
@@ -171,7 +171,7 @@ export function useWorkstationShortcuts(w) {
     !!trackerBlockName.value ||
     !!trackerBoundBlock.value
   );
-  // Session Modals: Empty Stop, Start Time Choice, Adjust Timesheet, Runaway Guard, Edit/Delete Session
+  // Session Modals: Empty Stop, Start Time Choice, Adjust Timesheet, Edit/Delete Session
   const sessionModalsStore = useWorkstationSessionModals({
     postJSON,
     showToast,
@@ -210,7 +210,6 @@ export function useWorkstationShortcuts(w) {
     getLocalTodayISO,
     hhmm,
     fmtHrs,
-    flt,
     extractErrorMessage,
     _errText
   });
@@ -221,7 +220,7 @@ export function useWorkstationShortcuts(w) {
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
-    pendingStartTimeOptions,
+    pendingStartMs,
     parseBlockStartEpoch,
     selectStartTimeChoice,
     openAdjustModal,
@@ -229,12 +228,6 @@ export function useWorkstationShortcuts(w) {
     cancelLiveAdjust,
     keepSessionRunning,
     stopAndLogSession,
-    showRunawayAlertModal,
-    runawayGuardData,
-    runawayChoice,
-    checkRunawayStopwatch,
-    resolveRunawayOption,
-    confirmRunawayResolution,
     quickLogTimelineGap,
     showEditSessionModal,
     isSavingEditSession,
@@ -281,24 +274,9 @@ export function useWorkstationShortcuts(w) {
         trackBlock(b, startEpoch);
         return;
       } else if (elapsedMinutes <= 120) {
-        // Prompt user with 1-click suggested start times
+        // Ask once: from the planned start, or from now (StartTimeChoiceModal)
         pendingStartBlock.value = b;
-        const schedTimeStr = b.start_time ? String(b.start_time).substring(0, 5) : '';
-        const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        pendingStartTimeOptions.value = [
-          {
-            label: `Start on time at ${schedTimeStr}`,
-            sublabel: `${elapsedMinutes}m elapsed · Plan adherence protected`,
-            epoch: startEpoch,
-            isOntime: true
-          },
-          {
-            label: `Start from now at ${nowTimeStr}`,
-            sublabel: `Fresh start at 00:00:00`,
-            epoch: now,
-            isOntime: false
-          }
-        ];
+        pendingStartMs.value = startEpoch;
         showStartTimeChoiceModal.value = true;
         return;
       }
@@ -321,19 +299,13 @@ export function useWorkstationShortcuts(w) {
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
-    pendingStartTimeOptions,
+    pendingStartMs,
     selectStartTimeChoice,
     openAdjustModal,
     liveAdjust,
     cancelLiveAdjust,
     keepSessionRunning,
     stopAndLogSession,
-    showRunawayAlertModal,
-    runawayGuardData,
-    runawayChoice,
-    checkRunawayStopwatch,
-    resolveRunawayOption,
-    confirmRunawayResolution,
     quickLogTimelineGap,
     showEditSessionModal,
     isSavingEditSession,

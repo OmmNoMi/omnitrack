@@ -8,14 +8,14 @@
 
 import * as Vue from "vue";
 import { blockTitle } from '../utils/blockTitle.js';
+import { clock } from '../utils/clockTime.js';
 const { ref } = Vue;
 
 export function useWorkstationAudioSync({
   postJSON,
   showToast,
   isTracking,
-  trackerBoundBlock,
-  confirmStillWorking
+  trackerBoundBlock
 }) {
   // Web Audio Context Helper
   const getAudioContext = () => {
@@ -181,7 +181,9 @@ export function useWorkstationAudioSync({
     }
   };
 
-  const dispatchInactivityNotification = async (msg, tag = 'omnitrack-inactivity') => {
+  // A notification states what happened; it cannot take an answer. Clicking it only brings the
+  // page forward, where the question (if any) waits for one: it never answers it.
+  const dispatchInactivityNotification = async (msg, tag = 'omnitrack-inactivity', heading = 'OmniTrack: Are you still working?') => {
     try {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         navigator.vibrate([200, 100, 200, 100, 200]);
@@ -190,7 +192,7 @@ export function useWorkstationAudioSync({
 
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (Notification.permission === 'granted') {
-      const title = 'OmniTrack: Are you still working?';
+      const title = heading;
       const options = {
         body: msg || 'Nothing logged in the running session for 30 minutes.',
         icon: '/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg',
@@ -227,12 +229,7 @@ export function useWorkstationAudioSync({
       try {
         const notif = new Notification(title, options);
         notif.onclick = () => {
-          try {
-            window.focus();
-            if (typeof confirmStillWorking === 'function') {
-              confirmStillWorking();
-            }
-          } catch (e) {}
+          try { window.focus(); } catch (e) {}
         };
       } catch (e) {}
     } else if (Notification.permission === 'default') {
@@ -256,7 +253,6 @@ export function useWorkstationAudioSync({
     const endMins = eh * 60 + em;
 
     if (curMins >= endMins) {
-      const overdueMins = curMins - endMins;
       const nowMs = Date.now();
       const timeSinceAlert = nowMs - (lastOverrunAlertTime.value || 0);
       const REPEAT_MS = 30 * 60 * 1000;
@@ -265,12 +261,8 @@ export function useWorkstationAudioSync({
         lastOverrunAlertTime.value = nowMs;
         playInactivityChime();
         const title = blockTitle(b, b.name);
-        const endHHMM = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-        const msg = overdueMins > 0
-          ? `Planned block "${title}" ended at ${endHHMM} (${overdueMins}m overdue). Wrap up or continue?`
-          : `Planned block "${title}" ended at ${endHHMM}. Wrap up or continue?`;
-
-        dispatchInactivityNotification(msg, 'omnitrack-block-overrun');
+        const msg = `"${title}" was planned to end at ${clock(endMins)}. The session is still running.`;
+        dispatchInactivityNotification(msg, 'omnitrack-block-overrun', 'OmniTrack: Planned block ended');
       }
     }
   };

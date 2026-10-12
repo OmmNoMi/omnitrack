@@ -15,21 +15,6 @@ export function useWorkstationAttendance(w) {
   // TIMESHEET CAPTURE PERFECTION SUITE (PILLARS 1-5)
   // ==========================================
 
-  // Pillar 1: 1-Click Plan-to-Actuals Catch-Up
-  const quickConvertPlanToActual = async (block) => {
-    if (!block || !block.name) return;
-    try {
-      const res = await postJSON('convert_plan_to_actual', {
-        block_name: block.name,
-        session_notes: block.deliverable_notes || 'Completed as scheduled.'
-      });
-      showToast(`Logged ${res.actual_hours}h from the plan`, 'success');
-      fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') fetchPlannerData();
-    } catch (err) {
-      showToast('Failed to convert plan: ' + (err && err.message || err), 'danger');
-    }
-  };
   // Pillar 2: Attendance Presence Reconciliation
   const attendancePresence = ref(null);
   const fetchAttendancePresence = async () => {
@@ -72,25 +57,12 @@ export function useWorkstationAttendance(w) {
   const openEODWrapUpDrawer = () => {
     showEODModal.value = true;
   };
-  const convertAllPendingPlannedBlocks = async () => {
-    const pending = eodPendingBlocks.value || [];
-    if (!pending.length) {
-      showToast('No unlogged planned blocks to convert.', 'info');
-      return;
-    }
-    let converted = 0;
-    for (const b of pending) {
-      try {
-        await postJSON('convert_plan_to_actual', {
-          block_name: b.name,
-          session_notes: b.deliverable_notes || 'Completed as scheduled.'
-        });
-        converted++;
-      } catch (e) {}
-    }
-    showToast(`Logged ${converted} planned ${converted === 1 ? 'block' : 'blocks'}`, 'success');
-    fetchWorkstationData(selectedEmployee.value);
-    if (typeof fetchPlannerData === 'function') fetchPlannerData();
+  // A block left unlogged is logged in its own entry box, where the person says what they did:
+  // never the plan written in as the work under a stock note
+  const logPendingBlock = (block) => {
+    if (!block) return;
+    showEODModal.value = false;
+    w.openEditSessionModal(block);
   };
   const trackBlock = (block, customStartMs = null) => {
     if (!block) return;
@@ -252,14 +224,13 @@ export function useWorkstationAttendance(w) {
     }
   };
   Object.assign(w, {
-    quickConvertPlanToActual,
     attendancePresence,
     fetchAttendancePresence,
     showEODModal,
     eodSummary,
     eodPendingBlocks,
     openEODWrapUpDrawer,
-    convertAllPendingPlannedBlocks,
+    logPendingBlock,
     trackBlock,
     showSwitchTaskModal,
     showSwitchConfirmModal,

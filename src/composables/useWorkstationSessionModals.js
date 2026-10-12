@@ -2,7 +2,7 @@
  * useWorkstationSessionModals Composable
  * The running session's guards and corrections, and writing time by hand: a Stop the log
  * cannot carry yet, Start time choice, the running session's Adjust, the entry panel (add /
- * edit / free), Runaway timer guard, and deleting a logged entry.
+ * edit / free), and deleting a logged entry.
  */
 import * as Vue from "vue";
 import { whenLine, spanMins } from "../utils/clockTime.js";
@@ -22,7 +22,7 @@ export function useWorkstationSessionModals(opts) {
     toggleTrack, discardSession, appendSessionLine, syncActiveSession,
     recordUserActivity, checkInactivity, markSessionEnded, trackBlock,
     fetchWorkstationData, fetchPlannerData, getLocalTodayISO, hhmm,
-    fmtHrs, flt, extractErrorMessage, _errText
+    fmtHrs, extractErrorMessage, _errText
   } = opts;
 
   // 1. A Stop the log cannot carry yet. toggleTrack checks it before anything is torn down,
@@ -59,7 +59,9 @@ export function useWorkstationSessionModals(opts) {
   // 2. Start Time Choice Modal (Early / On-Time Protection)
   const showStartTimeChoiceModal = ref(false);
   const pendingStartBlock = ref(null);
-  const pendingStartTimeOptions = ref([]);
+  // The block's planned start, when the person starts it late: they say whether the session
+  // runs from then or from now. Now is the default answer, it claims no time not tracked.
+  const pendingStartMs = ref(0);
 
   const parseBlockStartEpoch = (b) => {
     if (!b || !b.start_time) return null;
@@ -72,6 +74,8 @@ export function useWorkstationSessionModals(opts) {
     return d.getTime();
   };
 
+  // epoch: the planned start, or null for now (the moment the answer is given, not the moment
+  // the question was asked)
   const selectStartTimeChoice = (epoch) => {
     showStartTimeChoiceModal.value = false;
     if (pendingStartBlock.value) {
@@ -142,7 +146,6 @@ export function useWorkstationSessionModals(opts) {
   const cancelLiveAdjust = () => { liveAdjust.value = null; };
 
   // Adjust: the running session in its own box, or the last hour when nothing runs.
-  // capMinutes (the runaway guard) proposes an end that many minutes after the start.
   // inPlace: asked from the box itself, which is already where the person is looking.
   const openAdjustModal = (opt = {}) => {
     const now = new Date();
@@ -153,8 +156,7 @@ export function useWorkstationSessionModals(opts) {
     }
     const start = new Date(Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000));
     // endMs: an end already suggested (the still-working question's "15 min after your last activity")
-    const cap = opt && opt.endMs ? new Date(Math.min(now.getTime(), Math.max(start.getTime(), opt.endMs)))
-      : opt && opt.capMinutes ? new Date(Math.min(now.getTime(), start.getTime() + opt.capMinutes * 60000)) : now;
+    const cap = opt && opt.endMs ? new Date(Math.min(now.getTime(), Math.max(start.getTime(), opt.endMs))) : now;
     liveAdjust.value = {
       session_date: dayOf(start),
       from_time: clockOf(start),
@@ -289,47 +291,7 @@ export function useWorkstationSessionModals(opts) {
     }
   };
 
-  // 4. Runaway Timer Guard
-  const showRunawayAlertModal = ref(false);
-  const runawayGuardData = ref({ elapsed_hours: 0, suggested_cap_hours: 0, reason: '', started_at_str: '' });
-  const runawayChoice = ref('keep'); // 'keep' | 'cap' | 'custom'
-
-  const checkRunawayStopwatch = async () => {
-    if (!isTracking.value || !startTime.value) return;
-    try {
-      const res = await postJSON('check_runaway_timer_guard', {
-        start_ms: startTime.value,
-        scheduled_duration_hours: trackerBoundBlock.value ? flt(trackerBoundBlock.value.duration_hours) : 0
-      });
-      if (res && res.is_runaway) {
-        runawayGuardData.value = {
-          elapsed_hours: res.elapsed_hours,
-          suggested_cap_hours: res.suggested_cap_hours,
-          reason: res.reason,
-          started_at_str: new Date(res.start_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        runawayChoice.value = 'cap';
-        showRunawayAlertModal.value = true;
-      }
-    } catch (err) {}
-  };
-
-  const resolveRunawayOption = (choice) => { runawayChoice.value = choice; };
-
-  const confirmRunawayResolution = () => {
-    showRunawayAlertModal.value = false;
-    if (runawayChoice.value === 'keep') {
-      showToast('Timer kept running. Remember to stop when done!', 'info');
-    } else if (runawayChoice.value === 'cap') {
-      // The running session's box opens on its times, with the end at the suggested cap
-      openAdjustModal({ capMinutes: Math.round(flt(runawayGuardData.value.suggested_cap_hours || 2.0) * 60) });
-    } else if (runawayChoice.value === 'custom') {
-      openAdjustModal();
-    }
-  };
-
-
-  // 5. Delete a logged entry
+  // 4. Delete a logged entry
   const confirmDeleteSession = async (block, session) => {
     if (!session || !session.name) return;
     const timeLabel = session.from_time ? hhmm(session.from_time) + '–' + hhmm(session.to_time) : fmtHrs(session.hours) + 'h';
@@ -358,15 +320,9 @@ export function useWorkstationSessionModals(opts) {
     refuseEmptySession,
     showStartTimeChoiceModal,
     pendingStartBlock,
-    pendingStartTimeOptions,
+    pendingStartMs,
     parseBlockStartEpoch,
     selectStartTimeChoice,
-    showRunawayAlertModal,
-    runawayGuardData,
-    runawayChoice,
-    checkRunawayStopwatch,
-    resolveRunawayOption,
-    confirmRunawayResolution,
     showEditSessionModal,
     isSavingEditSession,
     editSessionTargetBlock,
