@@ -6,6 +6,9 @@
 //   calendar over the form at once (Reschedule). A field marked aria-haspopup is skipped.
 // - frappe-ui's Combobox trigger is inline-flex, so it shrank to its text and cut a long
 //   name short ("Nomeshwer Sharma (") inside a wider column. It fills its container.
+// - A component's $el is not always an element: frappe-ui's Button can root on a text or
+//   fragment node, so `this.$refs.keepBtn.$el.focus()` threw "e.focus is not a function" and
+//   focus fell to <body>. Focus an element found by querySelector (a data- attribute), never $el.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +43,20 @@ if (!/items\.find\(\(el\) => !isClose\(el\) && !isDestructive\(el\) && !opensOnF
 
 const css = read("src/styles/main.css");
 if (!/\[data-slot="trigger"\]:has\(> input\[role="combobox"\]\) \{ display: flex; width: 100%; \}/.test(css)) problems.push("src/styles/main.css: a Combobox trigger fills its container (display: flex; width: 100%)");
+
+// A $el is never focused itself, directly or through a variable it was put in
+const sources = [];
+const walkAll = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walkAll(p); else if (/\.(vue|js)$/.test(e.name)) sources.push(p); } };
+walkAll(path.join(root, "src"));
+for (const file of sources) {
+  const src = fs.readFileSync(file, "utf8");
+  const rel = path.relative(root, file);
+  if (/\.\$el\??\.focus\(/.test(src)) problems.push(`${rel}: focuses a component's $el; focus the element itself (querySelector a data- attribute)`);
+  for (const m of src.matchAll(/(?:const|let)\s+(\w+)\s*=\s*[^;\n]*\.\$el\b[^;\n]*;([\s\S]{0,240})/g)) {
+    if (/querySelector/.test(m[0].slice(0, m[0].indexOf(";")))) continue; // an element found inside it
+    if (new RegExp(`\\b${m[1]}\\??\\.focus\\(`).test(m[2])) problems.push(`${rel}: focuses a component's $el (${m[1]}); focus the element itself (querySelector a data- attribute)`);
+  }
+}
 
 if (problems.length) {
   console.error("FAIL: field focus and width\n  " + problems.join("\n  "));

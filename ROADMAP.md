@@ -1168,5 +1168,5 @@ Open:
 - `workSessionStore.js` looks dead; `useWorkstationApi` still exports an unused `sessionStart`.
 - The Live session bar is named from the block title only; with no block it should use the first Log line, as the prompt does.
 - The hash once jumped to `#/planner` after the prompt closed; not reproduced since. Watch for it.
-- Console showed `Uncaught (in promise) TypeError: e.focus is not a function` (twice, from an earlier bundle, 2026-10-12): some focus-return calls `.focus()` on a component ref, not its element. Find the `$refs`/ref `.focus()` calls that can hold a frappe-ui component and use `$el` or a guard.
+- Fixed: `Uncaught (in promise) TypeError: e.focus is not a function`. An interim still-working prompt focused `this.$refs.keepBtn.$el` / `discardBtn.$el`; a frappe-ui Button's `$el` can be a text node. That code is gone, and `check_field_focus.mjs` now refuses focusing any `$el`.
 - Maybe: show a passive word count in the Log once a minimum is set, so the refusal is never a surprise.

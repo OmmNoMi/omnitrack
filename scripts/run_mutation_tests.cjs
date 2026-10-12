@@ -1293,6 +1293,10 @@ runMutationTest('The Due picker loses its name', SRC('src/components/dialogs/Tas
   (code) => code.replace('aria-label="Due" aria-haspopup="dialog"', 'aria-haspopup="dialog"'), FF, 'has no aria-label');
 runMutationTest('The Combobox shrinks to its text again', SRC('src/styles/main.css'),
   (code) => code.replace('[data-slot="trigger"]:has(> input[role="combobox"]) { display: flex; width: 100%; }', ''), FF, 'fills its container');
+runMutationTest('A dialog focuses a Button through its $el again', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("const el = box && (box.querySelector('button:not([disabled])') || box);", 'const el = this.$refs.stateBtn && this.$refs.stateBtn.$el;'), FF, "focuses a component's $el");
+runMutationTest('A sheet focuses its close Button through $el directly', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace("if (el) el.focus();\n      });\n    },\n    // Back to the row", "if (el) el.focus();\n        this.$refs.sheet.$el.focus();\n      });\n    },\n    // Back to the row"), FF, "focuses a component's $el");
 
 runMutationTest('The session sheet drops a fact name', SRC('src/drawers/SessionDetailDrawer.vue'),
   (code) => code.replace('<dt :class="mutedText">When</dt>', '<dt :class="mutedText"></dt>'), DK, 'the "When" fact is not named');

@@ -351,6 +351,9 @@ A span measured on the clock (`spanMins`, 23:00 to 04:00 = 300) must be added on
 ## Gotcha: page activity must never answer a prompt
 `recordUserActivity` runs on every pointerdown and keydown on the page (`useWorkstationEod`). It used to close the still-working dialog, so the click that went to "Stop at" closed the dialog first and the person's answer was lost. Activity listeners move the clock on and nothing else. The dialog also holds the moment it asked about (`idleSinceMs`), so what the person does while answering does not move "since 12:49 pm" or the suggested end. The dialog never stops the session itself: one press must not end a session that may still be running. `check_session_restore.mjs` guards all three.
 
+## Gotcha: a component's `$el` is not something to focus
+frappe-ui's Button (and any component whose root is a fragment or text) can have a `$el` that is a text node, so `this.$refs.btn.$el.focus()` throws "e.focus is not a function" inside `$nextTick` and focus falls to `<body>`. Give the target a `data-` attribute and focus what `querySelector` finds. `check_field_focus.mjs` refuses a focused `$el`.
+
 ## Gotcha: focus that falls to the dialog shell loses Escape
 When a dialog swaps the focused button for another (`v-if`), focus drops to reka's DialogContent, outside our panel. An Escape there is not the panel's: `onPlannerKeydown` (document, bubble) closes the whole dialog instead of the step. Place focus by hand after the swap (`document.querySelector` in `$nextTick`; a Button ref's `$el` is not the button), and an FDialog `escBack` step calls `preventDefault` so the page handler skips it.
 
