@@ -97,7 +97,12 @@ def _create_assigned_work(subject, user, project=None):
 	if not subject:
 		frappe.throw(_("Task name cannot be empty."))
 	has_project = project and frappe.db.exists("DocType", "Project") and frappe.db.exists("Project", project)
-	if frappe.db.exists("DocType", "Task"):
+	can_use_task = (
+		frappe.db.exists("DocType", "Task")
+		and frappe.has_permission("Task", "create", user=frappe.session.user)
+		and frappe.has_permission("Task", "read", user=frappe.session.user)
+	)
+	if can_use_task:
 		task = frappe.new_doc("Task")
 		task.subject = subject[:140]
 		task.status = "Open"
@@ -106,7 +111,14 @@ def _create_assigned_work(subject, user, project=None):
 		task.flags.ignore_permissions = True
 		task.insert()
 		from frappe.desk.form.assign_to import add as add_assignment
-		add_assignment({"doctype": "Task", "name": task.name, "assign_to": [user]})
+		try:
+			add_assignment({"doctype": "Task", "name": task.name, "assign_to": [user]})
+		except Exception:
+			try:
+				from frappe.desk.form.assign_to import _add as add_assignment_internal
+				add_assignment_internal({"doctype": "Task", "name": task.name, "assign_to": [user]}, ignore_permissions=True)
+			except Exception:
+				pass
 		return task.name
 	todo = frappe.new_doc("ToDo")
 	todo.description = subject

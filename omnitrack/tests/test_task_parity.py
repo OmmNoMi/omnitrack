@@ -26,8 +26,12 @@ NEHA, NOMESH = "neha@example.com", "nomesh@example.com"
 
 
 def body_of(src, name):
-	start = src.index(f"\tdef {name}(")
-	end = src.find("\n\tdef ", start + 1)
+	if f"\tdef {name}(" in src:
+		start = src.index(f"\tdef {name}(")
+		end = src.find("\n\tdef ", start + 1)
+	else:
+		start = src.index(f"def {name}(")
+		end = src.find("\ndef ", start + 1)
 	return src[start:end if end != -1 else len(src)]
 
 
@@ -82,6 +86,17 @@ class TestTaskParity(unittest.TestCase):
 	def test_the_result_says_who_was_added(self):
 		self.assertIn('"added_to_tasks": doc.flags.added_to_tasks or [],', PLANNER)
 		self.assertIn('"added_to_tasks": res.get("added_to_tasks") or [],', FAC)
+
+	def test_create_assigned_work_permission_defense(self):
+		"""Users without Task docperm must not crash with PermissionError when creating work."""
+		body = body_of(PLANNER, "_create_assigned_work")
+		self.assertIn("can_use_task", body)
+		self.assertIn('frappe.has_permission("Task"', body)
+
+	def test_controller_guards_against_task_assignment_permission_error(self):
+		"""When employee lacks Task permission, put_person_on_tasks must catch assignment errors."""
+		body = body_of(CONTROLLER, "put_person_on_tasks")
+		self.assertIn("try:\n\t\t\t\t\tadd_assignment", body)
 
 
 if __name__ == "__main__":

@@ -204,7 +204,23 @@ class PlannedWorkBlock(OptionalLinks, Document):
 			from frappe.desk.form.assign_to import add as add_assignment
 
 			for name in assign:
-				add_assignment({"doctype": "Task", "name": name, "assign_to": [self.employee]})
+				try:
+					add_assignment({"doctype": "Task", "name": name, "assign_to": [self.employee]})
+				except Exception:
+					try:
+						task_subj = frappe.db.get_value("Task", name, "subject") or name
+						frappe.get_doc({
+							"doctype": "ToDo",
+							"allocated_to": self.employee,
+							"reference_type": "Task",
+							"reference_name": name,
+							"description": task_subj,
+							"status": "Open",
+							"date": frappe.utils.nowdate(),
+							"assigned_by": frappe.session.user,
+						}).insert(ignore_permissions=True)
+					except Exception:
+						pass
 			self.flags.added_to_tasks = assign
 
 	def calculate_duration(self):
