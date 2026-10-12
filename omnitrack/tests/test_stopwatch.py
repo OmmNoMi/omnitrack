@@ -141,7 +141,7 @@ class TestStopwatch(FrappeTestCase):
 
 		res = switch_active_session(
 			target_block=block_b.name,
-			current_session_notes="Wrapping up sprint testing on block A"
+			current_session_notes="Wrapped up sprint testing on block A, filed the two failing cases, and noted the retest for tomorrow"
 		)
 
 		self.assertEqual(res["status"], "success")
@@ -156,6 +156,41 @@ class TestStopwatch(FrappeTestCase):
 		self.assertIsNotNone(active)
 		self.assertEqual(active.get("status"), "active")
 		self.assertEqual(active.get("trackerBlockName"), block_b.name)
+
+	def test_switch_from_a_session_on_no_block_saves_it(self):
+		"""A session on no block is saved when the person switches, as Stop saves it. It used to
+		end with nothing saved while the dialog said "Ends now and is saved"."""
+		target = _block(start_time="10:00:00", end_time="11:00:00", status="Planned")
+		target.insert()
+		start_ms = int(datetime.now().timestamp() * 1000) - (20 * 60 * 1000)
+		sync_active_session(session_data={"startTime": start_ms, "trackerBlockName": None, "selectedNature": "Work", "status": "active"})
+		notes = "Read the failing invoice export, found the rounding bug in the tax line, and wrote a fix with a test"
+		before = frappe.db.count("Planned Work Block", {"employee": "Administrator", "unplanned": 1})
+
+		res = switch_active_session(target_block=target.name, current_session_notes=notes)
+
+		self.assertGreater(res["elapsed_hours"], 0)
+		saved = frappe.get_all("Planned Work Block", filters={"employee": "Administrator", "unplanned": 1}, fields=["name", "deliverable_notes", "actual_hours"], order_by="creation desc", limit=1)
+		self.assertEqual(frappe.db.count("Planned Work Block", {"employee": "Administrator", "unplanned": 1}), before + 1)
+		self.assertEqual(saved[0].deliverable_notes, notes)
+		self.assertGreater(flt(saved[0].actual_hours), 0)
+		self.assertEqual(get_active_session().get("trackerBlockName"), target.name)
+
+	def test_switch_refuses_a_short_log_and_keeps_the_session(self):
+		"""No invented note: a log too short to save refuses the switch, and the session runs on."""
+		block_a = _block(start_time="09:00:00", end_time="10:00:00", status="In Progress")
+		block_a.insert()
+		block_b = _block(start_time="10:00:00", end_time="11:00:00", status="Planned")
+		block_b.insert()
+		start_ms = int(datetime.now().timestamp() * 1000) - (15 * 60 * 1000)
+		sync_active_session(session_data={"startTime": start_ms, "trackerBlockName": block_a.name, "status": "active"})
+
+		for notes in (None, "", "fixed it"):
+			with self.assertRaises(frappe.ValidationError):
+				switch_active_session(target_block=block_b.name, current_session_notes=notes)
+			active = get_active_session()
+			self.assertEqual(active.get("trackerBlockName"), block_a.name)
+			self.assertEqual(int(active.get("startTime")), start_ms)
 
 	def test_multi_device_clock_skew_and_future_tolerance(self):
 		"""Ensures get_active_session does not prematurely evict sessions with near-future/skewed start times."""

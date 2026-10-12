@@ -142,6 +142,12 @@ Every frappe-ui component a template uses, `FeatherIcon` included, must be liste
 
 ommnomi.local is the owner's shared, working site. Python tests that insert Planned Work Blocks, ToDos or Users must clean up in `tearDown` and must not commit. Run them on a throwaway site. Past runs left 147 test blocks and 255 test ToDos there. They were deleted on 2026-10-07 (see ROADMAP); do not refill it. A test that deletes a block must use `delete_doc` so its child rows go too. Raw deletes left 28 orphan Work Session rows.
 
+On this bench, ommnomi.local is the only site with OmniTrack installed (2026-10-12), so there is no throwaway site to run them on yet; make one (`bench new-site` + `install-app omnitrack`) with the owner's OK rather than running them here. `test_stopwatch.py` is doubly unsafe on a live site: `setUp` deletes Administrator's active session from Redis (`frappe.cache.hdel`), which no rollback undoes, so a real running session on that account would vanish.
+
+## Gotcha: `switch_active_session` saved only sessions on a block
+
+Until 2026-10-12 it logged the ending session only when it had a `trackerBlockName`. A session on no block was overwritten by the next one with nothing saved, while the dialog said "Ends now and is saved". It now saves that session through `quick_timer_punch`, as Stop does. It also used to invent a note ("Session completed before switching to …") when the person wrote nothing; now a short log refuses the switch and the session keeps running. Any new "end this session" path must save in both cases and in the person's words.
+
 ## Workflow
 
 After editing `www/*.html`: `bench --site <site> clear-website-cache`, then reload
@@ -262,6 +268,7 @@ reka's Combobox and MultiSelect are the exception: they close on Escape **withou
 ## Gotcha: TimePicker and Combobox attrs (frappe-ui 0.1.278)
 * `TimePicker` drops every attr (its Popover has `inheritAttrs: false`), so `aria-label`, `class` and `id` passed to it do nothing. Style its input from a wrapper (`[&_input]:h-9`).
 * `TimePicker` with `:options` shows the option's `label` in the list but formats the input itself ("1:45 pm").
+* `Combobox` puts `id` and any other attrs (`data-autofocus`) on its input, so `<label for="that-id">` names it and FDialog can focus it.
 * `Combobox` accepts `variant` and `size` (they render as `data-variant`/`data-size` on its anchor). The anchor is `inline-flex`, so make it full width from a wrapper: `[&_div[data-variant]]:w-full`.
 
 ## Gotcha: Raven's routes
@@ -315,6 +322,9 @@ In the Claude desktop browser pane, `ws://ommnomi.local:9003/socket.io/` fails h
 
 ## Gotcha: mutants must never touch the served files
 `scripts/run_mutation_tests.cjs` used to rewrite real source files for a moment, the Python API files among them. `bench start` serves with the reloader, so each Python mutant restarted the web process, and pages loaded meanwhile came up as bare HTML. Mutant 1 also rebuilt the served bundle with a runtime-only Vue. The runner now copies the app to a temp directory (with `node_modules` symlinked), mutates and tests only there, and throws if a mutant names a file outside the copy. Build new mutants with `SRC(...)` or `path.resolve(omnitrackDir, ...)`, never `__dirname`. Side effect: you can keep editing `src/` while a run is going.
+
+## Gotcha: a lazy `[\s\S]*?` in a guard runs past the code it means
+`/log_work_session\([\s\S]*?notes=current_session_notes,/` passed with the call's `notes=` mutated, because the lazy match kept going into the next call (`quick_timer_punch`), which has the same line. Bound the match to the one call: `(?:(?!\n\t\t\))[\s\S])*?` stops at that call's closing paren. Every guard needs a mutant on the exact line it protects. A survivor in a file with repeated lines usually means this.
 
 The old runs once left the web process broken, and reloading did not help. It cuts large responses off at random sizes, the stylesheet and sometimes the script, and logs `OSError: [Errno 9] Bad file descriptor` from `werkzeug/serving.py` `write` → `sendall` (Python 3.14, werkzeug threaded server). Every client sees it, not just the browser. To tell: `curl -o /dev/null -w "%{size_download}\n"` the bundle CSS ten times. Anything short of the size on disk means the process is broken, and only a full `bench start` restart fixes it. The extra 5 s on `http://ommnomi.local` URLs in curl is macOS trying mDNS for `.local` before `/etc/hosts`. It is unrelated, so use `--resolve ommnomi.local:8003:127.0.0.1` to skip it.
 

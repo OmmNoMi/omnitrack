@@ -184,9 +184,9 @@ runMutationTest(
   'they stack on hover'
 );
 runMutationTest(
-  'Tailwind config loses the 950 / indigo palette extension',
+  'Tailwind config loses the 950 palette extension',
   tailwindConfigPath,
-  (code) => code.replace('indigo: require("tailwindcss/colors").indigo,', ''),
+  (code) => code.replace('{ 950: require("tailwindcss/colors")[c][950] }', '{}'),
   'node scripts/check_palette_classes.cjs',
   'compile to nothing'
 );
@@ -1405,13 +1405,53 @@ runMutationTest('The runaway options-plus-Apply dialog comes back', SRC('src/com
 runMutationTest('App.vue hands the start-time question its block under a name it does not declare', SRC('src/App.vue'),
   (code) => code.replace(':pending-start-block="pendingStartBlock"', ':pending-block="pendingStartBlock"'), 'node scripts/check_app_bindings.cjs', 'bindings it does not declare');
 
+// One switch dialog: picked in place, Switch waits, a refusal keeps the session and says why
+const SWM = 'src/components/dialogs/WrapAndStartNextModal.vue', SWA = 'src/composables/useWorkstationAttendance.js';
+runMutationTest('Switch can be pressed with nothing picked', SRC(SWM),
+  (code) => code.replace('return !!this.targetItem && this.enoughWords && !this.isSwitching;', 'return this.enoughWords && !this.isSwitching;'), SD, 'Switch waits for a target');
+runMutationTest('Switch ignores a log too short to save', SRC(SWM),
+  (code) => code.replace('return !!this.targetItem && this.enoughWords && !this.isSwitching;', 'return !!this.targetItem && !this.isSwitching;'), SD, 'Switch waits');
+runMutationTest('The last line does not count toward the words', SRC(SWM),
+  (code) => code.replace('return this.logWords + countSessionWords(this.wrapUpNote);', 'return this.logWords;'), SD, "last line's words count");
+runMutationTest('Focus skips the open question', SRC(SWM),
+  (code) => code.replace('if (this.pick && !this.targetItem) return "pick";', ''), SD, 'focus starts on what starts next');
+runMutationTest('The title jumps once a target is picked', SRC(SWM),
+  (code) => code.replace('if (this.pick) return "What are you switching to?";', 'if (this.pick && !this.targetItem) return "What are you switching to?";'), SD, 'the title stays put');
+runMutationTest('A block option drops its clock times', SRC(SWM),
+  (code) => code.replace('description: this.details(t)', 'description: t.project'), SD, 'says when, as a clock');
+runMutationTest('A refusal is not said in the dialog', SRC(SWM),
+  (code) => code.replace('<p v-if="error" role="alert"', '<p v-if="error"'), SD, 'said in place');
+runMutationTest('A refusal closes the dialog', SRC(SWA),
+  (code) => code.replace('if (await executeSwitchTask(switchTargetItem.value)) {', 'await executeSwitchTask(switchTargetItem.value); {'), SD, 'refused: the dialog stays open');
+runMutationTest('A refusal is only a toast', SRC(SWA),
+  (code) => code.replace("switchError.value = String((err && err.message) || err || '');", "showToast(String(err), 'danger');"), SD, 'refused: it says why');
+runMutationTest('An edit leaves the old refusal up', SRC(SWA),
+  (code) => code.replace("watch([switchWrapUpNote, switchTargetItem], () => { switchError.value = ''; });", ''), SD, 'an edit clears the refusal');
+runMutationTest("The session's tasks are dropped on a switch", SRC(SWA),
+  (code) => code.replace(/,\n\s*session_tasks: JSON\.stringify\([^\n]*\n/, '\n'), SD, "the session's tasks go with it");
+runMutationTest('The next session inherits the last one\'s tasks', SRC(SWA),
+  (code) => code.replace('if (w.sessionTasks) w.sessionTasks.value = [];', ''), SD, 'starts with no tasks');
+runMutationTest('The running block is offered as the next one', SRC(SWA),
+  (code) => code.replace("b.name !== curBlock && ", ''), SD, 'the running block is not offered');
+runMutationTest('Switch opens over the session popup', SRC(SWA),
+  (code) => code.replace('if (isSessionElevated.value) isSessionElevated.value = false;\n    openSwitch(null, true);', 'openSwitch(null, true);'), SD, 'closes the session popup');
+runMutationTest('The Switch button opens the old list', SRC('src/views/dashboard/DashboardHappeningNow.vue'),
+  (code) => code.replace('@click.stop="openSwitchPicker"', '@click.stop="openSwitchTaskModal"'), SD, 'opens the switch dialog to pick in');
+runMutationTest('Switch offered with nothing to switch to', SRC('src/views/dashboard/DashboardHappeningNow.vue'),
+  (code) => code.replace('<Button v-if="switchCandidates.length" variant="ghost" icon="repeat"', '<Button variant="ghost" icon="repeat"'), SD, 'a question with no answer');
+runMutationTest('The switch invents a note again', SRC('omnitrack/api/stopwatch.py'),
+  (code) => code.replace('\t\t\tnotes=current_session_notes,\n\t\t\tlogged_via="Stopwatch"', '\t\t\tnotes=current_session_notes or "Switched to another task",\n\t\t\tlogged_via="Stopwatch"'), SD, 'never an invented note');
+runMutationTest('A session on no block is dropped by a switch', SRC('omnitrack/api/stopwatch.py'),
+  (code) => code.replace('\telif start_ms > 0:\n', '\telif False:\n'), SD, 'on no block is saved');
+
 // Summary Report
 console.log('\n===========================================================');
 console.log(` Mutation Testing Summary:`);
 console.log(`   Total Mutants Tested: ${totalMutants}`);
 console.log(`   Killed Mutants (Caught): ${killedMutants}`);
 console.log(`   Surviving Mutants (Missed): ${survivingMutants}`);
-const mutationScore = Math.round((killedMutants / totalMutants) * 100);
+// Floored, so a single survivor never reads as 100%
+const mutationScore = Math.floor((killedMutants / totalMutants) * 1000) / 10;
 console.log(`   Mutation Score: ${mutationScore}%`);
 console.log('===========================================================\n');
 

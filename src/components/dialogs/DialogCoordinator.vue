@@ -50,19 +50,6 @@
       @log-block="$emit('log-pending-block', $event)"
     />
 
-    <SwitchTaskModal
-      :model-value="showSwitchTaskModal"
-      @update:model-value="$emit('update:showSwitchTaskModal', $event)"
-      :wrap-up-note="switchWrapUpNote"
-      @update:wrap-up-note="$emit('update:switchWrapUpNote', $event)"
-      :search-query="switchSearchQuery"
-      @update:search-query="$emit('update:switchSearchQuery', $event)"
-      :formatted-time="formattedTime"
-      :is-bound="isBound"
-      :candidates="switchCandidates"
-      @switch-to="$emit('switch-task-to', $event)"
-    />
-
     <WrapAndStartNextModal
       :model-value="showSwitchConfirmModal"
       @update:model-value="$emit('update:showSwitchConfirmModal', $event)"
@@ -74,6 +61,12 @@
       :selected-project="selectedProject"
       :target-item="switchTargetItem"
       :is-switching="isSwitchingSession"
+      :pick="switchPick"
+      :candidates="switchCandidates"
+      :log-words="switchLogWords"
+      :min-words="switchMinWords"
+      :error="switchError"
+      @pick="$emit('update:switchTargetItem', $event)"
       @confirm="$emit('confirm-switch-and-start')"
     />
 
@@ -139,15 +132,14 @@ export default {
     eodSummary: { type: Object, default: () => ({}) },
     eodPendingBlocks: { type: Array, default: () => [] },
 
-    // SwitchTaskModal
-    showSwitchTaskModal: { type: Boolean, default: false },
-    switchWrapUpNote: { type: String, default: "" },
-    switchSearchQuery: { type: String, default: "" },
-    isBound: { type: Boolean, default: false },
-    switchCandidates: { type: Array, default: () => [] },
-
-    // WrapAndStartNextModal
+    // WrapAndStartNextModal: the one switch dialog
     showSwitchConfirmModal: { type: Boolean, default: false },
+    switchWrapUpNote: { type: String, default: "" },
+    switchPick: { type: Boolean, default: false },
+    switchCandidates: { type: Array, default: () => [] },
+    switchLogWords: { type: Number, default: 0 },
+    switchMinWords: { type: Number, default: 15 },
+    switchError: { type: String, default: "" },
     currentSessionLabel: { type: String, default: "" },
     currentLogCount: { type: Number, default: 0 },
     selectedProject: { type: String, default: "" },
@@ -178,10 +170,8 @@ export default {
     "adjust-inactivity",
     "update:showEODModal",
     "log-pending-block",
-    "update:showSwitchTaskModal",
     "update:switchWrapUpNote",
-    "update:switchSearchQuery",
-    "switch-task-to",
+    "update:switchTargetItem",
     "update:showSwitchConfirmModal",
     "confirm-switch-and-start",
     "update:showCancelModal",

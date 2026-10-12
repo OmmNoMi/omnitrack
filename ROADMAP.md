@@ -731,7 +731,7 @@ Phase 0 → Phase 1 (dashboard first, as proof) → Phase 2 splits → Phase 3 �
 - Done: the session popup's "Working on" Combobox is gone. It now shows the same `BlockTasksSection` a block shows. Bound to a block, it lists that block's tasks. Unbound, it lists the session's own tasks (`sessionTasks`, synced across devices), and Stop puts them on the new block (`quick_timer_punch` → `attach_session_tasks`). A session task opens the one `TaskFormDialog` (`onRemove` / `onChange`), so it moves through its workflow the same way everywhere. Guarded by `check_dialog_popovers.cjs` sections 13–15, with mutants.
 - Fixed: on phones the three session tools (Discard / Adjust / Stop) were off centre. frappe-ui keeps the hidden label's wrapper and its 8px gap. Under 480px they are squared to 28×28 (`TOOL_SQUARE`).
 - Fixed: one Escape closed both the Add tasks dialog and the session popup under it. `FDialog.keepEscape` stops the Escape at its panel and closes the dialog itself (reka's own close listens on the bubble path, so it never sees it).
-- Open: `sessionTasks` are dropped when an unbound session is bound to a block mid-session, and when a bound session stops. `switch_active_session` does not carry them either, and nor does `writeEntry`'s `quick_timer_punch`.
+- Open: `sessionTasks` are dropped when an unbound session is bound to a block mid-session, and when a bound session stops. `writeEntry`'s `quick_timer_punch` does not carry them either. (`switch_active_session` now carries them for an unbound session, 2026-10-12.)
 - Open: ticking a session task does not close its ToDo until Stop.
 - Open: `src/session/useSessionTodoPicker.js` is now unused. Delete it (waiting on the owner's OK). `SessionBox`'s `assignedTasks` / `workBlocks` props and the workstation-level ToDo picker (`assignmentStore`, `useWorkstationIdentity`) may be dead too.
 - Open: in nested FDialogs, the outer dialog's `noteEscape` still fires `escBack` for the inner dialog's Escape.
@@ -1141,7 +1141,7 @@ Fixed:
 
 Open:
 - `linesRev` is the device's clock. Two devices with clocks far apart could still pick the wrong copy. A server-issued counter would not.
-- Switching to another block (`switch_active_session`) is refused by the same word rule, and when the person wrote nothing the server invents "Session completed before switching to …". The switch is atomic, so nothing is lost, but it should ask for words first, as Stop now does, and never invent a note.
+- Done (2026-10-12): switching asks for words first, in the switch dialog, and the server never invents a note. See "One question at a time" below.
 - `src/stores/workSessionStore.js` repeats the session sync with none of this (no `linesRev`, and it clears the server copy before saving). Nothing imports it; it is on the list to delete.
 
 ## OmniTrack tile missing from the ommnomi.in desk (found 2026-10-12)
@@ -1170,11 +1170,22 @@ Done:
   - Wrap up the day is one sentence ("You logged 1 h 12 min today. 2 planned blocks are not logged yet.") and the blocks left. Each block's Log closes the review and opens that block's own entry box, where the person says what they did. Done closes it. Gone: "Log all", which wrote every plan in as the work under "Completed as scheduled.", and "Finish", which only showed a toast.
   - The block-overrun notification says what happened and asks nothing: "\"Reconcile March invoices\" was planned to end at 4:30 pm. The session is still running." It has its own heading. Clicking any notification only brings the page forward. It used to answer the still-working question with Keep working.
   - The still-working notification states the gap ("Nothing logged on … for 25 min."); its heading carries the question.
-  - The switch confirm (`WrapAndStartNextModal`) already fits: one question, its buttons are the answers.
   - Guarded by `check_prompts.mjs` (in `test:static`) and 12 mutants.
+- The switch dialog, the same way:
+  - `SwitchTaskModal` is deleted: "Switch Active Task", "Active Clock", the bound/unbound badges, raw inputs, and a list whose rows switched on one click, with no word rule.
+  - The Switch button now opens the one switch dialog (`WrapAndStartNextModal`), titled "What are you switching to?". Its second stop is a frappe-ui Combobox: "Planned today" (with clock times and project), then "Your tasks". Focus starts there. A block's own Start still opens it with the block known ("Start the next block?").
+  - Switch waits for a target and for a log the server will save. When the log is short, the last line says so live ("Describe what you did in at least 15 words (you wrote 6).") and focus starts in it.
+  - The dialog closes only once the switch is made. A refusal stays in place: "Not switched, the session is still running." plus the server's reason, and the last line is kept. It used to close first, then show a toast.
+  - Server: no invented note ("Session completed before switching to …"); the log is saved as written, or the switch is refused and the session runs on.
+  - Fixed, data loss: switching from a session on no block saved nothing, while the dialog said "Ends now and is saved". It is now saved as Stop saves it (its own unplanned block), with the session's tasks.
+  - The Switch icon is offered only when there is something to switch to. With nothing planned or assigned it opened a question no one could answer.
+  - Guarded by `check_switch_dialog.mjs` (runs the dialog's rules and the real composable) and 18 mutants. Server tests in `omnitrack/tests/test_stopwatch.py` (saved with no block; a short log is refused and the session kept). Not run yet: ommnomi.local is the only site with OmniTrack, and tests must not run there.
+
+- Test suite: the mutation report rounded 489/491 up to "Mutation Score: 100%" while saying two survived. It is floored to one decimal now. The Tailwind `indigo`/`sky` extensions lost their last user with `SwitchTaskModal`, so they are gone, and the palette mutant now removes the 950 shades `src` still uses.
 
 Open:
-- `SwitchTaskModal` (opened by the switch shortcut, not on its own) still reads the old way: "Switch Active Task", "Active Clock", "Bound to Block / Unbound Focus" badges, raw `<input>`s instead of frappe-ui fields, and a free-text wrap-up note that skips the Log's word rule.
+- The switch toast says "Saved 10 min. X has started." with no Undo. Maybe: an Undo that puts the last session back for a few seconds.
+- `quick_timer_punch` saves for `frappe.session.user`, while `switch_active_session` reads the session of `_resolve_planner_user()`. When a manager switches on someone else's behalf (if that path exists), an unbound session would be saved to the manager. Check whether that path is reachable.
 - `convert_plan_to_actual` (server) still accepts a block with any notes, and its docstring still says "Pillar 1". Nothing in the page calls it now. Either delete it or make it refuse a note under Minimum Words per Session, like Stop does.
 - Maybe: the day review counts only logged sessions, so a running session reads as "You logged 0 min today". Say "and one session is still running" when one is.
 - `workSessionStore.js` looks dead; `useWorkstationApi` still exports an unused `sessionStart`.

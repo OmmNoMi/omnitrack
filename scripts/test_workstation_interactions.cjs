@@ -211,7 +211,9 @@ for (const f of vueFiles) {
   assert.ok(!/<f-combobox|<FCombobox/.test(src), `FAIL: ${path.basename(f)} uses the retired FCombobox`);
   for (const m of src.matchAll(/<Combobox\b([^>]*)>/g)) {
     comboboxCount++;
-    assert.ok(/aria-label=/.test(m[1]), `FAIL: <Combobox> in ${path.basename(f)} needs an aria-label`);
+    // Named by aria-label, or by a <label for> its id (frappe-ui puts the id on the input)
+    const id = (m[1].match(/\sid="([^"]+)"/) || [])[1];
+    assert.ok(/aria-label=/.test(m[1]) || (id && src.includes(`<label for="${id}"`)), `FAIL: <Combobox> in ${path.basename(f)} needs an aria-label or a <label for> its id`);
     assert.ok(/v-model=/.test(m[1]) || (/:model-value=/.test(m[1]) && /@update:model-value=/.test(m[1])), `FAIL: <Combobox> in ${path.basename(f)} needs a v-model (or :model-value with @update:model-value)`);
   }
 }
@@ -962,24 +964,22 @@ assert.ok(
   'FAIL: switch_active_session must be defined in omnitrack/api'
 );
 
-// 2. UI trigger button in session card toolbar
+// 2. The Switch button opens the one switch dialog, asking what comes next (check_switch_dialog.mjs)
 assert.ok(
-  content.includes('@click.stop="openSwitchTaskModal"'),
+  content.includes('@click.stop="openSwitchPicker"'),
   'FAIL: Switch task button must be present in session card toolbar'
 );
-
-// 3. Switch Task modal dialog defined in template
 assert.ok(
-  content.includes('v-model="showSwitchTaskModal"') || content.includes(':model-value="showSwitchTaskModal"') || content.includes('v-model:show-switch-task-modal="showSwitchTaskModal"'),
-  'FAIL: showSwitchTaskModal dialog must be defined in template'
+  content.includes('v-model:show-switch-confirm-modal="showSwitchConfirmModal"') && content.includes(':switch-pick="switchPick"'),
+  'FAIL: the switch dialog must be bound in the template, with its picking mode'
 );
 
-// 4. Setup exposes switch task properties
+// 3. Setup exposes switch task properties
 assert.ok(
-  content.includes('showSwitchTaskModal,') &&
-  content.includes('openSwitchTaskModal,') &&
+  content.includes('showSwitchConfirmModal,') &&
+  content.includes('openSwitchPicker,') &&
   content.includes('executeSwitchTask,'),
-  'FAIL: setup() must expose showSwitchTaskModal, openSwitchTaskModal, and executeSwitchTask'
+  'FAIL: setup() must expose showSwitchConfirmModal, openSwitchPicker, and executeSwitchTask'
 );
 
 console.log('✓ Test 28: 1-Click atomic Switch Task action and WCAG dialog verified.');
@@ -1319,13 +1319,13 @@ console.log('✓ Test 36: Configurable temporal horizon & past block grace invar
   // The switch dialog never asks to retype the log: it shows what ends and what starts, and takes
   // one optional last line. The saved notes are composed by composeWrapNote (check_switch_dialog.mjs).
   const wrapSrc = fs.readFileSync(path.join(__dirname, '..', 'src/components/dialogs/WrapAndStartNextModal.vue'), 'utf8');
-  assert.ok(wrapSrc.includes("'Start the next block?'"), 'FAIL: the switch dialog (WrapAndStartNextModal) must exist');
+  assert.ok(wrapSrc.includes('"Start the next block?"'), 'FAIL: the switch dialog (WrapAndStartNextModal) must exist');
   assert.ok(!/<Textarea|<textarea/.test(wrapSrc) && /<label for="wrap-last-line"/.test(wrapSrc) && /<TextInput\s+id="wrap-last-line"/.test(wrapSrc),
     'FAIL: the switch dialog takes one labelled optional line, never a textarea prefilled with the log');
   const attendanceSrc = fs.readFileSync(path.join(__dirname, '..', 'src/composables/useWorkstationAttendance.js'), 'utf8');
-  const prompt = attendanceSrc.slice(attendanceSrc.indexOf('const promptSwitchSession'), attendanceSrc.indexOf('};', attendanceSrc.indexOf('const promptSwitchSession')));
-  assert.ok(/switchTargetItem\.value = /.test(prompt) && /switchWrapUpNote\.value = '';/.test(prompt) && /showSwitchConfirmModal\.value = true/.test(prompt),
-    'FAIL: promptSwitchSession sets the target, starts the last line empty and opens the dialog');
+  const opener = attendanceSrc.slice(attendanceSrc.indexOf('const openSwitch ='), attendanceSrc.indexOf('};', attendanceSrc.indexOf('const openSwitch =')));
+  assert.ok(/switchTargetItem\.value = /.test(opener) && /switchWrapUpNote\.value = '';/.test(opener) && /showSwitchConfirmModal\.value = true/.test(opener),
+    'FAIL: the switch dialog opens with its target, the last line empty');
 }
 assert.ok(content.includes('showSwitchConfirmModal'), 'FAIL: showSwitchConfirmModal must exist');
 assert.ok(content.includes('promptSwitchSession'), 'FAIL: promptSwitchSession must exist');

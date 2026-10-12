@@ -1,7 +1,9 @@
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { WORK, toKind } from "../utils/activity.js";
 import { blockTitle } from '../utils/blockTitle.js';
 import { composeWrapNote } from '../utils/wrapNote.js';
+import { countSessionWords } from '../utils/sessionWords.js';
+import { hoursMinutes } from '../utils/clockTime.js';
 
 /**
  * Attendance presence and block tracking.
@@ -103,125 +105,121 @@ export function useWorkstationAttendance(w) {
     trackerNature.value = nat;
     toggleTrack(null, customStartMs);
   };
-  // 2c. 1-Click Atomic Switch Task Action (WCAG 2.2 AA)
-  const showSwitchTaskModal = ref(false);
+  // 2c. Switch: one dialog, a route from what ends to what starts. A block's own Start knows what
+  //     comes next and the dialog confirms it; the Switch button opens the same dialog asking
+  //     what comes next. It closes only once the switch is made: refused, it says why in place
+  //     and the session runs on, with the person's last line still in the field.
   const showSwitchConfirmModal = ref(false);
   const switchTargetItem = ref(null);
+  const switchPick = ref(false);
+  const switchError = ref('');
   const isSwitchingSession = ref(false);
-  const switchSearchQuery = ref('');
   const switchWrapUpNote = ref('');
+  const openSwitch = (target, pick) => {
+    switchTargetItem.value = target;
+    switchPick.value = pick;
+    // The log is saved as it stands; this is only a last line for it
+    switchWrapUpNote.value = '';
+    switchError.value = '';
+    showSwitchConfirmModal.value = true;
+  };
   const promptSwitchSession = (target) => {
     if (!target) return;
     triggerHaptic([20]);
-    switchTargetItem.value = target;
-    // The log is saved as it stands; this is only an optional last line for it
-    switchWrapUpNote.value = '';
-    showSwitchConfirmModal.value = true;
+    openSwitch(target, false);
   };
+  const openSwitchPicker = () => {
+    if (isSessionElevated.value) isSessionElevated.value = false;
+    openSwitch(null, true);
+  };
+  // A refusal is about what was there when Switch was pressed; an edit answers it
+  watch([switchWrapUpNote, switchTargetItem], () => { switchError.value = ''; });
+  // Words the session is saved with before the last line: its title and its log, as the server counts them
+  const switchLogWords = computed(() => countSessionWords(composeWrapNote(trackerNotes.value, sessionNotesList.value)));
   const confirmSwitchAndStart = async () => {
-    if (!switchTargetItem.value) return;
-    const target = switchTargetItem.value;
+    if (!switchTargetItem.value || isSwitchingSession.value) return;
     isSwitchingSession.value = true;
     try {
-      await executeSwitchTask(target);
-      showSwitchConfirmModal.value = false;
-      switchTargetItem.value = null;
+      if (await executeSwitchTask(switchTargetItem.value)) {
+        showSwitchConfirmModal.value = false;
+        switchTargetItem.value = null;
+      }
     } finally {
       isSwitchingSession.value = false;
     }
   };
-  const openSwitchTaskModal = () => {
-    if (isSessionElevated.value) isSessionElevated.value = false;
-    switchSearchQuery.value = '';
-    switchWrapUpNote.value = '';
-    showSwitchTaskModal.value = true;
-  };
+  // What the session can switch to: today's blocks not done yet, then the person's open tasks
   const switchCandidates = computed(() => {
-    const q = (switchSearchQuery.value || '').toLowerCase().trim();
     const curBlock = trackerBlockName.value;
-    const list = [];
-
-    // 1. Candidate Planned Work Blocks for today
-    const blocks = (plannerData.value && plannerData.value.blocks) || [];
-    blocks.forEach(b => {
-      if (b.name === curBlock) return;
-      if (b.status === 'Cancelled' || b.status === 'Logged (Full)') return;
-      const label = blockTitle(b, b.name);
-      const sublabel = `${b.start_time || ''} – ${b.end_time || ''} · ${b.project || 'General'}`;
-      if (!q || label.toLowerCase().includes(q) || (b.project || '').toLowerCase().includes(q)) {
-        list.push({
-          id: b.name,
-          name: b.name,
-          label,
-          sublabel,
-          project: b.project,
-          is_block: true,
-          task_nature: b.task_nature
-        });
-      }
-    });
-
-    // 2. Candidate Open Tasks
-    const tasks = assignedTasks.value || [];
-    tasks.forEach(t => {
-      const label = t.subject || t.title || t.name;
-      const sublabel = `Task · ${t.project || 'General'}`;
-      if (!q || label.toLowerCase().includes(q) || (t.project || '').toLowerCase().includes(q)) {
-        list.push({
-          id: t.name || t.id,
-          name: t.name || t.id,
-          label,
-          sublabel,
-          project: t.project,
-          is_block: false,
-          task_nature: WORK
-        });
-      }
-    });
-
-    return list;
+    const blocks = ((plannerData.value && plannerData.value.blocks) || [])
+      .filter(b => b.name !== curBlock && b.status !== 'Cancelled' && b.status !== 'Logged (Full)')
+      .map(b => ({
+        id: b.name,
+        name: b.name,
+        label: blockTitle(b, b.name),
+        start_time: b.start_time,
+        end_time: b.end_time,
+        project: b.project,
+        project_name: b.project_name,
+        is_block: true,
+        task_nature: b.task_nature
+      }));
+    const taskItems = (assignedTasks.value || []).map(t => ({
+      id: t.name || t.id,
+      name: t.name || t.id,
+      label: t.subject || t.title || t.name,
+      project: t.project,
+      project_name: t.project_name,
+      is_block: false,
+      task_nature: WORK
+    }));
+    return [...blocks, ...taskItems];
   });
+  // True once switched. A refusal leaves everything running and says why in switchError.
   const executeSwitchTask = async (target) => {
     triggerHaptic([30, 40]);
     const isBlock = !!target.is_block;
     const targetBlock = isBlock ? target.name : null;
     const targetTask = !isBlock ? target.name : null;
     const wrapNote = composeWrapNote(trackerNotes.value, sessionNotesList.value, switchWrapUpNote.value);
-
-    showSwitchTaskModal.value = false;
-    showSwitchConfirmModal.value = false;
+    switchError.value = '';
+    let res;
     try {
-      const res = await postJSON('switch_active_session', {
+      res = await postJSON('switch_active_session', {
         target_block: targetBlock,
         target_task: targetTask,
         current_session_notes: wrapNote,
         previous_block: trackerBlockName.value || null,
-        start_time_ms: startTime.value || null
+        start_time_ms: startTime.value || null,
+        session_tasks: JSON.stringify(w.sessionTasks ? w.sessionTasks.value || [] : [])
       });
-      const loggedH = (res && res.elapsed_hours) ? `${res.elapsed_hours}h` : 'time';
-      showToast(`Switched session! Logged ${loggedH} on previous session.`, 'success');
-      trackerSeconds.value = 0;
-      startTime.value = Date.now();
-      lastActivityTime.value = Date.now();
-      lastInactivityAlertTime.value = 0;
-      trackerBlockName.value = targetBlock;
-      trackerNotes.value = target.label || '';
-      sessionNotesList.value = [];
-      if (isBlock && targetBlock) {
-        const foundB = (plannerData.value?.blocks || []).find(b => b.name === targetBlock);
-        if (foundB) {
-          _explicitBoundBlock.value = foundB;
-          selectedProject.value = foundB.project || '';
-          trackerProject.value = foundB.project || '';
-          selectedNature.value = toKind(foundB.task_nature);
-          trackerNature.value = toKind(foundB.task_nature);
-        }
-      }
-      fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') fetchPlannerData();
     } catch (err) {
-      showToast('Failed to switch task: ' + (err && err.message || err), 'danger');
+      switchError.value = String((err && err.message) || err || '');
+      return false;
     }
+    const savedMin = Math.round(flt(res && res.elapsed_hours) * 60);
+    showToast(savedMin ? `Saved ${hoursMinutes(savedMin)}. ${target.label} has started.` : `${target.label} has started.`, 'success');
+    trackerSeconds.value = 0;
+    startTime.value = Date.now();
+    lastActivityTime.value = Date.now();
+    lastInactivityAlertTime.value = 0;
+    trackerBlockName.value = targetBlock;
+    trackerNotes.value = target.label || '';
+    sessionNotesList.value = [];
+    if (w.sessionTasks) w.sessionTasks.value = [];
+    if (isBlock && targetBlock) {
+      const foundB = (plannerData.value?.blocks || []).find(b => b.name === targetBlock);
+      if (foundB) {
+        _explicitBoundBlock.value = foundB;
+        selectedProject.value = foundB.project || '';
+        trackerProject.value = foundB.project || '';
+        selectedNature.value = toKind(foundB.task_nature);
+        trackerNature.value = toKind(foundB.task_nature);
+      }
+    }
+    fetchWorkstationData(selectedEmployee.value);
+    if (typeof fetchPlannerData === 'function') fetchPlannerData();
+    return true;
   };
   Object.assign(w, {
     attendancePresence,
@@ -232,15 +230,16 @@ export function useWorkstationAttendance(w) {
     openEODWrapUpDrawer,
     logPendingBlock,
     trackBlock,
-    showSwitchTaskModal,
     showSwitchConfirmModal,
     switchTargetItem,
+    switchPick,
+    switchError,
     isSwitchingSession,
-    switchSearchQuery,
     switchWrapUpNote,
+    switchLogWords,
     promptSwitchSession,
     confirmSwitchAndStart,
-    openSwitchTaskModal,
+    openSwitchPicker,
     switchCandidates,
     executeSwitchTask,
   });

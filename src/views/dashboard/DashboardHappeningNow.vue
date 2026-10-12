@@ -21,7 +21,8 @@
         <template v-if="recording">
           <span class="font-mono text-sm tabular-nums mr-1" :class="isDarkMode ? 'text-gray-100' : 'text-gray-800'" aria-label="Elapsed time">{{ formattedTime }}</span>
           <Button variant="ghost" icon="clock" label="Adjust start and end time" tooltip="Adjust time" @click.stop="openAdjustModal" />
-          <Button variant="ghost" icon="repeat" label="Switch to another task without losing time" tooltip="Switch task" @click.stop="openSwitchTaskModal" />
+          <!-- Offered only when there is something to switch to; otherwise it opens a question with no answer -->
+          <Button v-if="switchCandidates.length" variant="ghost" icon="repeat" label="Switch to another task without losing time" tooltip="Switch task" @click.stop="openSwitchPicker" />
           <Button
             :variant="discardConfirm ? 'solid' : 'ghost'"
             :theme="discardConfirm ? 'orange' : 'gray'"
@@ -91,11 +92,12 @@ export default {
       'isTracking',
       'openAdjustModal',
       'openBlockDrawer',
-      'openSwitchTaskModal',
+      'openSwitchPicker',
       'requestStopFocusBlock',
       'sessionNotesList',
       'startFocusBlock',
       'stopConfirmName',
+      'switchCandidates',
       'trackerBlockName'
     ]);
   },

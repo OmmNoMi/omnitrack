@@ -329,7 +329,7 @@ def sync_active_session(session_data=None, user=None):
 
 
 @frappe.whitelist()
-def switch_active_session(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None, previous_block=None, start_time_ms=None):
+def switch_active_session(target_block=None, target_task=None, target_project=None, target_nature=None, current_session_notes=None, previous_block=None, start_time_ms=None, session_tasks=None):
 	"""
 	Atomically switches the user's active running timesheet session to another Planned Work Block or Task.
 	1. Closes the currently running session:
@@ -363,6 +363,8 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 	if start_ms <= 0 and start_time_ms:
 		start_ms = flt(start_time_ms)
 
+	# The session that ends is saved in the person's own words, never under an invented note; a
+	# log too short to save refuses the switch, and the session keeps running.
 	if prev_block_name and frappe.db.exists("Planned Work Block", prev_block_name):
 		if start_ms > 0:
 			diff_secs = max(60, (now_ms - start_ms) / 1000.0)
@@ -378,8 +380,26 @@ def switch_active_session(target_block=None, target_task=None, target_project=No
 			to_time=now_dt.strftime("%H:%M:%S"),
 			hours=elapsed_hours,
 			session_date=start_dt.strftime("%Y-%m-%d"),
-			notes=current_session_notes or f"Session completed before switching to {target_block or target_task or 'next block'}",
+			notes=current_session_notes,
 			logged_via="Stopwatch"
+		)
+	elif start_ms > 0:
+		# A session on no block is saved as Stop saves it, as its own unplanned block. It used to
+		# end here with nothing saved, while the dialog said "Ends now and is saved".
+		start_dt = datetime.fromtimestamp(start_ms / 1000.0)
+		diff_secs = max(60, (now_ms - start_ms) / 1000.0)
+		elapsed_hours = round(diff_secs / 3600.0, 2)
+		quick_timer_punch(
+			action="stop",
+			duration_seconds=diff_secs,
+			duration_hours=elapsed_hours,
+			from_time=start_dt.strftime("%H:%M"),
+			to_time=now_dt.strftime("%H:%M"),
+			work_date=start_dt.strftime("%Y-%m-%d"),
+			project=(active or {}).get("selectedProject") or None,
+			work_nature=(active or {}).get("selectedNature") or None,
+			notes=current_session_notes,
+			session_tasks=session_tasks,
 		)
 
 	# 2. Resolve target block or task metadata

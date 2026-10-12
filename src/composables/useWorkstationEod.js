@@ -10,7 +10,7 @@ import { setScrollLock } from "../utils/scrollLock.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showSwitchTaskModal, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -134,7 +134,6 @@ export function useWorkstationEod(w) {
     else if (showTaskRavenDrawer.value && !dialogEsc) showTaskRavenDrawer.value = false;
     else if (showBookModal.value) showBookModal.value = false;
     else if (showEditSessionModal.value) showEditSessionModal.value = false;
-    else if (showSwitchTaskModal.value) showSwitchTaskModal.value = false;
     else if (showSwitchConfirmModal.value) showSwitchConfirmModal.value = false;
     else if (showCancelModal.value) showCancelModal.value = false;
     else if (dialogEsc) return;
@@ -144,7 +143,7 @@ export function useWorkstationEod(w) {
     else if (showTrackerPopup.value) showTrackerPopup.value = false;
     else if (showNatureFilter.value) showNatureFilter.value = false;
   };
-  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchTaskModal, showSwitchConfirmModal, showCancelModal, showBlockDrawer, showSessionDrawer, showTaskRavenDrawer], (vals) => {
+  watch([showInactivityModal, showStartTimeChoiceModal, showBookModal, showEditSessionModal, showSwitchConfirmModal, showCancelModal, showBlockDrawer, showSessionDrawer, showTaskRavenDrawer], (vals) => {
     const anyOpen = vals.some(Boolean);
     if (anyOpen) {
       document.addEventListener('keydown', notePopoverEscape, true);

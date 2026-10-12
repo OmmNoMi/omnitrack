@@ -12,7 +12,6 @@ import PlanWorkBlockDialog from "./components/dialogs/PlanWorkBlockDialog.vue";
 import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
 import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
 import EODWrapUpModal from "./components/dialogs/EODWrapUpModal.vue";
-import SwitchTaskModal from "./components/dialogs/SwitchTaskModal.vue";
 import WrapAndStartNextModal from "./components/dialogs/WrapAndStartNextModal.vue";
 import CancelWorkBlockModal from "./components/dialogs/CancelWorkBlockModal.vue";
 import WorkSessionEntry from "./components/dialogs/WorkSessionEntry.vue";
@@ -55,7 +54,6 @@ if (typeof window !== "undefined") {
 		InactivityGovernorModal,
 		StartTimeChoiceModal,
 		EODWrapUpModal,
-		SwitchTaskModal,
 		WrapAndStartNextModal,
 		CancelWorkBlockModal,
 		WorkSessionEntry,
@@ -98,7 +96,6 @@ function mountApp(target = "#app") {
 	app.component("InactivityGovernorModal", InactivityGovernorModal);
 	app.component("StartTimeChoiceModal", StartTimeChoiceModal);
 	app.component("EODWrapUpModal", EODWrapUpModal);
-	app.component("SwitchTaskModal", SwitchTaskModal);
 	app.component("WrapAndStartNextModal", WrapAndStartNextModal);
 	app.component("CancelWorkBlockModal", CancelWorkBlockModal);
 	app.component("WorkSessionEntry", WorkSessionEntry);
