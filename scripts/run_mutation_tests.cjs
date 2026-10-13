@@ -1855,6 +1855,22 @@ runMutationTest('An open page keeps yesterday as today', SRC('src/composables/us
 runMutationTest('The dashboard stays on yesterday at midnight', SRC('src/composables/useWorkstationEod.js'),
   (code) => code.replace('if (selectedDashboardDate.value === was) selectedDashboardDate.value = now;', ''), LM, 'a dashboard on today follows');
 
+// A logged session past midnight is drawn and counted only on the day each part was worked
+const SOD = 'node scripts/check_session_on_day.mjs';
+const SODU = SRC('src/utils/sessionOnDay.js');
+runMutationTest('A session row is drawn on every day its block shows', SODU,
+  (code) => code.replace('  if (day === iso) {', '  if (true) {'), SOD, 'not drawn on the next day');
+runMutationTest('A night row stops short of midnight', SODU,
+  (code) => code.replace('return h === 23 && m === 59 && s === 59 ? 1440 : ', 'return '), SOD, 'runs to midnight');
+runMutationTest('An old night row is lost the next morning', SODU,
+  (code) => code.replace('if (overnight && nextDay(day) === iso && e > 0) return { s: 0, e };', ''), SOD, 'a single night row on the next day');
+runMutationTest('Close your day counts a night block on both days', SODU,
+  (code) => code.replace('return Math.round(actual * onDay / total * 100) / 100;', 'return actual;'), SOD, 'blockHoursOn');
+runMutationTest('Day at a glance draws every row of a block', SRC('src/composables/useWorkstationTimeline.js'),
+  (code) => code.replace('const span = sessionSpanOn(x, bk, selectedDashboardDate.value);', 'const span = sessionSpanOn(x, bk, x.session_date || bk.work_date);'), SOD, 'the part of its session on the day shown');
+runMutationTest('Close your day counts block totals', SRC('src/composables/useWorkstationAttendance.js'),
+  (code) => code.replace('acc + blockHoursOn(b, dt), 0)', 'acc + flt(b.actual_hours || 0), 0)'), SOD, 'only the hours worked on the day shown');
+
 // Press and drag picks a stretch to plan or log, the same in both views, and a swipe still scrolls
 const DPK = 'node scripts/check_drag_pick_range.mjs';
 const PTR = SRC('src/utils/pickTimeRange.js');

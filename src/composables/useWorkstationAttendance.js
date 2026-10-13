@@ -4,6 +4,7 @@ import { blockTitle } from '../utils/blockTitle.js';
 import { composeWrapNote } from '../utils/wrapNote.js';
 import { countSessionWords } from '../utils/sessionWords.js';
 import { hoursMinutes } from '../utils/clockTime.js';
+import { blockHoursOn } from '../utils/sessionOnDay.js';
 
 /**
  * Attendance presence and block tracking.
@@ -39,7 +40,9 @@ export function useWorkstationAttendance(w) {
   const showEODModal = ref(false);
   const eodSummary = computed(() => {
     const blocks = workFocusBlocks.value || [];
-    const actualH = blocks.reduce((acc, b) => acc + flt(b.actual_hours || 0), 0);
+    // Only the hours worked on this day: last night's block shows here for its after-midnight part
+    const dt = selectedDashboardDate.value || getLocalTodayISO();
+    const actualH = blocks.reduce((acc, b) => acc + blockHoursOn(b, dt), 0);
     const unloggedBlocks = blocks.filter(isPendingLog);
     const unloggedH = unloggedBlocks.reduce((acc, b) => acc + flt(b.duration_hours || 0), 0);
     const curH = new Date().getHours();

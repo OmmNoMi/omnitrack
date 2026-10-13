@@ -627,6 +627,13 @@ Open:
   time actually running (18:00 to midnight). Show the running span beside the bound block?
 - Open: the week view does not follow today into a new week at midnight on Saturday
   (`plannerAnchor` stays put).
+- Done: a *logged* night session (12th 8:21 pm–00:11 am, stored as two rows, one per day) showed
+  on Day at a glance on both days: the 13th drew the 12th's 8:21 pm–midnight row again at 8:21 pm,
+  and "Close your day" counted the whole block on both days (the calendar was right). Each row is
+  now drawn only on its own `session_date`, and a block's hours are shared out by day
+  (`utils/sessionOnDay.js`). Guard: `check_session_on_day.mjs`, with mutants.
+- Open: the same block still reads "3.8h" (its full total) in the 13th's "Done today" list. Show
+  the part worked that day, or "3.8h across 2 days"?
 
 ### Drag to pick a time, the same in both views (2026-10-13)
 

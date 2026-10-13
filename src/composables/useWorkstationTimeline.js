@@ -4,6 +4,7 @@ import { noteHeading } from "../utils/wrapNote.js";
 import { TIMELINE_ZOOM_OPTIONS, defaultTimelineZoom } from "../utils/timelineZoom.js";
 import { countedHours } from "../utils/countedHours.js";
 import { liveSpanOn } from "../utils/liveSpan.js";
+import { sessionSpanOn } from "../utils/sessionOnDay.js";
 const { ref, computed, watch, nextTick, onMounted } = Vue;
 
 export function useWorkstationTimeline({
@@ -85,11 +86,12 @@ export function useWorkstationTimeline({
           planned.push({ s, e: 1440, block: bk });
         }
       }
+      // Only the part of each session on the day shown: a night block's rows are one per day
       (bk.sessions || []).forEach((x) => {
-        const ss = _minsOf(x.from_time), ee = _minsOf(x.to_time);
-        if (ss >= 0 && ee > ss) logged.push({
-          s: ss,
-          e: ee,
+        const span = sessionSpanOn(x, bk, selectedDashboardDate.value);
+        if (span) logged.push({
+          s: span.s,
+          e: span.e,
           from_time: x.from_time,
           to_time: x.to_time,
           block: bk,
