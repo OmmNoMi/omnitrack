@@ -8,6 +8,7 @@ import "./styles/main.css";
 import App from "./App.vue";
 import SessionBox from "./session/SessionBox.vue";
 import FDialog from "./components/common/FDialog.vue";
+import { quietReopenOnEscape } from "./utils/popover.js";
 import PlanWorkBlockDialog from "./components/dialogs/PlanWorkBlockDialog.vue";
 import InactivityGovernorModal from "./components/dialogs/InactivityGovernorModal.vue";
 import StartTimeChoiceModal from "./components/dialogs/StartTimeChoiceModal.vue";
@@ -35,6 +36,9 @@ import SessionOverlay from "./components/layout/SessionOverlay.vue";
 import DialogCoordinator from "./components/dialogs/DialogCoordinator.vue";
 import DrawerCoordinator from "./drawers/DrawerCoordinator.vue";
 import router from "./router/index.js";
+
+// Escape closes a day calendar for good: its field does not open it again as focus comes back
+quietReopenOnEscape();
 
 // Expose Vue, Frappe UI, and Socket.io globally for zero-CDN workstation operation
 if (typeof window !== "undefined") {

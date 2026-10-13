@@ -185,6 +185,7 @@
     v-model:show-book-modal="showBookModal"
     :book-form="bookForm"
     :book-error="bookError"
+    :payroll-closed-through="payrollClosedThrough"
     :combobox-assignee-options="comboboxAssigneeOptions"
     :combobox-book-task-options="comboboxBookTaskOptions"
     :combobox-project-options="comboboxProjectOptions"

@@ -1,7 +1,7 @@
 <template>
   <Dialog v-model="open" :options="{ size: dialogSize }" :disable-outside-click-to-close="!dismissible">
     <template #body>
-      <div ref="panel" class="max-h-[85vh] overflow-y-auto bg-surface-modal p-5 sm:p-6 space-y-4" :aria-label="title || ariaLabel || undefined" @keydown.esc="keepEscape">
+      <div ref="panel" class="max-h-[85vh] overflow-y-auto bg-surface-modal p-5 sm:p-6 space-y-4" :aria-label="title || ariaLabel || undefined" @keydown.esc="keepEscape" @focus.capture="noteFocus" @pointerdown="noteFocus">
         <div v-if="title || $slots.header || $slots['header-icon']" class="flex items-start justify-between gap-3">
           <slot name="header">
             <div class="flex items-center gap-3 min-w-0">
@@ -30,7 +30,7 @@
 <script>
 import { Dialog } from 'frappe-ui';
 import { DialogTitle, DialogDescription } from 'reka-ui';
-import { popoverOpen, markDialogEscape } from '../../utils/popover.js';
+import { popoverOpen, markDialogEscape, focusBack, opensOnFocus } from '../../utils/popover.js';
 
 // Focus trap, Esc, scroll lock and return-focus come from frappe-ui's Dialog
 // (reka-ui). What stays ours is the *safe* initial focus: never the close
@@ -41,7 +41,6 @@ const FOCUSABLE =
 const isClose = (el) => el.getAttribute('aria-label') === 'Close dialog';
 // A field that opens its own popup when focused (a DatePicker's calendar) would open over the
 // form the moment the dialog does, hiding the fields under it.
-const opensOnFocus = (el) => el.tagName === 'INPUT' && el.hasAttribute('aria-haspopup');
 const isDestructive = (el) => {
   const txt = (el.textContent || '').trim().toLowerCase();
   return el.getAttribute('theme') === 'red' || txt.includes('discard') || txt.includes('delete');
@@ -79,7 +78,7 @@ export default {
     }
   },
   data() {
-    return { escOwnedByPopover: false, escHeld: false };
+    return { escOwnedByPopover: false, escHeld: false, lastFocus: null };
   },
   watch: {
     modelValue(v) { if (v) this.focusSafe(); }
@@ -97,8 +96,18 @@ export default {
       if (e.key !== 'Escape' || !this.modelValue) return;
       markDialogEscape(e);
       this.escOwnedByPopover = popoverOpen();
-      if (this.escOwnedByPopover) setTimeout(() => { this.escOwnedByPopover = false; }, 0);
-      else if (this.escBack) {
+      if (this.escOwnedByPopover) {
+        // frappe-ui's TimePicker closes its list and then blurs its field, and reka hands a closed
+        // calendar's focus to whatever had it before: focus fell to the page, or to another
+        // field. The field the list or calendar belongs to (the last pressed or focused in the
+        // panel) gets it back.
+        const panel = this.$refs.panel;
+        setTimeout(() => {
+          this.escOwnedByPopover = false;
+          const field = this.lastFocus, now = document.activeElement;
+          if (field && field.isConnected && now !== field && (now === document.body || (panel && panel.contains(now)))) focusBack(field);
+        }, 0);
+      } else if (this.escBack) {
         // This Escape steps back inside the dialog; the page's own Escape handlers skip a
         // handled key, so none of them closes the dialog around the step
         e.preventDefault();
@@ -115,6 +124,14 @@ export default {
       if (this.escOwnedByPopover) return;
       e.stopPropagation();
       this.open = false;
+    },
+    // The field a list or calendar belongs to. A click on a DatePicker opens its calendar without
+    // focusing the field, so a press counts as well as a focus. Tabbing onto a DatePicker opens its
+    // calendar in its focus handler and the calendar takes focus, so focusin never reaches the
+    // field: focus is caught on the way down instead.
+    noteFocus(e) {
+      const el = e.target.closest && e.target.closest(FOCUSABLE);
+      if (el) this.lastFocus = el;
     },
     focusSafe() {
       // After reka's own auto-focus (which lands on the first focusable).

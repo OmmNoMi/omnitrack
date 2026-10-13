@@ -90,6 +90,15 @@
   max-width: min(32rem, calc(100vw - 1.5rem));
 }
 [data-reka-popper-content-wrapper] > [role="listbox"] [role="option"] { overflow-wrap: anywhere; }
+/* A TimePicker's list is a fixed w-44 and cuts every option short, so an end time with its
+   length ("4:45 pm next day (17.5 hrs)") read "4:45 pm next day (2…". It grows to its longest
+   option, within the screen. */
+[data-reka-popper-content-wrapper] [role="listbox"].w-44 {
+  width: max-content;
+  min-width: 11rem;
+  max-width: calc(100vw - 1.5rem);
+  scrollbar-gutter: stable;
+}
 /* A Combobox's trigger is inline-flex, so it shrank to its text and cut a long name short
    ("Nomeshwer Sharma (") however wide its column was. It fills the width it is given; the
    container sets the width, as for every other field. */

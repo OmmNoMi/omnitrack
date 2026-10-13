@@ -10,7 +10,7 @@ import { setScrollLock } from "../utils/scrollLock.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -165,6 +165,19 @@ export function useWorkstationEod(w) {
       fetchPendingApprovals();
     }
   });
+  // The day turns over at midnight with the page open: today moves on, a dashboard showing
+  // today follows it, and the blocks are fetched again. Without this a page left open overnight
+  // kept yesterday as today, with the now line at 12a on it.
+  watch(nowMinute, () => {
+    const was = todayDate.value;
+    const now = getLocalTodayISO();
+    if (!was || now === was) return;
+    todayDate.value = now;
+    if (selectedDashboardDate.value === was) selectedDashboardDate.value = now;
+    fetchWorkstationData(selectedEmployee.value);
+    if (typeof fetchPlannerData === 'function') fetchPlannerData();
+  });
+
   onMounted(() => {
     // The tab watch above only fires on a change, so a page opened straight on
     // #/planner (reload, bookmark, shared link) never loaded its blocks.

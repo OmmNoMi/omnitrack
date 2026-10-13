@@ -64,6 +64,8 @@ def create_planned_work_block(work_date=None, start_time="09:00:00", end_time="1
 	doc.work_date = work_date or nowdate()
 	doc.start_time = start_time or "09:00:00"
 	doc.end_time = end_time or "10:00:00"
+	from omnitrack.permissions import check_plan_date
+	check_plan_date(doc.work_date, doc.start_time, doc.end_time)
 	doc.duration_hours = flt(duration_hours) or 1.0
 	if project:
 		doc.project = project
@@ -374,8 +376,12 @@ def book_work_block(work_date, start_time, end_time, work_item=None, work_item_l
 
 	# "2026-10-08 10:45:00" with no work_date once landed on today, 0.0 hrs long
 	work_date, start_time, end_time = _slot(start_time, end_time, work_date)
-	if work_date and getdate(work_date) < getdate(nowdate()):
-		frappe.throw(_("Cannot plan or book work blocks in the past."), frappe.ValidationError)
+	# A plan is for time still to come. The assistant's log_work_session books the block that
+	# holds time already worked through here too, and says so in frappe.flags (request-local:
+	# no caller can send it).
+	if not frappe.flags.omnitrack_block_for_logged_time:
+		from omnitrack.permissions import check_plan_date
+		check_plan_date(work_date or nowdate(), start_time, end_time)
 
 	has_task = frappe.db.exists("DocType", "Task")
 	refs = _parse_refs(work_items)
@@ -553,9 +559,12 @@ def update_work_block(block_name, work_date=None, start_time=None, end_time=None
 		day, start_time, end_time = _slot(start_time or doc.start_time, end_time or doc.end_time, work_date)
 		work_date = day
 
-	from omnitrack.permissions import check_planned_block_past_lock
+	from omnitrack.permissions import check_planned_block_past_lock, check_plan_date
 	# In the past, NO ONE changes planned work blocks
 	check_planned_block_past_lock(doc, new_work_date=work_date)
+	# A move or resize is planning again: it lands on time still to come
+	if work_date or start_time or end_time:
+		check_plan_date(work_date or doc.work_date, start_time or doc.start_time, end_time or doc.end_time)
 
 	if work_date:
 		doc.work_date = work_date
@@ -679,6 +688,9 @@ def reschedule_work_block(block_name, new_date=None, new_start_time=None, new_en
 	target_date = new_date or doc.work_date
 	target_start = new_start_time or doc.start_time
 	target_end = new_end_time or doc.end_time
+	# Where it goes is a plan: today or later, never onto a closed payroll day
+	from omnitrack.permissions import check_plan_date
+	check_plan_date(target_date, target_start, target_end)
 
 	# Clone to target slot: the plan travels, nothing that belonged to the original's outcome does
 	new_block = frappe.copy_doc(doc)

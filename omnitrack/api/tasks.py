@@ -750,8 +750,15 @@ def reschedule_unfinished_tasks(block_name, target_date=None, start_time=None, e
 	if not unfinished:
 		return {"status": "noop", "message": "No unfinished items to carry forward."}
 
+	from omnitrack.permissions import check_plan_date, plan_refusal
+	start_at, end_at = start_time or block.start_time, end_time or block.end_time
 	if not target_date:
-		target_date = frappe.utils.add_days(block.work_date or nowdate(), 1)
+		# The day after; when that has passed, today, or tomorrow once today's slot is over: open
+		# tasks carry forward, never back
+		target_date = max(getdate(frappe.utils.add_days(block.work_date or nowdate(), 1)), getdate(nowdate()))
+		if plan_refusal(target_date, start_at, end_at):
+			target_date = getdate(frappe.utils.add_days(nowdate(), 1))
+	check_plan_date(target_date, start_at, end_at)
 
 	new_block = frappe.new_doc("Planned Work Block")
 	new_block.employee = block.employee

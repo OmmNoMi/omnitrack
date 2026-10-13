@@ -22,6 +22,18 @@ def _block(**kw):
 	return doc
 
 
+def _book_for_logged_time(**kw):
+	"""Books a block to hold time a test then logs on it, as fac.log_work_session does: a plan
+	is for time still to come, so a block for an hour already past today is booked this way."""
+	from omnitrack.api import book_work_block
+
+	frappe.flags.omnitrack_block_for_logged_time = True
+	try:
+		return book_work_block(**kw)
+	finally:
+		frappe.flags.omnitrack_block_for_logged_time = False
+
+
 class TestPlannedWorkBlock(FrappeTestCase):
 	def setUp(self):
 		# Redis is outside the rollback. Administrator's active session may be someone's real,
@@ -1332,7 +1344,7 @@ console.log('SUCCESS');
 
 
 	def test_task_kpi_target_and_cumulative_rollup(self):
-		from omnitrack.api import book_work_block, log_work_session, update_task_kpi_progress
+		from omnitrack.api import log_work_session, update_task_kpi_progress
 
 		if not frappe.db.exists("DocType", "Task"):
 			return
@@ -1350,7 +1362,7 @@ console.log('SUCCESS');
 		task.insert()
 
 		# Book block linked to task
-		res = book_work_block(
+		res = _book_for_logged_time(
 			work_date=frappe.utils.nowdate(),
 			start_time="09:00:00",
 			end_time="10:00:00",
@@ -1377,7 +1389,7 @@ console.log('SUCCESS');
 			self.assertEqual(flt(task.custom_kpi_progress_percent), 25.0)
 
 		# Log second block and metrics
-		res2 = book_work_block(
+		res2 = _book_for_logged_time(
 			work_date=frappe.utils.nowdate(),
 			start_time="11:00:00",
 			end_time="12:00:00",
@@ -1401,9 +1413,9 @@ console.log('SUCCESS');
 			self.assertEqual(flt(task.custom_kpi_progress_percent), 75.0)
 
 	def test_get_pending_team_approvals_and_bulk_approval(self):
-		from omnitrack.api import book_work_block, log_work_session, get_pending_team_approvals, approve_work_blocks
+		from omnitrack.api import log_work_session, get_pending_team_approvals, approve_work_blocks
 
-		res = book_work_block(
+		res = _book_for_logged_time(
 			work_date=frappe.utils.nowdate(),
 			start_time="13:00:00",
 			end_time="14:00:00",
@@ -1467,8 +1479,8 @@ console.log('SUCCESS');
 
 	def test_timesheet_booking_continuous_improvement_and_reconciliation(self):
 		"""Ensures work block booking and full timesheet logging accurately derive hours and status."""
-		from omnitrack.api import book_work_block, log_work_session
-		res = book_work_block(
+		from omnitrack.api import log_work_session
+		res = _book_for_logged_time(
 			work_date=frappe.utils.nowdate(),
 			start_time="10:08:00",
 			end_time="18:30:00",

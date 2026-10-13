@@ -132,5 +132,59 @@ class TestUnitTemporalGovernance(unittest.TestCase):
 		self.assertEqual(time_diff_in_hours("09:00:00", "09:00:00"), 0.0)
 
 
+
+class TestPlanWindow(unittest.TestCase):
+	"""A plan is for time still to come (permissions.plan_refusal), at 10:00 on 12 Oct 2026."""
+
+	def setUp(self):
+		from datetime import datetime
+
+		self.settings = {}
+		for target, kwargs in [
+			("omnitrack.permissions._", {"side_effect": lambda msg: msg}),
+			("omnitrack.permissions.formatdate", {"side_effect": lambda d: str(getdate(d))}),
+			("omnitrack.permissions.frappe.throw", {"side_effect": _throw}),
+			("omnitrack.permissions._setting", {"side_effect": lambda fn: self.settings.get(fn)}),
+			("omnitrack.permissions.nowdate", {"return_value": "2026-10-12"}),
+			("omnitrack.permissions.now_datetime", {"return_value": datetime(2026, 10, 12, 10, 0)}),
+		]:
+			p = patch(target, **kwargs)
+			p.start()
+			self.addCleanup(p.stop)
+
+	def says(self, day, start, end):
+		from omnitrack.permissions import plan_refusal
+
+		return plan_refusal(day, start, end) or ""
+
+	def test_earlier_days_are_logged_not_planned(self):
+		self.assertIn("plan from today on", self.says("2026-10-11", "14:00:00", "15:00:00"))
+		self.assertIn("plan from today on", self.says("2025-01-05", None, None))
+
+	def test_today_from_now_on(self):
+		self.assertEqual(self.says("2026-10-12", "10:00:00", "11:00:00"), "")
+		# under way: started, not over
+		self.assertEqual(self.says("2026-10-12", "09:00:00", "10:15:00"), "")
+		self.assertIn("That time is over", self.says("2026-10-12", "08:00:00", "10:00:00"))
+		self.assertIn("That time is over", self.says("2026-10-12", "08:00:00", "09:00"))
+		# an end before its start is the next morning
+		self.assertEqual(self.says("2026-10-12", "09:00:00", "01:00:00"), "")
+		self.assertEqual(self.says("2026-10-13", "08:00:00", "09:00:00"), "")
+
+	def test_never_on_a_closed_payroll_day(self):
+		self.settings["payroll_closed_through"] = "2026-10-13"
+		self.assertIn("Payroll is closed through 2026-10-13. Plan from 2026-10-14 on.", self.says("2026-10-13", "10:00:00", "11:00:00"))
+		self.assertIn("Payroll is closed", self.says("2026-10-12", "11:00:00", "12:00:00"))
+		self.assertEqual(self.says("2026-10-14", "10:00:00", "11:00:00"), "")
+
+	def test_check_plan_date_refuses_with_the_reason(self):
+		from omnitrack.permissions import check_plan_date
+
+		with self.assertRaises(Refused) as ctx:
+			check_plan_date("2026-10-11", "14:00:00", "15:00:00")
+		self.assertIn("ValidationError", str(ctx.exception))
+		self.assertTrue(check_plan_date("2026-10-12", "11:00:00", "12:00:00"))
+
+
 if __name__ == "__main__":
 	unittest.main()

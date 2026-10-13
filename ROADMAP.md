@@ -539,6 +539,23 @@ Open:
 - The edit box checks the day it is moving to, not the day the session is leaving; the server
   refuses that, but the box only says so after Save.
 - The planner's day chips do not mark days payroll has closed; the refusal shows once picked.
+
+Done (asked 2026-10-12, "no planning in the past, and never before the payroll lock"):
+- A plan lands today or later, never on a day payroll has closed, and today never in a slot that
+  has already ended. Server: `permissions.plan_refusal` / `check_plan_date` in every path that
+  plans or moves a block. Page: `planRefusal` (`src/utils/planWindow.js`) in the Plan and
+  Reschedule dialogs (why, as an alert; Save waits), the booking store and the planner drag.
+  The assistant's logging still makes a block to hold logged time (a request-local flag).
+- Fixed on the way: the server's past check missed earlier today and moves, and no planning path
+  read `payroll_closed_through`.
+
+Open:
+- The day calendar in Plan and Reschedule still offers past and closed days; they are refused
+  once picked. Grey them out in the calendar if frappe-ui's DatePicker can take a minimum date.
+- Bug (found 2026-10-12): `PlannedWorkBlock.validate_past_plan_immutability` uses
+  `has_value_changed("work_date")`, which is true on insert, so a block `quick_timer_punch` makes
+  for an older session (more than a day back) may be refused. `test_planned_work_block.py:636`
+  expects the opposite. Check on a throwaway site and decide which is right.
 - Run the Python integration tests (updated for the 15-day window) on a throwaway site.
 - `src/stores/workSessionStore.js` is imported nowhere (the other three stores are, via
   `useWorkstationStoreBindings.js`). Confirm and remove it.
@@ -565,8 +582,71 @@ Open:
 - The chat box is a bare `<textarea>`, not frappe-ui's `Textarea`; move it over.
 - Audit other dialogs whose answer opens work elsewhere (the day's review Log, Switch's target)
   for the same focus hand-back, and use `handFocus`.
-- The same TimePicker Escape swallow in `RescheduleBlockDialog` and `PlanWorkBlockDialog`:
-  check with a real key press whether one Escape blurs the field instead of stepping back.
+- Done (checked with real key presses in Plan, Reschedule and the session box's Adjust): one
+  Escape is one step back. An open time list or day calendar closes and focus stays on its field;
+  with nothing open, the dialog (or the adjust times) closes and focus goes back to its button.
+  - In a dialog, the TimePicker's blur sent focus to the page, and a closed calendar handed it to
+    whatever had it before (a click opens the calendar without focusing the day field). `FDialog`
+    notes the last field pressed or focused (`@focus.capture`, `@pointerdown`) and gives it back.
+  - From the keyboard a day calendar could not be closed: reka gave focus back to the day field,
+    which opened the calendar again on focus. `quietReopenOnEscape` (`src/utils/popover.js`, set
+    up in `main.js`) holds that focus back from the field for the rest of the Escape.
+  - Outside a dialog (the session box) a calendar's Escape left focus on the page. The same
+    listener notes the field a popup belongs to and gives focus back once the calendar lets go.
+  - The day field had no accessible name: frappe-ui's DatePicker drops `aria-label` and
+    `aria-haspopup`, so FDialog's "never focus a field that opens a popup on open" never matched
+    at runtime either. `v-input-attrs` puts them on the input.
+  - The End list cut its options short ("4:45 pm next day (2…"): TimePicker's list is a fixed
+    `w-44`. It grows to its longest option (`main.css`).
+  Guards in `check_field_focus.mjs` and `check_dialog_popovers.cjs`, with mutants for each.
+- Done: `check_live_adjust.mjs` crashed after 23:30. "Half an hour from now" is past midnight, and
+  a Stop that read an overnight end on the start day closed the box the next lines wrote to, so
+  two overnight mutants survived as a crash instead of failing on their own check. It now reports
+  the closed box and carries on.
+- The Start and End time fields are named only by their placeholder. TimePicker drops attrs as
+  DatePicker does; `v-input-attrs` can now name them ("Start time", "End time").
+- Done (2026-10-12): one Tasks layout for the live box and the hand-entry box. With two columns
+  (lg, the grid's own breakpoint) Tasks sit under the Log on the left, so Adjust no longer makes
+  the right column long beside a half-empty Log; with one column they stay beside "Logging to",
+  so they are not pushed under a long Log. SessionBox provides `tasksBlock` and `tasksUnderLog`
+  (a matchMedia on min-width 1024px); only one BlockTasksSection is mounted. Guarded in
+  `check_dialog_popovers.cjs` §13, with mutants.
+
+### A session running past midnight (2026-10-13)
+
+- Done: a session started at 6:00 pm and still running at 00:01 vanished from Day at a glance and
+  the calendar on both days. Both drew the running bar only on "today", from its start time (the
+  calendar also only on the day it started). `utils/liveSpan.js` `liveSpanOn(day, start)` gives
+  the part on any day: 18:00–24:00 on the 12th, 00:00–now on the 13th, shown as "(cont.)" and
+  "spans midnight" as a night block is.
+- Done: an open page kept yesterday as today after midnight (the now line sat at 12a on it,
+  "Up next" counted down to yesterday's block). The now clock now moves `todayDate` on, a
+  dashboard showing today follows, and the blocks are fetched again (`useWorkstationEod.js`).
+  Guard: `check_live_across_midnight.mjs`, with mutants.
+- Open: on the calendar, a session bound to a block shows only that block (18:15–20:00), not the
+  time actually running (18:00 to midnight). Show the running span beside the bound block?
+- Open: the week view does not follow today into a new week at midnight on Saturday
+  (`plannerAnchor` stays put).
+
+### Drag to pick a time, the same in both views (2026-10-13)
+
+- Done: Day at a glance only had click-to-log gaps, while the calendar drew a range by dragging.
+  Now press and drag along Planned to plan that stretch, along Logged to log it (a drag can start
+  on a gap, to log part of it; a gap's click still logs all of it). A click on an empty part of
+  Planned plans that hour, as a calendar cell does. A plan never starts in the past (it starts at
+  the next quarter hour) and a log never ends after now; the wrong lane says which one to use.
+- Done: the calendar refused a range that had passed ("work blocks can only be booked from now
+  on"). A past range now opens the log entry for it, and the ghost says "Log" (amber) or "Plan"
+  (blue) before you let go. One rule for both views: `utils/pickTimeRange.js` `rangeIntent`.
+- Done: phones. A finger draws only after being held still (400 ms, the calendar's hold); a swipe
+  that starts on the timeline scrolls the page or the day as before. Once a held finger draws, a
+  `touchmove` listener stops the scroll; it does nothing otherwise. The calendar grid gets the
+  same listener, so a held drag there no longer turns into a scroll halfway.
+  Guard: `check_drag_pick_range.mjs`, with mutants.
+- Open: checked with synthetic touches in the desktop browser only (a swipe is not blocked, a
+  hold draws, a cancel discards). Try it on a real iPhone and Android phone.
+- Open: no keyboard way to pick a stretch on the lanes themselves; the keyboard path is "+ Plan",
+  a gap's Enter, and the Log button, then the times in the dialog.
 
 ## Domain model written down (`docs/DOMAIN_MODEL.md`)
 

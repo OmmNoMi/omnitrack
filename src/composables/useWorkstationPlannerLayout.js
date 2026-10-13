@@ -1,6 +1,7 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { KINDS, toKind } from '../utils/activity.js';
 import { noteHeading } from '../utils/wrapNote.js';
+import { liveSpanOn } from '../utils/liveSpan.js';
 
 export function useWorkstationPlannerLayout(opts) {
   const {
@@ -173,46 +174,45 @@ export function useWorkstationPlannerLayout(opts) {
       }
     }
 
-    if (iso === (todayDate.value || todayISO()) && isTracking.value && startTime.value) {
+    // The running session on every day it covers: one started last night is drawn up to
+    // midnight on its own day and from midnight today (liveSpanOn). trackerSeconds is read so
+    // the bar grows as the clock runs.
+    const live = isTracking.value && startTime.value && trackerSeconds.value >= 0 ? liveSpanOn(iso, startTime.value) : null;
+    if (live) {
       const isBoundToExistingSeg = trackerBlockName.value && segments.some(s => s.block && s.block.name === trackerBlockName.value);
       if (!isBoundToExistingSeg) {
-        const d = new Date(startTime.value);
-        const startISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        if (startISO === iso) {
-          const sMins = d.getHours() * 60 + d.getMinutes();
-          const curNow = new Date();
-          const curNowMins = curNow.getHours() * 60 + curNow.getMinutes();
-          const eMins = Math.max(sMins + 15, curNowMins);
-          // The session's notes are what got done, not a title: name it by the first line
-          // that is not a ticked-off task
-          const notes = String(trackerNotes.value || '').trim();
-          const heading = noteHeading(notes) || 'Live session';
-          const liveBlock = {
-            name: trackerBlockName.value || 'live_active_session',
-            is_live_active: true,
-            task_subject: heading,
-            work_item_label: heading,
-            deliverable_notes: notes,
-            start_time: _minToHHMM(sMins),
-            end_time: _minToHHMM(eMins),
-            duration_hours: ((eMins - sMins) / 60).toFixed(2),
-            actual_hours: (trackerSeconds.value / 3600).toFixed(2),
-            task_nature: toKind(selectedNature.value),
-            project: selectedProject.value || '',
-            status: 'In Progress',
-            // An unbound session carries its own tasks until Stop makes its block
-            ...(trackerBlockName.value ? {} : { is_session_tasks: true, employee: currentUser && currentUser.value, work_date: iso, tasks: sessionTasks ? sessionTasks.value : [] })
-          };
-          segments.push({
-            key: 'live_active_session_seg',
-            name: liveBlock.name,
-            is_segment: false,
-            segment_type: 'full',
-            start_mins: sMins,
-            end_mins: eMins,
-            block: liveBlock
-          });
-        }
+        const sMins = live.s;
+        const eMins = Math.min(1440, Math.max(sMins + 15, live.e));
+        // The session's notes are what got done, not a title: name it by the first line
+        // that is not a ticked-off task
+        const notes = String(trackerNotes.value || '').trim();
+        const heading = noteHeading(notes) || 'Live session';
+        const liveBlock = {
+          name: trackerBlockName.value || 'live_active_session',
+          is_live_active: true,
+          task_subject: heading,
+          work_item_label: heading,
+          deliverable_notes: notes,
+          start_time: _minToHHMM(sMins),
+          end_time: _minToHHMM(eMins),
+          duration_hours: ((eMins - sMins) / 60).toFixed(2),
+          actual_hours: (trackerSeconds.value / 3600).toFixed(2),
+          task_nature: toKind(selectedNature.value),
+          project: selectedProject.value || '',
+          status: 'In Progress',
+          // An unbound session carries its own tasks until Stop makes its block
+          ...(trackerBlockName.value ? {} : { is_session_tasks: true, employee: currentUser && currentUser.value, work_date: iso, tasks: sessionTasks ? sessionTasks.value : [] })
+        };
+        segments.push({
+          key: 'live_active_session_seg',
+          name: liveBlock.name,
+          // Past midnight it reads as a night block does: "(cont.)" today, "spans midnight" before
+          is_segment: live.fromBefore || live.toAfter,
+          segment_type: live.fromBefore ? 'head' : live.toAfter ? 'tail' : 'full',
+          start_mins: sMins,
+          end_mins: eMins,
+          block: liveBlock
+        });
       }
     }
 

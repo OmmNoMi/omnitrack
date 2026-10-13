@@ -208,11 +208,9 @@
     </div>
 
     <!-- What this session is for: the same task list a block shows, so a task is ticked,
-         edited or moved through its workflow the same way everywhere. Bound to a block, it is
-         that block's tasks; otherwise the session's own, which Stop puts on its new block. -->
-    <!-- An entry lists its block's tasks under its Log instead (SessionLogPane), and never the
-         running session's own tasks: it is not that session -->
-    <BlockTasksSection v-if="!isEntry" :block="trackerBoundBlock || liveSessionBlock" :is-dark-mode="isDarkMode" />
+         edited or moved through its workflow the same way everywhere (tasksBlock, SessionBox).
+         Here only with one column; with two they sit under the Log (SessionLogPane). -->
+    <BlockTasksSection v-if="tasksBlock && !tasksUnderLog" :block="tasksBlock" :is-dark-mode="isDarkMode" />
 
     <!-- Project & activity: searchable frappe-ui Comboboxes. frappe-ui gives a Combobox
          trigger a fixed width, so each one is stretched to its column or it spills out. -->
@@ -267,7 +265,7 @@ export default {
   components: { BlockTasksSection, Button, Combobox, DayTimeFields, FeatherIcon },
   methods: { blockTitle },
   setup() {
-    const ws = useWorkstationContext(['cancelLiveAdjust', 'keepSessionRunning', 'liveAdjust', 'liveSessionBlock', 'stopAndLogSession']);
+    const ws = useWorkstationContext(['cancelLiveAdjust', 'keepSessionRunning', 'liveAdjust', 'stopAndLogSession']);
     const box = useSessionContext(['activeToolIndex', 'isEntry', 'toolbarRef']);
     const adjustRef = ref(null);
     const adjustMins = computed(() => (ws.liveAdjust.value ? spanMins(ws.liveAdjust.value.from_time, ws.liveAdjust.value.to_time) : 0));
@@ -362,6 +360,8 @@ export default {
         'projectComboOptions',
         'projectComboValue',
         'sessionStart',
+        'tasksBlock',
+        'tasksUnderLog',
         'toolbarRef',
         'trackerBoundBlock',
       ]),

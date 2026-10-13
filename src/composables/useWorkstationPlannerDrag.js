@@ -1,4 +1,5 @@
 import { ref, computed, watch } from "vue";
+import { planRefusal } from "../utils/planWindow.js";
 
 /**
  * Drag to reschedule and press-and-hold.
@@ -71,13 +72,22 @@ export function useWorkstationPlannerDrag(w) {
     _blockDragEndedAt.value = Date.now();
     const changed = d.curStart !== d.origStart || d.curEnd !== d.origEnd || d.curDayIdx !== d.origDayIdx;
     if (!changed) return;
+    const move = {
+      block_name: d.name,
+      new_date: plannerDays.value[d.curDayIdx],
+      new_start_time: _minsToHHMM(d.curStart),
+      new_end_time: _minsToHHMM(d.curEnd),
+    };
+    // Dropped on a past day, a slot already over or a closed payroll day: it springs back, and
+    // says why (the server's check_plan_date)
+    const refused = planRefusal(move.new_date, move.new_start_time, move.new_end_time, { payrollClosedThrough: plannerData.value && plannerData.value.payroll_closed_through });
+    if (refused) {
+      await fetchPlannerData();
+      showToast('Not moved. ' + refused, 'danger');
+      return;
+    }
     try {
-      await postJSON('reschedule_work_block', {
-        block_name: d.name,
-        new_date: plannerDays.value[d.curDayIdx],
-        new_start_time: _minsToHHMM(d.curStart),
-        new_end_time: _minsToHHMM(d.curEnd),
-      });
+      await postJSON('reschedule_work_block', move);
       await fetchPlannerData();
     } catch (e) {
       // The block springs back to where it was; the page is not frozen by the browser's alert()

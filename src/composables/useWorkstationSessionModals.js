@@ -171,11 +171,13 @@ export function useWorkstationSessionModals(opts) {
     if (!(opt && opt.inPlace)) showSessionBox();
   };
 
+  // A gap on Day at a glance, or a stretch picked by dragging (which names its own day: the
+  // calendar's columns are not the dashboard's day)
   const quickLogTimelineGap = (gap) => {
     if (!gap) return;
     openPanel({
       mode: 'free',
-      session_date: selectedDashboardDate.value || getLocalTodayISO(),
+      session_date: gap.session_date || selectedDashboardDate.value || getLocalTodayISO(),
       from_time: gap.from_time.substring(0, 5),
       to_time: gap.to_time.substring(0, 5)
     });

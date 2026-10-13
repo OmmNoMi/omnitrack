@@ -34,8 +34,8 @@
           </Dropdown>
           <Badge v-else size="lg" variant="subtle" class="h-8" :class="chip(detail.state)" :title="stateHint || 'No next step open to you from here'">{{ detail.state || 'Open' }}</Badge>
         </div>
-        <div class="w-48">
-          <DatePicker v-model="form.due_date" variant="subtle" format="ddd, D MMM YYYY" placeholder="Due day" aria-label="Due" aria-haspopup="dialog" :disabled="!editable">
+        <div v-input-attrs="{ 'aria-label': 'Due', 'aria-haspopup': 'dialog' }" class="w-48">
+          <DatePicker v-model="form.due_date" variant="subtle" format="ddd, D MMM YYYY" placeholder="Due day" :disabled="!editable">
             <template #prefix><FeatherIcon name="calendar" class="h-4 w-4" :class="iconTone" aria-hidden="true" /></template>
           </DatePicker>
         </div>
@@ -91,6 +91,7 @@ import { useWorkstationContext } from '../../composables/useWorkstationContext.j
 import { taskForm, closeTaskForm } from '../../composables/useTaskForm.js';
 import { whenLine } from '../../utils/clockTime.js';
 import { stateChipClass, isDangerMove, moveIcon } from '../../utils/taskState.js';
+import { vInputAttrs } from '../../utils/popover.js';
 
 const FIELDS = ['subject', 'due_date', 'priority'];
 const blank = () => ({ subject: '', due_date: '', priority: '' });
@@ -98,6 +99,7 @@ const emptyDetail = () => ({ doctype: '', name: null, can_edit: true, priorities
 
 export default {
   name: 'TaskFormDialog',
+  directives: { inputAttrs: vInputAttrs },
   setup() {
     const ctx = useWorkstationContext([
       'postJSON', 'showToast', 'fetchPlannerData', 'fetchWorkstationData', 'selectedEmployee',

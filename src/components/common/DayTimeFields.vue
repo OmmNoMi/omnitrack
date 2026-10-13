@@ -6,16 +6,16 @@
       <FeatherIcon name="calendar" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
       <div class="flex-1 min-w-0 space-y-2 [&_input]:h-9 [&_input]:text-base">
         <p class="text-sm font-medium" :class="labelText" aria-hidden="true">{{ dayLabel }}</p>
-        <DatePicker
-          variant="outline"
-          :model-value="date"
-          format="ddd, D MMM YYYY"
-          :clearable="false"
-          placeholder="Pick a day"
-          :aria-label="dayLabel"
-          aria-haspopup="dialog"
-          @update:model-value="$emit('update:date', $event)"
-        />
+        <div v-input-attrs="{ 'aria-label': dayLabel, 'aria-haspopup': 'dialog' }">
+          <DatePicker
+            variant="outline"
+            :model-value="date"
+            format="ddd, D MMM YYYY"
+            :clearable="false"
+            placeholder="Pick a day"
+            @update:model-value="$emit('update:date', $event)"
+          />
+        </div>
         <ChoiceChips :options="dayOptions" :model-value="date" aria-label="Quick day" @update:model-value="$emit('update:date', $event)" />
       </div>
     </div>
@@ -44,11 +44,13 @@
 
 <script>
 import ChoiceChips from "./ChoiceChips.vue";
+import { vInputAttrs } from "../../utils/popover.js";
 import { toMin, toHHMM, spanMins, localISO, durationLabel, endTimeOptions } from "../../utils/clockTime.js";
 
 export default {
   name: "DayTimeFields",
   components: { ChoiceChips },
+  directives: { inputAttrs: vInputAttrs },
   props: {
     date: { type: String, default: "" },
     start: { type: String, default: "" },

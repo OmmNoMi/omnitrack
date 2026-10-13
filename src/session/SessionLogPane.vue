@@ -1,7 +1,7 @@
 <template>
   <!-- An entry is not stretched to the controls' height: its Log is as tall as its lines, and
-       the block's tasks follow it, so the popup has no empty column on a wide screen -->
-  <div class="lg:col-span-7 flex flex-col" :class="isEntry ? 'gap-5' : 'min-h-[16rem]'">
+       the tasks follow it, so the popup has no empty column on a wide screen -->
+  <div class="lg:col-span-7 flex flex-col gap-5" :class="isEntry ? '' : 'min-h-[16rem]'">
     <div class="min-h-0 flex flex-col" :class="isEntry ? '' : 'flex-1'">
       <!-- An entry has the Log only: a heading, as the Tasks below it have, not a bar of one tab -->
       <h3 v-if="isEntry" :id="idp + 'tab-session-notes'" class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Log<template v-if="(sessionNotesList || []).length"> ({{ sessionNotesList.length }})</template></h3>
@@ -269,8 +269,9 @@
       </div>
     </div>
 
-    <!-- An entry's block tasks sit under what got done: what and which task, then when (right) -->
-    <BlockTasksSection v-if="isEntry && trackerBoundBlock" :block="trackerBoundBlock" :is-dark-mode="isDarkMode" />
+    <!-- With two columns the tasks sit under what got done, in the wide column: what and which
+         task, then when (right). With one they stay beside "Logging to" (SessionControlsPane). -->
+    <BlockTasksSection v-if="tasksBlock && tasksUnderLog" :block="tasksBlock" :is-dark-mode="isDarkMode" />
   </div>
 </template>
 
@@ -329,6 +330,8 @@ export default {
       'paneTab',
       'selectPaneTab',
       'tabDetailsRef',
+      'tasksBlock',
+      'tasksUnderLog',
       'trackerBoundBlock'
     ]);
     const ws = useWorkstationContext(['isBlockCompleted', 'openBlockDrawer', 'isSessionElevated', 'sessionMinWords', 'stopNeedsWords', 'stopWordsNow']);

@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { provide, toRefs, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { provide, toRefs, ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import SessionLogPane from './SessionLogPane.vue';
 import SessionControlsPane from './SessionControlsPane.vue';
 import { SESSION_KEY } from './useSessionContext.js';
@@ -80,13 +80,26 @@ const notes = useSessionNotes(props, emit);
 const entry = useSessionEntry(props, emit, notes);
 // Ids and the "/" target belong to the running session; an entry open beside it has its own
 const idp = props.mode === 'entry' ? 'entry-' : '';
-provide(SESSION_KEY, { ...toRefs(props), emit, ...chat, ...display, ...notes, ...entry, idp });
+
+// The tasks this box lists: the running session's are its bound block's, else its own list
+// (liveSessionBlock), which Stop puts on its new block. An entry lists only its own block's,
+// never the running session's: it is not that session.
+const ws = props.mode === 'entry' ? null : useWorkstationContext(['liveSessionBlock', 'newSessionPoint']);
+const tasksBlock = computed(() => (ws ? props.trackerBoundBlock || ws.liveSessionBlock.value : props.trackerBoundBlock));
+// With two columns (lg, the grid's own breakpoint) the Tasks sit under the Log, in the wide
+// left column; with one they stay beside "Logging to", so nothing is pushed below a long Log.
+// One BlockTasksSection is mounted at a time, in the pane where it shows, so the tab order
+// follows what is seen.
+const twoColumns = window.matchMedia('(min-width: 1024px)');
+const tasksUnderLog = ref(twoColumns.matches);
+function onColumnsChange(e) { tasksUnderLog.value = e.matches; }
+provide(SESSION_KEY, { ...toRefs(props), emit, ...chat, ...display, ...notes, ...entry, idp, tasksBlock, tasksUnderLog });
 
 // The running session's line still in the field is the workstation's newSessionPoint too: Stop
 // adds it to the log rather than dropping it, and the word count asked for on a refused Stop
 // counts it as it is typed. An entry's field is its own.
-if (props.mode !== 'entry') {
-  const { newSessionPoint } = useWorkstationContext(['newSessionPoint']);
+if (ws) {
+  const { newSessionPoint } = ws;
   watch(notes.localLineText, (t) => { if (newSessionPoint.value !== t) newSessionPoint.value = t; });
   watch(newSessionPoint, (t) => { if (notes.localLineText.value !== (t || '')) notes.localLineText.value = t || ''; });
 }
@@ -97,11 +110,13 @@ function onFocusSessionInput() {
 }
 
 onMounted(() => {
+  twoColumns.addEventListener('change', onColumnsChange);
   if (props.mode === 'entry') return;
   window.addEventListener('omnitrack:focus-session-input', onFocusSessionInput);
 });
 
 onUnmounted(() => {
+  twoColumns.removeEventListener('change', onColumnsChange);
   window.removeEventListener('omnitrack:focus-session-input', onFocusSessionInput);
 });
 

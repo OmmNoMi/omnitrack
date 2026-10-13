@@ -231,7 +231,7 @@ runMutationTest(
 runMutationTest(
   'The recording bar reads the wall clock again and falls behind the now line',
   path.resolve(omnitrackDir,'src/composables/useWorkstationTimeline.js'),
-  (code) => code.replace('const ee = Math.max(ss + 1, nowMinute.value);', 'const curNow = new Date();\n        const ee = Math.max(ss + 1, curNow.getHours() * 60 + curNow.getMinutes());'),
+  (code) => code.replace('const ee = live.toAfter ? 1440 : Math.max(ss + 1, nowMinute.value);', 'const curNow = new Date();\n        const ee = live.toAfter ? 1440 : Math.max(ss + 1, curNow.getHours() * 60 + curNow.getMinutes());'),
   'node scripts/check_timeline_zoom.mjs',
   'must end at nowMinute.value'
 );
@@ -625,11 +625,23 @@ runMutationTest("The Log's waiting Add goes pale blue", SLP,
   (code) => code.replace(":class=\"[DISABLED_SOLID, '!h-auto", ":class=\"['!h-auto"), DP, "Log's Add waits");
 runMutationTest('A waiting button keeps white text', path.resolve(omnitrackDir,'src/utils/sessionFrame.js'),
   (code) => code.replace("'disabled:!bg-gray-100 disabled:!text-gray-700 ", "'disabled:!bg-gray-100 disabled:!text-white "), DP, 'greys a waiting button');
-// An entry lists its own block's tasks under the Log, never the running session's
-runMutationTest("An entry lists the running session's tasks", SCP,
-  (code) => code.replace('<BlockTasksSection v-if="!isEntry" ', '<BlockTasksSection '), DP, 'bound block, else liveSessionBlock');
-runMutationTest("An entry on a block loses the block's tasks", SLP,
-  (code) => code.replace('<BlockTasksSection v-if="isEntry && trackerBoundBlock"', '<BlockTasksSection v-if="false"'), DP, "its block's tasks under the Log");
+// An entry lists its own block's tasks, never the running session's
+const SBX = path.resolve(omnitrackDir,'src/session/SessionBox.vue');
+runMutationTest("An entry lists the running session's tasks", SBX,
+  (code) => code.replace('(ws ? props.trackerBoundBlock || ws.liveSessionBlock.value : props.trackerBoundBlock)', '(props.trackerBoundBlock || (ws && ws.liveSessionBlock.value))'), DP, 'never the running session');
+// Two columns: tasks under the Log. One column: beside "Logging to". Never both, never neither.
+runMutationTest('Tasks stay beside "Logging to" with two columns', SCP,
+  (code) => code.replace('v-if="tasksBlock && !tasksUnderLog"', 'v-if="tasksBlock"'), DP, 'beside "Logging to" only with one column');
+runMutationTest('Tasks vanish with two columns', SLP,
+  (code) => code.replace('v-if="tasksBlock && tasksUnderLog"', 'v-if="false"'), DP, 'under the Log only with two columns');
+runMutationTest('Tasks follow a breakpoint the grid does not use', SBX,
+  (code) => code.replace("window.matchMedia('(min-width: 1024px)')", "window.matchMedia('(min-width: 768px)')"), DP, "grid's own lg breakpoint");
+runMutationTest('Tasks do not move when the window is resized', SBX,
+  (code) => code.replace("  twoColumns.addEventListener('change', onColumnsChange);\n", ''), DP, 'crosses lg');
+runMutationTest('The column listener outlives the box', SBX,
+  (code) => code.replace("  twoColumns.removeEventListener('change', onColumnsChange);\n", ''), DP, 'listener is removed');
+runMutationTest('Tasks sit above the Log', SLP,
+  (code) => code.replace(/(\s*<!-- With two columns[\s\S]*?<BlockTasksSection v-if="tasksBlock && tasksUnderLog"[^>]*\/>)/, '').replace('<div class="min-h-0 flex flex-col"', '<BlockTasksSection v-if="tasksBlock && tasksUnderLog" :block="tasksBlock" :is-dark-mode="isDarkMode" />\n    <div class="min-h-0 flex flex-col"'), DP, 'last thing in the pane');
 // Dark mode is two switches: .dark and frappe-ui's data-theme
 runMutationTest("Dark mode leaves frappe-ui's tokens light", path.resolve(omnitrackDir,'src/composables/useWorkstationShell.js'),
   (code) => code.replace("document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');", ''), 'node scripts/check_contrast_tokens.cjs', 'applyTheme sets data-theme');
@@ -800,8 +812,8 @@ runMutationTest('A refused tick stays ticked', path.resolve(omnitrackDir,'src/co
   (code) => code.replace('      Object.assign(item, before);\n', ''), TE, 'restore the task');
 
 const SRC = (f) => path.resolve(omnitrackDir,f);
-runMutationTest('The session popup loses its task list', SRC('src/session/SessionControlsPane.vue'),
-  (code) => code.replace(':block="trackerBoundBlock || liveSessionBlock"', ':block="trackerBoundBlock"'), DP, 'lists its tasks with BlockTasksSection');
+runMutationTest('The session popup loses its task list', SRC('src/session/SessionBox.vue'),
+  (code) => code.replace('(ws ? props.trackerBoundBlock || ws.liveSessionBlock.value : props.trackerBoundBlock)', '(props.trackerBoundBlock)'), DP, 'bound block, else liveSessionBlock');
 runMutationTest('A session task opens the block form', drawerDir('BlockTasksSection.vue'),
   (code) => code.replace('openTaskForm(row, { onRemove: this.removeSessionTask, onChange: this.onSessionTaskChange })', 'openTaskForm(row, { block: this.block, canRemove: this.canAdd })'), DP, 'a session task opens the one task form');
 runMutationTest('The task form ignores onChange', SRC('src/components/dialogs/TaskFormDialog.vue'),
@@ -820,6 +832,18 @@ runMutationTest('clean_session_tasks keeps duplicate refs', SRC('omnitrack/utils
   (code) => code.replace(' or t["ref"] in seen', ''), DP, 'clean_session_tasks must dedupe');
 runMutationTest('A session tool is no longer squared', SRC('src/session/SessionControlsPane.vue'),
   (code) => code.replace(':class="TOOL_SQUARE"\n            :tabindex="activeToolIndex === 2', ':tabindex="activeToolIndex === 2'), DP, 'each of the 3 session tools');
+runMutationTest('Escape on a time list in a dialog drops focus to the page', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace('          if (field && field.isConnected && now !== field && (now === document.body || (panel && panel.contains(now)))) focusBack(field);\n', ''), DP, 'focus stays on its field');
+runMutationTest('A closed day calendar leaves focus on another field', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace(' || (panel && panel.contains(now))', ''), DP, 'focus stays on its field');
+runMutationTest('Focus coming back to a day field opens its calendar again', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace('panel.contains(now)))) focusBack(field);', 'panel.contains(now)))) field.focus();'), DP, 'focus stays on its field');
+runMutationTest('A dialog forgets which field its list belongs to', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace(' @focus.capture="noteFocus"', ''), DP, 'focus stays on its field');
+runMutationTest('A click on the day field is forgotten by its dialog', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace(' @pointerdown="noteFocus"', ''), DP, 'focus stays on its field');
+runMutationTest('Escape on a time list in a dialog steals focus already placed', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace('if (field && field.isConnected && now !== field && (now === document.body || (panel && panel.contains(now))))', 'if (field)'), DP, 'focus stays on its field');
 runMutationTest('An FDialog Escape reaches the page again', SRC('src/components/common/FDialog.vue'),
   (code) => code.replace('      e.stopPropagation();\n      this.open = false;', '      this.open = false;'), DP, 'keepEscape');
 runMutationTest('A spread setup hides an undeclared template name', SRC('src/session/SessionControlsPane.vue'),
@@ -1320,7 +1344,45 @@ const FF = 'node scripts/check_field_focus.mjs';
 runMutationTest('A dialog opens its date picker on open again', SRC('src/components/common/FDialog.vue'),
   (code) => code.replace(' && !opensOnFocus(el))', ')'), FF, 'skips a field that opens a popup');
 runMutationTest('The Due picker loses its name', SRC('src/components/dialogs/TaskFormDialog.vue'),
-  (code) => code.replace('aria-label="Due" aria-haspopup="dialog"', 'aria-haspopup="dialog"'), FF, 'has no aria-label');
+  (code) => code.replace("{ 'aria-label': 'Due', 'aria-haspopup': 'dialog' }", "{ 'aria-haspopup': 'dialog' }"), FF, 'has no aria-label');
+runMutationTest('The day field\'s name goes back on the DatePicker, which drops it', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace('placeholder="Pick a day"\n', 'placeholder="Pick a day"\n            :aria-label="dayLabel"\n'), FF, 'put them in v-input-attrs');
+runMutationTest('A DatePicker loses the element that names its input', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace(`<div v-input-attrs="{ 'aria-label': dayLabel, 'aria-haspopup': 'dialog' }">`, '<div>'), FF, 'sits directly inside');
+runMutationTest('The day field no longer says it opens a calendar', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace(`'aria-haspopup': 'dialog' }">`, `}">`), FF, "needs 'aria-haspopup'");
+runMutationTest('v-input-attrs is not registered where it is used', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace('  directives: { inputAttrs: vInputAttrs },\n', ''), FF, 'registers v-input-attrs');
+runMutationTest('v-input-attrs keeps a stale name after the label changes', SRC('src/utils/popover.js'),
+  (code) => code.replace('{ mounted: applyInputAttrs, updated: applyInputAttrs }', '{ mounted: applyInputAttrs }'), FF, 'on every update');
+runMutationTest('v-input-attrs puts nothing on the input', SRC('src/utils/popover.js'),
+  (code) => code.replace('    else input.setAttribute(k, String(v));\n', ''), FF, 'puts its attributes on the input');
+runMutationTest('Escape on a day calendar opens it again as focus comes back', SRC('src/utils/popover.js'),
+  (code) => code.replace('    window.addEventListener("focus", hushOpener, true);\n    const settle', '    const settle'), FF, 'does not open its calendar again');
+runMutationTest('A day field opens its calendar even while focus is held back', SRC('src/utils/popover.js'),
+  (code) => code.replace('if (opensOnFocus(e.target)) e.stopImmediatePropagation();', 'if (opensOnFocus(e.target)) return;'), FF, 'without opening (hushOpener)');
+runMutationTest('The day calendar hold is installed nowhere', SRC('src/main.js'),
+  (code) => code.replace('\nquietReopenOnEscape();\n', '\n'), FF, 'installed when the app loads');
+runMutationTest('The day calendar hold listens after the calendar closed', SRC('src/utils/popover.js'),
+  (code) => code.replace('      else settle();\n    });\n  }, true);', '      else settle();\n    });\n  });'), FF, 'capture phase');
+runMutationTest('Escape on a day calendar outside a dialog leaves focus on the page', SRC('src/utils/popover.js'),
+  (code) => code.replace('if (ours && field.isConnected && (!now || now === document.body)) focusBack(field);', ''), FF, 'its field gets focus back');
+runMutationTest('Tabbing onto a day field is never noted (focusin comes too late)', SRC('src/utils/popover.js'),
+  (code) => code.replace('window.addEventListener("focus", noteField, true);', 'document.addEventListener("focusin", noteField, true);'), FF, 'capturing focus, not focusin');
+runMutationTest('A click on a day field is never noted', SRC('src/utils/popover.js'),
+  (code) => code.replace('  document.addEventListener("pointerdown", noteField, true);\n', ''), FF, 'as it is pressed');
+runMutationTest("A calendar's own buttons count as the field it belongs to", SRC('src/utils/popover.js'),
+  (code) => code.replace('if (!t || !t.closest || t.closest(POPUP)) return;', 'if (!t || !t.closest) return;'), FF, 'outside a popup');
+runMutationTest('Escape on a hover tooltip pulls focus to a field pressed long ago', SRC('src/utils/popover.js'),
+  (code) => code.replace('const ours = !!field && (from === field || !!(from && from.closest && from.closest(POPUP)));', 'const ours = !!field;'), FF, 'does not open its calendar again');
+runMutationTest('Focus already placed after Escape is moved again', SRC('src/utils/popover.js'),
+  (code) => code.replace('(!now || now === document.body)) focusBack(field);', 'now !== field) focusBack(field);'), FF, 'its field gets focus back');
+runMutationTest('Focus is checked before the calendar lets go of it', SRC('src/utils/popover.js'),
+  (code) => code.replace('if (ours && now && now.closest && now.closest(POPUP)) now.addEventListener("focusout", () => setTimeout(settle), { once: true });\n      else settle();', 'settle();'), FF, 'let go of it');
+runMutationTest('An end time and its length are cut off in the time list', SRC('src/styles/main.css'),
+  (code) => code.replace('  width: max-content;\n  min-width: 11rem;', '  min-width: 11rem;'), FF, 'never cut off');
+runMutationTest('Tabbing onto a day field in a dialog is never noted', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace('@focus.capture="noteFocus"', '@focusin="noteFocus"'), DP, 'focus stays on its field');
 runMutationTest('The Combobox shrinks to its text again', SRC('src/styles/main.css'),
   (code) => code.replace('[data-slot="trigger"]:has(> input[role="combobox"]) { display: flex; width: 100%; }', ''), FF, 'fills its container');
 runMutationTest('A dialog focuses a Button through its $el again', SRC('src/components/dialogs/TaskFormDialog.vue'),
@@ -1703,6 +1765,153 @@ runMutationTest('JS composeWrapNote keeps a blank line', SRC('src/utils/wrapNote
   (code) => code.replace(/\.filter\(Boolean\)/, '.filter((x) => x !== undefined)'), FT_, 'as compose_wrap_note does');
 runMutationTest('Python compose_wrap_note keeps a blank line', SRC('omnitrack/utils/session_lines.py'),
   (code) => code.replace('for p in lines if p)', 'for p in lines)'), SLT, 'test_same_notes_as_the_page');
+
+// A plan is for time still to come (scripts/check_plan_window.mjs, test_unit_governance.TestPlanWindow)
+const PW = 'node scripts/check_plan_window.mjs';
+const GOV = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_unit_governance`;
+const PWJS = SRC('src/utils/planWindow.js');
+const PERMS = SRC('omnitrack/permissions.py');
+runMutationTest('JS plans an earlier day again', PWJS,
+  (code) => code.replace('if (day < today) return PLAN_PAST;', ''), PW, 'yesterday');
+runMutationTest('JS plans on the payroll day itself', PWJS,
+  (code) => code.replace('if (closed && day <= closed) {', 'if (closed && day < closed) {'), PW, 'the day payroll is closed through');
+runMutationTest('JS plans a slot already over', PWJS,
+  (code) => code.replace('if (e <= now.getHours() * 60 + now.getMinutes()) return PLAN_OVER;', ''), PW, 'today, ended at now');
+runMutationTest('JS reads an overnight end as over', PWJS,
+  (code) => code.replace('if (e <= s) e += 24 * 60;', ''), PW, 'today, ending the next morning');
+runMutationTest('JS says the slot words differently', PWJS,
+  (code) => code.replace('"That time is over. Plan from now on, or log it as time worked."', '"That time is over."'), PW, 'as src/utils/planWindow.js does');
+runMutationTest('Python plans an earlier day again', PERMS,
+  (code) => code.replace('\tif day < today:\n\t\treturn _(', '\tif False:\n\t\treturn _('), GOV, 'test_earlier_days_are_logged_not_planned');
+runMutationTest('Python plans on the payroll day itself', PERMS,
+  (code) => code.replace('if closed and day <= closed:', 'if closed and day < closed:'), GOV, 'test_never_on_a_closed_payroll_day');
+runMutationTest('Python plans a slot already over', PERMS,
+  (code) => code.replace('if end <= now.hour * 60 + now.minute:', 'if False:'), GOV, 'test_today_from_now_on');
+runMutationTest('Python reads an overnight end as over', PERMS,
+  (code) => code.replace('\t\tif end <= start:\n\t\t\tend += 24 * 60\n', ''), GOV, 'test_today_from_now_on');
+runMutationTest('check_plan_date lets a refusal through', PERMS,
+  (code) => code.replace('\tif refusal:\n\t\tfrappe.throw(refusal, frappe.ValidationError)', '\tif False:\n\t\tfrappe.throw(refusal, frappe.ValidationError)'), GOV, 'test_check_plan_date_refuses_with_the_reason');
+runMutationTest('Python says the past-day words differently', PERMS,
+  (code) => code.replace('"You can plan from today on. Time already worked is logged, not planned."', '"You can plan from today on."'), PW, 'as src/utils/planWindow.js does');
+const PLN = SRC('omnitrack/api/planner.py');
+runMutationTest('book_work_block plans the past again', PLN,
+  (code) => code.replace('\t\tcheck_plan_date(work_date or nowdate(), start_time, end_time)', '\t\tpass'), PW, 'book_work_block');
+runMutationTest('book_work_block checks logged time too', PLN,
+  (code) => code.replace('if not frappe.flags.omnitrack_block_for_logged_time:', 'if True:'), PW, 'unless it holds logged time');
+runMutationTest('create_planned_work_block plans the past again', PLN,
+  (code) => code.replace('check_plan_date(doc.work_date, doc.start_time, doc.end_time)', 'pass'), PW, 'create_planned_work_block');
+runMutationTest('update_work_block moves into the past again', PLN,
+  (code) => code.replace('check_plan_date(work_date or doc.work_date, start_time or doc.start_time, end_time or doc.end_time)', 'pass'), PW, 'update_work_block');
+runMutationTest('reschedule_work_block moves into the past again', PLN,
+  (code) => code.replace('check_plan_date(target_date, target_start, target_end)', 'pass'), PW, 'reschedule_work_block');
+runMutationTest('Carrying tasks over lands in the past again', SRC('omnitrack/api/tasks.py'),
+  (code) => code.replace('\tcheck_plan_date(target_date, start_at, end_at)', '\tpass'), PW, 'reschedule_unfinished_tasks: check_plan_date');
+runMutationTest('Carrying tasks over keeps a slot already over', SRC('omnitrack/api/tasks.py'),
+  (code) => code.replace('\t\tif plan_refusal(target_date, start_at, end_at):\n', '\t\tif False:\n'), PW, 'carries to tomorrow');
+runMutationTest('The logged-time flag is never cleared', SRC('omnitrack/fac.py'),
+  (code) => code.replace('\t\t\tfinally:\n\t\t\t\tfrappe.flags.omnitrack_block_for_logged_time = False\n', '\t\t\tfinally:\n\t\t\t\tpass\n'), PW, 'cleared in finally');
+runMutationTest('Another caller books a block for logged time', SRC('omnitrack/api/stopwatch.py'),
+  (code) => code + '\n\ndef _sneak():\n\tfrappe.flags.omnitrack_block_for_logged_time = True\n', PW, 'only fac.log_work_session');
+runMutationTest('The FAC plan tool plans the past again', SRC('omnitrack/fac.py'),
+  (code) => code.replace('\t\tcheck_plan_date(target_date, s_time, e_time)', '\t\tpass'), PW, 'plan_work_blocks');
+runMutationTest('The FAC plan tool tells the old rule', SRC('omnitrack/fac.py'),
+  (code) => code.replace('A plan is for time still to come: refused for an earlier day', 'Cannot plan in the past: refused for an earlier day'), PW, 'tells the assistant the rule');
+runMutationTest('The Plan dialog saves a refused day', SRC('src/components/dialogs/PlanWorkBlockDialog.vue'),
+  (code) => code.replace('if (this.dayRefusal) return false;', ''), PW, 'Save waits');
+runMutationTest('The Plan dialog does not say why', SRC('src/components/dialogs/PlanWorkBlockDialog.vue'),
+  (code) => code.replace(/<p v-if="dayRefusal" role="alert"/, '<p v-if="dayRefusal"'), PW, 'as an alert');
+runMutationTest('The Plan dialog forgets payroll', SRC('src/components/dialogs/DialogCoordinator.vue'),
+  (code) => code.replace(/(<PlanWorkBlockDialog[\s\S]*?):payroll-closed-through="payrollClosedThrough"/, '$1'), PW, 'the Plan dialog gets the payroll date');
+runMutationTest('Move block takes a refused day', SRC('src/drawers/RescheduleBlockDialog.vue'),
+  (code) => code.replace('&& !this.dayRefusal;', ';'), PW, 'Move block waits');
+runMutationTest('submitBooking posts a refused day', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace(/if \(refused\) \{\s*bookError\.value = refused;\s*return;\s*\}/, ''), PW, 'submitBooking refuses');
+runMutationTest('The Plan dialog opens on a past day', SRC('src/stores/workBlockStore.js'),
+  (code) => code.replace('isISODate(opts.date) && opts.date >= today ? opts.date : today', 'isISODate(opts.date) ? opts.date : today'), PW, 'opens the dialog on today');
+runMutationTest('A drag drops into the past', SRC('src/composables/useWorkstationPlannerDrag.js'),
+  (code) => code.replace(/if \(refused\) \{\s*await fetchPlannerData\(\);\s*showToast\('Not moved\. ' \+ refused, 'danger'\);\s*return;\s*\}/, ''), PW, 'springs back');
+
+// A session past midnight is drawn on both days, and today moves on at midnight
+const LM = 'node scripts/check_live_across_midnight.mjs';
+const LSPAN = SRC('src/utils/liveSpan.js');
+runMutationTest('The running bar stops at its start day', LSPAN,
+  (code) => code.replace('const s = fromBefore ? 0 : ', 'const s = '), LM, 'the next day runs from midnight');
+runMutationTest('The running bar runs past midnight on its start day', LSPAN,
+  (code) => code.replace('const e = toAfter ? 1440 : ', 'const e = '), LM, 'runs to midnight');
+runMutationTest('The running bar shows on a day it never reached', LSPAN,
+  (code) => code.replace('if (start >= dayEnd || now <= dayStart || now <= start) return null;', 'if (now <= start) return null;'), LM, 'a day still to come');
+runMutationTest('Day at a glance draws the running bar only today', SRC('src/composables/useWorkstationTimeline.js'),
+  (code) => code.replace('liveSpanOn(selectedDashboardDate.value || todayDate.value || todayISO(), startTime.value)', 'liveSpanOn(todayDate.value || todayISO(), startTime.value)'), LM, 'part of the session on the day shown');
+runMutationTest('Day at a glance stops a night session at the now minute', SRC('src/composables/useWorkstationTimeline.js'),
+  (code) => code.replace('const ee = live.toAfter ? 1440 : ', 'const ee = '), LM, 'runs to the end of the day');
+runMutationTest('A carried-over bar is rounded at midnight', SRC('src/views/dashboard/DashboardTimeline.vue'),
+  (code) => code.replace("r.from_before ? 'rounded-none z-10' : 'rounded-r-none z-10'", "'rounded-r-none z-10'"), LM, 'square at midnight');
+runMutationTest('The calendar draws the running bar only on its start day', SRC('src/composables/useWorkstationPlannerLayout.js'),
+  (code) => code.replace('? liveSpanOn(iso, startTime.value) : null;', '&& iso === (todayDate.value || todayISO()) ? liveSpanOn(iso, startTime.value) : null;'), LM, 'every day column asks liveSpanOn');
+runMutationTest('The calendar hides that the bar crosses midnight', SRC('src/composables/useWorkstationPlannerLayout.js'),
+  (code) => code.replace("segment_type: live.fromBefore ? 'head' : live.toAfter ? 'tail' : 'full',", "segment_type: 'full',"), LM, 'reads as a night block does');
+runMutationTest('An open page keeps yesterday as today', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('    todayDate.value = now;\n    if (selectedDashboardDate', '    if (selectedDashboardDate'), LM, 'today moves on');
+runMutationTest('The dashboard stays on yesterday at midnight', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('if (selectedDashboardDate.value === was) selectedDashboardDate.value = now;', ''), LM, 'a dashboard on today follows');
+
+// Press and drag picks a stretch to plan or log, the same in both views, and a swipe still scrolls
+const DPK = 'node scripts/check_drag_pick_range.mjs';
+const PTR = SRC('src/utils/pickTimeRange.js');
+const PSEL = SRC('src/composables/useWorkstationPlannerSelect.js');
+const DTLV = SRC('src/views/dashboard/DashboardTimeline.vue');
+runMutationTest('A plan starts in the past', PTR,
+  (code) => code.replace('const start = isToday && range.start < nowMin ? (next < range.end ? next : nowMin) : range.start;', 'const start = range.start;'), DPK, 'not in the past');
+runMutationTest('Time that has passed can be planned', PTR,
+  (code) => code.replace("    if (endsByNow) return { refuse: 'past' };\n", ''), DPK, 'plan time that has passed');
+runMutationTest('A log runs into the future', PTR,
+  (code) => code.replace('end: isToday ? Math.min(range.end, nowMin) : range.end', 'end: range.end'), DPK, 'a log ends now');
+runMutationTest('Time still to come can be logged', PTR,
+  (code) => code.replace("  if (startsAfterNow) return { refuse: 'future' };\n", ''), DPK, 'log time still to come');
+runMutationTest('The calendar plans every range', PTR,
+  (code) => code.replace("want === 'auto' ? (endsByNow ? 'log' : 'plan') : want", "want === 'auto' ? 'plan' : want"), DPK, 'the calendar logs');
+runMutationTest('A range can be a single minute', PTR,
+  (code) => code.replace('  if (end - start < RANGE_SNAP_MIN) end = start + RANGE_SNAP_MIN;\n', ''), DPK, 'never shorter than 15 minutes');
+runMutationTest('The end of the day reads 00:00', PTR,
+  (code) => code.replace('Math.min(1439, Math.round(m))', 'Math.min(1440, Math.round(m))'), DPK, 'the end of the day');
+runMutationTest('A refused range says nothing', PSEL,
+  (code) => code.replace("if (r.refuse) { showToast(PICK_REFUSED[r.refuse], 'warning'); return; }", 'if (r.refuse) return;'), DPK, 'says why');
+runMutationTest('A log opens on the dashboard day, not the range day', PSEL,
+  (code) => code.replace('w.quickLogTimelineGap({ session_date: iso, from_time', 'w.quickLogTimelineGap({ from_time'), DPK, 'on the day the range is on');
+runMutationTest('The quick log ignores the day it is given', SRC('src/composables/useWorkstationSessionModals.js'),
+  (code) => code.replace('session_date: gap.session_date || selectedDashboardDate.value', 'session_date: selectedDashboardDate.value'), DPK, 'names its own day');
+runMutationTest('The calendar range only plans', PSEL,
+  (code) => code.replace("const openBookModalRange = (iso, startMin, endMin) => openPickedRange('auto', iso,", "const openBookModalRange = (iso, startMin, endMin) => openPickedRange('plan', iso,"), DPK, 'logs the past and plans the rest');
+runMutationTest('The calendar hour only plans', PSEL,
+  (code) => code.replace("openPickedRange('auto', iso, { start: hour * 60", "openPickedRange('plan', iso, { start: hour * 60"), DPK, 'single hour follows the same rule');
+runMutationTest('Both lanes plan', PSEL,
+  (code) => code.replace("openPickedRange(s.lane === 'planned' ? 'plan' : 'log', s.iso, range)", "openPickedRange('plan', s.iso, range)"), DPK, 'Logged logs it');
+runMutationTest('A finger draws at once on Day at a glance', PSEL,
+  (code) => code.replace("    _armOnHold(ev, (x) => { triggerHaptic([25]); begin(x); });\n", '    begin(ev.clientX);\n'), DPK, 'a finger is held first');
+runMutationTest('A press on a bar draws a range', PSEL,
+  (code) => code.replace("if (ev.target && ev.target.closest && ev.target.closest('[data-tl-bar]')) return; // a bar opens itself", ''), DPK, 'opens the bar');
+runMutationTest('A cancelled timeline press still opens a dialog', PSEL,
+  (code) => code.replace("    if (ev && ev.type === 'pointercancel') return;\n    if (!s || !s.moved || !range) return;\n    _timelineSelEndedAt", "    if (!s || !s.moved || !range) return;\n    _timelineSelEndedAt"), DPK, 'a cancelled or unmoved press');
+runMutationTest('A drag ending on a gap also logs the whole gap', PSEL,
+  (code) => code.replace('const clickTimelineGap = (g) => {\n    if (_timelineSelJustEnded()) return;\n', 'const clickTimelineGap = (g) => {\n'), DPK, 'does not also log the whole gap');
+runMutationTest('A click on a planned bar also plans an hour', PSEL,
+  (code) => code.replace('if (_timelineSelJustEnded() || ev.target !== ev.currentTarget) return;', 'if (_timelineSelJustEnded()) return;'), DPK, 'plans that hour');
+runMutationTest('Day at a glance blocks every scroll', PSEL,
+  (code) => code.replace('if (timelineSel.value && ev.cancelable) ev.preventDefault();', 'if (ev.cancelable) ev.preventDefault();'), DPK, 'only while a held finger is drawing');
+runMutationTest('The calendar blocks every scroll', PSEL,
+  (code) => code.replace('if ((slotSel.value || w.plannerDrag.value) && ev.cancelable) ev.preventDefault();', 'if (ev.cancelable) ev.preventDefault();'), DPK, 'only while a held finger draws');
+runMutationTest('A held finger on the timeline still scrolls', DTLV,
+  (code) => code.replace(' @touchmove="onTimelineTouchMove"', ''), DPK, "held finger's moves can draw");
+runMutationTest('The timeline takes the page scroll away from a finger', DTLV,
+  (code) => code.replace('class="relative h-8 mt-3 cursor-cell select-none', 'class="relative h-8 mt-3 cursor-cell select-none touch-none'), DPK, 'takes a vertical page scroll away');
+runMutationTest('The Logged lane cannot draw', DTLV,
+  (code) => code.replace(`@pointerdown="startTimelineSel($event, 'logged')"`, ''), DPK, 'the Logged lane draws');
+runMutationTest('A logged bar is not marked as a bar', DTLV,
+  (code) => code.replace(`:key="'l' + i" data-tl-bar`, `:key="'l' + i"`), DPK, 'a logged bar is marked');
+runMutationTest('A gap click skips the drag check', DTLV,
+  (code) => code.replace('@click.stop="clickTimelineGap(g)"', '@click.stop="quickLogTimelineGap(g)"'), DPK, "a gap's click goes through");
+runMutationTest('A held finger on the calendar still scrolls', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
+  (code) => code.replace(' @touchmove="onPlannerTouchMove"', ''), DPK, 'the calendar grid listens for moves');
 
 // Summary Report
 console.log('\n===========================================================');

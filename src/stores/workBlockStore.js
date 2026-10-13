@@ -2,6 +2,7 @@ import * as Vue from "vue";
 import { WORK, BREAK as ACTIVITY_BREAK, AWAY, toKind } from '../utils/activity.js';
 // localISO, never toISOString(): that is the UTC date, a day behind in IST before 05:30
 import { toMin, toHHMM, spanMins, localISO } from '../utils/clockTime.js';
+import { planRefusal } from '../utils/planWindow.js';
 const { ref, computed } = Vue;
 
 // Planned Work Block.task_nature, the block's activity (src/utils/activity.js). PLANNED keeps
@@ -119,7 +120,8 @@ export function useWorkBlockStore({
    */
   const openPlanDialog = (opts = {}) => {
     const today = (todayDate && todayDate.value) || localISO(new Date());
-    const date = isISODate(opts.date) ? opts.date : today;
+    // A plan is for time still to come: a past day (the dashboard looking back) plans today
+    const date = isISODate(opts.date) && opts.date >= today ? opts.date : today;
     let start = opts.start;
     if (!start) {
       // Today: the next quarter hour. Another day: the start of the working day.
@@ -161,6 +163,12 @@ export function useWorkBlockStore({
     // An end before the start is the next morning, as the server reads it
     if (spanMins(f.start_time, f.end_time) <= 0) {
       bookError.value = 'Set an end time that differs from the start.';
+      return;
+    }
+    // The dialog says why before Save; this is the same rule (the server's check_plan_date)
+    const refused = planRefusal(f.work_date, f.start_time, f.end_time, { payrollClosedThrough: plannerData.value && plannerData.value.payroll_closed_through });
+    if (refused) {
+      bookError.value = refused;
       return;
     }
     plannerBusy.value = true;

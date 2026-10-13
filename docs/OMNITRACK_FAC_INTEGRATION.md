@@ -64,7 +64,7 @@ OmniTrack offers three consolidated tools (the `fac_tools` hook, `get_fac_tools(
 
 ### 2. `omnitrack_plan_work_blocks`
 * **Purpose**: Batch schedules planned work blocks for a day (`09:00 - 11:00`, `11:00 - 13:00`, etc.).
-* **Temporal Rule**: **Past dates (`work_date < today`) are strictly locked.** The assistant cannot book or alter historical commitments.
+* **Temporal Rule**: **A plan is for time still to come.** Nobody books or moves a block to an earlier day, to a day on or before Payroll Closed Through, or, today, to a slot that has already ended (`permissions.check_plan_date`, the same check as the page). Time already worked is logged with `omnitrack_log_work_session`, which may make a block to hold it.
 * **Dates in times**: `start_time` may be a time (`"10:45"`) or a date and time (`"2026-10-08 10:45"`). A date there sets the day when `work_date` is omitted, and must match `work_date` when it is given, or the call is refused. One call plans one day; a block that ends the next day only works past midnight (`23:00` to `01:00`). `omnitrack_reschedule_block` reads its new times the same way: a dated `new_start_time` moves the block to that day.
 * **Assignee parity**: the person a block is for is always on its task. If the task is assigned to someone else, the block's person is added to it as Frappe's Assign To adds them (the caller must be able to read the task; the other assignees stay), and the block's `added_to_tasks` lists it. A to-do belongs to one person, so a block on someone else's to-do is refused. This holds for every path that saves a block, since the check lives in the Planned Work Block controller.
 * **Example Agent Query**: *"Plan my day: 2 hrs on Gaonhae invoice bug starting at 9:30 AM, 1 hr team sync, and 3 hrs on CardView accessibility."*
@@ -161,8 +161,10 @@ When managing timesheets, work blocks, or tasks, you MUST adhere to these invari
      (Log Days Back, default 15 days, today is day 1). Managers reach any day.
    - Nobody touches a day on or before payroll_closed_through: it is paid.
 
-2. Past Planned Work Blocks Lock:
-   - In the past (work_date < today), NO ONE can create, reschedule, or edit planned work blocks. Historical plans are immutable.
+2. A plan is for time still to come:
+   - NO ONE plans or moves a block to an earlier day, to a day on or before
+     payroll_closed_through, or today to a slot that has already ended. Time already
+     worked is logged as a Work Session, not planned. A block whose day has passed is locked.
 
 3. Session notes in the person's words:
    - A saved session says what was done in at least min_session_words words (default 15);

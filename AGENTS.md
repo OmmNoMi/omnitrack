@@ -73,10 +73,13 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
    - Frappe reads an empty Date on a Single as `0001-01-01`, so `get_payroll_closed_through` treats year 1 as not set.
    - `scripts/check_log_window.mjs` and `omnitrack/tests/test_unit_governance.py` (in `npm run test:fixtures`, no site needed) guard it.
 
-2. **Past Planned Work Blocks Lock (Historical Plan Immutability)**:
-   - In the past (`work_date < nowdate()`), **NO ONE** (neither User nor Manager nor Administrator) can create, modify, reschedule, move, or delete planned work blocks.
-   - Historical plan commitments are permanently immutable once their calendar day has elapsed.
-   - Enforce in `book_work_block`, `update_work_block`, `delete_work_block`, `PlannedWorkBlock.validate()`, and `PlannedWorkBlock.on_trash()`.
+2. **A plan is for time still to come**:
+   - Nobody (managers and Administrator included) plans or moves a block to an earlier day, to a day on or before `payroll_closed_through`, or, today, to a slot that has already ended (an end at or before its start is the next morning). Time already worked is logged, not planned.
+   - One rule, one place: `permissions.plan_refusal` says why (or None), `check_plan_date` throws it. It runs in `book_work_block`, `create_planned_work_block`, `update_work_block` (when the day or times change), `reschedule_work_block` (on where the block goes, so a missed block can still be moved forward) and `tasks.reschedule_unfinished_tasks` (whose default day falls to tomorrow when today's slot is over).
+   - The client mirrors it in `planRefusal` (`src/utils/planWindow.js`), with the same words: the Plan and Reschedule dialogs say why in a `role="alert"` line and hold Save / Move block, `submitBooking` refuses before it posts, a planner drag onto a refused slot springs back with a toast, and Plan opened on a past day starts on today.
+   - The one exception is a block made to hold time already logged: `fac.log_work_session` sets `frappe.flags.omnitrack_block_for_logged_time` around its own `book_work_block` call, in `try`/`finally`. Flags are request-local, so no caller can send it. Set it nowhere else.
+   - A block whose day has passed stays locked as before: `delete_work_block`, `PlannedWorkBlock.validate()` and `PlannedWorkBlock.on_trash()`.
+   - `scripts/check_plan_window.mjs` and `test_unit_governance.TestPlanWindow` guard it.
 
 3. **Workstation Session Terminology & UX Protocol**:
    - Action terminology for starting a timesheet session against a task/block is strictly **"Start Session"** with a play icon (FeatherIcon `play`, never a glyph). Never use meeting/video metaphors such as "Join Focus Session".
@@ -258,6 +261,15 @@ Extracted SFC views get no access to the workstation. Declare dependencies with 
 ## Gotcha: never take a calendar date from `toISOString()`
 `new Date(ms).toISOString().split('T')[0]` is the **UTC** date. In IST, anything between 00:00 and 05:30 local comes out as yesterday. This made `restoreActiveSession` evict live sessions as "prior-day zombies". Use `getLocalTodayISO(date)` (useWorkstationShell) or build `YYYY-MM-DD` from `getFullYear/getMonth/getDate`.
 
+## Gotcha: "today" and the running session both cross midnight
+`todayDate` was set only when data loaded, so a page left open overnight kept yesterday as today, and the running bar was drawn only on "today" from its start time, so a session started at 6:00 pm fell off both days at 00:00. Anything that draws the running session on a day asks `liveSpanOn(day, startTime)` (`src/utils/liveSpan.js`) for the part on that day, never `startTime`'s hours alone; the now clock (`watch(nowMinute)` in `useWorkstationEod.js`) moves `todayDate` on at midnight. `scripts/check_live_across_midnight.mjs` guards both.
+
+## Gotcha: the session box's two columns are a viewport breakpoint
+`SessionBox.vue`'s grid is `lg:grid-cols-12`, a viewport media query, so even inside a narrower dialog it has two columns from 1024px. Anything placed by column count reads the same query (`tasksUnderLog`, `matchMedia('(min-width: 1024px)')`), not the box's width, and mounts one copy in the pane it shows in so the tab order follows what is seen.
+
+## Gotcha: a held finger cannot switch off scrolling with touch-action
+Setting `style.touchAction = 'none'` after a press-and-hold does nothing for that touch: browsers read `touch-action` when the finger lands, so the first move still scrolls and the pointer gets `pointercancel`. To let a held finger draw (calendar range, Day at a glance range, block move), keep a `@touchmove` listener on the scroller from the start (Vue's is not passive) that calls `preventDefault()` only while a drag is active (`onTimelineTouchMove`, `onPlannerTouchMove`). A listener added on `window` after the hold is too late: Chrome treats the touch as non-blocking when no blocking listener was there at touchstart. Never put `touch-none` or `touch-pan-x` on a lane that sits in a scrolling page; that takes the vertical scroll away. `scripts/check_drag_pick_range.mjs` guards it.
+
 ## Gotcha: frappe-ui dialogs have no z-index (0.1.278)
 `.dialog-overlay` stacks only by DOM order, so anything positioned with a z-index (the sticky header z-40, the planner now-line and hovered blocks z-20) paints over an open dialog. `src/styles/main.css` lifts `.dialog-overlay` to z-50. Keep page chrome below 50.
 
@@ -295,6 +307,22 @@ close animation ends, later than `nextTick` and `setTimeout(0)`. A dialog answer
 elsewhere ("Adjust times" opens the session box) lost its focus to the page behind (the week
 strip). Use `handFocus(getTarget)` (`src/utils/focusHandOff.js`): it focuses the target and puts
 focus back if it is taken without a press, then lets go. `check_live_adjust.mjs` guards it.
+
+## Gotcha: DatePicker drops attrs and opens on focus (frappe-ui 0.1.278)
+* `DatePicker` sets `inheritAttrs: false` and passes on only `class` and `style`: an `aria-label`,
+  `aria-haspopup` or `label` on `<DatePicker>` never reaches its input. Wrap it in
+  `<div v-input-attrs="{ 'aria-label': ..., 'aria-haspopup': 'dialog' }">` (`src/utils/popover.js`);
+  `check_field_focus.mjs` fails on a bare one. TimePicker drops attrs the same way.
+* Its input opens the calendar on focus and on click, and the calendar takes focus inside that
+  focus handler, so `focusin` never reaches the field. To note the field, listen for `focus` in
+  the capture phase (`@focus.capture`, `window.addEventListener("focus", ..., true)`).
+* On Escape, reka gives focus back to the field, which opens the calendar again: from the
+  keyboard it could never close. `quietReopenOnEscape` (installed in `main.js`) holds that focus
+  back from the field, and gives the field focus back when a calendar or TimePicker leaves it on
+  `<body>` (outside a dialog nothing else does). A calendar lets go of focus only after
+  `setTimeout(0)`; wait for its `focusout`.
+* A mouse click opens the calendar without focusing the input; note `pointerdown` too.
+* TimePicker's list is a fixed `w-44` with `truncate` on each option; `main.css` lets it grow.
 
 ## Gotcha: TimePicker swallows every Escape (frappe-ui 0.1.278)
 `TimePicker` has `@keydown.esc.prevent` and blurs its field on Escape, list open or not. A

@@ -17,6 +17,8 @@
         day-label="Move to"
         :is-dark-mode="isDarkMode"
       />
+      <!-- Where it goes is a plan: today or later, never onto a closed payroll day -->
+      <p v-if="dayRefusal" role="alert" class="text-sm text-ink-red-4">{{ dayRefusal }}</p>
       <p v-if="error" role="alert" class="text-sm text-ink-red-4">Not moved. {{ error }}</p>
     </form>
 
@@ -33,6 +35,7 @@
 import DayTimeFields from '../components/common/DayTimeFields.vue';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
 import { whenLine, toMin, toHHMM, spanMins, localISO } from '../utils/clockTime.js';
+import { planRefusal } from '../utils/planWindow.js';
 
 const hhmm = (t) => (t ? toHHMM(toMin(t)) : '');
 
@@ -48,7 +51,7 @@ export default {
   },
   emits: ['update:modelValue'],
   setup() {
-    return useWorkstationContext(['submitReschedule']);
+    return useWorkstationContext(['submitReschedule', 'payrollClosedThrough']);
   },
   data() {
     // error: why it was not moved, shown here; the dialog stays open with the form as typed
@@ -58,12 +61,16 @@ export default {
     now() {
       return whenLine(this.block.work_date, this.block.start_time, this.block.end_time);
     },
-    // A real move: a day and a time that ends after it starts, and not where it is now
+    dayRefusal() {
+      const f = this.form;
+      return planRefusal(f.work_date, f.start_time, f.end_time, { payrollClosedThrough: this.payrollClosedThrough });
+    },
+    // A real move: a day and a time that ends after it starts, still to come, and not where it is now
     canMove() {
       const f = this.form, b = this.block;
       const valid = !!f.work_date && !!f.start_time && spanMins(f.start_time, f.end_time) > 0;
       const moved = f.work_date !== String(b.work_date || '').slice(0, 10) || f.start_time !== hhmm(b.start_time) || f.end_time !== hhmm(b.end_time);
-      return !this.busy && valid && moved;
+      return !this.busy && valid && moved && !this.dayRefusal;
     },
     mutedText() { return this.isDarkMode ? 'text-gray-300' : 'text-gray-700'; },
   },

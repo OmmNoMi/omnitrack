@@ -164,7 +164,8 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 	"""Batch schedule planned work blocks for a day.
 
 	Enforces OmniTrack Temporal Governance:
-	- Historical plan commitments in the past (work_date < today) cannot be created.
+	- A plan is for time still to come: never an earlier day, a day payroll has closed, or a
+	  slot today that has already ended (permissions.check_plan_date).
 
 	Args:
 		blocks (list|str): List of block definitions (or JSON string).
@@ -207,12 +208,10 @@ def plan_work_blocks(blocks, work_date=None, employee=None):
 		frappe.throw(_("These blocks are on different days ({0}); plan one day per call.").format(", ".join(sorted(days))), frappe.ValidationError)
 	target_date = work_date or (days.pop() if days else nowdate())
 
-	# Temporal lock check
-	if getdate(target_date) < getdate(nowdate()):
-		frappe.throw(
-			_("Cannot plan work blocks in the past ({0}). Historical plans are immutable.").format(target_date),
-			frappe.ValidationError
-		)
+	# A plan is for time still to come: every block is checked before any is booked
+	from omnitrack.permissions import check_plan_date
+	for _day, s_time, e_time in slots:
+		check_plan_date(target_date, s_time, e_time)
 
 	booked_blocks = []
 	for item, (_day, s_time, e_time) in zip(blocks, slots):
@@ -342,16 +341,21 @@ def log_work_session(
 			end_t = to_time or (datetime.strptime(start_t, "%H:%M:%S") + timedelta(hours=dur_hours)).strftime("%H:%M:%S")
 
 			nature = task_nature or "Work"
-			bk_res = book_work_block(
-				work_date=target_date,
-				start_time=start_t,
-				end_time=end_t,
-				task=task,
-				project=project,
-				deliverable_notes=notes,
-				task_nature=nature,
-				employee=target_user
-			)
+			# This block holds time already worked, so the plan's "from now on" rule does not apply
+			frappe.flags.omnitrack_block_for_logged_time = True
+			try:
+				bk_res = book_work_block(
+					work_date=target_date,
+					start_time=start_t,
+					end_time=end_t,
+					task=task,
+					project=project,
+					deliverable_notes=notes,
+					task_nature=nature,
+					employee=target_user
+				)
+			finally:
+				frappe.flags.omnitrack_block_for_logged_time = False
 			target_block = bk_res.get("name")
 			# Made only to hold this logged time: no block was planned for it
 			frappe.db.set_value("Planned Work Block", target_block, "unplanned", 1, update_modified=False)
@@ -1231,7 +1235,7 @@ def omnitrack_schedule(
 	"""Unified controller for pre-scheduled commitments and block governance.
 
 	Actions:
-	  - 'plan': Batch schedules planned work blocks for a day (immutable in the past).
+	  - 'plan': Batch schedules planned work blocks for a day, from now on (never a past slot or a payroll-closed day).
 	  - 'reschedule': Moves an unworked/unfinished block to a new date and time slot.
 	  - 'extend': Extends the scheduled duration of the user's active block by N minutes.
 	  - 'approve': Manager or HR approval for employee work blocks.
@@ -1451,7 +1455,7 @@ class OmniTrackPlanWorkBlocksTool(BaseTool):
 	def __init__(self):
 		super().__init__()
 		self.name = "omnitrack_plan_work_blocks"
-		self.description = "Batch schedules planned work blocks for a day (e.g. 'from 9am to 11am work on Task-01'). Cannot plan in the past (historical plans are immutable)."
+		self.description = "Batch schedules planned work blocks for a day (e.g. 'from 9am to 11am work on Task-01'). A plan is for time still to come: refused for an earlier day, a day on or before Payroll Closed Through, or a slot today that has already ended. Time already worked is logged with omnitrack_log_work_session, not planned."
 		self.category = "OmniTrack"
 		self.source_app = "omnitrack"
 		self.inputSchema = {

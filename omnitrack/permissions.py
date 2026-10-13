@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import add_days, formatdate, getdate, nowdate
+from frappe.utils import add_days, formatdate, getdate, now_datetime, nowdate
 
 
 def is_omnitrack_manager(user=None):
@@ -124,6 +124,42 @@ def check_payroll_open(target_date):
 			frappe.PermissionError,
 		)
 	return True
+
+
+def plan_refusal(work_date, start_time=None, end_time=None):
+	"""Rule: a plan is for time still to come. A block is planned or moved to today or later,
+	never onto a day payroll has closed, and today never into a slot that has already ended (an
+	end before its start is the next morning). Time already worked is logged, not planned: the
+	blocks made to hold logged time (quick_timer_punch, fac.log_work_session) never come here.
+	Returns why not, or None. src/utils/planWindow.js gives the dialogs the same answer."""
+	day = getdate(work_date or nowdate())
+	today = getdate(nowdate())
+	if day < today:
+		return _("You can plan from today on. Time already worked is logged, not planned.")
+	closed = get_payroll_closed_through()
+	if closed and day <= closed:
+		return _("Payroll is closed through {0}. Plan from {1} on.").format(formatdate(closed), formatdate(add_days(closed, 1)))
+	if day == today and start_time and end_time:
+		start, end = _minutes(start_time), _minutes(end_time)
+		if end <= start:
+			end += 24 * 60
+		now = now_datetime()
+		if end <= now.hour * 60 + now.minute:
+			return _("That time is over. Plan from now on, or log it as time worked.")
+	return None
+
+
+def check_plan_date(work_date, start_time=None, end_time=None):
+	"""plan_refusal, as a refusal."""
+	refusal = plan_refusal(work_date, start_time, end_time)
+	if refusal:
+		frappe.throw(refusal, frappe.ValidationError)
+	return True
+
+
+def _minutes(t):
+	parts = str(t or "").split(":")
+	return int(parts[0] or 0) * 60 + int(parts[1] if len(parts) > 1 and parts[1] else 0)
 
 
 def _refuse_before_window():

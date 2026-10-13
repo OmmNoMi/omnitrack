@@ -3,6 +3,7 @@ import { toKind } from "../utils/activity.js";
 import { noteHeading } from "../utils/wrapNote.js";
 import { TIMELINE_ZOOM_OPTIONS, defaultTimelineZoom } from "../utils/timelineZoom.js";
 import { countedHours } from "../utils/countedHours.js";
+import { liveSpanOn } from "../utils/liveSpan.js";
 const { ref, computed, watch, nextTick, onMounted } = Vue;
 
 export function useWorkstationTimeline({
@@ -101,13 +102,14 @@ export function useWorkstationTimeline({
     });
 
     if (isTracking.value && startTime.value) {
-      const isViewingToday = !selectedDashboardDate.value || selectedDashboardDate.value === (todayDate.value || todayISO());
-      if (isViewingToday) {
-        const d = new Date(startTime.value);
-        const ss = d.getHours() * 60 + d.getMinutes();
-        // nowMinute, not new Date(): a computed only re-runs when a ref it reads changes,
-        // so the bar froze while the now line kept moving.
-        const ee = Math.max(ss + 1, nowMinute.value);
+      // The part of the session on the day shown: one started last night is drawn up to
+      // midnight on its own day and from midnight today (liveSpanOn).
+      const live = liveSpanOn(selectedDashboardDate.value || todayDate.value || todayISO(), startTime.value);
+      if (live) {
+        const ss = live.s;
+        // Today it ends at nowMinute, not new Date(): a computed only re-runs when a ref it
+        // reads changes, so the bar froze while the now line kept moving.
+        const ee = live.toAfter ? 1440 : Math.max(ss + 1, nowMinute.value);
         // Named like the planner's live block: the notes' first line that is not a ticked-off task
         const heading = noteHeading(trackerNotes.value) || 'Live session';
         const runningBlock = blocks.find(b => b.name === trackerBlockName.value) || {
@@ -125,7 +127,8 @@ export function useWorkstationTimeline({
           block: runningBlock,
           hours: (ee - ss) / 60,
           notes: trackerNotes.value || '',
-          is_live_active: true
+          is_live_active: true,
+          from_before: live.fromBefore
         });
       }
     }

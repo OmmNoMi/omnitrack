@@ -143,6 +143,10 @@ const stopClock = (s) => { if (s.trackerTimer.value) clearInterval(s.trackerTime
   m.liveAdjust.value.to_time = clockOf(later);
   await m.stopAndLogSession();
   check(s.stops.length === 0 && s.startTime.value === started.getTime(), "an end after now never stops or moves the session");
+  // Late at night "half an hour from now" is past midnight; a Stop that read it on the start day
+  // ended the session and closed the box. Reported here, so the checks below still run.
+  check(m.liveAdjust.value, "an end after now keeps the open times");
+  if (!m.liveAdjust.value) { s.isTracking.value = true; m.openAdjustModal({ inPlace: true }); }
   const newStart = minuteAgo(45);
   m.liveAdjust.value.from_time = clockOf(newStart);
   m.keepSessionRunning();

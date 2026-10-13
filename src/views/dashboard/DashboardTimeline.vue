@@ -52,7 +52,7 @@
       :class="isDarkMode ? 'bg-[#1E1F22]/90 border-gray-700 text-gray-300 hover:bg-gray-800' : 'bg-white/90 border-gray-200 text-gray-600 hover:bg-gray-50'">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
-    <div ref="timelineScroller" @scroll="syncTimelineEdges" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1 pt-6">
+    <div ref="timelineScroller" @scroll="syncTimelineEdges" @touchmove="onTimelineTouchMove" @contextmenu="onTimelineContextMenu" class="overflow-x-auto no-scrollbar w-full -mr-1 pr-1 pt-6">
     <div class="relative" role="img" :style="{ width: timelineTrackWidth }"
       :aria-label="dayTimeline.plannedH.toFixed(1) + ' hours planned and ' + dayTimeline.loggedH.toFixed(1) + ' hours logged on ' + selectedDashboardDateLabel">
       <!-- hour grid -->
@@ -77,9 +77,12 @@
           <div class="w-[2px] flex-1 bg-red-500 shadow-xs"></div>
         </div>
       </div>
-      <!-- planned lane -->
-      <div class="relative h-9">
-        <div v-for="(r, i) in dayTimeline.planned" :key="'p' + i"
+      <!-- planned lane: press and drag along it to plan that stretch (a finger holds still
+           first, so a swipe still scrolls); a click on an empty part plans that hour -->
+      <div class="relative h-9 cursor-cell select-none [-webkit-touch-callout:none]"
+        @pointerdown="startTimelineSel($event, 'planned')"
+        @click="clickPlannedLane">
+        <div v-for="(r, i) in dayTimeline.planned" :key="'p' + i" data-tl-bar
           class="absolute top-0 h-9 rounded-md border text-[10px] font-bold px-1.5 leading-9 truncate cursor-pointer hover:brightness-95"
           :style="Object.assign({ left: r.left, width: r.width }, timelinePlannedStyle(r.block))"
           tabindex="0"
@@ -90,12 +93,17 @@
           @blur="hideBlockHover"
           @keydown.enter.prevent="openBlockDrawer(r.block)"
           @click="openBlockDrawer(r.block)">{{ blockTitle(r.block, 'Block') }}</div>
+        <div v-if="timelineSel && timelineSel.lane === 'planned'" class="absolute top-0 h-9 rounded-md border-2 border-dashed pointer-events-none z-30 flex items-center justify-center text-[9px] font-bold whitespace-nowrap"
+          :class="isDarkMode ? 'border-blue-500 bg-blue-500/20 text-blue-300' : 'border-blue-500 bg-blue-500/10 text-blue-700'"
+          :style="timelineSelStyle" aria-hidden="true">Plan {{ timelineSelLabel }}</div>
       </div>
       <!-- logged lane -->
-      <div class="relative h-8 mt-3">
-        <div v-for="(r, i) in dayTimeline.logged" :key="'l' + i"
+      <!-- press and drag along it to log that stretch -->
+      <div class="relative h-8 mt-3 cursor-cell select-none [-webkit-touch-callout:none]"
+        @pointerdown="startTimelineSel($event, 'logged')">
+        <div v-for="(r, i) in dayTimeline.logged" :key="'l' + i" data-tl-bar
           class="absolute top-0 h-8 rounded-md text-[10px] font-bold text-white px-2 leading-8 truncate cursor-pointer hover:brightness-110 shadow-xs flex items-center select-none"
-          :class="r.is_live_active ? 'rounded-r-none z-10' : ''"
+          :class="r.is_live_active ? (r.from_before ? 'rounded-none z-10' : 'rounded-r-none z-10') : ''"
           :style="Object.assign({ left: r.left, width: r.width }, timelineLoggedStyle(r))"
           tabindex="0"
           :aria-label="'Logged: ' + loggedName(r) + ', ' + loggedLength(r) + (r.is_live_active ? ', live' : '')"
@@ -114,15 +122,18 @@
           :class="isDarkMode ? 'border-amber-700/80 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60' : 'border-amber-300 bg-amber-50/90 text-amber-800 hover:bg-amber-100'"
           :style="{ left: g.left, width: g.width }"
           tabindex="0"
-          :title="'Click to quickly log ' + g.label + ' (' + g.from_time + '–' + g.to_time + ')'"
+          :title="'Click to log ' + g.label + ' (' + g.from_time + '–' + g.to_time + '), or drag across it to log part of it'"
           :aria-label="'Quickly log ' + g.label"
           @keydown.enter.prevent="quickLogTimelineGap(g)"
-          @click.stop="quickLogTimelineGap(g)">
+          @click.stop="clickTimelineGap(g)">
           <span>{{ g.label }}</span>
         </div>
         <div v-if="!dayTimeline.logged.length"
           class="absolute inset-0 rounded-md border border-dashed flex items-center justify-center text-[10px] font-semibold"
           :class="isDarkMode ? 'border-amber-800 text-amber-400' : 'border-amber-300 text-amber-600'">No sessions logged</div>
+        <div v-if="timelineSel && timelineSel.lane === 'logged'" class="absolute top-0 h-8 rounded-md border-2 border-dashed pointer-events-none z-30 flex items-center justify-center text-[9px] font-bold whitespace-nowrap"
+          :class="isDarkMode ? 'border-amber-500 bg-amber-500/25 text-amber-200' : 'border-amber-500 bg-amber-100/90 text-amber-900'"
+          :style="timelineSelStyle" aria-hidden="true">Log {{ timelineSelLabel }}</div>
       </div>
       <!-- hour labels -->
       <div class="relative h-4 mt-2" aria-hidden="true">
@@ -163,6 +174,8 @@ export default {
   setup() {
     return useWorkstationContext([
       'attendancePresence',
+      'clickPlannedLane',
+      'clickTimelineGap',
       'dayTimeline',
       'formatBlockRange',
       'hideBlockHover',
@@ -170,6 +183,8 @@ export default {
       'nowLineLabel',
       'nowMinute',
       'nudgeTimeline',
+      'onTimelineContextMenu',
+      'onTimelineTouchMove',
       'openAdjustModal',
       'onTimelineZoomKey',
       'openBlockDrawer',
@@ -178,12 +193,16 @@ export default {
       'selectedDashboardDate',
       'selectedDashboardDateLabel',
       'showBlockHover',
+      'startTimelineSel',
       'syncTimelineEdges',
       'timelineCanScrollLeft',
       'timelineCanScrollRight',
       'timelineLoggedStyle',
       'timelinePlannedStyle',
       'timelineScroller',
+      'timelineSel',
+      'timelineSelLabel',
+      'timelineSelStyle',
       'timelineTrackWidth',
       'timelineZoom',
       'timelineZoomOptions',

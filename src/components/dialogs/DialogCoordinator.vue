@@ -16,6 +16,7 @@
       :partner-options="comboboxPairingPartnerOptions"
       :assignee-options="comboboxAssigneeOptions"
       :error="bookError"
+      :payroll-closed-through="payrollClosedThrough"
       @submit="$emit('submit-booking')"
     />
 
@@ -111,6 +112,8 @@ export default {
     showBookModal: { type: Boolean, default: false },
     bookForm: { type: Object, default: () => ({}) },
     bookError: { type: String, default: "" },
+    // The last day payroll is closed through: nothing is planned on or before it
+    payrollClosedThrough: { type: String, default: "" },
     comboboxAssigneeOptions: { type: Array, default: () => [] },
     comboboxBookTaskOptions: { type: Array, default: () => [] },
     comboboxProjectOptions: { type: Array, default: () => [] },

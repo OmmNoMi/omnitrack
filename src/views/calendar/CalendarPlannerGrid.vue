@@ -100,10 +100,6 @@
     </div>
 
     <!-- Banners & Feedback -->
-    <div v-if="pastBookingHint" class="px-3 py-2 text-[11px] font-semibold flex items-center gap-2 border-b" :class="isDarkMode ? 'bg-amber-950/60 text-amber-200 border-amber-900/50' : 'bg-amber-50 text-amber-800 border-amber-200'" role="status">
-      <FeatherIcon name="lock" class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-      <span>{{ pastBookingHint }}</span>
-    </div>
     <div v-if="pickedTask" class="px-3 py-2 text-[11px] flex items-center justify-between gap-2 border-b" :class="isDarkMode ? 'bg-blue-950/50 text-blue-200 border-blue-900/50' : 'bg-blue-50 text-blue-700 border-blue-200'">
       <div class="flex items-center gap-2">
         <FeatherIcon name="map-pin" class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
@@ -125,7 +121,7 @@
         </div>
         <!-- hour rows (full 24h, scrollable; opens scrolled to ~7a) -->
         <div ref="plannerGridScroll" class="overflow-y-auto overscroll-contain flex-1 min-h-0"
-          @touchstart="onPlannerTouchStart" @touchend="onPlannerTouchEnd"
+          @touchstart="onPlannerTouchStart" @touchmove="onPlannerTouchMove" @touchend="onPlannerTouchEnd"
           style="scrollbar-gutter: stable;">
         <div class="relative" :style="{ height: (plannerHours.length * 44) + 'px' }">
           <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', minmax(0, 1fr))' }">
@@ -147,7 +143,7 @@
                 :class="[isDarkMode ? 'border-gray-700 hover:bg-blue-950/30' : 'border-gray-300 hover:bg-blue-50/60']"
                 :style="{ top: (i * 44) + 'px', height: '44px' }"
                 role="button"
-                :aria-label="'Book work on ' + d + ' at ' + hourLabel(h) + ' — drag to cover more hours'"
+                :aria-label="(isPastSlot(d, (h + 1) * 60) ? 'Log time on ' : 'Plan work on ') + d + ' at ' + hourLabel(h) + ' — drag to cover more hours'"
                 tabindex="0"
                 draggable="false"
                 @dragstart.prevent
@@ -161,9 +157,9 @@
               </div>
               <!-- drag-to-select ghost -->
               <div v-if="slotSel && slotSel.iso === d" class="absolute left-0.5 right-0.5 rounded-lg border-2 border-dashed pointer-events-none z-10 flex items-start justify-center pt-0.5"
-                :class="isDarkMode ? 'border-blue-500 bg-blue-500/20' : 'border-blue-500 bg-blue-500/10'"
+                :class="slotSelIsLog ? (isDarkMode ? 'border-amber-500 bg-amber-500/20' : 'border-amber-500 bg-amber-500/10') : (isDarkMode ? 'border-blue-500 bg-blue-500/20' : 'border-blue-500 bg-blue-500/10')"
                 :style="slotSelStyle">
-                <span class="text-[9px] font-bold text-blue-600 dark:text-blue-300">{{ slotSelLabel }}</span>
+                <span class="text-[9px] font-bold" :class="slotSelIsLog ? 'text-amber-800 dark:text-amber-300' : 'text-blue-600 dark:text-blue-300'">{{ (slotSelIsLog ? 'Log ' : 'Plan ') + slotSelLabel }}</span>
               </div>
               <!-- current-time line (today only), like Google Calendar -->
               <div v-if="isTodayCol(d)" class="absolute left-0 right-0 pointer-events-none z-20" :style="{ top: nowLineTop + 'px' }" aria-hidden="true">
@@ -286,12 +282,13 @@ export default {
       'nowLineTop',
       'officeMarks',
       'onBlockClick',
+      'isPastSlot',
       'onPlannerTouchEnd',
+      'onPlannerTouchMove',
       'onPlannerTouchStart',
       'onPlannerViewKey',
       'openBlockDrawer',
       'openBookModal',
-      'pastBookingHint',
       'pastShadeStyle',
       'pickedTask',
       'plannerDays',
@@ -309,6 +306,7 @@ export default {
       'setUserPlannerView',
       'showBlockHover',
       'slotSel',
+      'slotSelIsLog',
       'slotSelLabel',
       'slotSelStyle',
       'startBlockDrag',

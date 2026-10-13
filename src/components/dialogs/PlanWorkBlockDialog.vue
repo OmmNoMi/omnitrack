@@ -61,6 +61,9 @@
         v-model:end="form.end_time"
         :is-dark-mode="isDarkMode"
       />
+      <!-- A plan is for time still to come: why this day or slot can't be planned, under the
+           fields that set it, with Save waiting (the server's check_plan_date says the same) -->
+      <p v-if="dayRefusal" role="alert" class="text-sm text-ink-red-4">{{ dayRefusal }}</p>
 
       <template v-if="mode === 'work'">
         <div class="flex gap-3">
@@ -189,6 +192,7 @@ import PlanTaskStep from "./PlanTaskStep.vue";
 import DayTimeFields from "../common/DayTimeFields.vue";
 import { taskMeta, toneClass } from "../../utils/taskMeta.js";
 import { spanMins, whenLine } from "../../utils/clockTime.js";
+import { planRefusal } from "../../utils/planWindow.js";
 
 let uid = 0;
 // A swipe is a mostly sideways move of at least this many pixels
@@ -209,6 +213,7 @@ export default {
     assigneeOptions: { type: Array, default: () => [] },
     // Why the server refused; the plan is not saved
     error: { type: String, default: "" },
+    payrollClosedThrough: { type: String, default: "" },
   },
   emits: ["update:modelValue", "submit"],
   data() {
@@ -309,9 +314,13 @@ export default {
     currentUser() {
       return (typeof window !== "undefined" && window.OMNITRACK_SESSION && window.OMNITRACK_SESSION.user) || "";
     },
+    dayRefusal() {
+      return planRefusal(this.form.work_date, this.form.start_time, this.form.end_time, { payrollClosedThrough: this.payrollClosedThrough });
+    },
     canSave() {
       if (this.busy || !this.form.work_date) return false;
       if (this.durationMins <= 0) return false;
+      if (this.dayRefusal) return false;
       return this.mode !== "work" || !!((this.form.deliverable_notes || "").trim() || this.form.work_items.length || this.form.new_task_subject);
     },
     iconTone() { return this.isDarkMode ? "text-gray-300" : "text-gray-600"; },

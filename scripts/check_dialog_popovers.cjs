@@ -76,6 +76,12 @@ if (!/if\s*\(\s*!v\s*&&\s*this\.escOwnedByPopover\s*\)\s*return/.test(fdialog)) 
 if (!/addEventListener\(\s*['"]keydown['"]\s*,\s*this\.noteEscape\s*,\s*true\s*\)/.test(fdialog)) {
   problems.push('FDialog.vue: noteEscape must listen in the capture phase (before the dialog sees Escape)');
 }
+// frappe-ui's TimePicker closes its list and then blurs its field, and reka hands a closed
+// calendar's focus to whatever had it before: in the Plan and Reschedule dialogs focus fell to
+// the page, or to another field. The last field pressed or focused in the panel gets it back.
+if (!/<div ref="panel"[^>]*@focus\.capture="noteFocus" @pointerdown="noteFocus"/.test(fdialog) || !/noteFocus\(e\) \{\s*const el = e\.target\.closest && e\.target\.closest\(FOCUSABLE\);\s*if \(el\) this\.lastFocus = el;/.test(fdialog) || !/const field = this\.lastFocus, now = document\.activeElement;\s*if \(field && field\.isConnected && now !== field && \(now === document\.body \|\| \(panel && panel\.contains\(now\)\)\)\) focusBack\(field\);/.test(fdialog)) {
+  problems.push('FDialog.vue: Escape on an open time list inside a dialog closes only the list, and focus stays on its field');
+}
 
 // 4. ChoiceChips radio group
 const chips = read('src/components/common/ChoiceChips.vue');
@@ -277,9 +283,22 @@ if (!/:class="\[DISABLED_SOLID, '!h-auto self-stretch/.test(read('src/session/Se
 //     Combobox of its own: bound, the block's tasks; unbound, the session's own list
 //     (w.sessionTasks), which travels with the live session and lands on the block Stop makes.
 const pane = read('src/session/SessionControlsPane.vue');
-if (!/<BlockTasksSection v-if="!isEntry" :block="trackerBoundBlock \|\| liveSessionBlock"/.test(pane)) problems.push('SessionControlsPane.vue: the session lists its tasks with BlockTasksSection (bound block, else liveSessionBlock)');
-// An entry lists its own block's tasks under its Log, never the running session's tasks
-if (!/<BlockTasksSection v-if="isEntry && trackerBoundBlock" :block="trackerBoundBlock"/.test(read('src/session/SessionLogPane.vue'))) problems.push('SessionLogPane.vue: an entry lists its block\'s tasks under the Log (its own block only, never the running session\'s tasks)');
+const box = read('src/session/SessionBox.vue');
+const logPane = read('src/session/SessionLogPane.vue');
+if (!/const ws = props\.mode === 'entry' \? null : useWorkstationContext\(\[[^\]]*'liveSessionBlock'/.test(box)
+  || !/const tasksBlock = computed\(\(\) => \(ws \? props\.trackerBoundBlock \|\| ws\.liveSessionBlock\.value : props\.trackerBoundBlock\)\);/.test(box))
+  problems.push('SessionBox.vue: the session lists its tasks (bound block, else liveSessionBlock); an entry lists only its own block\'s, never the running session\'s');
+// Two columns: the tasks sit under the Log. One column: beside "Logging to". The query is the
+// grid's own lg breakpoint, followed as the window changes, and only one list is mounted.
+if (!/grid-cols-1 lg:grid-cols-12/.test(box) || !/const twoColumns = window\.matchMedia\('\(min-width: 1024px\)'\);\s*const tasksUnderLog = ref\(twoColumns\.matches\);/.test(box))
+  problems.push('SessionBox.vue: tasksUnderLog follows the grid\'s own lg breakpoint (min-width: 1024px)');
+if (!/twoColumns\.addEventListener\('change', onColumnsChange\);/.test(box) || !/twoColumns\.removeEventListener\('change', onColumnsChange\);/.test(box))
+  problems.push('SessionBox.vue: the tasks move when the window crosses lg, and the listener is removed');
+if (!/provide\(SESSION_KEY, \{[^}]*tasksBlock, tasksUnderLog \}\)/.test(box)) problems.push('SessionBox.vue: provides tasksBlock and tasksUnderLog to both panes');
+const tasksIn = (src) => (src.match(/<BlockTasksSection /g) || []).length;
+if (tasksIn(pane) !== 1 || !/<BlockTasksSection v-if="tasksBlock && !tasksUnderLog" :block="tasksBlock"/.test(pane)) problems.push('SessionControlsPane.vue: one task list, beside "Logging to" only with one column');
+if (tasksIn(logPane) !== 1 || !/<BlockTasksSection v-if="tasksBlock && tasksUnderLog" :block="tasksBlock"/.test(logPane)) problems.push('SessionLogPane.vue: one task list, under the Log only with two columns');
+if (!/<\/div>\s*<!--[^>]*-->\s*<BlockTasksSection v-if="tasksBlock && tasksUnderLog"[^>]*\/>\s*<\/div>\s*<\/template>/.test(logPane)) problems.push('SessionLogPane.vue: the task list is the last thing in the pane, under the Log');
 if (/workingOn|pickWorkingOn/.test(pane) || /useSessionTodoPicker/.test(read('src/session/SessionBox.vue'))) problems.push('SessionControlsPane.vue / SessionBox.vue: no "Working on" Combobox beside the task list (a second component for the same job)');
 if (!/if \(this\.block\.is_session_tasks\) \{\s*openTaskForm\(row, \{ onRemove: this\.removeSessionTask, onChange: this\.onSessionTaskChange \}\)/.test(tasksSection)) problems.push('BlockTasksSection.vue: a session task opens the one task form, removing it from the session and keeping the list in step');
 if (!/typeof taskForm\.onChange === 'function'/.test(taskForm) || !/taskForm\.onRemove\(this\.task\)/.test(taskForm)) problems.push('TaskFormDialog.vue: honours onRemove / onChange for a list that is not a block');
@@ -341,7 +360,6 @@ for (const [what, re] of [
 // 18. Session pane tabs are Material primary tabs: a padded target whose keyboard focus ring is
 //     inset (an outer ring was clipped by the bar into a broken box round "Log 5"), with a 3px
 //     indicator under the active tab instead of a border on the label.
-const logPane = read('src/session/SessionLogPane.vue');
 // The look lives once, in utils/materialTab.js, and every tab bar imports it.
 const tabMod = read('src/utils/materialTab.js');
 const tabCls = (tabMod.match(/export const TAB = '([^']*)'/) || ['', ''])[1];

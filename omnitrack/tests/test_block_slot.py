@@ -74,7 +74,9 @@ class TestBlockSlot(unittest.TestCase):
 		body = body_of(PLANNER, "book_work_block")
 		self.assertIn("work_date, start_time, end_time = _slot(start_time, end_time, work_date)", body)
 		# the day is known before the past check, and a bad slot creates no task
-		self.assertLess(body.index("_slot("), body.index("getdate(work_date) < getdate(nowdate())"))
+		self.assertLess(body.index("_slot("), body.index("check_plan_date(work_date or nowdate(), start_time, end_time)"))
+		# and a refused plan (the past, a closed payroll day) creates no task either
+		self.assertLess(body.index("check_plan_date("), body.index("_create_assigned_work("))
 		self.assertLess(body.index("_slot("), body.index("_create_assigned_work("))
 		self.assertRegex(body_of(PLANNER, "_slot"), r"except ValueError as e:\s*frappe\.throw\(str\(e\), frappe\.ValidationError\)")
 
