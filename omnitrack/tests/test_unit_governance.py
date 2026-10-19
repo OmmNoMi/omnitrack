@@ -186,5 +186,60 @@ class TestPlanWindow(unittest.TestCase):
 		self.assertTrue(check_plan_date("2026-10-12", "11:00:00", "12:00:00"))
 
 
+class TestTaskWorkflowActions(unittest.TestCase):
+	"""Cancelled, Completed and On Hold tasks offer appropriate workflow actions."""
+
+	def test_cancelled_task_offers_only_reopen(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		with patch("frappe.model.workflow.get_workflow_name", return_value=None):
+			actions = get_task_workflow_actions("Task", "TASK-001", "Cancelled")
+			self.assertEqual(len(actions), 1)
+			self.assertEqual(actions[0]["action"], "Reopen")
+			self.assertEqual(actions[0]["next_state"], "Open")
+
+			todo_actions = get_task_workflow_actions("ToDo", "TODO-001", "Cancelled")
+			self.assertEqual(len(todo_actions), 1)
+			self.assertEqual(todo_actions[0]["action"], "Reopen")
+			self.assertEqual(todo_actions[0]["next_state"], "Open")
+
+	def test_completed_and_closed_tasks_offer_only_reopen(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		with patch("frappe.model.workflow.get_workflow_name", return_value=None):
+			actions = get_task_workflow_actions("Task", "TASK-001", "Completed")
+			self.assertEqual(len(actions), 1)
+			self.assertEqual(actions[0]["action"], "Reopen")
+			self.assertEqual(actions[0]["next_state"], "Open")
+
+			todo_actions = get_task_workflow_actions("ToDo", "TODO-001", "Closed")
+			self.assertEqual(len(todo_actions), 1)
+			self.assertEqual(todo_actions[0]["action"], "Reopen")
+			self.assertEqual(todo_actions[0]["next_state"], "Open")
+
+	def test_on_hold_task_offers_resume_complete_cancel(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		with patch("frappe.model.workflow.get_workflow_name", return_value=None):
+			actions = get_task_workflow_actions("Task", "TASK-001", "On Hold")
+			act_names = [a["action"] for a in actions]
+			self.assertIn("Resume", act_names)
+			self.assertIn("Complete", act_names)
+			self.assertIn("Cancel Task", act_names)
+			self.assertNotIn("Put on Hold", act_names)
+
+	def test_open_task_offers_complete_cancel_hold(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		with patch("frappe.model.workflow.get_workflow_name", return_value=None):
+			actions = get_task_workflow_actions("Task", "TASK-001", "Open")
+			act_names = [a["action"] for a in actions]
+			self.assertIn("Complete", act_names)
+			self.assertIn("Cancel Task", act_names)
+			self.assertIn("Put on Hold", act_names)
+			self.assertNotIn("Reopen", act_names)
+
+
 if __name__ == "__main__":
 	unittest.main()
+
