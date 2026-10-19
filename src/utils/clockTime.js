@@ -24,14 +24,52 @@ export const durationLabel = (mins) => {
 
 // As in Google Calendar: every 15 minutes after the start, each with its length, on past
 // midnight into the next morning, so a night's work can end at 4:00 am
-export function endTimeOptions(startHHMM) {
+export function endTimeOptions(startHHMM, opts = {}) {
   if (!startHHMM) return [];
   const start = toMin(startHHMM);
   const out = [];
-  for (let m = start + 15; m < start + 24 * 60; m += 15) {
-    const at = m % (24 * 60);
-    out.push({ value: toHHMM(at), label: `${clock(at)}${m >= 24 * 60 ? " next day" : ""} (${lengthWords(m - start)})` });
+
+  let maxSpan = opts.maxSpanMins != null ? opts.maxSpanMins : 24 * 60;
+  if (opts.capToNow) {
+    const nowHHMM = opts.nowHHMM || toHHMM(new Date().getHours() * 60 + new Date().getMinutes());
+    const spanToNow = spanMins(startHHMM, nowHHMM);
+    const curSpan = opts.currentEnd ? spanMins(startHHMM, opts.currentEnd) : 0;
+    maxSpan = Math.max(spanToNow, curSpan) + 15;
+    if (maxSpan < 60) maxSpan = 60;
   }
+
+  const curEnd = opts.currentEnd ? String(opts.currentEnd).trim().slice(0, 5) : "";
+  const curSpan = curEnd && curEnd !== startHHMM ? spanMins(startHHMM, curEnd) : null;
+
+  let curInserted = false;
+  for (let m = start + 15; m < start + maxSpan; m += 15) {
+    const span = m - start;
+    if (!curInserted && curSpan != null && curSpan > 0 && curSpan < span) {
+      const atCur = (start + curSpan) % (24 * 60);
+      out.push({
+        value: toHHMM(atCur),
+        label: `${clock(atCur)}${start + curSpan >= 24 * 60 ? " next day" : ""} (${lengthWords(curSpan)})`,
+      });
+      curInserted = true;
+    }
+    if (curSpan === span) {
+      curInserted = true;
+    }
+    const at = m % (24 * 60);
+    out.push({
+      value: toHHMM(at),
+      label: `${clock(at)}${m >= 24 * 60 ? " next day" : ""} (${lengthWords(span)})`,
+    });
+  }
+
+  if (!curInserted && curSpan != null && curSpan > 0) {
+    const atCur = (start + curSpan) % (24 * 60);
+    out.push({
+      value: toHHMM(atCur),
+      label: `${clock(atCur)}${start + curSpan >= 24 * 60 ? " next day" : ""} (${lengthWords(curSpan)})`,
+    });
+  }
+
   return out;
 }
 
