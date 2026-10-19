@@ -79,10 +79,21 @@ export function useWorkstationDashboardBinding(w) {
     _byTimeAsc
   } = dashboardStore;
   // Kept under this name for the keyboard shortcut and the header menu; it is the one plan dialog
-  const openNewTaskModal = (initialDate = null) => {
+  const openNewTaskModal = (initialDateOrOpts = null) => {
     // `@click="openNewTaskModal"` passes the MouseEvent here; only a YYYY-MM-DD string is a date
-    const explicit = typeof initialDate === 'string' ? initialDate : null;
-    w.workBlockStore.openPlanDialog({ date: explicit || selectedDashboardDate.value || todayDate.value });
+    let explicit = null;
+    let askTask = false;
+    const isEvent = initialDateOrOpts && typeof initialDateOrOpts === 'object' && ('preventDefault' in initialDateOrOpts || 'target' in initialDateOrOpts);
+    if (typeof initialDateOrOpts === 'string') {
+      explicit = initialDateOrOpts;
+    } else if (initialDateOrOpts && typeof initialDateOrOpts === 'object' && !isEvent) {
+      if (typeof initialDateOrOpts.date === 'string') explicit = initialDateOrOpts.date;
+      if (initialDateOrOpts.askTask) askTask = true;
+    }
+    w.workBlockStore.openPlanDialog({
+      date: explicit || selectedDashboardDate.value || todayDate.value,
+      askTask
+    });
   };
 
   Object.assign(w, {
