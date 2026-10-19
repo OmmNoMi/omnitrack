@@ -35,7 +35,11 @@ def body_of(src, name):
 	return src[start:end if end != -1 else len(src)]
 
 
+API_TASKS = open(os.path.join(APP_DIR, "api", "tasks.py")).read()
+
+
 class TestTaskParity(unittest.TestCase):
+
 	def gaps(self, rows, task_assignees=None, todo_owners=None, is_copy=False):
 		return task_parity.parity_gaps(NEHA, rows, task_assignees or {}, todo_owners or {}, is_copy)
 
@@ -97,6 +101,23 @@ class TestTaskParity(unittest.TestCase):
 		"""When employee lacks Task permission, put_person_on_tasks must catch assignment errors."""
 		body = body_of(CONTROLLER, "put_person_on_tasks")
 		self.assertIn("try:\n\t\t\t\t\tadd_assignment", body)
+
+	def test_task_form_returns_description(self):
+		"""_task_form must include description in its returned dict."""
+		body = body_of(API_TASKS, "_task_form")
+		self.assertIn('"description": doc.get("description") or "",', body)
+
+	def test_task_edit_and_update_accept_description(self):
+		"""_edit_task_doc, update_task, and update_block_task must accept and persist description."""
+		edit_body = body_of(API_TASKS, "_edit_task_doc")
+		self.assertIn("description=None", edit_body)
+		self.assertIn("doc.description = description", edit_body)
+		update_body = body_of(API_TASKS, "update_task")
+		self.assertIn("description=None", update_body)
+		self.assertIn("_edit_task_doc(doc, _clean_subject(subject), due_date, priority, description)", update_body)
+		block_task_body = body_of(API_TASKS, "update_block_task")
+		self.assertIn("description=None", block_task_body)
+		self.assertIn("row.subject = _edit_task_doc(doc, subject, due_date, priority, description)", block_task_body)
 
 
 if __name__ == "__main__":

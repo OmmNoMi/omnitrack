@@ -179,6 +179,16 @@ if (!/'remove_block_task'/.test(taskForm)) problems.push('TaskFormDialog.vue: ca
 if ((taskForm.match(/>\{\{ detail\.state \|\| 'Open' \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (detail.state)');
 if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves ask first, then apply (execute_task_workflow_action)');
 if (!/:esc-back="!!confirming"/.test(taskForm) || !/this\.\$emit\('back'\)/.test(fdialog)) problems.push('TaskFormDialog.vue: Escape steps back out of a move\'s confirm before it closes the form');
+if (!/FIELDS\s*=\s*\[[^\]]*'description'/.test(taskForm) || !/label="Description"/.test(taskForm)) {
+  problems.push('TaskFormDialog.vue: must include Description field in form and FIELDS');
+}
+const apiTasks = read('omnitrack/api/tasks.py');
+if (!/def update_task\([^)]*description=None/.test(apiTasks) || !/def update_block_task\([^)]*description=None/.test(apiTasks) || !/def _edit_task_doc\([^)]*description=None/.test(apiTasks)) {
+  problems.push('tasks.py: update_task, update_block_task, and _edit_task_doc must accept description');
+}
+if (!/"description":\s*doc\.get\("description"\)/.test(apiTasks)) {
+  problems.push('tasks.py: _task_form must return description');
+}
 for (const f of walkVue(path.join(root, 'src'))) {
   const rel = path.relative(root, f);
   if (rel.endsWith('TaskFormDialog.vue')) continue;
