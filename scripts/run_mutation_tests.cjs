@@ -832,6 +832,10 @@ runMutationTest('clean_session_tasks keeps duplicate refs', SRC('omnitrack/utils
   (code) => code.replace(' or t["ref"] in seen', ''), DP, 'clean_session_tasks must dedupe');
 runMutationTest('A session tool is no longer squared', SRC('src/session/SessionControlsPane.vue'),
   (code) => code.replace(':class="TOOL_SQUARE"\n            :tabindex="activeToolIndex === 2', ':tabindex="activeToolIndex === 2'), DP, 'each of the 3 session tools');
+runMutationTest('Mobile session tools drop 40px touch target', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('max-[479px]:!w-10', 'max-[479px]:w-7'), DP, '!w-10');
+runMutationTest('Mobile session tools shrink their icons', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('max-[479px]:[&_svg]:!w-6 max-[479px]:[&_svg]:!h-6', ''), DP, '[&_svg]:!w-6');
 runMutationTest('Escape on a time list in a dialog drops focus to the page', SRC('src/components/common/FDialog.vue'),
   (code) => code.replace('          if (field && field.isConnected && now !== field && (now === document.body || (panel && panel.contains(now)))) focusBack(field);\n', ''), DP, 'focus stays on its field');
 runMutationTest('A closed day calendar leaves focus on another field', SRC('src/components/common/FDialog.vue'),
