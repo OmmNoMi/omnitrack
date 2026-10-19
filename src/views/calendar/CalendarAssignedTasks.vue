@@ -48,8 +48,14 @@
           :aria-selected="plannerTaskFilter === tab.id"
           :tabindex="plannerTaskFilter === tab.id ? 0 : -1"
           :data-planner-tab="tab.id"
+          :icon="plannerTaskFilter !== tab.id ? tab.icon : undefined"
+          :icon-left="plannerTaskFilter === tab.id ? tab.icon : undefined"
+          :label="tab.label"
+          :tooltip="plannerTaskFilter !== tab.id ? tab.label : undefined"
           @click="setPlannerTaskFilter(tab.id)"
-        >{{ tab.label }}</Button>
+        >
+          <span v-if="plannerTaskFilter === tab.id">{{ tab.label }}</span>
+        </Button>
       </div>
     </div>
 
@@ -116,10 +122,10 @@ export default {
   data() {
     return {
       taskTabs: [
-        { id: 'all', label: 'All' },
-        { id: 'underplanned', label: 'Underplanned' },
-        { id: 'overdue', label: 'Overdue' },
-        { id: 'high', label: 'High' }
+        { id: 'all', label: 'All', icon: 'list' },
+        { id: 'underplanned', label: 'Underplanned', icon: 'clock' },
+        { id: 'overdue', label: 'Overdue', icon: 'alert-triangle' },
+        { id: 'high', label: 'High', icon: 'star' }
       ]
     };
   },
