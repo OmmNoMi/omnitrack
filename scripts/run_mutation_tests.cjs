@@ -260,6 +260,20 @@ runMutationTest(
   'needs !important'
 );
 runMutationTest(
+  "DatePicker popover loses today's accent ring",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('box-shadow: inset 0 0 0 1.5px var(--primary, #4285f4);', ''),
+  'node scripts/check_dialog_popovers.cjs',
+  "visually highlight today's date"
+);
+runMutationTest(
+  "DatePicker popover today accent loses dark mode styling",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('.dark [data-reka-popper-content-wrapper] button.font-extrabold.text-ink-gray-9:not(.bg-surface-gray-6)', '/* dark-removed */'),
+  'node scripts/check_dialog_popovers.cjs',
+  'dark mode styling'
+);
+runMutationTest(
   'Document Escape handler stops skipping events a popover already handled',
   path.resolve(omnitrackDir,'src/composables/useWorkstationEod.js'),
   (code) => code.replace('    if (e.defaultPrevented) return;\n', ''),
