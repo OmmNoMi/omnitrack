@@ -186,5 +186,151 @@ class TestPlanWindow(unittest.TestCase):
 		self.assertTrue(check_plan_date("2026-10-12", "11:00:00", "12:00:00"))
 
 
+class TestPlannedWorkBlockDeletionGovernance(unittest.TestCase):
+	"""Past planned work block deletion governance (Issue #27).
+	- Standard users cannot delete past blocks older than grace hours.
+	- Standard users cannot delete approved blocks.
+	- System Manager / Administrator / OmniTrack Manager CAN delete unworked past blocks.
+	- Neither managers nor standard users can delete blocks with logged sessions.
+	"""
+
+	def setUp(self):
+		self.settings = {}
+		self.manager = False
+		self.user = "employee@ommnomi.in"
+		self.logged_messages = []
+
+		class DummyLogger:
+			def __init__(dummy, target):
+				dummy.target = target
+			def info(dummy, msg):
+				dummy.target.logged_messages.append(msg)
+			def warning(dummy, msg):
+				dummy.target.logged_messages.append(msg)
+			def error(dummy, msg):
+				dummy.target.logged_messages.append(msg)
+
+		for target, kwargs in [
+			("frappe.utils.data.get_system_timezone", {"return_value": "Asia/Kolkata"}),
+			("omnitrack.permissions._", {"side_effect": lambda msg: msg}),
+			("omnitrack.permissions.formatdate", {"side_effect": lambda d: str(getdate(d))}),
+			("omnitrack.permissions.frappe.throw", {"side_effect": _throw}),
+			("omnitrack.permissions._setting", {"side_effect": lambda fn: self.settings.get(fn)}),
+			("omnitrack.permissions.is_omnitrack_manager", {"side_effect": lambda user=None: self.manager}),
+		]:
+			p = patch(target, **kwargs)
+			p.start()
+			self.addCleanup(p.stop)
+
+		session = patch.object(frappe, "session", frappe._dict(user=self.user))
+		session.start()
+		self.addCleanup(session.stop)
+
+		throw_patcher = patch.object(frappe, "throw", side_effect=_throw)
+		throw_patcher.start()
+		self.addCleanup(throw_patcher.stop)
+
+		_patcher = patch.object(frappe, "_", side_effect=lambda msg: msg)
+		_patcher.start()
+		self.addCleanup(_patcher.stop)
+
+		if not hasattr(frappe, "local"):
+			frappe.local = frappe._dict()
+		frappe.local.flags = frappe._dict()
+
+		log_patcher = patch.object(frappe, "logger", return_value=DummyLogger(self))
+		log_patcher.start()
+		self.addCleanup(log_patcher.stop)
+
+	def make_block(self, **kwargs):
+		data = {
+			"doctype": "Planned Work Block",
+			"name": "PWB-2026-TEST-001",
+			"employee": self.user,
+			"work_date": add_days(nowdate(), -3),
+			"start_time": "09:00:00",
+			"end_time": "12:00:00",
+			"status": "Missed",
+			"approval_status": "Draft",
+			"actual_hours": 0.0,
+			"sessions": [],
+			"flags": frappe._dict(),
+		}
+		data.update(kwargs)
+		doc = frappe._dict(data)
+		doc.get = lambda k, default=None: getattr(doc, k, default)
+		return doc
+
+	def test_standard_user_cannot_delete_past_planned_work_block(self):
+		from omnitrack.omnitrack.doctype.planned_work_block.planned_work_block import PlannedWorkBlock
+
+		doc = self.make_block()
+		with self.assertRaises(Refused) as ctx:
+			PlannedWorkBlock.on_trash(doc)
+		self.assertIn("Past planned work blocks older than the grace period cannot be deleted", str(ctx.exception))
+
+	def test_standard_user_cannot_delete_approved_block(self):
+		from omnitrack.omnitrack.doctype.planned_work_block.planned_work_block import PlannedWorkBlock
+
+		doc = self.make_block(work_date=nowdate(), approval_status="Approved")
+		with self.assertRaises(Refused) as ctx:
+			PlannedWorkBlock.on_trash(doc)
+		self.assertIn("Approved work blocks are permanently locked", str(ctx.exception))
+
+	def test_manager_can_delete_unworked_past_planned_work_block(self):
+		from omnitrack.omnitrack.doctype.planned_work_block.planned_work_block import PlannedWorkBlock
+
+		self.manager = True
+		doc = self.make_block()
+		PlannedWorkBlock.on_trash(doc)
+		self.assertTrue(any("PWB-2026-TEST-001" in m for m in self.logged_messages))
+
+	def test_manager_cannot_delete_block_with_logged_work_sessions(self):
+		from omnitrack.omnitrack.doctype.planned_work_block.planned_work_block import PlannedWorkBlock
+
+		self.manager = True
+		doc = self.make_block(actual_hours=1.5, sessions=[frappe._dict(hours=1.5)])
+		with self.assertRaises(Refused) as ctx:
+			PlannedWorkBlock.on_trash(doc)
+		self.assertIn("Cannot delete a work block with logged work sessions", str(ctx.exception))
+
+	def test_ignore_past_block_lock_flag(self):
+		from omnitrack.omnitrack.doctype.planned_work_block.planned_work_block import PlannedWorkBlock
+
+		doc = self.make_block(flags=frappe._dict(ignore_past_block_lock=True))
+		# Bypasses check without error
+		PlannedWorkBlock.on_trash(doc)
+
+	def test_delete_work_block_api_governance(self):
+		from omnitrack.api.planner import delete_work_block
+
+		doc = self.make_block()
+		with patch("frappe.get_doc", return_value=doc), patch("frappe.delete_doc") as mock_delete:
+			# 1. Other employee block as standard user -> PermissionError
+			doc.employee = "other@ommnomi.in"
+			with self.assertRaises(Refused) as ctx:
+				delete_work_block(doc.name)
+			self.assertIn("Not permitted to delete this work block", str(ctx.exception))
+
+			# 2. Own past block as standard user -> ValidationError
+			doc.employee = self.user
+			with self.assertRaises(Refused) as ctx:
+				delete_work_block(doc.name)
+			self.assertIn("older than the", str(ctx.exception))
+
+			# 3. Manager on past unworked block -> succeeds!
+			self.manager = True
+			res = delete_work_block(doc.name)
+			self.assertEqual(res, {"status": "success"})
+			mock_delete.assert_called_with("Planned Work Block", doc.name, force=True)
+
+			# 4. Manager on block with logged work sessions -> ValidationError
+			doc.actual_hours = 2.0
+			with self.assertRaises(Refused) as ctx:
+				delete_work_block(doc.name)
+			self.assertIn("This block has logged work sessions", str(ctx.exception))
+
+
 if __name__ == "__main__":
 	unittest.main()
+
