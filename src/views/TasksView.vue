@@ -15,12 +15,30 @@
         <div v-if="isManager" class="w-full sm:w-52">
           <Combobox open-on-click :model-value="selectedEmployee" :options="employeeOptions" placeholder="Search teammates" aria-label="Show tasks for" @update:model-value="setSelectedEmployee" />
         </div>
+        <Button
+          variant="solid"
+          theme="blue"
+          icon-left="plus"
+          label="Add task"
+          class="shrink-0 enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"
+          @click="openNewTask"
+        >Add task</Button>
       </div>
     </div>
 
-    <p v-if="!tasks.length" class="px-4 py-10 text-center text-sm" :class="mutedText">
-      No open tasks. Tasks assigned in Desk, and tasks added while planning a block, show here.
-    </p>
+    <div v-if="!tasks.length" class="px-4 py-10 text-center text-sm space-y-3" :class="mutedText">
+      <p>No open tasks. Tasks assigned in Desk, and tasks added while planning a block, show here.</p>
+      <div class="flex justify-center">
+        <Button
+          variant="solid"
+          theme="blue"
+          icon-left="plus"
+          label="Add task"
+          class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white"
+          @click="openNewTask"
+        >Add task</Button>
+      </div>
+    </div>
     <div v-else-if="!rows.length" class="px-4 py-10 text-center text-sm space-y-2" :class="mutedText">
       <p>No task matches.</p>
       <Button variant="ghost" label="Clear filters" @click="clearFilters">Clear filters</Button>
@@ -73,6 +91,7 @@ export default {
       'fmtHrs',
       'isDarkMode',
       'isManager',
+      'openNewTaskModal',
       'planAttentionTask',
       'selectedEmployee',
       'setSelectedEmployee',
@@ -150,6 +169,7 @@ export default {
     cellKey(t, col) { return t.ref + ':' + col; },
     tabindex(t, col) { return this.current[0] === t.ref && this.current[1] === col ? 0 : -1; },
     open(t) { openTaskDetail(t, { onChange: () => this.fetchWorkstationData(this.selectedEmployee) }); },
+    openNewTask() { this.openNewTaskModal({ askTask: true }); },
     setProject(v) { this.project = this.projectOptions.some((o) => o.value === v) ? v : ALL_PROJECTS; },
     clearFilters() { this.search = ''; this.project = ALL_PROJECTS; },
     onKey(e) {
