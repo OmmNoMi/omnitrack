@@ -137,7 +137,13 @@ export default {
     people() { return ((this.d && this.d.assigned_to) || []).map((p) => p.name || p.user).join(', '); },
     // Every move opens the one task form at its confirm step, which asks for a comment
     stateMoves() {
-      return ((this.d && this.d.actions) || []).map((a) => ({
+      const seen = new Set();
+      const actions = ((this.d && this.d.actions) || []).filter((a) => {
+        if (!a || !a.action || seen.has(a.action)) return false;
+        seen.add(a.action);
+        return true;
+      });
+      return actions.map((a) => ({
         label: a.action,
         icon: moveIcon(a.action),
         theme: isDangerMove(a) ? 'red' : undefined,

@@ -56,7 +56,7 @@ export default {
     start: { type: String, default: "" },
     end: { type: String, default: "" },
     // Quick-day chips, as offsets from today: planning looks ahead, logging looks back
-    dayOffsets: { type: Array, default: () => [0, 1, 2, 3] },
+    dayOffsets: { type: Array, default: () => [0, 1, 2] },
     // Four at most, so the chips sit on one line in the narrowest box (the session box)
     durations: { type: Array, default: () => [30, 60, 120, 240] },
     isDarkMode: { type: Boolean, default: false },
@@ -70,7 +70,7 @@ export default {
       return this.dayOffsets.map((offset) => {
         const d = new Date();
         d.setDate(d.getDate() + offset);
-        const named = { 0: "Today", 1: "Tomorrow", "-1": "Yesterday" }[offset];
+        const named = { 0: "Today", 1: "Tomorrow", 2: "+2d", 3: "+3d", "-1": "Yesterday", "-2": "-2d" }[offset];
         return {
           label: named || d.toLocaleDateString(undefined, { weekday: "short" }),
           value: localISO(d),

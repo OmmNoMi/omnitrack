@@ -302,8 +302,12 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 			doc = frappe.get_doc(doctype, docname)
 			transitions = get_transitions(doc)
 			actions = []
+			seen_actions = set()
 			for t in transitions:
 				act = t.action
+				if act in seen_actions:
+					continue
+				seen_actions.add(act)
 				act_l = act.lower()
 				style = "danger" if any(w in act_l for w in ("cancel", "reject", "drop")) \
 					else "success" if any(w in act_l for w in ("close", "complete", "approve", "done")) \
@@ -603,11 +607,21 @@ def _workflow_of(doc):
 	if wf:
 		field = frappe.get_cached_value("Workflow", wf, "workflow_state_field") or "workflow_state"
 		try:
-			moves = [{"action": t.action, "next_state": t.next_state} for t in get_transitions(doc)]
+			seen = set()
+			moves = []
+			for t in get_transitions(doc):
+				if t.action not in seen:
+					seen.add(t.action)
+					moves.append({"action": t.action, "next_state": t.next_state})
 		except Exception:
 			moves = []
 		return {"workflow": wf, "state": doc.get(field) or "", "actions": moves}
-	moves = [{"action": m["action"], "next_state": m["next_state"]} for m in get_task_workflow_actions(doc.doctype, doc.name, doc.get("status"))]
+	seen = set()
+	moves = []
+	for m in get_task_workflow_actions(doc.doctype, doc.name, doc.get("status")):
+		if m["action"] not in seen:
+			seen.add(m["action"])
+			moves.append({"action": m["action"], "next_state": m["next_state"]})
 	return {"workflow": None, "state": doc.get("status") or "Open", "actions": moves}
 
 
