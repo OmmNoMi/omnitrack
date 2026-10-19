@@ -186,5 +186,104 @@ class TestPlanWindow(unittest.TestCase):
 		self.assertTrue(check_plan_date("2026-10-12", "11:00:00", "12:00:00"))
 
 
+class TestTaskWorkflowActions(unittest.TestCase):
+	"""Workflow and status action transitions for Task and ToDo documents."""
+
+	def test_completed_task_offers_only_reopen(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		actions = get_task_workflow_actions("Task", "TASK-0001", current_status="Completed")
+		self.assertEqual(len(actions), 1)
+		self.assertEqual(actions[0]["action"], "Reopen")
+		self.assertEqual(actions[0]["next_state"], "Open")
+		self.assertEqual(actions[0]["style"], "primary")
+
+		# Ensure Cancel Task and Put on Hold are strictly not offered
+		action_names = [a["action"] for a in actions]
+		self.assertNotIn("Cancel Task", action_names)
+		self.assertNotIn("Put on Hold", action_names)
+		self.assertNotIn("Complete", action_names)
+
+	def test_closed_todo_offers_only_reopen(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		actions = get_task_workflow_actions("ToDo", "TODO-0001", current_status="Closed")
+		self.assertEqual(len(actions), 1)
+		self.assertEqual(actions[0]["action"], "Reopen")
+		self.assertEqual(actions[0]["next_state"], "Open")
+
+		action_names = [a["action"] for a in actions]
+		self.assertNotIn("Cancel Task", action_names)
+		self.assertNotIn("Close Task", action_names)
+
+	def test_cancelled_task_offers_only_reopen(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		actions = get_task_workflow_actions("Task", "TASK-0001", current_status="Cancelled")
+		self.assertEqual(len(actions), 1)
+		self.assertEqual(actions[0]["action"], "Reopen")
+		self.assertEqual(actions[0]["next_state"], "Open")
+
+		action_names = [a["action"] for a in actions]
+		self.assertNotIn("Cancel Task", action_names)
+		self.assertNotIn("Put on Hold", action_names)
+
+	def test_on_hold_task_offers_resume_complete_cancel(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		actions = get_task_workflow_actions("Task", "TASK-0001", current_status="On Hold")
+		action_names = [a["action"] for a in actions]
+		self.assertEqual(action_names, ["Resume", "Complete", "Cancel Task"])
+		self.assertNotIn("Put on Hold", action_names)
+
+		# ToDo on hold (if ever in hold status) offers Reopen, Close Task, Cancel Task
+		todo_actions = get_task_workflow_actions("ToDo", "TODO-0001", current_status="On Hold")
+		todo_action_names = [a["action"] for a in todo_actions]
+		self.assertEqual(todo_action_names, ["Reopen", "Close Task", "Cancel Task"])
+
+	def test_open_task_offers_complete_cancel_hold(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		actions = get_task_workflow_actions("Task", "TASK-0001", current_status="Open")
+		action_names = [a["action"] for a in actions]
+		self.assertEqual(action_names, ["Complete", "Cancel Task", "Put on Hold"])
+
+		todo_actions = get_task_workflow_actions("ToDo", "TODO-0001", current_status="Open")
+		todo_action_names = [a["action"] for a in todo_actions]
+		self.assertEqual(todo_action_names, ["Close Task", "Cancel Task"])
+
+	def test_execute_reopen_and_resume_transitions_to_open(self):
+		from unittest.mock import MagicMock
+		from omnitrack.api.tasks import execute_task_workflow_action
+
+		mock_doc = MagicMock()
+		mock_doc.doctype = "Task"
+		mock_doc.name = "TASK-0001"
+		mock_doc.status = "Completed"
+
+		mock_db = MagicMock()
+		mock_db.exists.return_value = True
+
+		with patch.object(frappe, "db", mock_db), \
+		     patch.object(frappe, "get_doc", return_value=mock_doc), \
+		     patch("omnitrack.api.tasks._", side_effect=lambda msg: msg), \
+		     patch("frappe.model.workflow.get_workflow_name", return_value=None):
+			res = execute_task_workflow_action("Task", "TASK-0001", "Reopen")
+			self.assertEqual(res["status"], "success")
+			self.assertEqual(res["new_state"], "Open")
+			self.assertEqual(mock_doc.status, "Open")
+			mock_doc.save.assert_called_once()
+
+			# Test Resume
+			mock_doc.status = "On Hold"
+			mock_doc.save.reset_mock()
+			res_resume = execute_task_workflow_action("Task", "TASK-0001", "Resume")
+			self.assertEqual(res_resume["status"], "success")
+			self.assertEqual(res_resume["new_state"], "Open")
+			self.assertEqual(mock_doc.status, "Open")
+			mock_doc.save.assert_called_once()
+
+
 if __name__ == "__main__":
 	unittest.main()
+

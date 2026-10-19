@@ -1793,6 +1793,13 @@ runMutationTest('check_plan_date lets a refusal through', PERMS,
   (code) => code.replace('\tif refusal:\n\t\tfrappe.throw(refusal, frappe.ValidationError)', '\tif False:\n\t\tfrappe.throw(refusal, frappe.ValidationError)'), GOV, 'test_check_plan_date_refuses_with_the_reason');
 runMutationTest('Python says the past-day words differently', PERMS,
   (code) => code.replace('"You can plan from today on. Time already worked is logged, not planned."', '"You can plan from today on."'), PW, 'as src/utils/planWindow.js does');
+const TASKS_PY = SRC('omnitrack/api/tasks.py');
+runMutationTest('Completed tasks offer cancel or hold', TASKS_PY,
+  (code) => code.replace('if status in ("cancelled", "completed", "closed"):', 'if status in ("cancelled",):'), GOV, 'test_completed_task_offers_only_reopen');
+runMutationTest('Reopen action does not restore Open status', TASKS_PY,
+  (code) => code.replace('elif "resume" in act_lower or "reopen" in act_lower or act_lower == "open":', 'elif False:'), GOV, 'test_execute_reopen_and_resume_transitions_to_open');
+runMutationTest('On hold tasks do not offer resume', TASKS_PY,
+  (code) => code.replace('if status in ("on hold", "hold"):', 'if False:'), GOV, 'test_on_hold_task_offers_resume_complete_cancel');
 const PLN = SRC('omnitrack/api/planner.py');
 runMutationTest('book_work_block plans the past again', PLN,
   (code) => code.replace('\t\tcheck_plan_date(work_date or nowdate(), start_time, end_time)', '\t\tpass'), PW, 'book_work_block');
