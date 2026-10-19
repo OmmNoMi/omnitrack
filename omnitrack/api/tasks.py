@@ -373,6 +373,7 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 		frappe.db.commit()
 		state_field = frappe.get_doc("Workflow", wf_name).workflow_state_field
 		new_state = doc.get(state_field) or doc.get("status")
+		_sync_task_status_to_blocks(doctype, docname, doc, new_state)
 		return {
 			"status": "success",
 			"message": _("Workflow action '{0}' applied to {1} {2} (New State: {3})").format(
@@ -402,6 +403,7 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			except Exception:
 				pass
 		frappe.db.commit()
+		_sync_task_status_to_blocks(doctype, docname, doc, doc.status)
 		return {
 			"status": "success",
 			"message": _("Status updated to '{0}' for {1} {2}").format(
@@ -411,6 +413,19 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			"docname": docname,
 			"new_state": doc.status
 		}
+
+
+def _sync_task_status_to_blocks(doctype, docname, doc, new_state):
+	"""Syncs status to any Planned Work Block holding this task."""
+	is_done = doc.get("status") in ("Completed", "Closed") or str(new_state).lower() in ("completed", "closed", "done")
+	for r in frappe.get_all(
+		CHILD,
+		filters={"parenttype": "Planned Work Block", "reference_doctype": doctype, "reference_name": docname},
+		fields=["name"],
+		limit_page_length=0,
+	):
+		frappe.db.set_value(CHILD, r.name, "status", "Completed" if is_done else "Open", update_modified=False)
+		frappe.db.set_value(CHILD, r.name, "completed_at", frappe.utils.now_datetime() if is_done else None, update_modified=False)
 
 
 @frappe.whitelist()
