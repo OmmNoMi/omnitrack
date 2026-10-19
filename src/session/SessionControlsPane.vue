@@ -53,6 +53,7 @@
         :day-offsets="dayOffsets"
         :durations="[15, 30, 60, 120]"
         :is-dark-mode="isDarkMode"
+        :scheduled-start="trackerBoundBlock ? trackerBoundBlock.start_time : ''"
       />
       <!-- Why it cannot be saved, inside the box that keeps what was typed: a day outside the
            logging window or a closed payroll period, time not worked yet (the clock is how time
@@ -126,6 +127,9 @@
         :day-offsets="[0, -1]"
         :durations="[30, 60, 120, 240]"
         :is-dark-mode="isDarkMode"
+        :is-live="true"
+        :cap-to-now="true"
+        :scheduled-start="trackerBoundBlock ? trackerBoundBlock.start_time : ''"
       />
       <!-- Time not worked yet cannot be logged; Keep running is how the clock goes on -->
       <p v-if="adjustAhead" class="text-sm text-red-700 dark:text-red-200" role="alert">The end is after now. Keep running, or pick an earlier end.</p>
