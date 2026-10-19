@@ -115,6 +115,44 @@ class TestWorkspaceFixtures(unittest.TestCase):
 					continue
 		self.assertEqual(hits, [], f"stale workspace identity {stale!r} still in: {hits}")
 
+	def test_add_to_apps_screen_hook_is_declared(self):
+		"""Frappe v16 /desk apps screen requires add_to_apps_screen declared in hooks.py."""
+		import ast
+
+		hooks_path = os.path.join(APP_DIR, "hooks.py")
+		with open(hooks_path, encoding="utf-8") as f:
+			content = f.read()
+
+		# Parse hooks.py with AST to avoid security scanner warnings (bandit B102 exec)
+		tree = ast.parse(content, filename=hooks_path)
+		add_to_apps_screen_node = None
+		for node in tree.body:
+			if isinstance(node, ast.Assign):
+				for target in node.targets:
+					if isinstance(target, ast.Name) and target.id == "add_to_apps_screen":
+						add_to_apps_screen_node = node
+						break
+
+		self.assertIsNotNone(add_to_apps_screen_node, "omnitrack/hooks.py must declare add_to_apps_screen")
+		self.assertIsInstance(add_to_apps_screen_node.value, ast.List)
+		self.assertGreaterEqual(len(add_to_apps_screen_node.value.elts), 1)
+
+		# Also verify evaluation through ast.literal_eval or variable resolution
+		found_entry = False
+		for elt in add_to_apps_screen_node.value.elts:
+			if isinstance(elt, ast.Dict):
+				keys = [k.value for k in elt.keys if isinstance(k, ast.Constant)]
+				self.assertIn("name", keys)
+				self.assertIn("logo", keys)
+				self.assertIn("title", keys)
+				self.assertIn("route", keys)
+				for k, v in zip(elt.keys, elt.values):
+					if isinstance(k, ast.Constant) and k.value == "route":
+						self.assertEqual(getattr(v, "value", None), "/desk/omnitrack")
+						found_entry = True
+		self.assertTrue(found_entry, "omnitrack entry with route /desk/omnitrack found in add_to_apps_screen")
+
 
 if __name__ == "__main__":
 	unittest.main()
+

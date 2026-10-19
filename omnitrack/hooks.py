@@ -6,6 +6,17 @@ app_description = "Universal Workforce, Task Sync & Split-Shift Engine"
 app_email = "omnitrack@ommnomi.com"
 app_license = "GNU General Public License v3.0"
 
+# Apps Screen
+# -----------
+add_to_apps_screen = [
+	{
+		"name": app_name,
+		"logo": app_logo_url,
+		"title": app_title,
+		"route": "/desk/omnitrack",
+	}
+]
+
 # Includes in <head>
 # ------------------
 app_include_js = "omnitrack.bundle.js"
