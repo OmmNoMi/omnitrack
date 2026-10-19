@@ -1321,6 +1321,12 @@ runMutationTest('The kind and record name run together for a screen reader', SRC
   (code) => code.replace('<span class="sr-only">, </span>{{ docName }}', '{{ docName }}'), DK, 'a hidden comma parts the kind');
 runMutationTest('The task panel shows a bare status chip again', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<dt :class="mutedText">Status</dt>', ''), DK, 'the Status fact is named');
+runMutationTest('The task panel hides the Due row when unset', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('<template v-if="d">\n              <dt :class="mutedText">Due</dt>', '<template v-if="due">\n              <dt :class="mutedText">Due</dt>'), DK, 'Due is always shown when the task is loaded');
+runMutationTest('The task panel drops quick deadline presets', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('v-for="p in quickPresets"', 'v-for="p in []"'), DK, 'quick deadline presets are offered');
+runMutationTest('Setting deadline does not persist via update_task', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace("postJSON('update_task'", "postJSON('skip_task'"), DK, 'setDeadline persists the date via update_task');
 runMutationTest('Workflow steps leave the action bar', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<Button v-for="(m, i) in shownMoves"', '<Button v-if="false" v-for="(m, i) in shownMoves"'), DK, 'buttons at the start of the action bar');
 runMutationTest("A block's task title opens nothing", SRC('src/drawers/BlockTasksSection.vue'),

@@ -25,9 +25,68 @@
               <dt :class="mutedText">Status</dt>
               <dd class="min-w-0"><Badge variant="subtle" size="md" :class="stateChip(state)" :title="stateHint">{{ state }}</Badge></dd>
             </template>
-            <template v-if="due">
+            <template v-if="d">
               <dt :class="mutedText">Due</dt>
-              <dd class="min-w-0" :class="overdue ? lateText : strongText">{{ due }}<template v-if="overdue">, overdue</template></dd>
+              <dd class="min-w-0 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span :class="due ? (overdue ? lateText : strongText) : mutedText">
+                    {{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template>
+                  </span>
+                  <button
+                    v-if="canEdit && due"
+                    type="button"
+                    class="p-0.5 text-xs text-gray-700 dark:text-gray-300 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
+                    title="Clear deadline"
+                    aria-label="Clear deadline"
+                    :disabled="savingDue"
+                    @click="setDeadline('')"
+                  >
+                    <FeatherIcon name="x" class="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <!-- Quick deadline presets -->
+                <div v-if="canEdit && !showCustomPicker" class="flex items-center gap-1 flex-wrap pt-0.5" role="group" aria-label="Quick deadline presets">
+                  <button
+                    v-for="p in quickPresets"
+                    :key="p.id"
+                    type="button"
+                    class="px-2 py-0.5 text-xs font-medium rounded border transition-colors shadow-sm"
+                    :class="dueISO === p.iso
+                      ? (isDarkMode ? 'border-blue-500 bg-blue-950/60 text-blue-200' : 'border-blue-400 bg-blue-50 text-blue-800')
+                      : (isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white' : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900')"
+                    :title="p.tooltip"
+                    :disabled="savingDue"
+                    @click="setDeadline(p.iso)"
+                  >
+                    {{ p.label }}
+                  </button>
+                  <button
+                    type="button"
+                    class="px-2 py-0.5 text-xs font-medium rounded border transition-colors shadow-sm"
+                    :class="isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white' : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900'"
+                    title="Pick custom deadline"
+                    :disabled="savingDue"
+                    @click="showCustomPicker = true"
+                  >
+                    Custom…
+                  </button>
+                </div>
+
+                <!-- Custom date picker when toggled -->
+                <div v-if="showCustomPicker" class="flex items-center gap-1.5 pt-1">
+                  <div v-input-attrs="{ 'aria-label': 'Pick task deadline', 'aria-haspopup': 'dialog' }" class="flex-1 max-w-[200px]">
+                    <DatePicker
+                      variant="subtle"
+                      :model-value="dueISO"
+                      format="ddd, D MMM YYYY"
+                      placeholder="Pick deadline"
+                      @update:model-value="onCustomDueSelected($event)"
+                    />
+                  </div>
+                  <Button variant="ghost" size="sm" icon="x" label="Cancel" title="Cancel" @click="showCustomPicker = false" />
+                </div>
+              </dd>
             </template>
             <template v-if="d && d.priority">
               <dt :class="mutedText">Priority</dt>
@@ -88,6 +147,8 @@ import { taskDetail, closeTaskDetail, openTaskForm, taskDocRef } from '../compos
 import { stateChipClass, stateTone, isDangerMove, moveIcon } from '../utils/taskState.js';
 import { hrs } from '../utils/taskMeta.js';
 import { setScrollLock } from '../utils/scrollLock.js';
+import { vInputAttrs } from '../utils/popover.js';
+import { localISO } from '../utils/clockTime.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
@@ -96,14 +157,19 @@ const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabin
 export default {
   name: 'TaskDetailDrawer',
   components: { DetailKind, DocActivity },
+  directives: { inputAttrs: vInputAttrs },
   setup() {
-    const ctx = useWorkstationContext(['postJSON', 'getTaskDeskUrl', 'openTaskRavenDrawer', 'isDarkMode']);
+    const ctx = useWorkstationContext([
+      'postJSON', 'getTaskDeskUrl', 'openTaskRavenDrawer', 'isDarkMode',
+      'showToast', 'fetchPlannerData', 'fetchWorkstationData', 'extractErrorMessage',
+    ]);
     return { ...ctx, taskDetail, closeTaskDetail };
   },
   data() {
-    return { d: null, failed: false, seq: 0, opener: null };
+    return { d: null, failed: false, seq: 0, opener: null, savingDue: false, showCustomPicker: false };
   },
   computed: {
+    canEdit() { return !!(this.d && this.d.can_edit); },
     doc() { return taskDocRef(taskDetail.task) || { doctype: 'Task', name: '' }; },
     title() {
       const t = taskDetail.task || {};
@@ -129,6 +195,37 @@ export default {
       const now = new Date();
       const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
       return this.dueISO < today;
+    },
+    quickPresets() {
+      const now = new Date();
+      const todayISO = localISO(now);
+
+      const d1 = new Date(now);
+      d1.setDate(d1.getDate() + 1);
+      const tomorrowISO = localISO(d1);
+
+      const d2 = new Date(now);
+      d2.setDate(d2.getDate() + 2);
+      const in2DaysISO = localISO(d2);
+
+      const day = now.getDay();
+      const daysToFriday = day >= 1 && day <= 4 ? (5 - day) : (day === 5 ? 7 : (day === 6 ? 6 : 5));
+      const df = new Date(now);
+      df.setDate(df.getDate() + daysToFriday);
+      const fridayISO = localISO(df);
+      const fridayLabel = (day >= 1 && day <= 4) ? 'This Fri' : 'Next Fri';
+
+      const d7 = new Date(now);
+      d7.setDate(d7.getDate() + 7);
+      const nextWeekISO = localISO(d7);
+
+      return [
+        { id: 'today', label: 'Today', iso: todayISO, tooltip: 'Due today' },
+        { id: 'tomorrow', label: 'Tomorrow', iso: tomorrowISO, tooltip: 'Due tomorrow' },
+        { id: 'in2days', label: '+2d', iso: in2DaysISO, tooltip: 'Due in 2 days' },
+        { id: 'friday', label: fridayLabel, iso: fridayISO, tooltip: 'Due ' + fridayLabel },
+        { id: 'nextweek', label: 'Next week', iso: nextWeekISO, tooltip: 'Due in 7 days' },
+      ];
     },
     project() {
       const t = taskDetail.task || {};
@@ -192,6 +289,8 @@ export default {
       const seq = ++this.seq;
       this.d = null;
       this.failed = false;
+      this.showCustomPicker = false;
+      this.savingDue = false;
       try {
         const res = await this.postJSON('tasks.get_task_details', { task_id: r.name, doctype: r.doctype });
         if (seq === this.seq) this.d = res && res.name ? res : null;
@@ -199,6 +298,38 @@ export default {
       } catch (e) {
         if (seq === this.seq) this.failed = true;
       }
+    },
+    async setDeadline(iso) {
+      if (!this.canEdit || this.savingDue) return;
+      const targetDate = iso ? String(iso).slice(0, 10) : '';
+      if (targetDate === this.dueISO && !this.showCustomPicker) return;
+      this.savingDue = true;
+      try {
+        const res = await this.postJSON('update_task', {
+          doctype: this.doc.doctype,
+          name: this.doc.name,
+          due_date: targetDate,
+        });
+        if (this.d) this.d.due_date = targetDate;
+        if (taskDetail.task) taskDetail.task.due_date = targetDate;
+        this.showToast(targetDate ? 'Deadline set to ' + (this.due || targetDate) : 'Deadline cleared', 'success');
+        if (typeof this.fetchPlannerData === 'function') this.fetchPlannerData();
+        if (typeof this.fetchWorkstationData === 'function') this.fetchWorkstationData();
+        const opts = taskDetail.opts || {};
+        if (typeof opts.onChange === 'function') {
+          opts.onChange(res && res.task ? res.task : { ...(taskDetail.task || {}), due_date: targetDate });
+        }
+        this.showCustomPicker = false;
+      } catch (e) {
+        this.showToast('Could not set deadline: ' + (this.extractErrorMessage ? this.extractErrorMessage(e, 'Try again.') : (e.message || e)), 'danger');
+      } finally {
+        this.savingDue = false;
+      }
+    },
+    onCustomDueSelected(val) {
+      if (!val) return;
+      const iso = typeof val === 'string' ? val.slice(0, 10) : localISO(new Date(val));
+      this.setDeadline(iso);
     },
     // The one task form, opened as the list that showed this task would have opened it. A save
     // or a move there reads this panel again.
