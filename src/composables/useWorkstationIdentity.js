@@ -297,18 +297,7 @@ const attentionTasks = ref([]);
     triggerHaptic([25]);
     showToast(`Bound session to Work Block ${b.name}`, 'info');
   };
-        const teamMembers = ref([
-    { name: 'hardiksharma80912@gmail.com', full_name: 'Hardik Sharma', role: 'Lead Architect / Founder' },
-    { name: 'Devoted NoMi', full_name: 'Nomeshwer Sharma', role: 'Operations Manager' },
-    { name: 'Meenaxi Maxi', full_name: 'Meenaxi Maxi', role: 'Logistics & Field Lead' },
-    { name: 'Misha Sharma', full_name: 'Misha Sharma', role: 'Admin & Finance Specialist' },
-    { name: 'Alex Vance', full_name: 'Alex Vance', role: 'Principal Engineer' },
-    { name: 'Tariq Nomi', full_name: 'Tariq Nomi', role: 'Operations Lead' },
-    { name: 'Elena Rostova', full_name: 'Elena Rostova', role: 'Full-Stack Dev' },
-    { name: 'Amara Okafor', full_name: 'Amara Okafor', role: 'Logistics Dispatcher' },
-    { name: 'Sophia Patel', full_name: 'Sophia Patel', role: 'Backend Engineer' },
-    { name: 'Administrator', full_name: 'Administrator', role: 'System Admin' }
-  ]);
+  const teamMembers = ref([]);
   const filteredTeamMembers = computed(() => {
     return teamMembers.value.filter(m => 
       (m.full_name || '').toLowerCase() !== (currentUserFullName.value || '').toLowerCase() &&
