@@ -622,19 +622,28 @@ def _task_form(doc):
 		"priority": doc.get("priority") or "",
 		"priorities": _priorities(doc.doctype),
 		"project": doc.get("project") or (doc.get("reference_name") if doc.get("reference_type") == "Project" else "") or "",
+		"description": doc.get("description") or "",
 		"can_edit": bool(doc.has_permission("write")),
 		**_workflow_of(doc),
 	}
 
 
-def _edit_task_doc(doc, subject=None, due_date=None, priority=None):
+def _edit_task_doc(doc, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the edits on the Task or ToDo, then every work block's copy of its name."""
 	if not doc.has_permission("write"):
 		frappe.throw(_("You can't edit {0} {1}. Ask its owner.").format(_(doc.doctype), doc.name), frappe.PermissionError)
 	is_task = doc.doctype == "Task"
 	old_label = doc.subject if is_task else _todo_subject(doc.description)
-	if subject is not None:
-		doc.set("subject" if is_task else "description", subject[:140] if is_task else subject)
+	if is_task:
+		if subject is not None:
+			doc.subject = subject[:140]
+		if description is not None:
+			doc.description = description
+	else:
+		if description is not None:
+			doc.description = description
+		elif subject is not None:
+			doc.description = subject
 	if due_date is not None:
 		doc.set("exp_end_date" if is_task else "date", due_date or None)
 	if priority:
@@ -674,10 +683,10 @@ def get_task(doctype, name):
 
 
 @frappe.whitelist()
-def update_task(doctype, name, subject=None, due_date=None, priority=None):
+def update_task(doctype, name, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the task form for a Task or ToDo, wherever it was opened from."""
 	doc = _task_doc(doctype, name, "write")
-	_edit_task_doc(doc, _clean_subject(subject), due_date, priority)
+	_edit_task_doc(doc, _clean_subject(subject), due_date, priority, description)
 	return {"status": "success", "task": _task_form(doc)}
 
 
@@ -687,7 +696,7 @@ def get_block_task(block_name, task_ref):
 	row = _block_row(_get_block(block_name, write=False), task_ref)
 	doc = _linked_doc(row)
 	out = {"doctype": "Item", "name": None, "subject": row.subject, "status": row.status, "due_date": "",
-		"priority": "", "priorities": [], "project": row.project or "", "can_edit": True,
+		"priority": "", "priorities": [], "project": row.project or "", "description": "", "can_edit": True,
 		"workflow": None, "state": row.status or "Open", "actions": []}
 	if doc:
 		out.update(_task_form(doc))
@@ -706,7 +715,7 @@ def _title_follows(block, subject):
 
 
 @frappe.whitelist()
-def update_block_task(block_name, task_ref, subject=None, due_date=None, priority=None):
+def update_block_task(block_name, task_ref, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the task form for one of a block's tasks: on the Task or ToDo itself, then the block's copy."""
 	block = _get_block(block_name)
 	row = _block_row(block, task_ref)
@@ -714,7 +723,7 @@ def update_block_task(block_name, task_ref, subject=None, due_date=None, priorit
 	subject = _clean_subject(subject)
 	doc = _linked_doc(row)
 	if doc:
-		row.subject = _edit_task_doc(doc, subject, due_date, priority)
+		row.subject = _edit_task_doc(doc, subject, due_date, priority, description)
 	elif subject is not None:
 		row.subject = subject[:140]
 	if block.work_item == row.work_item and _title_follows(block, old_subject):

@@ -476,6 +476,14 @@ runMutationTest('The task form hides where the task stands', taskFormFile,
   (code) => code.replace("{{ detail.state || 'Open' }}", "{{ detail.subject }}"), DP, 'where the task stands');
 runMutationTest('Escape closes the form from a move\'s confirm', taskFormFile,
   (code) => code.replace(':esc-back="!!confirming"', ''), DP, 'steps back');
+runMutationTest('The task form drops the Description field', taskFormFile,
+  (code) => code.replace('label="Description"', 'label="Notes"'), DP, 'must include Description field');
+runMutationTest('FIELDS loses description in task form', taskFormFile,
+  (code) => code.replace("'description'", "'desc'"), DP, 'FIELDS');
+runMutationTest('update_task drops description argument', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('def update_task(doctype, name, subject=None, due_date=None, priority=None, description=None):', 'def update_task(doctype, name, subject=None, due_date=None, priority=None):'), DP, 'must accept description');
+runMutationTest('_task_form drops description', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('"description": doc.get("description") or "",', ''), DP, 'must return description');
 const DA = 'node scripts/check_doc_activity.mjs';
 runMutationTest('The task panel loses its Activity', drawerDir('TaskDetailDrawer.vue'),
   (code) => code.replace('<DocActivity v-if="d" :doctype="doc.doctype" :name="doc.name" :is-dark-mode="isDarkMode" />', ''), DA, "task's or to-do's own Activity");

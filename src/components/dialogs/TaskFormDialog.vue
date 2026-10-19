@@ -44,6 +44,19 @@
         </Dropdown>
       </div>
 
+      <Textarea
+        v-model="form.description"
+        variant="outline"
+        size="md"
+        :rows="4"
+        label="Description"
+        placeholder="Detailed instructions, acceptance criteria, or context (optional)"
+        class="[&_textarea]:resize-y"
+        :disabled="!editable"
+        @keydown.meta.enter.prevent="save"
+        @keydown.ctrl.enter.prevent="save"
+      />
+
       <div v-if="confirming" ref="confirm" class="rounded-lg border border-outline-gray-2 p-4 space-y-3">
         <p class="text-base" :class="strongText">
           {{ confirming.action }}? It moves to <span class="font-medium">{{ confirming.next_state }}</span>.
@@ -93,9 +106,27 @@ import { whenLine } from '../../utils/clockTime.js';
 import { stateChipClass, isDangerMove, moveIcon } from '../../utils/taskState.js';
 import { vInputAttrs } from '../../utils/popover.js';
 
-const FIELDS = ['subject', 'due_date', 'priority'];
-const blank = () => ({ subject: '', due_date: '', priority: '' });
+const FIELDS = ['subject', 'due_date', 'priority', 'description'];
+const blank = () => ({ subject: '', due_date: '', priority: '', description: '' });
 const emptyDetail = () => ({ doctype: '', name: null, can_edit: true, priorities: [], state: '', status: '', workflow: null, actions: [] });
+
+function htmlToPlainText(html) {
+  if (!html || typeof html !== 'string') return '';
+  if (!html.includes('<')) return html;
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 export default {
   name: 'TaskFormDialog',
@@ -132,7 +163,7 @@ export default {
     changes() {
       const out = {};
       for (const k of FIELDS) {
-        const v = k === 'subject' ? String(this.form[k] || '').trim() : (this.form[k] || '');
+        const v = (k === 'subject' || k === 'description') ? String(this.form[k] || '').trim() : (this.form[k] || '');
         if (v !== (this.saved[k] || '')) out[k] = v;
       }
       return out;
@@ -201,11 +232,12 @@ export default {
       return this.postJSON('get_task', { doctype, name });
     },
     fill(d, keepEdits) {
-      const next = { subject: d.subject || '', due_date: d.due_date || '', priority: d.priority || '' };
+      const desc = htmlToPlainText(d.description || '');
+      const next = { subject: d.subject || '', due_date: d.due_date || '', priority: d.priority || '', description: desc };
       // A workflow move reloads the form: edits not saved yet stay
       if (keepEdits) for (const k of FIELDS) if (this.form[k] !== this.saved[k]) next[k] = this.form[k];
       this.detail = { ...emptyDetail(), ...d, priorities: d.priorities || [], actions: d.actions || [] };
-      this.saved = { subject: d.subject || '', due_date: d.due_date || '', priority: d.priority || '' };
+      this.saved = { subject: d.subject || '', due_date: d.due_date || '', priority: d.priority || '', description: desc };
       this.form = next;
     },
     async load() {
@@ -213,7 +245,8 @@ export default {
       if (!t) return;
       // The name shows at once; the rest arrives with the task
       Object.assign(this, { loaded: false, busy: '', confirming: null, comment: '', error: '', detail: emptyDetail() });
-      this.form = { ...blank(), subject: t.subject || '' };
+      const initialDesc = htmlToPlainText(t.description || '');
+      this.form = { ...blank(), subject: t.subject || '', description: initialDesc };
       this.saved = { ...this.form };
       try {
         const d = await this.fetchDetail();
@@ -239,7 +272,11 @@ export default {
     apply(res) {
       // A list keeping its own copy of the task (a running session) hears what changed
       if (typeof taskForm.onChange === 'function' && this.detail.name) {
-        taskForm.onChange({ ...this.detail, subject: (res && res.subject) || this.form.subject || this.detail.subject });
+        taskForm.onChange({
+          ...this.detail,
+          subject: (res && res.subject) || this.form.subject || this.detail.subject,
+          description: (res && res.description) || this.form.description || this.detail.description,
+        });
       }
       const b = this.block;
       if (!b || !res) return;

@@ -63,7 +63,7 @@
           <!-- Its description as it was written, links and lists kept (sanitized on the server) -->
           <section v-if="d && d.description_html" class="space-y-1.5" aria-labelledby="task-drawer-description">
             <h3 id="task-drawer-description" class="text-sm font-medium" :class="mutedText">Description</h3>
-            <div class="prose prose-sm max-w-none break-words" :class="isDarkMode ? 'prose-invert' : ''" v-html="d.description_html"></div>
+            <div class="prose prose-sm max-w-none break-words whitespace-pre-wrap" :class="isDarkMode ? 'prose-invert' : ''" v-html="d.description_html"></div>
           </section>
 
           <!-- Hours ERPNext has logged on it, against what was expected -->
