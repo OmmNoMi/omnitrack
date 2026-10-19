@@ -31,6 +31,7 @@
 import { Dialog } from 'frappe-ui';
 import { DialogTitle, DialogDescription } from 'reka-ui';
 import { popoverOpen, markDialogEscape, focusBack, opensOnFocus } from '../../utils/popover.js';
+import { pushOverlay, removeOverlay } from '../../utils/overlayHistory.js';
 
 // Focus trap, Esc, scroll lock and return-focus come from frappe-ui's Dialog
 // (reka-ui). What stays ours is the *safe* initial focus: never the close
@@ -78,19 +79,39 @@ export default {
     }
   },
   data() {
-    return { escOwnedByPopover: false, escHeld: false, lastFocus: null };
+    return {
+      dialogOverlayId: 'dialog-' + Math.random().toString(36).slice(2, 9),
+      escOwnedByPopover: false,
+      escHeld: false,
+      lastFocus: null
+    };
   },
   watch: {
-    modelValue(v) { if (v) this.focusSafe(); }
+    modelValue(v) {
+      if (v) {
+        pushOverlay(this.dialogOverlayId, () => { this.open = false; });
+        this.focusSafe();
+      } else {
+        removeOverlay(this.dialogOverlayId);
+      }
+    }
   },
   // frappe-ui's Dialog closes on any Escape, even one meant for a TimePicker list,
   // DatePicker calendar or Combobox open inside it: the user lost the whole form.
   // Escape closes the innermost thing first (WAI-ARIA dialog pattern).
   mounted() {
-    if (this.modelValue) this.focusSafe();
+    if (this.modelValue) {
+      pushOverlay(this.dialogOverlayId, () => { this.open = false; });
+      this.focusSafe();
+    }
     document.addEventListener('keydown', this.noteEscape, true);
   },
-  beforeUnmount() { document.removeEventListener('keydown', this.noteEscape, true); },
+  beforeUnmount() {
+    document.removeEventListener('keydown', this.noteEscape, true);
+    if (this.modelValue) {
+      removeOverlay(this.dialogOverlayId);
+    }
+  },
   methods: {
     noteEscape(e) {
       if (e.key !== 'Escape' || !this.modelValue) return;

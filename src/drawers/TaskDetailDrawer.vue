@@ -88,6 +88,7 @@ import { taskDetail, closeTaskDetail, openTaskForm, taskDocRef } from '../compos
 import { stateChipClass, stateTone, isDangerMove, moveIcon } from '../utils/taskState.js';
 import { hrs } from '../utils/taskMeta.js';
 import { setScrollLock } from '../utils/scrollLock.js';
+import { pushOverlay, removeOverlay } from '../utils/overlayHistory.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
@@ -160,10 +161,24 @@ export default {
     lateText() { return this.isDarkMode ? 'text-red-200' : 'text-red-700'; },
   },
   watch: {
-    'taskDetail.open': { immediate: true, handler(open) { if (open) this.open(); else this.closed(); } },
+    'taskDetail.open': {
+      immediate: true,
+      handler(open) {
+        if (open) {
+          pushOverlay('drawer-task-detail', closeTaskDetail);
+          this.open();
+        } else {
+          removeOverlay('drawer-task-detail');
+          this.closed();
+        }
+      }
+    },
     'taskDetail.task'() { if (taskDetail.open) this.load(); },
   },
-  beforeUnmount() { setScrollLock('task-detail', false); },
+  beforeUnmount() {
+    removeOverlay('drawer-task-detail');
+    setScrollLock('task-detail', false);
+  },
   methods: {
     hrs,
     stateChip(state) { return stateChipClass(state, this.isDarkMode); },

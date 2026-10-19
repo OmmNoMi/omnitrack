@@ -59,6 +59,8 @@
 </template>
 
 <script>
+import { pushOverlay, removeOverlay } from '../utils/overlayHistory.js';
+
 export default {
   name: "DrawerCoordinator",
   props: {
@@ -105,6 +107,30 @@ export default {
     "plan-attention-task",
     "open-block-drawer",
     "send-raven-message"
-  ]
+  ],
+  watch: {
+    showBlockDrawer(v) {
+      if (v) pushOverlay('drawer-block', () => this.$emit('close-block-drawer'));
+      else removeOverlay('drawer-block');
+    },
+    showSessionDrawer(v) {
+      if (v) pushOverlay('drawer-session', () => this.$emit('close-session-drawer'));
+      else removeOverlay('drawer-session');
+    },
+    showTaskRavenDrawer(v) {
+      if (v) pushOverlay('drawer-raven', () => this.$emit('close-raven-drawer'));
+      else removeOverlay('drawer-raven');
+    }
+  },
+  mounted() {
+    if (this.showBlockDrawer) pushOverlay('drawer-block', () => this.$emit('close-block-drawer'));
+    if (this.showSessionDrawer) pushOverlay('drawer-session', () => this.$emit('close-session-drawer'));
+    if (this.showTaskRavenDrawer) pushOverlay('drawer-raven', () => this.$emit('close-raven-drawer'));
+  },
+  beforeUnmount() {
+    removeOverlay('drawer-block');
+    removeOverlay('drawer-session');
+    removeOverlay('drawer-raven');
+  }
 };
 </script>
