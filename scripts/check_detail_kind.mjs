@@ -67,6 +67,9 @@ for (const [file, re] of [
 for (const label of ["Status", "Due", "Priority", "Project", "Assigned to"]) {
   if (!new RegExp(`<dt :class="mutedText">${label}</dt>`).test(drawer)) problems.push(`src/drawers/TaskDetailDrawer.vue: the ${label} fact is named by a <dt>`);
 }
+if (!/<template v-if="d">\s*<dt :class="mutedText">Due<\/dt>/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: Due is always shown when the task is loaded");
+if (!/quickPresets\(\) \{/.test(drawer) || !/v-for="p in quickPresets"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: quick deadline presets are offered");
+if (!/setDeadline\(iso\)/.test(drawer) || !/postJSON\('update_task'/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: setDeadline persists the date via update_task");
 if (/<Badge[^>]*>\{\{ d\.status \}\}<\/Badge>|priority<\/Badge>|>Overdue<\/Badge>/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: an unnamed status, priority or overdue chip is back");
 if (!/<div v-if="d \|\| failed" class="flex items-center gap-2 flex-wrap" role="group" aria-label="Task actions">\s*<Button v-for="\(m, i\) in shownMoves"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: the first workflow steps are buttons at the start of the action bar");
 if (!/shownMoves\(\) \{ return this\.stateMoves\.slice\(0, 2\)/.test(drawer) || !/\.\.\.this\.stateMoves\.slice\(2\),/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: two steps show as buttons; the rest go under More");
