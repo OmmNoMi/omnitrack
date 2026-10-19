@@ -1434,11 +1434,14 @@ assert.ok(
 console.log('✓ Test 41: 4 Days planner layout (Yesterday context + Today on 2nd day) and drag across days verified.');
 
 // Test 42: Planner large screen 3-column layout (Left Assigned Work, Center Calendar, Right Stats Rail)
+// On 13–15" laptop viewports (xl), rails stay compact (240px/220px) to prevent week view grid cramping;
+// rails expand to 280px/260px on wide desktop displays (2xl:grid-cols-[280px_1fr_260px]).
 assert.ok(
-  content.includes("xl:grid-cols-[280px_1fr_260px]") &&
+  (content.includes("2xl:grid-cols-[280px_1fr_260px]") || content.includes("xl:grid-cols-[280px_1fr_260px]")) &&
+  content.includes("lg:grid-cols-[240px_1fr_220px]") &&
   content.includes("order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full") &&
   content.includes("items-stretch lg:h-full lg:min-h-0 flex-1"),
-  'FAIL: omnitrack.html must layout Planner in 3 columns on big screens (xl:grid-cols-[280px_1fr_260px]) with right stats rail'
+  'FAIL: omnitrack must layout Planner in 3 columns on big screens with right stats rail'
 );
 
 console.log('✓ Test 42: Planner large screen 3-column layout & right stats rail verified.');
