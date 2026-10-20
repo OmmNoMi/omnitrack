@@ -92,6 +92,7 @@
       site: "{{ site_name }}",
       socketio_port: {{ socketio_port | int }},
       csrf_token: "{{ csrf_token }}",
+      vapid_public_key: "{{ vapid_public_key or '' }}",
       active_session: {{ (active_session | tojson) if active_session else 'null' }}
     };
   </script>

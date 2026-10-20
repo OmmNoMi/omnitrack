@@ -221,6 +221,7 @@ export function useWorkstationSessionClock(w) {
         idleSinceMs.value = act;
         showInactivityModal.value = true;
         playInactivityChime();
+        showToast(`Nothing logged for ${hoursMinutes(Math.floor(idleMs / 60000))}. Are you still working?`, 'warning');
         dispatchInactivityNotification(`Nothing logged on "${trackerNotes.value || 'the running session'}" for ${hoursMinutes(Math.floor(idleMs / 60000))}.`);
       }
     }

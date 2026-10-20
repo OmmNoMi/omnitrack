@@ -30,7 +30,7 @@ def on_task_update(doc, method=None):
 			)
 
 
-def dispatch_push_notification(user, title, message, action_url="/omnitrack", is_urgent=False):
+def dispatch_push_notification(user, title, message, action_url="/omnitrack", is_urgent=False, alert_type=""):
 	"""
 	Dispatches a notification to the target user across:
 	1. Frappe Cloud Push Relay (APNs for iOS, FCM for Android)
@@ -94,7 +94,8 @@ def dispatch_push_notification(user, title, message, action_url="/omnitrack", is
 			"user": user,
 			"title": title,
 			"message": message,
-			"action_url": action_url
+			"action_url": action_url,
+			"alert_type": alert_type or ""
 		}, user=user)
 	except Exception:
 		pass
@@ -368,7 +369,7 @@ def check_active_timesheet_reminders():
 			notes = (data.get("trackerNotes") or "Active Work").strip()[:50]
 			title = _("OmniTrack: Are you still working?")
 			msg = _("No notes logged for {0}m on '{1}'. Wrap up or continue your timesheet?").format(idle_mins, notes)
-			dispatch_push_notification(user, title, msg, action_url="/omnitrack")
+			dispatch_push_notification(user, title, msg, action_url="/omnitrack", alert_type="inactivity")
 			data["lastInactivityAlertTime"] = int(now_ms)
 			session_updated = True
 			alerts_sent += 1
@@ -404,7 +405,7 @@ def check_active_timesheet_reminders():
 									block_title, end_hhmm
 								)
 
-							dispatch_push_notification(user, title, msg, action_url="/omnitrack")
+							dispatch_push_notification(user, title, msg, action_url="/omnitrack", alert_type="block_overrun")
 							data["lastOverrunAlertTime"] = int(now_ms)
 							session_updated = True
 							alerts_sent += 1
