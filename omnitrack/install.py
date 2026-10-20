@@ -4,7 +4,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 MODULE_NAME = "OmniTrack"
-SIDEBAR_ICON = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg?v=shiva_eye_v1"
+SIDEBAR_ICON = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
 
 ROLES = [
 	{"role_name": "OmniTrack Admin", "desk_access": 1},
@@ -378,7 +378,7 @@ def _ensure_workspaces():
 			"name": "OmniTrack",
 			"label": "OmniTrack",
 			"title": "OmniTrack",
-			"icon": "shield-check",
+			"icon": "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg",
 			"indicator_color": "blue",
 			"number_cards": [
 				{"number_card_name": "Total Work Blocks", "label": "Total Work Blocks"},
@@ -393,11 +393,11 @@ def _ensure_workspaces():
 			"shortcuts": [
 				{"label": "PWA Workstation", "type": "URL", "url": "/omnitrack", "color": "Cyan"},
 				{"label": "Planned Work Blocks", "type": "DocType", "link_to": "Planned Work Block", "color": "Green"},
+				{"label": "Employee Timesheets", "type": "DocType", "link_to": "Timesheet", "color": "Blue"},
 				{"label": "Employee Checkins", "type": "DocType", "link_to": "Employee Checkin", "color": "Blue"},
 				{"label": "Attendance Records", "type": "DocType", "link_to": "Attendance", "color": "Purple"},
 				{"label": "Shift Templates", "type": "DocType", "link_to": "OmniTrack Shift Template", "color": "Yellow"},
 				{"label": "Shift Split Assignments", "type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "color": "Orange"},
-				{"label": "Attendance Synthesizer Logs", "type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "color": "Red"},
 				{"label": "OmniTrack Settings", "type": "DocType", "link_to": "OmniTrack Settings", "color": "Grey"}
 			],
 			"quick_lists": [
@@ -412,27 +412,19 @@ def _ensure_workspaces():
 					"label": "Workforce & Shifts",
 					"links": [
 						{"label": "Planned Work Blocks", "link_to": "Planned Work Block"},
+						{"label": "Employee Timesheets", "link_to": "Timesheet"},
 						{"label": "Employee Checkins", "link_to": "Employee Checkin"},
 						{"label": "Attendance Records", "link_to": "Attendance"},
 						{"label": "Shift Templates", "link_to": "OmniTrack Shift Template"},
-						{"label": "Shift Split Assignments", "link_to": "OmniTrack Shift Split Assignment"},
-						{"label": "Attendance Synthesizer Logs", "link_to": "OmniTrack Attendance Synthesizer Log"}
+						{"label": "Shift Split Assignments", "link_to": "OmniTrack Shift Split Assignment"}
 					]
 				},
 				{
-					"label": "Projects & Tasks",
+					"label": "Administration & Settings",
 					"links": [
-						{"label": "Projects", "link_to": "Project"},
-						{"label": "Tasks", "link_to": "Task"}
-					]
-				},
-				{
-					"label": "Sync & Integrations",
-					"links": [
-						{"label": "Task Sync Payloads", "link_to": "OmniTrack Task Sync"},
-						{"label": "Remote Connections", "link_to": "OmniTrack Remote Connection"},
-						{"label": "Client Workspaces", "link_to": "OmniTrack Workspace"},
-						{"label": "Push Subscriptions", "link_to": "OmniTrack Push Subscription"}
+						{"label": "OmniTrack Settings", "link_to": "OmniTrack Settings"},
+						{"label": "Project Policies", "link_to": "OmniTrack Project Policy"},
+						{"label": "Synthesizer Logs", "link_to": "OmniTrack Attendance Synthesizer Log"}
 					]
 				}
 			]
@@ -614,7 +606,8 @@ def _ensure_workspace_sidebar():
 			{"type": "Link", "label": "Dashboard", "link_type": "Workspace", "link_to": "OmniTrack", "icon": "layout-dashboard", "child": 1},
 			{"type": "Link", "label": "PWA Workstation", "link_type": "URL", "url": "/omnitrack", "icon": "smartphone", "child": 1},
 			{"type": "Section Break", "label": "Workforce & Shifts", "link_type": "DocType", "icon": "calendar", "indent": 1, "collapsible": 1},
-			{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1}
+			{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1},
+			{"type": "Link", "label": "Employee Timesheets", "link_type": "DocType", "link_to": "Timesheet", "icon": "clock", "child": 1}
 		]
 
 		if frappe.db.exists("DocType", "Employee Checkin"):
@@ -625,15 +618,10 @@ def _ensure_workspace_sidebar():
 		items.extend([
 			{"type": "Link", "label": "Shift Templates", "link_type": "DocType", "link_to": "OmniTrack Shift Template", "icon": "clock", "child": 1},
 			{"type": "Link", "label": "Shift Split Assignments", "link_type": "DocType", "link_to": "OmniTrack Shift Split Assignment", "icon": "users", "child": 1},
-			{"type": "Link", "label": "Attendance Synthesizer Logs", "link_type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "icon": "check-circle", "child": 1},
 			{"type": "Section Break", "label": "Administration & Settings", "link_type": "DocType", "icon": "settings", "indent": 1, "collapsible": 1},
 			{"type": "Link", "label": "OmniTrack Settings", "link_type": "DocType", "link_to": "OmniTrack Settings", "icon": "settings", "child": 1},
 			{"type": "Link", "label": "Project Policies", "link_type": "DocType", "link_to": "OmniTrack Project Policy", "icon": "shield", "child": 1},
-			{"type": "Section Break", "label": "Sync & Integrations", "link_type": "DocType", "icon": "repeat", "indent": 1, "collapsible": 1},
-			{"type": "Link", "label": "Task Sync Payloads", "link_type": "DocType", "link_to": "OmniTrack Task Sync", "icon": "repeat", "child": 1},
-			{"type": "Link", "label": "Remote Connections", "link_type": "DocType", "link_to": "OmniTrack Remote Connection", "icon": "link", "child": 1},
-			{"type": "Link", "label": "Client Workspaces", "link_type": "DocType", "link_to": "OmniTrack Workspace", "icon": "globe", "child": 1},
-			{"type": "Link", "label": "Push Subscriptions", "link_type": "DocType", "link_to": "OmniTrack Push Subscription", "icon": "bell", "child": 1}
+			{"type": "Link", "label": "Synthesizer Logs", "link_type": "DocType", "link_to": "OmniTrack Attendance Synthesizer Log", "icon": "activity", "child": 1},
 		])
 
 		for it in items:
