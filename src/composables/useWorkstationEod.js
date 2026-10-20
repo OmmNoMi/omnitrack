@@ -10,7 +10,7 @@ import { setScrollLock } from "../utils/scrollLock.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playOverrunChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -307,7 +307,9 @@ export function useWorkstationEod(w) {
     // this window is not in front, not only when its tab is hidden.
     const alertKeyFor = (data) => {
       const kind = data.alert_type || '';
-      if (!data.block_name || (kind !== 'upcoming_10m' && kind !== 'start_on_time')) return '';
+      if (!data.block_name || (kind !== 'upcoming_10m' && kind !== 'start_on_time')) {
+        return kind === 'inactivity' ? `omnitrack:inact:${localISO(new Date())}:${new Date().getHours()}:${data.user || ''}` : '';
+      }
       return reminderKey(localISO(new Date()), data.block_name, kind);
     };
     const handleIncomingBlockAlert = (data) => {
@@ -326,6 +328,13 @@ export function useWorkstationEod(w) {
       } else if (aType === 'start_on_time') {
         playStartOnTimeChime();
         showToast(data.title || 'Time to start your planned block', 'success');
+      } else if (aType === 'inactivity' || (data.title || '').includes('still working')) {
+        playInactivityChime();
+        showToast(data.title || 'Are you still working?', 'warning');
+        if (w.showInactivityModal) w.showInactivityModal.value = true;
+      } else if (aType === 'block_overrun' || (data.title || '').includes('Planned block ended') || (data.title || '').includes('Planned Block Ended')) {
+        playOverrunChime();
+        showToast(data.message || data.title || 'Planned block ended', 'warning');
       } else {
         playInactivityChime();
         showToast(data.title || 'OmniTrack Alert', 'info');
@@ -445,12 +454,8 @@ export function useWorkstationEod(w) {
         socket.on('omnitrack:active_session_cleared', () => {
           handleRemoteSessionCleared({ authoritative: true });
         });
-        socket.on('omnitrack:block_alert', (data) => {
-          handleIncomingBlockAlert(data);
-        });
-        socket.on('omnitrack:timesheet_reminder', (data) => {
-          handleIncomingBlockAlert(data);
-        });
+        socket.on('omnitrack:block_alert', (data) => handleIncomingBlockAlert(data));
+        socket.on('omnitrack:timesheet_reminder', (data) => handleIncomingBlockAlert(data));
       } catch (e) {
         console.debug('Socket.io connection bypassed, live poller active', e);
       }
@@ -461,12 +466,8 @@ export function useWorkstationEod(w) {
       frappe.realtime.on('omnitrack:active_session_cleared', () => {
         handleRemoteSessionCleared({ authoritative: true });
       });
-      frappe.realtime.on('omnitrack:block_alert', (data) => {
-        handleIncomingBlockAlert(data);
-      });
-      frappe.realtime.on('omnitrack:timesheet_reminder', (data) => {
-        handleIncomingBlockAlert(data);
-      });
+      frappe.realtime.on('omnitrack:block_alert', (data) => handleIncomingBlockAlert(data));
+      frappe.realtime.on('omnitrack:timesheet_reminder', (data) => handleIncomingBlockAlert(data));
     }
   });
   onUnmounted(() => {

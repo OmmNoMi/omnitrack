@@ -65,6 +65,11 @@ def get_context(context):
 	ctx.socketio_port = frappe.conf.get("socketio_port") or 9000
 	ctx.app_logo_url = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg?v=shiva_eye_v1"
 	ctx.manifest_url = "/assets/omnitrack/manifest.json"
+	try:
+		_settings = frappe.get_single("OmniTrack Settings")
+		ctx.vapid_public_key = getattr(_settings, "vapid_public_key", "") or ""
+	except Exception:
+		ctx.vapid_public_key = ""
 
 	if isinstance(context, dict):
 		context.update(ctx)

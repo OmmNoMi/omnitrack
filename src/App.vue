@@ -5,7 +5,7 @@
   <!-- FLOATING TOAST NOTIFICATION               -->
   <!-- ========================================== -->
   <transition enter-active-class="transform ease-out duration-200 transition" enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2" enter-to-class="translate-y-0 opacity-100 sm:translate-x-0" leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-    <div v-if="toast.show" role="status" aria-live="polite" class="fixed top-4 right-4 left-4 sm:left-auto z-50 flex items-center gap-3 pl-4 pr-1.5 py-1.5 min-h-12 rounded-xl shadow-lg border text-sm sm:max-w-sm bg-white border-gray-200 text-gray-900 dark:bg-[#1E1F22] dark:border-gray-700 dark:text-gray-100" @mouseenter="holdToast" @mouseleave="releaseToast" @focusin="holdToast" @focusout="releaseToast">
+    <div v-if="toast.show" role="status" aria-live="polite" class="fixed top-4 right-4 left-4 sm:left-auto z-[70] flex items-center gap-3 pl-4 pr-1.5 py-1.5 min-h-12 rounded-xl shadow-lg border text-sm sm:max-w-sm bg-white border-gray-200 text-gray-900 dark:bg-[#1E1F22] dark:border-gray-700 dark:text-gray-100" @mouseenter="holdToast" @mouseleave="releaseToast" @focusin="holdToast" @focusout="releaseToast">
       <FeatherIcon
         :name="toast.type === 'success' ? 'check-circle' : (toast.type === 'danger' ? 'alert-triangle' : (toast.type === 'warning' ? 'alert-circle' : 'info'))"
         class="w-5 h-5 shrink-0"
