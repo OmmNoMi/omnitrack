@@ -30,7 +30,7 @@
       <div v-if="loaded && detail.name" class="flex flex-wrap items-center gap-2 [&_input]:h-8 [&_input]:text-base">
         <div ref="state" tabindex="-1" class="outline-none">
           <Dropdown v-if="statusMenu.length" :options="statusMenu" placement="left">
-            <Button variant="subtle" size="md" icon-right="chevron-down" :class="chip(detail.state)" :label="'Status: ' + (detail.state || 'Open')" :tooltip="stateHint" :disabled="!!busy">{{ detail.state || 'Open' }}</Button>
+            <Button variant="subtle" size="md" icon-right="chevron-down" :class="chip(currentState)" :label="'Status: ' + currentState" :tooltip="stateHint" :disabled="!!busy">{{ currentState }}</Button>
           </Dropdown>
           <Badge v-else size="lg" variant="subtle" class="h-8" :class="chip(detail.state)" :title="stateHint || 'No next step open to you from here'">{{ detail.state || 'Open' }}</Badge>
         </div>
@@ -127,6 +127,9 @@ export default {
     },
     editable() {
       return !this.busy && (!this.loaded || this.detail.can_edit);
+    },
+    currentState() {
+      return (this.confirming && this.confirming.next_state) || this.detail.state || 'Open';
     },
     // Only what changed goes to the server
     changes() {

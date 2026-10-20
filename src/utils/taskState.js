@@ -39,7 +39,6 @@ export const isDangerMove = (move) =>
 
 export function moveIcon(action) {
   const a = String(action || '').toLowerCase();
-  if (/close|complete|approve|done/.test(a)) return 'check';
   if (/cancel|reject|drop/.test(a)) return 'x';
   if (/hold|pause/.test(a)) return 'pause';
   if (/reopen|undo|back/.test(a)) return 'rotate-ccw';

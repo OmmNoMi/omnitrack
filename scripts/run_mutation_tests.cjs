@@ -473,7 +473,7 @@ runMutationTest('Saving a task sends every field', taskFormFile,
 runMutationTest('A workflow move skips its confirm', taskFormFile,
   (code) => code.replace('onClick: () => this.ask(a),', 'onClick: () => { this.confirming = a; this.move(); },'), DP, 'ask first');
 runMutationTest('The task form hides where the task stands', taskFormFile,
-  (code) => code.replace("{{ detail.state || 'Open' }}", "{{ detail.subject }}"), DP, 'where the task stands');
+  (code) => code.replace("{{ currentState }}", "{{ detail.subject }}"), DP, 'where the task stands');
 runMutationTest('Escape closes the form from a move\'s confirm', taskFormFile,
   (code) => code.replace(':esc-back="!!confirming"', ''), DP, 'steps back');
 const DA = 'node scripts/check_doc_activity.mjs';
