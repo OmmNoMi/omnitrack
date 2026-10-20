@@ -470,12 +470,12 @@ runMutationTest('Every task row becomes a tab stop', drawerDir('BlockTasksSectio
 const taskFormFile = path.resolve(omnitrackDir,'src/components/dialogs/TaskFormDialog.vue');
 runMutationTest('Saving a task sends every field', taskFormFile,
   (code) => code.replace('...this.changes', '...this.form'), DP, 'only what changed');
-runMutationTest('A workflow move skips its confirm', taskFormFile,
-  (code) => code.replace('onClick: () => this.ask(a),', 'onClick: () => { this.confirming = a; this.move(); },'), DP, 'ask first');
+runMutationTest('A workflow move is not staged', taskFormFile,
+  (code) => code.replace('onClick: () => this.ask(a),', 'onClick: () => {},'), DP, 'stage and execute on save');
 runMutationTest('The task form hides where the task stands', taskFormFile,
-  (code) => code.replace("{{ detail.state || 'Open' }}", "{{ detail.subject }}"), DP, 'where the task stands');
-runMutationTest('Escape closes the form from a move\'s confirm', taskFormFile,
-  (code) => code.replace(':esc-back="!!confirming"', ''), DP, 'steps back');
+  (code) => code.replace("{{ currentState }}", "{{ detail.subject }}"), DP, 'where the task stands');
+runMutationTest('Staging status does not enable Save', taskFormFile,
+  (code) => code.replace('|| !!this.stagedAction', ''), DP, 'status changes stage state and enable Save without confirming box');
 const DA = 'node scripts/check_doc_activity.mjs';
 runMutationTest('The task panel loses its Activity', drawerDir('TaskDetailDrawer.vue'),
   (code) => code.replace('<DocActivity v-if="d" :doctype="doc.doctype" :name="doc.name" :is-dark-mode="isDarkMode" />', ''), DA, "task's or to-do's own Activity");
@@ -1670,8 +1670,8 @@ runMutationTest('The delete dialog is never mounted', SRC('src/App.vue'),
   (code) => code.replace('<DeleteEntryDialog />', ''), DR, 'App mounts DeleteEntryDialog');
 runMutationTest('A refused task save is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not save this task: ' + (e && e.message || e), 'danger');"), DR, 'save says why in the dialog');
-runMutationTest('A refused workflow move is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
-  (code) => code.replace("this.error = 'Not moved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not move this task: ' + (e && e.message || e), 'danger');"), DR, 'a workflow move says why in the dialog');
+runMutationTest('A refused task removal is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Not taken off. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not remove: ' + (e && e.message || e), 'danger');"), DR, 'remove');
 runMutationTest('A task that will not open closes the form', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Could not open this task. ' + this.extractErrorMessage(e, 'Try again.');", "this.error = 'Could not open this task.';\n        closeTaskForm();"), DR, 'not a toast and a closed form');
 runMutationTest('A refused block edit is a toast again', SRC('src/drawers/EditBlockDialog.vue'),

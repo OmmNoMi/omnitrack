@@ -176,9 +176,9 @@ if (!/openTaskDetail\(row, \{ block: this\.block, canRemove: this\.canAdd \}\)/.
 if (!/const openTaskDetails = \(task\) => \{\s*openTaskDetail\(task\);/.test(plannerSelect)) problems.push('useWorkstationPlannerSelect.js: openTaskDetails opens the task details panel');
 if (!/'update_block_task'/.test(taskForm) || !/'update_task'/.test(taskForm) || (taskForm.match(/\.\.\.this\.changes/g) || []).length !== 2) problems.push('TaskFormDialog.vue: saves only what changed (update_block_task / update_task)');
 if (!/'remove_block_task'/.test(taskForm)) problems.push('TaskFormDialog.vue: can take a task off its block (remove_block_task)');
-if ((taskForm.match(/>\{\{ detail\.state \|\| 'Open' \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (detail.state)');
-if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves ask first, then apply (execute_task_workflow_action)');
-if (!/:esc-back="!!confirming"/.test(taskForm) || !/this\.\$emit\('back'\)/.test(fdialog)) problems.push('TaskFormDialog.vue: Escape steps back out of a move\'s confirm before it closes the form');
+if ((taskForm.match(/>\{\{ currentState \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (currentState)');
+if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves stage and execute on save (execute_task_workflow_action)');
+if (!/currentState\(\)\s*\{[\s\S]*?this\.stagedAction/.test(taskForm) || !/canSave\(\)\s*\{[\s\S]*?!!this\.stagedAction/.test(taskForm) || /confirming/.test(taskForm)) problems.push('TaskFormDialog.vue: status changes stage state and enable Save without confirming box');
 for (const f of walkVue(path.join(root, 'src'))) {
   const rel = path.relative(root, f);
   if (rel.endsWith('TaskFormDialog.vue')) continue;

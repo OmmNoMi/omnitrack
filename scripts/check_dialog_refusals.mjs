@@ -72,12 +72,10 @@ need("src/App.vue", /<DeleteEntryDialog \/>/, "App mounts DeleteEntryDialog");
 // 3. The task form
 const TF = "src/components/dialogs/TaskFormDialog.vue";
 inPlace(TF, "async save()", /this\.error = 'Not saved\. ' \+ this\.extractErrorMessage\(e, /, "save");
-inPlace(TF, "async move()", /this\.error = 'Not moved\. ' \+ this\.extractErrorMessage\(e, /, "a workflow move");
 inPlace(TF, "async remove()", /this\.error = 'Not taken off\. ' \+ this\.extractErrorMessage\(e, /, "remove");
 const load = catchOf(TF, "async load()");
 if (/closeTaskForm\(\)|showToast\(/.test(load)) problems.push(`${TF}: a task that will not open says so in the form, with Try again, not a toast and a closed form`);
-need(TF, /<p v-if="error" role="alert"[^>]*>\{\{ error \}\}<\/p>/, "a refused move shows in its confirm box");
-need(TF, /<div v-if="error && !confirming"[\s\S]*?<p role="alert"[^>]*>\{\{ error \}\}<\/p>\s*<Button v-if="!loaded"[^>]*label="Try again" @click="load"/, "other refusals show in the form, and a failed open offers Try again");
+need(TF, /<div v-if="error"[\s\S]*?<p role="alert"[^>]*>\{\{ error \}\}<\/p>\s*<Button v-if="!loaded"[^>]*label="Try again" @click="load"/, "refusals show in the form, and a failed open offers Try again");
 
 // 4. Edit block, Add tasks, Reschedule, Plan time
 inPlace("src/drawers/EditBlockDialog.vue", "async save()", /this\.error = this\.extractErrorMessage\(e, /, "Edit block");

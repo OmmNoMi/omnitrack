@@ -7,8 +7,6 @@
     :title="heading"
     :subtitle="subtitle"
     size="md"
-    :esc-back="!!confirming"
-    @back="back"
     @update:model-value="!$event && closeTaskForm()"
   >
     <form class="space-y-4" @submit.prevent="save">
@@ -30,9 +28,9 @@
       <div v-if="loaded && detail.name" class="flex flex-wrap items-center gap-2 [&_input]:h-8 [&_input]:text-base">
         <div ref="state" tabindex="-1" class="outline-none">
           <Dropdown v-if="statusMenu.length" :options="statusMenu" placement="left">
-            <Button variant="subtle" size="md" icon-right="chevron-down" :class="chip(detail.state)" :label="'Status: ' + (detail.state || 'Open')" :tooltip="stateHint" :disabled="!!busy">{{ detail.state || 'Open' }}</Button>
+            <Button variant="subtle" size="md" icon-right="chevron-down" :class="chip(currentState)" :label="'Status: ' + currentState" :tooltip="stateHint" :disabled="!editable">{{ currentState }}</Button>
           </Dropdown>
-          <Badge v-else size="lg" variant="subtle" class="h-8" :class="chip(detail.state)" :title="stateHint || 'No next step open to you from here'">{{ detail.state || 'Open' }}</Badge>
+          <Badge v-else size="lg" variant="subtle" class="h-8" :class="chip(currentState)" :title="stateHint || 'No next step open to you from here'">{{ currentState }}</Badge>
         </div>
         <div v-input-attrs="{ 'aria-label': 'Due', 'aria-haspopup': 'dialog' }" class="w-48">
           <DatePicker v-model="form.due_date" variant="subtle" format="ddd, D MMM YYYY" placeholder="Due day" :disabled="!editable">
@@ -44,29 +42,9 @@
         </Dropdown>
       </div>
 
-      <div v-if="confirming" ref="confirm" class="rounded-lg border border-outline-gray-2 p-4 space-y-3">
-        <p class="text-base" :class="strongText">
-          {{ confirming.action }}? It moves to <span class="font-medium">{{ confirming.next_state }}</span>.
-        </p>
-        <Textarea v-model="comment" variant="outline" size="md" :rows="2" label="Comment (optional)" placeholder="Why, for whoever reads it next" class="[&_textarea]:resize-none" :disabled="busy === 'move'" />
-        <p v-if="error" role="alert" class="text-sm text-ink-red-4">{{ error }}</p>
-        <div class="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" label="Back" :disabled="busy === 'move'" @click="back">Back</Button>
-          <Button
-            variant="solid"
-            :theme="isDangerMove(confirming) ? 'red' : 'gray'"
-            :label="confirming.action"
-            :loading="busy === 'move'"
-            :disabled="!!busy"
-            data-confirm-working
-            @click="move"
-          >{{ confirming.action }}</Button>
-        </div>
-      </div>
-
       <p v-if="loaded && !detail.can_edit" class="text-sm" :class="mutedText">Only its owner can edit this task.</p>
       <!-- Why it did not work, inside the form and kept open, never a toast behind it -->
-      <div v-if="error && !confirming" class="flex flex-wrap items-center gap-2">
+      <div v-if="error" class="flex flex-wrap items-center gap-2">
         <p role="alert" class="text-sm text-ink-red-4">{{ error }}</p>
         <Button v-if="!loaded" variant="ghost" label="Try again" @click="load">Try again</Button>
       </div>
@@ -108,7 +86,7 @@ export default {
     return { ...ctx, taskForm, closeTaskForm, isDangerMove, moveIcon };
   },
   data() {
-    return { loaded: false, busy: '', detail: emptyDetail(), form: blank(), saved: blank(), confirming: null, comment: '', error: '' };
+    return { loaded: false, busy: '', detail: emptyDetail(), form: blank(), saved: blank(), stagedAction: null, error: '' };
   },
   computed: {
     task() { return taskForm.task; },
@@ -128,6 +106,9 @@ export default {
     editable() {
       return !this.busy && (!this.loaded || this.detail.can_edit);
     },
+    currentState() {
+      return (this.stagedAction && this.stagedAction.next_state) || this.detail.state || 'Open';
+    },
     // Only what changed goes to the server
     changes() {
       const out = {};
@@ -138,13 +119,13 @@ export default {
       return out;
     },
     canSave() {
-      return this.loaded && this.detail.can_edit && !this.busy && !!String(this.form.subject || '').trim() && Object.keys(this.changes).length > 0;
+      return this.loaded && this.detail.can_edit && !this.busy && !!String(this.form.subject || '').trim() && (Object.keys(this.changes).length > 0 || !!this.stagedAction);
     },
-    // The moves open to you from here; each asks first (ask), then applies (move)
+    // The moves open to you from here; each stages the action to be saved with the form
     statusMenu() {
       return this.detail.actions.map((a) => ({
         label: a.action,
-        icon: moveIcon(a.action),
+        icon: this.stagedAction && this.stagedAction.action === a.action ? 'check' : moveIcon(a.action),
         theme: isDangerMove(a) ? 'red' : undefined,
         onClick: () => this.ask(a),
       }));
@@ -212,7 +193,7 @@ export default {
       const t = this.task;
       if (!t) return;
       // The name shows at once; the rest arrives with the task
-      Object.assign(this, { loaded: false, busy: '', confirming: null, comment: '', error: '', detail: emptyDetail() });
+      Object.assign(this, { loaded: false, busy: '', stagedAction: null, error: '', detail: emptyDetail() });
       this.form = { ...blank(), subject: t.subject || '' };
       this.saved = { ...this.form };
       try {
@@ -220,7 +201,7 @@ export default {
         if (!taskForm.open || this.task !== t) return;
         this.fill(d, false);
         this.loaded = true;
-        // Opened from a move picked elsewhere: straight to that move's confirm step
+        // Opened from a move picked elsewhere: stage that move immediately
         const wanted = taskForm.ask;
         taskForm.ask = null;
         const a = wanted && this.detail.actions.find((x) => x.action === wanted);
@@ -254,12 +235,33 @@ export default {
       this.busy = 'save';
       this.error = '';
       try {
-        const res = this.block
-          ? await this.postJSON('update_block_task', { block_name: this.block.name, task_ref: this.task.ref, ...this.changes })
-          : await this.postJSON('update_task', { doctype: this.detail.doctype, name: this.detail.name, ...this.changes });
-        this.apply(res);
+        const hasFieldChanges = Object.keys(this.changes).length > 0;
+        let res = null;
+        if (hasFieldChanges) {
+          res = this.block
+            ? await this.postJSON('update_block_task', { block_name: this.block.name, task_ref: this.task.ref, ...this.changes })
+            : await this.postJSON('update_task', { doctype: this.detail.doctype, name: this.detail.name, ...this.changes });
+          this.apply(res);
+        }
+
+        const action = this.stagedAction;
+        if (action && this.detail.name) {
+          const wfRes = await this.postJSON('execute_task_workflow_action', {
+            doctype: this.detail.doctype,
+            docname: this.detail.name,
+            action: action.action,
+          });
+          const nextState = (wfRes && wfRes.new_state) || action.next_state || '';
+          this.detail.state = nextState;
+          this.apply(res);
+        }
+
         this.refreshAll();
-        this.showToast('Task saved', 'success');
+        const actionLabel = action ? action.action.toLowerCase() : '';
+        const toastMsg = actionLabel.includes('complete') || actionLabel.includes('close')
+          ? 'Task completed'
+          : (action ? `Task moved to ${action.next_state}` : 'Task saved');
+        this.showToast(toastMsg, 'success');
         closeTaskForm();
       } catch (e) {
         this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');
@@ -267,55 +269,15 @@ export default {
         this.busy = '';
       }
     },
-    // The status button, or its wrapper when no move is open
     focusState() {
       const box = this.$refs.state;
       const el = box && (box.querySelector('button:not([disabled])') || box);
       if (el) el.focus();
     },
     ask(a) {
-      this.confirming = a;
-      this.comment = '';
+      if (!this.editable) return;
+      this.stagedAction = (this.stagedAction && this.stagedAction.action === a.action) ? null : a;
       this.error = '';
-      const toComment = () => {
-        const el = this.confirming === a && this.$refs.confirm && this.$refs.confirm.querySelector('textarea');
-        if (el) el.focus();
-      };
-      setTimeout(toComment);
-      // The menu hands focus back to its button once it has closed, which is after this tick
-      const box = this.$refs.state;
-      if (!box) return;
-      const onBack = () => setTimeout(toComment);
-      box.addEventListener('focusin', onBack, { once: true });
-      setTimeout(() => box.removeEventListener('focusin', onBack), 600);
-    },
-    back() {
-      if (!this.confirming || this.busy === 'move') return;
-      this.confirming = null;
-      this.error = '';
-      this.$nextTick(() => this.focusState());
-    },
-    async move() {
-      const a = this.confirming;
-      if (!a || this.busy) return;
-      this.busy = 'move';
-      this.error = '';
-      try {
-        const res = await this.postJSON('execute_task_workflow_action', {
-          doctype: this.detail.doctype, docname: this.detail.name, action: a.action, comment: this.comment.trim(),
-        });
-        const d = await this.fetchDetail();
-        this.fill(d, true);
-        this.apply(null);
-        this.confirming = null;
-        this.refreshAll();
-        this.showToast('Now ' + ((res && res.new_state) || d.state || a.next_state), 'success');
-        this.$nextTick(() => this.focusState());
-      } catch (e) {
-        this.error = 'Not moved. ' + this.extractErrorMessage(e, 'Try again.');
-      } finally {
-        this.busy = '';
-      }
     },
     discuss() {
       const t = this.linked;
