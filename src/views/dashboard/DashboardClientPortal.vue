@@ -11,7 +11,7 @@
               Active Operations
             </span>
           </div>
-          <h2 class="text-xl sm:text-2xl font-black mt-2 tracking-tight">Executive Project Pulse</h2>
+          <h2 class="text-xl sm:text-2xl sm:font-black font-black mt-2 tracking-tight">Executive Project Pulse</h2>
           <p class="text-xs text-gray-700 dark:text-gray-300 mt-1">
             Delivery status and work sessions on the projects shared with you.
           </p>

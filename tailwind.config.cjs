@@ -21,6 +21,11 @@ module.exports = {
 	darkMode: "class",
 	theme: {
 		extend: {
+			// The frappe-ui preset's `screens` stop at xl, so `2xl:` classes compiled to nothing and the
+			// planner rails never widened. Guarded by check_palette_classes.
+			screens: {
+				'2xl': '1536px',
+			},
 			fontFamily: {
 				sans: ['"Google Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
 				mono: ['"JetBrains Mono"', 'monospace'],

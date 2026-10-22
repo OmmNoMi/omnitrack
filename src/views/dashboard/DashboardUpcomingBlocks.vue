@@ -14,7 +14,7 @@
                 {{ getBlockTimingInfo(b).label }}
               </Badge>
             </div>
-            <h3 class="text-base sm:text-lg font-bold leading-snug truncate">
+            <h3 class="text-base sm:text-lg sm:font-bold font-bold leading-snug truncate">
               {{ blockTitle(b, 'Focus block') }}
             </h3>
             <p class="text-xs text-gray-700 dark:text-gray-300 truncate">

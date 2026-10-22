@@ -12,7 +12,7 @@
         @click="$emit('go-dashboard')"
       />
       <div class="flex items-center gap-2 min-w-0">
-        <span class="font-semibold text-lg sm:text-xl tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+        <span class="font-semibold text-lg sm:text-xl sm:font-semibold tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
           OmniTrack
         </span>
         <Badge v-if="isClient" theme="blue" variant="subtle">Client Portal</Badge>
