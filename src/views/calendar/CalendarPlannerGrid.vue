@@ -23,7 +23,7 @@
 
           <div class="w-[1px] h-4 mx-1" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" aria-hidden="true"></div>
 
-          <h3 class="text-xs sm:text-sm font-extrabold tracking-tight text-center px-2 tabular-nums whitespace-nowrap flex-1 sm:flex-none sm:w-[168px]" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
+          <h3 class="text-xs sm:text-sm sm:font-extrabold font-extrabold tracking-tight text-center px-2 tabular-nums whitespace-nowrap flex-1 sm:flex-none sm:w-[168px]" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
             {{ plannerRangeLabel }}
           </h3>
 

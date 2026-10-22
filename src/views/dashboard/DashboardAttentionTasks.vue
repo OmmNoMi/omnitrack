@@ -91,7 +91,7 @@
             </div>
 
             <!-- Subject (Column 0 in Roving Tabindex) -->
-            <h4 class="text-sm sm:text-base font-semibold text-gray-900 dark:text-white leading-snug flex items-center gap-1.5 group">
+            <h4 class="text-sm sm:text-base sm:font-semibold font-semibold text-gray-900 dark:text-white leading-snug flex items-center gap-1.5 group">
               <button
                 type="button"
                 @click.stop="openTaskDetails(t)"

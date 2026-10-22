@@ -207,6 +207,21 @@ runMutationTest(
 );
 
 runMutationTest(
+  'A stat value loses its 2xl weight and drops to regular',
+  path.resolve(omnitrackDir, 'src/views/calendar/CalendarWeekStats.vue'),
+  (code) => code.replace(' 2xl:font-extrabold', ''),
+  'node scripts/check_palette_classes.cjs',
+  'resets font-extrabold'
+);
+runMutationTest(
+  'A stacked breakpoint the theme lacks (dark:3xl:)',
+  path.resolve(omnitrackDir, 'src/views/calendar/CalendarWeekStats.vue'),
+  (code) => code.replace('!p-2.5 2xl:!p-3', '!p-2.5 2xl:!p-3 dark:3xl:!p-4'),
+  'node scripts/check_palette_classes.cjs',
+  'no "3xl" screen in the theme'
+);
+
+runMutationTest(
   'An emoji comes back into a user-facing label',
   path.resolve(omnitrackDir,'src/components/dialogs/WrapAndStartNextModal.vue'),
   (code) => code.replace('label="Keep working"', 'label="\u{1F680} Keep working"'),

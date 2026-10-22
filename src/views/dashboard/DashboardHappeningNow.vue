@@ -12,7 +12,7 @@
           <span :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">· {{ formatBlockRange(block) }}<template v-if="project"> · {{ project }}</template></span>
         </p>
         <!-- The title is the way into the block: details, tasks, Reschedule and More live in the drawer -->
-        <h3 class="mt-1 text-base sm:text-lg font-semibold leading-snug">
+        <h3 class="mt-1 text-base sm:text-lg sm:font-semibold font-semibold leading-snug">
           <button type="button" class="text-left break-words [overflow-wrap:anywhere] rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600" :aria-label="'Open details of ' + title" @click.stop="openBlockDrawer(block)">{{ title }}</button>
         </h3>
       </div>
