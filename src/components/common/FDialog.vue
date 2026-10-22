@@ -30,7 +30,9 @@
 <script>
 import { Dialog } from 'frappe-ui';
 import { DialogTitle, DialogDescription } from 'reka-ui';
+import { getCurrentInstance } from 'vue';
 import { popoverOpen, markDialogEscape, focusBack, opensOnFocus } from '../../utils/popover.js';
+import { useOverlayHistory } from '../../composables/useOverlayHistory.js';
 
 // Focus trap, Esc, scroll lock and return-focus come from frappe-ui's Dialog
 // (reka-ui). What stays ours is the *safe* initial focus: never the close
@@ -62,6 +64,11 @@ export default {
     ariaLabel: { type: String, default: null }
   },
   emits: ['update:modelValue', 'close', 'back'],
+  setup(props) {
+    // Back closes the dialog the way its X does, so a non-dismissible one stays open
+    const vm = getCurrentInstance();
+    useOverlayHistory('dialog', () => props.modelValue, () => { vm.proxy.open = false; });
+  },
   computed: {
     dialogSize() {
       return { sm: 'md', md: 'lg', lg: '2xl', xl: '4xl' }[this.size] || 'lg';

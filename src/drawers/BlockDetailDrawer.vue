@@ -134,6 +134,7 @@ import RescheduleBlockDialog from './RescheduleBlockDialog.vue';
 import EditBlockDialog from './EditBlockDialog.vue';
 import DetailKind from '../components/common/DetailKind.vue';
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { useOverlayHistory } from '../composables/useOverlayHistory.js';
 import { toneChipClass } from '../utils/taskState.js';
 import { whenLine } from '../utils/clockTime.js';
 import { hrs } from '../utils/taskMeta.js';
@@ -159,7 +160,8 @@ export default {
     canLogTimesheet: { type: Function, default: () => true },
     canReview: { type: Boolean, default: false }
   },
-  setup() {
+  setup(props, { emit }) {
+    useOverlayHistory('block-drawer', () => props.show && !!props.block && !props.inline, () => emit('close'));
     return useWorkstationContext(['isPastBlock', 'isManager', 'currentUser', 'todayDate']);
   },
   data() {

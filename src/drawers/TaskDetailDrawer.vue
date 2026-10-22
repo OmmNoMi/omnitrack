@@ -88,6 +88,7 @@ import { taskDetail, closeTaskDetail, openTaskForm, taskDocRef } from '../compos
 import { stateChipClass, stateTone, isDangerMove, moveIcon } from '../utils/taskState.js';
 import { hrs } from '../utils/taskMeta.js';
 import { setScrollLock } from '../utils/scrollLock.js';
+import { useOverlayHistory } from '../composables/useOverlayHistory.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
@@ -98,6 +99,7 @@ export default {
   components: { DetailKind, DocActivity },
   setup() {
     const ctx = useWorkstationContext(['postJSON', 'getTaskDeskUrl', 'openTaskRavenDrawer', 'isDarkMode']);
+    useOverlayHistory('task-detail', () => taskDetail.open, closeTaskDetail);
     return { ...ctx, taskDetail, closeTaskDetail };
   },
   data() {

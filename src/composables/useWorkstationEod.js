@@ -4,6 +4,7 @@ import { dueReminders, reminderKey } from "../utils/blockReminders.js";
 import { blockTitle } from "../utils/blockTitle.js";
 import { clock, toMin, localISO } from "../utils/clockTime.js";
 import { setScrollLock } from "../utils/scrollLock.js";
+import { dropUrlQuery } from "../utils/backNavigation.js";
 
 /**
  * End-of-day wrap-up and lifecycle effects.
@@ -269,17 +270,17 @@ export function useWorkstationEod(w) {
       const urlParams = new URLSearchParams(window.location.search);
       const blockParam = urlParams.get('block');
       if (urlParams.get('action') === 'still_working') {
-        window.history.replaceState({}, document.title, window.location.pathname);
+        dropUrlQuery();
         setTimeout(() => {
           confirmStillWorking();
         }, 300);
       } else if (urlParams.get('action') === 'stop') {
-        window.history.replaceState({}, document.title, window.location.pathname);
+        dropUrlQuery();
         setTimeout(() => {
           if (isTracking.value) toggleTrack();
         }, 300);
       } else if (urlParams.get('action') === 'start_block') {
-        window.history.replaceState({}, document.title, window.location.pathname);
+        dropUrlQuery();
         if (blockParam) {
           setTimeout(async () => {
             try {
@@ -294,7 +295,7 @@ export function useWorkstationEod(w) {
           }, 400);
         }
       } else if (urlParams.get('action') === 'view_block') {
-        window.history.replaceState({}, document.title, window.location.pathname);
+        dropUrlQuery();
         setTimeout(() => {
           fetchWorkstationData(selectedEmployee.value);
           playUpcoming10mChime();

@@ -197,8 +197,13 @@
 </template>
 
 <script>
+import { useOverlayHistory } from '../composables/useOverlayHistory.js';
+
 export default {
   name: 'RavenCollaborationDrawer',
+  setup(props, { emit }) {
+    useOverlayHistory('raven-drawer', () => props.show && !!props.task, () => emit('close'));
+  },
   props: {
     show: { type: Boolean, default: false },
     task: { type: Object, default: () => null },
