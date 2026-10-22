@@ -717,7 +717,7 @@ four-layer "for whom / what / when / did" framing is codified there.
 
 ### 4. Issue #19: UX Enhancements & Modern SPA Cleanliness
 - **Still open 2026-10-13:** the date presets, the icon-only inactive pills, and the task drawer duplicates check. Instant reactive booking is done.
-- **Also open on GitHub:** #15 (Back does not close an open drawer or dialog first). Closed 2026-10-13: #1, #3, #4, #14, #17, #20. Closed (PR): #13 (planner rails stay compact 240px/220px at xl for 13–15" week view room, expand to 280px/260px at 2xl, hour label collision resolved).
+- **Also open on GitHub:** #15 (Back does not close an open drawer or dialog first). Closed 2026-10-13: #1, #3, #4, #14, #17, #20. Fixed in PR #22, closes on merge: #13 (planner rails stay compact 240px/220px through xl so the 13–15" week view has room, and widen to 280px/260px at 2xl; the frappe-ui preset has no 2xl screen, so `tailwind.config.cjs` adds one and `check_palette_classes` now fails on any breakpoint the theme lacks; the 12a hour label is no longer cut off at the top of the grid).
 - **Date Presets:** Add quick date pills (`Today`, `Tomorrow`, `+2d`) alongside existing duration presets (`30m`, `1h`, `1.5h`, `2h`, `3h`, `4h`) in the Plan Focus Block modal.
 - **Icon-Only Inactive Filter Pills:** Assigned work filter pills (`All`, `Underplanned`, `Overdue`, `Star`) display compact icons when inactive, and expand with text only when active.
 - **De-duplicate Task Drawer Actions:** Clean up duplicate action buttons and duplicate views in the task drawer.

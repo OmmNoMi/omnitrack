@@ -1434,14 +1434,22 @@ assert.ok(
 console.log('✓ Test 41: 4 Days planner layout (Yesterday context + Today on 2nd day) and drag across days verified.');
 
 // Test 42: Planner large screen 3-column layout (Left Assigned Work, Center Calendar, Right Stats Rail)
-// On 13–15" laptop viewports (xl), rails stay compact (240px/220px) to prevent week view grid cramping;
-// rails expand to 280px/260px on wide desktop displays (2xl:grid-cols-[280px_1fr_260px]).
+// On 13–15" laptops (lg/xl) the rails stay compact (240px/220px) so the week grid has room; they widen
+// to 280px/260px only at 2xl. A bare `xl:` match must fail: `2xl:…` contains `xl:…` as a substring.
 assert.ok(
-  (content.includes("2xl:grid-cols-[280px_1fr_260px]") || content.includes("xl:grid-cols-[280px_1fr_260px]")) &&
+  /(?<![\w-])2xl:grid-cols-\[280px_1fr_260px\]/.test(content) &&
+  !/(?<![\w-])xl:grid-cols-\[280px_1fr_260px\]/.test(content) &&
   content.includes("lg:grid-cols-[240px_1fr_220px]") &&
   content.includes("order-3 lg:col-span-1 xl:col-span-1 flex flex-col space-y-2.5 w-full") &&
   content.includes("items-stretch lg:h-full lg:min-h-0 flex-1"),
-  'FAIL: omnitrack must layout Planner in 3 columns on big screens with right stats rail'
+  'FAIL: Planner rails must stay 240px/220px through xl and widen to 280px/260px only at 2xl'
+);
+// The class must also reach the built CSS: frappe-ui's preset has no 2xl screen of its own, and a
+// variant Tailwind does not know compiles to nothing while the source check above still passes.
+const plannerCss = fs.readFileSync(path.resolve(__dirname, '..', 'omnitrack', 'public', 'dist', 'omnitrack.bundle.css'), 'utf8');
+assert.ok(
+  /@media ?\(min-width: ?1536px\)\{[^@]*\.\\32xl\\:grid-cols-\\\[280px_1fr_260px\\\]/.test(plannerCss),
+  'FAIL: omnitrack.bundle.css has no 2xl rule for the planner rails; add the 2xl screen in tailwind.config.cjs and rebuild'
 );
 
 console.log('✓ Test 42: Planner large screen 3-column layout & right stats rail verified.');

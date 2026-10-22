@@ -127,7 +127,8 @@
           <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', minmax(0, 1fr))' }">
             <!-- hour gutter -->
             <div class="relative">
-              <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-2 text-[10px] tabular-nums text-right -translate-y-1/2 select-none" :class="isDarkMode ? 'text-gray-400' : 'text-gray-700'" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
+              <!-- each label centres on its hour line, except the first: centred, its top half sat above the scroll box and was cut off -->
+              <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-2 text-[10px] tabular-nums text-right select-none" :class="[isDarkMode ? 'text-gray-400' : 'text-gray-700', i === 0 ? 'translate-y-0' : '-translate-y-1/2']" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
             </div>
             <!-- day columns -->
             <div v-for="d in plannerDays" :key="d" data-day-col class="relative border-l" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">

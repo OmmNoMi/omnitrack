@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Static check: every colour utility in src/ names a colour + shade that exists in the
- * resolved Tailwind theme. The frappe-ui preset replaces Tailwind's palette, so classes
+ * resolved Tailwind theme (and every radius and breakpoint variant, below). The frappe-ui preset replaces Tailwind's palette, so classes
  * like `bg-indigo-50` or `bg-blue-950` compile to NOTHING and the element silently
  * renders unstyled (a "chip" with no background, a badge with default text colour).
  * Fix by using a palette colour (blue, purple, violet…) or extend `colors` in tailwind.config.cjs.
@@ -52,8 +52,22 @@ for (const file of walk(path.join(root, 'src'))) {
   });
 }
 
+// Breakpoints too: the preset's screens stop at xl, so every `2xl:` class compiled to nothing and
+// the planner rails never widened past 240px/220px. Looks like a screen variant (xs, sm, md, lg,
+// xl, 2xl…, with an optional max-) directly followed by a utility, so `{ lg: '2xl' }` is skipped.
+const screens = theme.screens;
+const screenRe = /(?<![\w:-])(?:max-)?(xs|sm|md|lg|\d?xl):(?=[!\[a-z-])/g;
+for (const file of walk(path.join(root, 'src'))) {
+  fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+    for (const m of line.matchAll(screenRe)) {
+      seen++;
+      if (screens[m[1]] === undefined) problems.push(`${path.relative(root, file)}:${i + 1} ${m[0]} (no "${m[1]}" screen in the theme)`);
+    }
+  });
+}
+
 if (problems.length) {
-  console.error('FAIL: colour or radius classes that do not exist in the frappe-ui/Tailwind theme (they compile to nothing):\n  ' + problems.join('\n  '));
+  console.error('FAIL: colour, radius or breakpoint classes that do not exist in the frappe-ui/Tailwind theme (they compile to nothing):\n  ' + problems.join('\n  '));
   process.exit(1);
 }
-console.log(`SUCCESS: all ${seen} colour and radius classes resolve to the theme.`);
+console.log(`SUCCESS: all ${seen} colour, radius and breakpoint classes resolve to the theme.`);

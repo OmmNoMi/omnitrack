@@ -192,6 +192,21 @@ runMutationTest(
 );
 
 runMutationTest(
+  'Tailwind config loses the 2xl screen',
+  tailwindConfigPath,
+  (code) => code.replace("'2xl': '1536px',", ''),
+  'node scripts/check_palette_classes.cjs',
+  'no "2xl" screen in the theme'
+);
+runMutationTest(
+  'Planner rails widen at xl again instead of 2xl',
+  path.resolve(omnitrackDir, 'src/views/CalendarView.vue'),
+  (code) => code.replace('2xl:grid-cols-[280px_1fr_260px]', 'xl:grid-cols-[280px_1fr_260px]'),
+  'node scripts/test_workstation_interactions.cjs',
+  'widen to 280px/260px only at 2xl'
+);
+
+runMutationTest(
   'An emoji comes back into a user-facing label',
   path.resolve(omnitrackDir,'src/components/dialogs/WrapAndStartNextModal.vue'),
   (code) => code.replace('label="Keep working"', 'label="\u{1F680} Keep working"'),
