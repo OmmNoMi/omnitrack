@@ -23,7 +23,7 @@
 
           <div class="w-[1px] h-4 mx-1" :class="isDarkMode ? 'bg-gray-700' : 'bg-gray-200'" aria-hidden="true"></div>
 
-          <h3 class="text-xs sm:text-sm font-extrabold tracking-tight text-center px-2 tabular-nums whitespace-nowrap flex-1 sm:flex-none sm:w-[168px]" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
+          <h3 class="text-xs sm:text-sm sm:font-extrabold font-extrabold tracking-tight text-center px-2 tabular-nums whitespace-nowrap flex-1 sm:flex-none sm:w-[168px]" :class="isDarkMode ? 'text-white' : 'text-gray-900'" aria-live="polite">
             {{ plannerRangeLabel }}
           </h3>
 
@@ -127,7 +127,8 @@
           <div class="absolute inset-0 grid" :style="{ gridTemplateColumns: '48px repeat(' + plannerDays.length + ', minmax(0, 1fr))' }">
             <!-- hour gutter -->
             <div class="relative">
-              <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-1 text-[10px] text-right -translate-y-1/2" :class="isDarkMode ? 'text-gray-400' : 'text-gray-700'" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
+              <!-- each label centres on its hour line, except the first: centred, its top half sat above the scroll box and was cut off -->
+              <div v-for="(h, i) in plannerHours" :key="h" class="absolute left-0 right-2 text-[10px] tabular-nums text-right select-none" :class="[isDarkMode ? 'text-gray-400' : 'text-gray-700', i === 0 ? 'translate-y-0' : '-translate-y-1/2']" :style="{ top: (i * 44) + 'px' }">{{ hourLabel(h) }}</div>
             </div>
             <!-- day columns -->
             <div v-for="d in plannerDays" :key="d" data-day-col class="relative border-l" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">

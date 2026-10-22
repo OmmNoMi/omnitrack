@@ -75,10 +75,15 @@
 
 <script>
 import { SESSION_BACKDROP, SESSION_PANEL } from "../../utils/sessionFrame.js";
+import { useOverlayHistory } from "../../composables/useOverlayHistory.js";
 
 export default {
   name: "SessionOverlay",
-  setup() { return { SESSION_BACKDROP, SESSION_PANEL }; },
+  setup(props, { emit }) {
+    // The raised popup only: inline on the dashboard it is part of the page
+    useOverlayHistory("session-popup", () => props.isTracking && props.isSessionElevated, () => emit("update:isSessionElevated", false));
+    return { SESSION_BACKDROP, SESSION_PANEL };
+  },
   props: {
     isTracking: { type: Boolean, default: false },
     activeTab: { type: String, default: "dashboard" },

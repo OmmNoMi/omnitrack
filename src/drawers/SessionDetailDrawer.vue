@@ -154,6 +154,7 @@
 
 <script>
 import { useWorkstationContext } from '../composables/useWorkstationContext.js';
+import { useOverlayHistory } from '../composables/useOverlayHistory.js';
 import { toneChipClass, stateChipClass } from '../utils/taskState.js';
 import { whenLine, clock, toMin } from '../utils/clockTime.js';
 import { hrs } from '../utils/taskMeta.js';
@@ -179,7 +180,8 @@ export default {
     canReview: { type: Boolean, default: false },
   },
   emits: ['close', 'open-block', 'edit-session', 'delete-session', 'approve-block', 'flag-block'],
-  setup() {
+  setup(props, { emit }) {
+    useOverlayHistory('session-drawer', () => props.show && !!props.entry, () => emit('close'));
     return useWorkstationContext(['postJSON', 'workBlocks', 'isManager', 'currentUser']);
   },
   data() {

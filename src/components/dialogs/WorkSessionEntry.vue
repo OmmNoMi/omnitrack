@@ -63,6 +63,7 @@ import { useWorkstationContext } from "../../composables/useWorkstationContext.j
 import { popoverOpen, menuTrigger } from "../../utils/popover.js";
 import { setScrollLock } from "../../utils/scrollLock.js";
 import { SESSION_BACKDROP, SESSION_PANEL } from "../../utils/sessionFrame.js";
+import { useOverlayHistory } from "../../composables/useOverlayHistory.js";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -79,7 +80,8 @@ export default {
     dayOffsets: { type: Array, default: () => [0, -1] },
   },
   emits: ["update:modelValue", "save"],
-  setup() {
+  setup(props, { emit }) {
+    useOverlayHistory("session-entry", () => props.modelValue, () => emit("update:modelValue", false));
     const ws = useWorkstationContext(["editSessionTargetBlock", "editSessionError", "logWindowRefusal", "projects", "natureOptions", "minLogLineChars", "modKey"]);
     return { ...ws, block: ws.editSessionTargetBlock, SESSION_BACKDROP, SESSION_PANEL };
   },

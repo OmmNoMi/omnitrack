@@ -30,8 +30,9 @@
 <script>
 import { Dialog } from 'frappe-ui';
 import { DialogTitle, DialogDescription } from 'reka-ui';
+import { getCurrentInstance } from 'vue';
 import { popoverOpen, markDialogEscape, focusBack, opensOnFocus } from '../../utils/popover.js';
-import { pushOverlay, removeOverlay } from '../../utils/overlayHistory.js';
+import { useOverlayHistory } from '../../composables/useOverlayHistory.js';
 
 // Focus trap, Esc, scroll lock and return-focus come from frappe-ui's Dialog
 // (reka-ui). What stays ours is the *safe* initial focus: never the close
@@ -63,6 +64,11 @@ export default {
     ariaLabel: { type: String, default: null }
   },
   emits: ['update:modelValue', 'close', 'back'],
+  setup(props) {
+    // Back closes the dialog the way its X does, so a non-dismissible one stays open
+    const vm = getCurrentInstance();
+    useOverlayHistory('dialog', () => props.modelValue, () => { vm.proxy.open = false; });
+  },
   computed: {
     dialogSize() {
       return { sm: 'md', md: 'lg', lg: '2xl', xl: '4xl' }[this.size] || 'lg';
@@ -79,39 +85,19 @@ export default {
     }
   },
   data() {
-    return {
-      dialogOverlayId: 'dialog-' + Math.random().toString(36).slice(2, 9),
-      escOwnedByPopover: false,
-      escHeld: false,
-      lastFocus: null
-    };
+    return { escOwnedByPopover: false, escHeld: false, lastFocus: null };
   },
   watch: {
-    modelValue(v) {
-      if (v) {
-        pushOverlay(this.dialogOverlayId, () => { this.open = false; });
-        this.focusSafe();
-      } else {
-        removeOverlay(this.dialogOverlayId);
-      }
-    }
+    modelValue(v) { if (v) this.focusSafe(); }
   },
   // frappe-ui's Dialog closes on any Escape, even one meant for a TimePicker list,
   // DatePicker calendar or Combobox open inside it: the user lost the whole form.
   // Escape closes the innermost thing first (WAI-ARIA dialog pattern).
   mounted() {
-    if (this.modelValue) {
-      pushOverlay(this.dialogOverlayId, () => { this.open = false; });
-      this.focusSafe();
-    }
+    if (this.modelValue) this.focusSafe();
     document.addEventListener('keydown', this.noteEscape, true);
   },
-  beforeUnmount() {
-    document.removeEventListener('keydown', this.noteEscape, true);
-    if (this.modelValue) {
-      removeOverlay(this.dialogOverlayId);
-    }
-  },
+  beforeUnmount() { document.removeEventListener('keydown', this.noteEscape, true); },
   methods: {
     noteEscape(e) {
       if (e.key !== 'Escape' || !this.modelValue) return;

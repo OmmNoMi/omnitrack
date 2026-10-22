@@ -192,6 +192,36 @@ runMutationTest(
 );
 
 runMutationTest(
+  'Tailwind config loses the 2xl screen',
+  tailwindConfigPath,
+  (code) => code.replace("'2xl': '1536px',", ''),
+  'node scripts/check_palette_classes.cjs',
+  'no "2xl" screen in the theme'
+);
+runMutationTest(
+  'Planner rails widen at xl again instead of 2xl',
+  path.resolve(omnitrackDir, 'src/views/CalendarView.vue'),
+  (code) => code.replace('2xl:grid-cols-[280px_1fr_260px]', 'xl:grid-cols-[280px_1fr_260px]'),
+  'node scripts/test_workstation_interactions.cjs',
+  'widen to 280px/260px only at 2xl'
+);
+
+runMutationTest(
+  'A stat value loses its 2xl weight and drops to regular',
+  path.resolve(omnitrackDir, 'src/views/calendar/CalendarWeekStats.vue'),
+  (code) => code.replace(' 2xl:font-extrabold', ''),
+  'node scripts/check_palette_classes.cjs',
+  'resets font-extrabold'
+);
+runMutationTest(
+  'A stacked breakpoint the theme lacks (dark:3xl:)',
+  path.resolve(omnitrackDir, 'src/views/calendar/CalendarWeekStats.vue'),
+  (code) => code.replace('!p-2.5 2xl:!p-3', '!p-2.5 2xl:!p-3 dark:3xl:!p-4'),
+  'node scripts/check_palette_classes.cjs',
+  'no "3xl" screen in the theme'
+);
+
+runMutationTest(
   'An emoji comes back into a user-facing label',
   path.resolve(omnitrackDir,'src/components/dialogs/WrapAndStartNextModal.vue'),
   (code) => code.replace('label="Keep working"', 'label="\u{1F680} Keep working"'),
@@ -1928,6 +1958,38 @@ runMutationTest('A gap click skips the drag check', DTLV,
   (code) => code.replace('@click.stop="clickTimelineGap(g)"', '@click.stop="quickLogTimelineGap(g)"'), DPK, "a gap's click goes through");
 runMutationTest('A held finger on the calendar still scrolls', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
   (code) => code.replace(' @touchmove="onPlannerTouchMove"', ''), DPK, 'the calendar grid listens for moves');
+
+// Back navigation (issue #15): each guard in src/utils/backNavigation.js turns its own check red
+const BACKNAV = SRC('src/utils/backNavigation.js');
+const BACKNAV_TEST = 'node scripts/test_overlay_back_navigation.cjs';
+runMutationTest('Any popstate closes the top overlay (a tab change counts as Back)', BACKNAV,
+  (code) => code.replace('  if (!landed) return;\n', '  if (!landed) { if (overlays.length) overlays[overlays.length - 1].close(); return; }\n'), BACKNAV_TEST, 'a typed hash must not close the open drawer');
+runMutationTest('Layers of the same kind count as equal (the URL stays on the old tab)', BACKNAV,
+  (code) => code.replace('cur[same] === want[same]) same++;', 'cur[same].slice(0, 3) === want[same].slice(0, 3)) same++;'), BACKNAV_TEST, 'must move the URL');
+runMutationTest('The tab gets no history entry (Back from a tab leaves the app)', BACKNAV,
+  (code) => code.replace("const layers = tab && tab !== HOME ? ['tab:' + tab] : [];", 'const layers = [];'), BACKNAV_TEST, 'Dashboard and a tab take two entries');
+runMutationTest('Each tab switch pushes an entry (Back walks every tab visited)', BACKNAV,
+  (code) => code.replace("if (cur.length > same) write('replaceState',", "if (cur.length > same) write('pushState',"), BACKNAV_TEST, 'Dashboard and a tab take two entries');
+runMutationTest('A tab switch leaves the URL on the old tab', BACKNAV,
+  (code) => code.replace("  if (cur.length > same) write('replaceState', want.slice(0, ++same));\n", "  if (cur.length > same) same++;\n"), BACKNAV_TEST, 'switching tabs must move the URL to the new tab');
+runMutationTest('A deep link has no Dashboard under it', BACKNAV,
+  (code) => code.replace("    write('replaceState', []);\n    cur = [];\n", "    cur = tabOf([]) === getTab() ? [] : ['tab:' + getTab()];\n    write('replaceState', cur);\n"), BACKNAV_TEST, 'Back from a tab opened by link must return to Dashboard');
+runMutationTest('Closing a drawer never steps back off its entry', BACKNAV,
+  (code) => code.replace('  if (back > 0) {\n', '  if (back > 0 && false) {\n'), BACKNAV_TEST, 'Back after that must return to Dashboard');
+runMutationTest('Back drops an overlay that refused to close', BACKNAV,
+  (code) => code.replace('if (!keep.has(o.id)) o.close();', 'if (!keep.has(o.id)) { removeOverlay(o.id); o.close(); }'), BACKNAV_TEST, 'must get its entry back');
+runMutationTest('Back closes every overlay instead of the top one', BACKNAV,
+  (code) => code.replace("const keep = new Set(landed.filter((l) => l.startsWith('ov:')).map((l) => l.slice(3)));", 'const keep = new Set();'), BACKNAV_TEST, 'the first Back must close only the top dialog');
+runMutationTest('The session popup is not registered with Back', SRC('src/components/layout/SessionOverlay.vue'),
+  (code) => code.replace(/\n    useOverlayHistory\([^\n]*\n/, '\n'), BACKNAV_TEST, 'do not call useOverlayHistory');
+runMutationTest('FDialog is not registered with Back', SRC('src/components/common/FDialog.vue'),
+  (code) => code.replace(/\n    useOverlayHistory\([^\n]*\n/, '\n'), BACKNAV_TEST, 'do not call useOverlayHistory');
+runMutationTest('The hash sync listens to popstate again', SRC('src/composables/useWorkstationShell.js'),
+  (code) => code.replace("    window.addEventListener('hashchange', handleHashSync);\n", "    window.addEventListener('hashchange', handleHashSync);\n    window.addEventListener('popstate', handleHashSync);\n"), BACKNAV_TEST, 'only src/utils/backNavigation.js may write the history');
+runMutationTest('The hash sync acts on entries backNavigation wrote', SRC('src/composables/useWorkstationShell.js'),
+  (code) => code.replace('      if (isManagedEntry()) return;\n', ''), BACKNAV_TEST, 'handleHashSync must skip entries backNavigation wrote');
+runMutationTest('A URL clean-up writes the history directly', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('dropUrlQuery();', 'window.history.replaceState({}, document.title, window.location.pathname);'), BACKNAV_TEST, 'only src/utils/backNavigation.js may write the history');
 
 // Summary Report
 console.log('\n===========================================================');

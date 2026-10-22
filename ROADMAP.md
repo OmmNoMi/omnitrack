@@ -1375,3 +1375,17 @@ Open:
 - Stop rounds a session shorter than 3 minutes up to 0.05 hours. Check what the page does and match it.
 - `OmniTrackUpdateWorkBlockTool` and `OmniTrackGetWorkBlockTool` are in `get_fac_tools(consolidated=False)` but not in hooks' `assistant_tools`. Register them, or say why not.
 - The new `test_fac.py` cases (nothing assumed, log rules, cancel reasons) have not run: they need a site, and ommnomi.local is the only one with OmniTrack. Run them on a throwaway site with the owner's OK.
+
+## Back closes what is open, then goes to Dashboard (issue #15, 2026-10-22)
+
+Done (`src/utils/backNavigation.js`, `useOverlayHistory`):
+- Back closes the top dialog or drawer first, one per press. With nothing open, Back from any tab goes to Dashboard, and Back on Dashboard leaves the app.
+- Every dialog and drawer registers through `useOverlayHistory(name, isOpen, close)`: FDialog, the four drawers, the session popup and the work-session entry. A dialog that refuses to close keeps its entry, so the next Back tries again.
+- Switching tabs rewrites one entry instead of adding one per tab, so Back never walks every tab visited. A tab change no longer closes an open drawer.
+- Only `backNavigation.js` writes the history. A reload, a deep link or a typed hash lands on a correct stack (Dashboard under the tab, no stale drawer entry).
+- Guarded by `test_overlay_back_navigation.cjs` (real jsdom history) and 14 mutants.
+
+Open:
+- Chrome fires `popstate` at once on a fragment navigation; jsdom fires it later. The jsdom tests cannot see that ordering, so a Cypress check through `bench run-ui-tests` (Back closes a drawer, Back from Planner goes to Dashboard) would cover it.
+- vue-router is installed, but there is no `RouterView`. If the tabs became routes, the tab layer in `backNavigation.js` could go.
+- `test:fixtures` and the Python mutants call `../../env/bin/python`, which only exists when the app sits in a bench's `apps/` folder. A worktree anywhere else fails with exit 127, and every Python mutant reads as survived. Read the bench path from an environment variable, or fail with a clear message.

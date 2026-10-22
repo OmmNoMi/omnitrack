@@ -4,7 +4,7 @@
          so on a phone nothing collides. Shift+D lives in the strip tooltip. -->
     <div class="flex items-center justify-between gap-3" data-day-section>
       <div class="min-w-0">
-        <h2 class="text-xl sm:text-2xl font-bold tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+        <h2 class="text-xl sm:text-2xl sm:font-bold font-bold tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
           {{ dashboardDayTitle }}
         </h2>
         <p v-if="dashboardDaySummary" class="text-xs mt-0.5" :class="isDarkMode ? 'text-gray-300' : 'text-gray-700'">

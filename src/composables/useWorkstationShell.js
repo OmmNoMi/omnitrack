@@ -1,6 +1,7 @@
 import { lazy } from "./workstationBag.js";
 import { ACTIVITY_OPTIONS, activityOption, isNonWorking } from "../utils/activity.js";
 import { ref, watch, onMounted } from "vue";
+import { initBackNavigation, syncTab, isManagedEntry } from "../utils/backNavigation.js";
 
 /**
  * Navigation, theme and static option tables.
@@ -21,23 +22,20 @@ const getInitialTabFromHash = () => {
   };
   const activeTab = ref(getInitialTabFromHash());
   if (typeof window !== 'undefined') {
+    // Back and Forward between the app's own entries are handled by backNavigation, which also
+    // sets the tab. Only a hash typed into the address bar (an entry it did not write) lands here.
     const handleHashSync = () => {
+      if (isManagedEntry()) return;
       const tab = getInitialTabFromHash();
       if (tab && activeTab.value !== tab) {
         activeTab.value = tab;
       }
     };
     window.addEventListener('hashchange', handleHashSync);
-    window.addEventListener('popstate', handleHashSync);
+    initBackNavigation({ getTab: () => activeTab.value, setTab: (t) => { activeTab.value = t; } });
   }
-  watch(activeTab, (newTab) => {
-    if (typeof window !== 'undefined' && newTab) {
-      const currentHash = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
-      if (currentHash !== newTab) {
-        window.location.hash = `#/${newTab}`;
-      }
-    }
-  });
+  // The URL follows the tab through backNavigation: Back from any tab returns to Dashboard (#15)
+  watch(activeTab, () => syncTab());
   const initialDark = localStorage.getItem('omnitrack_theme') === 'dark' || (!localStorage.getItem('omnitrack_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const isDarkMode = ref(initialDark);
   const hasFrappeUI = ref(typeof window !== 'undefined' && Boolean(window.OmniTrackSessionBox && window.OmniTrackSessionBox.mount));

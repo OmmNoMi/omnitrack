@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /**
- * Test Mobile Overlay Back Navigation Invariants (Issue #15)
+ * Back navigation invariants (issue #15), src/utils/backNavigation.js
  *
- * Invariants:
- * 1. Edge-swipe back or Back button with a drawer or modal open closes the topmost
- *    overlay without leaving the app or navigating away from current tab.
- * 2. Nested overlays (e.g. dialog opened from within a drawer) close in LIFO order
- *    on consecutive Back actions.
- * 3. Programmatic close (X button, backdrop click, cancel, form submit) removes the
- *    overlay and cleans up history without triggering unrequested popstate closures.
- * 4. When no overlays are open, back navigation passes through cleanly to router / browser.
- * 5. FDialog, DrawerCoordinator, and TaskDetailDrawer are correctly wired to overlayHistory.
+ * 1. Back closes the top drawer or dialog first, one per press (LIFO).
+ * 2. Back from any tab returns to Dashboard, however many tabs were visited; Dashboard is the root.
+ * 3. A tab change is never taken for Back: an open drawer stays open.
+ * 4. Closing a drawer after a tab change keeps the tab (no step back across it).
+ * 5. A drawer swapped for another in one handler leaves one entry for it, and Back closes it.
+ * 6. After a reload on a drawer's entry, the entry is dropped (no dead Back press).
+ * 7. An overlay that refuses to close (non-dismissible) gets its entry back.
+ * Static: every component with aria-modal, and FDialog, registers via useOverlayHistory; only
+ * backNavigation.js writes the history or listens for popstate.
+ *
+ * The runtime part uses jsdom's real history (popstate arrives asynchronously, as in a browser);
+ * nothing is mocked.
  */
 
 const fs = require('node:fs');
@@ -18,165 +21,164 @@ const path = require('node:path');
 const assert = require('node:assert');
 const { JSDOM } = require('jsdom');
 
-console.log('--- Running Mobile Overlay Back Navigation Invariants Suite (Issue #15) ---');
+console.log('--- Back navigation invariants (issue #15) ---');
 
-const omnitrackDir = path.resolve(__dirname, '..');
+const appDir = path.resolve(__dirname, '..');
+const srcDir = path.join(appDir, 'src');
+const rel = (f) => path.relative(appDir, f);
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
+const sources = walk(srcDir).filter((f) => /\.(vue|js)$/.test(f));
+const read = (f) => fs.readFileSync(f, 'utf8');
+const navModule = path.join(srcDir, 'utils', 'backNavigation.js');
 
-// --------------------------------------------------------------------------
-// Part 1: Static Wire Invariants
-// --------------------------------------------------------------------------
-const fdialogPath = path.resolve(omnitrackDir, 'src', 'components', 'common', 'FDialog.vue');
-const drawerCoordPath = path.resolve(omnitrackDir, 'src', 'drawers', 'DrawerCoordinator.vue');
-const taskDrawerPath = path.resolve(omnitrackDir, 'src', 'drawers', 'TaskDetailDrawer.vue');
+// Static 1: every overlay registers itself
+const overlays = sources.filter((f) => f.endsWith('.vue') && /aria-modal/.test(read(f)));
+overlays.push(path.join(srcDir, 'components', 'common', 'FDialog.vue'));
+const unregistered = overlays.filter((f) => !/useOverlayHistory\(/.test(read(f)));
+assert.deepStrictEqual(unregistered.map(rel), [],
+  'FAIL: these drawers or dialogs do not call useOverlayHistory, so Back leaves the tab or the app while they are open');
+console.log(`✓ ${overlays.length} drawers and dialogs register with Back navigation.`);
 
-const fdialogSrc = fs.readFileSync(fdialogPath, 'utf8');
-const drawerCoordSrc = fs.readFileSync(drawerCoordPath, 'utf8');
-const taskDrawerSrc = fs.readFileSync(taskDrawerPath, 'utf8');
+// Static 2: one owner of the history
+const HISTORY_WRITE = /history\.(pushState|replaceState|back|go|forward)\s*\(|location\.hash\s*=[^=]|addEventListener\(\s*['"]popstate/;
+const writers = sources.filter((f) => f !== navModule && HISTORY_WRITE.test(read(f)));
+assert.deepStrictEqual(writers.map(rel), [],
+  'FAIL: only src/utils/backNavigation.js may write the history or listen for popstate; anything else desyncs Back');
+const shell = read(path.join(srcDir, 'composables', 'useWorkstationShell.js'));
+assert.ok(/const handleHashSync = \(\) => \{\s*if \(isManagedEntry\(\)\) return;/.test(shell),
+  'FAIL: handleHashSync must skip entries backNavigation wrote, or a step it takes switches the tab back');
+console.log('✓ Only backNavigation writes the history.');
 
-// FDialog
-assert.ok(
-  fdialogSrc.includes("import { pushOverlay, removeOverlay } from '../../utils/overlayHistory.js'"),
-  'FAIL: FDialog.vue must import pushOverlay and removeOverlay from overlayHistory.js'
-);
-assert.ok(
-  /pushOverlay\(this\.dialogOverlayId,\s*\(\)\s*=>\s*\{\s*this\.open\s*=\s*false;\s*\}\)/.test(fdialogSrc),
-  'FAIL: FDialog.vue must push overlay with close callback setting open = false'
-);
-assert.ok(
-  /removeOverlay\(this\.dialogOverlayId\)/.test(fdialogSrc),
-  'FAIL: FDialog.vue must remove overlay when modelValue becomes false or component unmounts'
-);
-console.log('✓ Invariant 1: FDialog.vue is wired to overlayHistory.');
+// Runtime
+const settle = (ms = 40) => new Promise((r) => setTimeout(r, ms));
 
-// DrawerCoordinator
-assert.ok(
-  drawerCoordSrc.includes("import { pushOverlay, removeOverlay } from '../utils/overlayHistory.js'"),
-  'FAIL: DrawerCoordinator.vue must import pushOverlay and removeOverlay from overlayHistory.js'
-);
-assert.ok(
-  /pushOverlay\('drawer-block',\s*\(\)\s*=>\s*this\.\$emit\('close-block-drawer'\)\)/.test(drawerCoordSrc),
-  'FAIL: DrawerCoordinator.vue must push drawer-block overlay on showBlockDrawer'
-);
-assert.ok(
-  /pushOverlay\('drawer-session',\s*\(\)\s*=>\s*this\.\$emit\('close-session-drawer'\)\)/.test(drawerCoordSrc),
-  'FAIL: DrawerCoordinator.vue must push drawer-session overlay on showSessionDrawer'
-);
-assert.ok(
-  /pushOverlay\('drawer-raven',\s*\(\)\s*=>\s*this\.\$emit\('close-raven-drawer'\)\)/.test(drawerCoordSrc),
-  'FAIL: DrawerCoordinator.vue must push drawer-raven overlay on showTaskRavenDrawer'
-);
-assert.ok(
-  /removeOverlay\('drawer-block'\)/.test(drawerCoordSrc) &&
-  /removeOverlay\('drawer-session'\)/.test(drawerCoordSrc) &&
-  /removeOverlay\('drawer-raven'\)/.test(drawerCoordSrc),
-  'FAIL: DrawerCoordinator.vue must remove drawer overlays on close / unmount'
-);
-console.log('✓ Invariant 2: DrawerCoordinator.vue is wired to overlayHistory.');
-
-// TaskDetailDrawer
-assert.ok(
-  taskDrawerSrc.includes("import { pushOverlay, removeOverlay } from '../utils/overlayHistory.js'"),
-  'FAIL: TaskDetailDrawer.vue must import pushOverlay and removeOverlay from overlayHistory.js'
-);
-assert.ok(
-  /pushOverlay\('drawer-task-detail',\s*closeTaskDetail\)/.test(taskDrawerSrc),
-  'FAIL: TaskDetailDrawer.vue must push drawer-task-detail overlay with closeTaskDetail'
-);
-assert.ok(
-  /removeOverlay\('drawer-task-detail'\)/.test(taskDrawerSrc),
-  'FAIL: TaskDetailDrawer.vue must remove drawer-task-detail overlay on close / unmount'
-);
-console.log('✓ Invariant 3: TaskDetailDrawer.vue is wired to overlayHistory.');
-
-// --------------------------------------------------------------------------
-// Part 2: Runtime JSDOM Stack & Back Navigation Lifecycle
-// --------------------------------------------------------------------------
-async function runRuntimeTests() {
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    url: 'http://localhost:8000/#/dashboard'
-  });
+async function fresh(url = 'http://localhost/omnitrack#/dashboard', before) {
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url });
   global.window = dom.window;
   global.document = dom.window.document;
-
-  const { pushOverlay, removeOverlay, getOverlayStack, resetOverlayHistory } = await import('../src/utils/overlayHistory.js');
-
-  resetOverlayHistory();
-  assert.strictEqual(getOverlayStack().length, 0, 'Stack should be initially empty');
-
-  // Test A: Single overlay back gesture closes overlay
-  let drawerClosed = false;
-  pushOverlay('drawer-block', () => { drawerClosed = true; });
-
-  assert.strictEqual(getOverlayStack().length, 1);
-  assert.strictEqual(getOverlayStack()[0].id, 'drawer-block');
-
-  // Simulate Back button / edge swipe -> window popstate event
-  const popEvent = new dom.window.PopStateEvent('popstate', { state: null });
-  dom.window.dispatchEvent(popEvent);
-
-  assert.strictEqual(drawerClosed, true, 'FAIL: Back gesture must invoke overlay close callback');
-  assert.strictEqual(getOverlayStack().length, 0, 'FAIL: Stack must be empty after popping overlay');
-  console.log('✓ Invariant 4: Single overlay closes on back gesture.');
-
-  // Test B: Nested overlays close in LIFO order
-  resetOverlayHistory();
-  let blockClosed = false;
-  let dialogClosed = false;
-
-  pushOverlay('drawer-block', () => { blockClosed = true; });
-  pushOverlay('dialog-reschedule', () => { dialogClosed = true; });
-
-  assert.strictEqual(getOverlayStack().length, 2);
-  assert.strictEqual(getOverlayStack()[1].id, 'dialog-reschedule');
-
-  // 1st Back gesture -> closes top modal only
-  dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate', { state: null }));
-  assert.strictEqual(dialogClosed, true, 'FAIL: 1st back gesture must close top dialog');
-  assert.strictEqual(blockClosed, false, 'FAIL: Drawer behind dialog must remain open');
-  assert.strictEqual(getOverlayStack().length, 1);
-
-  // 2nd Back gesture -> closes drawer
-  dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate', { state: null }));
-  assert.strictEqual(blockClosed, true, 'FAIL: 2nd back gesture must close underlying drawer');
-  assert.strictEqual(getOverlayStack().length, 0);
-  console.log('✓ Invariant 5: Nested overlays close in strict LIFO order on consecutive Back gestures.');
-
-  // Test C: Programmatic close removes overlay and cleans up history
-  resetOverlayHistory();
-  let modalClosedByUI = false;
-  pushOverlay('dialog-test', () => { modalClosedByUI = true; });
-
-  assert.strictEqual(getOverlayStack().length, 1);
-  let backCalled = false;
-  const originalBack = dom.window.history.back;
-  dom.window.history.back = () => {
-    backCalled = true;
-    // Dispatch synthetic popstate as real browser does
-    dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate', { state: null }));
-  };
-
-  removeOverlay('dialog-test');
-  assert.strictEqual(getOverlayStack().length, 0, 'FAIL: removeOverlay must remove overlay from stack');
-  assert.strictEqual(backCalled, true, 'FAIL: removeOverlay must call window.history.back() to revert pushed state');
-  assert.strictEqual(modalClosedByUI, false, 'FAIL: synthetic popstate from programmatic close must be ignored');
-
-  dom.window.history.back = originalBack;
-  console.log('✓ Invariant 6: Programmatic close suppresses synthetic popstate and keeps stack in sync.');
-
-  // Test D: Popstate with empty overlay stack passes through
-  let passThrough = true;
-  try {
-    dom.window.dispatchEvent(new dom.window.PopStateEvent('popstate', { state: null }));
-  } catch (e) {
-    passThrough = false;
-  }
-  assert.ok(passThrough, 'FAIL: Popstate on empty overlay stack must not throw');
-  console.log('✓ Invariant 7: Popstate on empty stack passes through cleanly.');
-
-  console.log('\nSUCCESS: All Mobile Overlay Back Navigation Invariants passed cleanly!\n');
+  if (before) before(dom.window);
+  const nav = await import('../src/utils/backNavigation.js');
+  nav.resetBackNavigation();
+  const app = { tab: (url.split('#/')[1] || 'dashboard') };
+  // As useWorkstationShell: the activeTab watcher calls syncTab, a typed hash sets the tab
+  nav.initBackNavigation({ getTab: () => app.tab, setTab: (t) => { app.tab = t; nav.syncTab(); } });
+  dom.window.addEventListener('hashchange', () => {
+    if (!nav.isManagedEntry()) { app.tab = dom.window.location.hash.slice(2); nav.syncTab(); }
+  });
+  app.go = (t) => { app.tab = t; nav.syncTab(); };
+  // As a component: open pushes, close removes (its watcher), Back calls close
+  app.closed = [];
+  app.open = (id, refuse) => nav.pushOverlay(id, () => { if (!refuse) { app.closed.push(id); nav.removeOverlay(id); } });
+  app.back = async () => { dom.window.history.back(); await settle(); };
+  app.layers = () => (dom.window.history.state && dom.window.history.state.omnitrack || {}).layers;
+  app.hash = () => dom.window.location.hash;
+  await settle();
+  return { nav, app, win: dom.window };
 }
 
-runRuntimeTests().catch((err) => {
+(async () => {
+  // 2. Back from a tab returns to Dashboard
+  {
+    const { app, win } = await fresh();
+    assert.deepStrictEqual(app.layers(), [], 'FAIL: the first entry must become the Dashboard root');
+    const start = win.history.length;
+    app.go('planner'); await settle();
+    app.go('timesheets'); await settle();
+    app.go('tasks'); await settle();
+    assert.strictEqual(win.history.length, start + 1, 'FAIL: Dashboard and a tab take two entries (root, tab), however many tabs were switched');
+    assert.strictEqual(app.hash(), '#/tasks', 'FAIL: switching tabs must move the URL to the new tab');
+    await app.back();
+    assert.strictEqual(app.tab, 'dashboard', 'FAIL: Back from a tab must return to Dashboard');
+    assert.deepStrictEqual(app.layers(), [], 'FAIL: Back from a tab must land on the Dashboard root');
+    app.go('planner'); await settle();
+    app.go('dashboard'); await settle();
+    assert.deepStrictEqual(app.layers(), [], 'FAIL: opening Dashboard must step back to the root, not stack an entry');
+    assert.strictEqual(app.hash(), '#/dashboard');
+    console.log('✓ Back from any tab returns to Dashboard; Dashboard is the root.');
+  }
+  // 2b. A deep link gets a Dashboard root under it
+  {
+    const { app } = await fresh('http://localhost/omnitrack#/planner');
+    assert.deepStrictEqual(app.layers(), ['tab:planner']);
+    await app.back();
+    assert.strictEqual(app.tab, 'dashboard', 'FAIL: Back from a tab opened by link must return to Dashboard');
+    console.log('✓ A tab opened by link has Dashboard under it.');
+  }
+  // 1. LIFO
+  {
+    const { app } = await fresh();
+    app.go('planner'); app.open('drawer'); await settle();
+    app.open('dialog'); await settle();
+    await app.back();
+    assert.deepStrictEqual(app.closed, ['dialog'], 'FAIL: the first Back must close only the top dialog');
+    await app.back();
+    assert.deepStrictEqual(app.closed, ['dialog', 'drawer'], 'FAIL: the second Back must close the drawer');
+    assert.strictEqual(app.tab, 'planner', 'FAIL: closing overlays must not leave the tab');
+    await app.back();
+    assert.strictEqual(app.tab, 'dashboard');
+    console.log('✓ Back closes the top overlay first, then leaves the tab.');
+  }
+  // 3 and 4. A tab change with a drawer open
+  {
+    const { nav, app } = await fresh();
+    app.go('planner'); app.open('drawer'); await settle();
+    app.go('tasks'); await settle();
+    assert.deepStrictEqual(app.closed, [], 'FAIL: a tab change must not close the open drawer');
+    assert.strictEqual(app.hash(), '#/tasks', 'FAIL: a tab change with a drawer open must move the URL to the new tab');
+    nav.removeOverlay('drawer'); await settle(); // its X
+    assert.strictEqual(app.tab, 'tasks', 'FAIL: closing a drawer after a tab change must keep the tab');
+    assert.strictEqual(app.hash(), '#/tasks', 'FAIL: closing a drawer after a tab change must keep the URL');
+    await app.back();
+    assert.strictEqual(app.tab, 'dashboard', 'FAIL: Back after that must return to Dashboard');
+    console.log('✓ A tab change keeps the drawer open, and closing it keeps the tab.');
+  }
+  // 3b. A hash typed into the address bar is a tab change, not Back
+  {
+    const { app, win } = await fresh();
+    app.open('drawer'); await settle();
+    win.location.hash = '#/timesheets'; await settle();
+    assert.deepStrictEqual(app.closed, [], 'FAIL: a typed hash must not close the open drawer');
+    assert.strictEqual(app.tab, 'timesheets');
+    console.log('✓ A typed hash changes the tab and keeps the drawer.');
+  }
+  // 5. Swap in one handler
+  {
+    const { nav, app, win } = await fresh();
+    app.open('session'); await settle();
+    const len = win.history.length;
+    nav.removeOverlay('session'); app.open('block'); await settle();
+    assert.strictEqual(win.history.length, len, 'FAIL: a drawer swap must rewrite the entry in place');
+    assert.deepStrictEqual(app.layers(), ['ov:block']);
+    await app.back();
+    assert.deepStrictEqual(app.closed, ['block'], 'FAIL: Back after a swap must close the new drawer');
+    assert.deepStrictEqual(app.layers(), [], 'FAIL: Back after a swap must land on the root');
+    console.log('✓ A drawer swap leaves one entry, and Back closes it.');
+  }
+  // 6. Reload on a drawer's entry
+  {
+    const { app } = await fresh('http://localhost/omnitrack#/planner', (w) => {
+      w.history.replaceState({ omnitrack: { layers: [] } }, '', '/omnitrack#/dashboard');
+      w.history.pushState({ omnitrack: { layers: ['tab:planner'] } }, '', '/omnitrack#/planner');
+      w.history.pushState({ omnitrack: { layers: ['tab:planner', 'ov:drawer-1'] } }, '', '/omnitrack#/planner');
+    });
+    assert.deepStrictEqual(app.layers(), ['tab:planner'], 'FAIL: after a reload the closed drawer\'s entry must be dropped');
+    await app.back();
+    assert.strictEqual(app.tab, 'dashboard', 'FAIL: after a reload one Back must return to Dashboard');
+    console.log('✓ After a reload, one Back press is enough.');
+  }
+  // 7. A close that is refused
+  {
+    const { nav, app } = await fresh();
+    app.open('locked', true); await settle();
+    await app.back(); await settle();
+    assert.deepStrictEqual(nav.getOverlayStack(), ['locked'], 'FAIL: a dialog that stays open must get its entry back (it left the stack)');
+    assert.deepStrictEqual(app.layers(), ['ov:locked'], 'FAIL: a dialog that stays open must get its entry back');
+    console.log('✓ A dialog that refuses to close keeps its entry.');
+  }
+  console.log('\nSUCCESS: Back navigation invariants hold.\n');
+  process.exit(0);
+})().catch((err) => {
   console.error(err);
   process.exit(1);
 });
