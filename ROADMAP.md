@@ -698,7 +698,6 @@ four-layer "for whom / what / when / did" framing is codified there.
 ## 🎯 Active Refactoring Backlog & Tracked GitHub Issues (October 2026)
 
 ### 1. Issue #16: Calendar Vertical Scroll & Independent Rail Scrolling
-- **Closed 2026-10-13:** the grid and the rail scroll on their own, the grid reaches 11 pm, and the page does not scroll.
 - **Problem:** Calendar grid stops scrolling past 3:00 PM on desktop displays because the container locks vertically; scrolling assigned work inappropriately shifts the calendar grid.
 - **Solution:** Apply independent `overflow-y-auto` to both the left "Assigned Work" column and the 24-hour Calendar hour grid. Remove whole-page scroll lock so evening hours (3 PM - 11:59 PM) are fully accessible.
 
@@ -711,13 +710,10 @@ four-layer "for whom / what / when / did" framing is codified there.
   3. `Leave` (Longer absence; external HR rules/quotas govern whether paid/unpaid/absent).
 
 ### 3. Issue #18: Multi-Assignee Support for Shared Project Blocks
-- **Closed 2026-10-13:** the plan dialog's "Work with" picker; `book_work_block` creates matching blocks for everyone picked.
 - **Problem:** Scheduling a project meeting, pair-programming session, or release requires 2+ people, but the assignee field only accepts one member.
 - **Solution:** Enable multi-select assignee input that creates paired/mirrored Planned Work Blocks for all participants across identical time windows.
 
 ### 4. Issue #19: UX Enhancements & Modern SPA Cleanliness
-- **Still open 2026-10-13:** the date presets, the icon-only inactive pills, and the task drawer duplicates check. Instant reactive booking is done.
-- **Also open on GitHub:** #15 (Back does not close an open drawer or dialog first). Closed 2026-10-13: #1, #3, #4, #14, #17, #20. Fixed in PR #22, closes on merge: #13 (planner rails stay compact 240px/220px through xl so the 13–15" week view has room, and widen to 280px/260px at 2xl; the frappe-ui preset has no 2xl screen, so `tailwind.config.cjs` adds one and `check_palette_classes` now fails on any breakpoint the theme lacks; the 12a hour label is no longer cut off at the top of the grid).
 - **Date Presets:** Add quick date pills (`Today`, `Tomorrow`, `+2d`) alongside existing duration presets (`30m`, `1h`, `1.5h`, `2h`, `3h`, `4h`) in the Plan Focus Block modal.
 - **Icon-Only Inactive Filter Pills:** Assigned work filter pills (`All`, `Underplanned`, `Overdue`, `Star`) display compact icons when inactive, and expand with text only when active.
 - **De-duplicate Task Drawer Actions:** Clean up duplicate action buttons and duplicate views in the task drawer.
