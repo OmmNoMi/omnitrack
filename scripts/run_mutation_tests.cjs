@@ -1958,6 +1958,8 @@ runMutationTest('A gap click skips the drag check', DTLV,
   (code) => code.replace('@click.stop="clickTimelineGap(g)"', '@click.stop="quickLogTimelineGap(g)"'), DPK, "a gap's click goes through");
 runMutationTest('A held finger on the calendar still scrolls', SRC('src/views/calendar/CalendarPlannerGrid.vue'),
   (code) => code.replace(' @touchmove="onPlannerTouchMove"', ''), DPK, 'the calendar grid listens for moves');
+runMutationTest('Cancelled task offers Complete or Put on Hold again', SRC('omnitrack/api/tasks.py'),
+  (code) => code.replace('if status in ("cancelled", "completed", "closed"):', 'if status in ("completed", "closed"):'), GOV, 'test_cancelled_task_offers_only_reopen');
 
 // Back navigation (issue #15): each guard in src/utils/backNavigation.js turns its own check red
 const BACKNAV = SRC('src/utils/backNavigation.js');

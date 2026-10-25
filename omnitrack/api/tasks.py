@@ -322,19 +322,43 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 	# Standard actions fallback if no workflow or transitions empty
 	status = (current_status or "Open").lower()
 	fallback = []
-	if status not in ("completed", "closed"):
+	if status in ("cancelled", "completed", "closed"):
+		fallback.append({
+			"action": "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
+		return fallback
+
+	if status in ("on hold", "hold"):
+		fallback.append({
+			"action": "Resume" if doctype == "Task" else "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
 		fallback.append({
 			"action": "Complete" if doctype == "Task" else "Close Task",
 			"next_state": "Completed" if doctype == "Task" else "Closed",
 			"style": "success"
 		})
-	if status != "cancelled":
 		fallback.append({
 			"action": "Cancel Task",
 			"next_state": "Cancelled",
 			"style": "danger"
 		})
-	if status not in ("on hold", "hold"):
+		return fallback
+
+	fallback.append({
+		"action": "Complete" if doctype == "Task" else "Close Task",
+		"next_state": "Completed" if doctype == "Task" else "Closed",
+		"style": "success"
+	})
+	fallback.append({
+		"action": "Cancel Task",
+		"next_state": "Cancelled",
+		"style": "danger"
+	})
+	if doctype == "Task":
 		fallback.append({
 			"action": "Put on Hold",
 			"next_state": "On Hold",
@@ -390,6 +414,8 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			doc.status = "Cancelled"
 		elif "hold" in act_lower:
 			doc.status = "On Hold" if doctype == "Task" else "Open"
+		elif "resume" in act_lower or "reopen" in act_lower or act_lower == "open":
+			doc.status = "Open"
 		elif "progress" in act_lower or "start" in act_lower or "work" in act_lower:
 			doc.status = "Working" if doctype == "Task" else "Open"
 		else:
