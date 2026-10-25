@@ -5,6 +5,16 @@ app_publisher = "OmmNoMi Automation LLP"
 app_description = "Universal Workforce, Task Sync & Split-Shift Engine"
 app_email = "omnitrack@ommnomi.com"
 app_license = "GNU General Public License v3.0"
+app_home = "/desk/omnitrack"
+
+add_to_apps_screen = [
+	{
+		"name": "omnitrack",
+		"logo": "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg",
+		"title": "OmniTrack",
+		"route": "/desk/omnitrack",
+	}
+]
 
 # Includes in <head>
 # ------------------

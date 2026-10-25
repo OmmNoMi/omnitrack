@@ -46,7 +46,70 @@ def _fixtures():
 	return out
 
 
+HOOKS_PY = os.path.join(APP_DIR, "hooks.py")
+SIDEBAR_FIXTURES = [
+	os.path.join(APP_DIR, "workspace_sidebar", "omnitrack.json"),
+	os.path.join(APP_DIR, "omnitrack", "workspace_sidebar", "omnitrack.json"),
+]
+WORKSPACE_FIXTURES = [
+	os.path.join(WORKSPACE_DIR, "omnitrack", "omnitrack.json"),
+]
+
+
 class TestWorkspaceFixtures(unittest.TestCase):
+	def test_hooks_declares_apps_screen_and_home(self):
+		"""Frappe v16 Desk needs add_to_apps_screen and app_home to resolve app branding and routes."""
+		with open(HOOKS_PY, encoding="utf-8") as f:
+			content = f.read()
+		self.assertIn('app_home = "/desk/omnitrack"', content)
+		self.assertIn("add_to_apps_screen", content)
+		self.assertIn('"/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"', content)
+
+	def test_sidebar_fixtures_branding_and_links(self):
+		"""Sidebar must carry official brand logo, Employee Timesheets, and zero low-level developer payload doctypes."""
+		brand_icon = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
+		banned_doctypes = {
+			"OmniTrack Task Sync",
+			"OmniTrack Remote Connection",
+			"OmniTrack Workspace",
+			"OmniTrack Push Subscription",
+		}
+		for path in SIDEBAR_FIXTURES:
+			if not os.path.isfile(path):
+				continue
+			with open(path, encoding="utf-8") as f:
+				doc = json.load(f)
+			self.assertEqual(doc.get("header_icon"), brand_icon, f"{path} header_icon is not brand icon")
+			items = doc.get("items", [])
+			linked_doctypes = {it.get("link_to") for it in items if it.get("link_type") == "DocType"}
+			self.assertIn("Timesheet", linked_doctypes, f"{path} missing link to Timesheet")
+			overlap = linked_doctypes & banned_doctypes
+			self.assertEqual(overlap, set(), f"{path} contains developer payload doctypes: {overlap}")
+			for it in items:
+				if it.get("link_to") == "OmniTrack Attendance Synthesizer Log":
+					self.assertLessEqual(len(it.get("label", "")), 20, f"Label {it.get('label')!r} too long in {path}")
+
+	def test_workspace_fixtures_has_timesheet_and_clean_cards(self):
+		"""Desk Workspace must include Employee Timesheets in shortcuts and Workforce & Shifts card."""
+		banned_doctypes = {
+			"OmniTrack Task Sync",
+			"OmniTrack Remote Connection",
+			"OmniTrack Workspace",
+			"OmniTrack Push Subscription",
+		}
+		for path in WORKSPACE_FIXTURES:
+			with open(path, encoding="utf-8") as f:
+				doc = json.load(f)
+			shortcuts = doc.get("shortcuts", [])
+			shortcut_targets = {sc.get("link_to") for sc in shortcuts}
+			self.assertIn("Timesheet", shortcut_targets, f"{path} missing Timesheet shortcut")
+
+			links = doc.get("links", [])
+			linked = {l.get("link_to") for l in links}
+			self.assertIn("Timesheet", linked, f"{path} missing Timesheet link")
+			overlap = linked & banned_doctypes
+			self.assertEqual(overlap, set(), f"{path} links contain developer payload doctypes: {overlap}")
+
 	def test_only_the_sanctioned_public_workspaces_ship(self):
 		"""No workspace reaches a user's desktop without being on the list."""
 		shipped = {d["name"] for d in _fixtures().values() if d.get("public")}
