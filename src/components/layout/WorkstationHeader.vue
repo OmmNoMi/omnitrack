@@ -5,12 +5,19 @@
   >
     <!-- Authentic Brand Identity -->
     <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-      <img
-        src="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
-        alt="OmniTrack"
-        class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl shadow-xs object-contain cursor-pointer shrink-0"
+      <button
+        type="button"
+        class="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl shrink-0 transition-transform active:scale-95"
+        aria-label="OmniTrack workstation dashboard"
         @click="$emit('go-dashboard')"
-      />
+      >
+        <img
+          src="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
+          alt=""
+          aria-hidden="true"
+          class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl shadow-xs object-contain shrink-0"
+        />
+      </button>
       <div class="flex items-center gap-2 min-w-0">
         <span class="font-semibold text-lg sm:text-xl sm:font-semibold tracking-tight truncate" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
           OmniTrack

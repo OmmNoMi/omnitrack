@@ -4,13 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>{{ title or 'OmniTrack Workstation' }} | OmmNoMi</title>
+  <meta name="description" content="OmniTrack universal workforce workstation for real-time split-shift task synchronization and automated activity tracking.">
   
   <link rel="manifest" href="/assets/omnitrack/manifest.json">
   <meta name="theme-color" content="#121212">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="OmniTrack">
   <link rel="icon" type="image/svg+xml" href="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg">
+  <link rel="apple-touch-icon" href="/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg">
 
   <!-- Google Fonts: Google Sans / Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -82,8 +85,8 @@
   </script>
   <script>
     window.OMNITRACK_SESSION = {
-      user: "{{ user }}",
-      user_fullname: "{{ user_fullname }}",
+      user: {{ user | tojson }},
+      user_fullname: {{ user_fullname | tojson }},
       is_manager: {{ 'true' if is_manager else 'false' }},
       is_client: {{ 'true' if is_client else 'false' }},
       has_projects: {{ 'true' if has_projects else 'false' }},
@@ -91,7 +94,7 @@
       min_session_words: {{ min_session_words | int }},
       site: "{{ site_name }}",
       socketio_port: {{ socketio_port | int }},
-      csrf_token: "{{ csrf_token }}",
+      csrf_token: {{ csrf_token | tojson }},
       active_session: {{ (active_session | tojson) if active_session else 'null' }}
     };
   </script>
@@ -127,12 +130,12 @@
 <body class="min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
   <!-- Zero-White-Flash & Mount Fallback Error Boundary -->
-  <div id="omnitrack-fallback-error" style="display: none;" class="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-[#121212] text-white font-sans text-center z-50">
+  <div id="omnitrack-fallback-error" style="display: none;" role="alert" aria-live="assertive" class="min-h-screen w-full flex flex-col items-center justify-center p-6 bg-[#121212] text-white font-sans text-center z-50">
     <div class="w-12 h-12 rounded-2xl bg-red-950/60 border border-red-800 text-red-400 flex items-center justify-center mb-4 shadow-lg" aria-hidden="true"><svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
     <h2 class="text-lg font-bold tracking-tight">OmniTrack Workstation Initialization Error</h2>
     <p class="text-xs text-gray-400 mt-1.5 max-w-md leading-relaxed">The workstation client took too long or encountered an error while booting. Check your network connection or reload.</p>
     <div id="omnitrack-fallback-details" style="display: none;" class="mt-4 p-3 rounded-xl bg-black/60 border border-gray-800 font-mono text-[11px] text-red-400 max-w-lg text-left overflow-x-auto"></div>
-    <button onclick="window.location.reload()" class="mt-5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md">Reload Workstation</button>
+    <button type="button" onclick="window.location.reload()" class="mt-5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md">Reload Workstation</button>
   </div>
 
   <!-- Pure SPA Root Mount Container -->
