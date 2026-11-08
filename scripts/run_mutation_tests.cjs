@@ -1421,7 +1421,8 @@ runMutationTest('The task panel hides the Due row when unset', SRC('src/drawers/
 runMutationTest('The task panel drops quick deadline presets', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('v-for="p in quickPresets"', 'v-for="p in []"'), DK, 'quick deadline presets are offered');
 runMutationTest('A composable reads a chime no composable publishes', SRC('src/composables/useWorkstationSessionClock.js'),
-  (code) => code.replace('    playStartOnTimeChime,\n    playOverrunChime,\n', '    playStartOnTimeChime,\n'), 'node scripts/check_workstation_wiring.mjs', 'reads playOverrunChime from w');
+  // The last match is the return list (the publish); the first is the read from the audio store
+  (code) => { const a = '    playStartOnTimeChime,\n    playOverrunChime,\n'; const i = code.lastIndexOf(a); return code.slice(0, i) + '    playStartOnTimeChime,\n' + code.slice(i + a.length); }, 'node scripts/check_workstation_wiring.mjs', 'reads playOverrunChime from w');
 runMutationTest('Deadline presets count days in UTC', SRC('src/utils/deadlinePresets.js'),
   (code) => code.replace('localISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n))', 'new Date(now.getFullYear(), now.getMonth(), now.getDate() + n).toISOString().slice(0, 10)'), DK, 'deadlinePresets(');
 runMutationTest('Friday preset lands on today', SRC('src/utils/deadlinePresets.js'),
