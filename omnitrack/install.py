@@ -4,7 +4,8 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 MODULE_NAME = "OmniTrack"
-SIDEBAR_ICON = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
+# Workspace.icon and Workspace Sidebar.header_icon are Icon fields: an icon name, never an asset URL
+SIDEBAR_ICON = "shield-check"
 
 ROLES = [
 	{"role_name": "OmniTrack Admin", "desk_access": 1},
@@ -378,7 +379,7 @@ def _ensure_workspaces():
 			"name": "OmniTrack",
 			"label": "OmniTrack",
 			"title": "OmniTrack",
-			"icon": "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg",
+			"icon": SIDEBAR_ICON,
 			"indicator_color": "blue",
 			"number_cards": [
 				{"number_card_name": "Total Work Blocks", "label": "Total Work Blocks"},
@@ -420,6 +421,13 @@ def _ensure_workspaces():
 					]
 				},
 				{
+					"label": "Projects & Tasks",
+					"links": [
+						{"label": "Projects", "link_to": "Project"},
+						{"label": "Tasks", "link_to": "Task"}
+					]
+				},
+				{
 					"label": "Administration & Settings",
 					"links": [
 						{"label": "OmniTrack Settings", "link_to": "OmniTrack Settings"},
@@ -453,7 +461,7 @@ def _ensure_workspaces():
 
 		content.append({"id": "sp_2", "type": "spacer", "data": {"col": 12}})
 		content.append({"id": "hdr_actions", "type": "header", "data": {"text": "<span class=\"h4\">Quick Launch & Workstations</span>", "col": 12}})
-		# Employee Checkin and Attendance exist only with Frappe HR
+		# Employee Checkin and Attendance exist only with Frappe HR, Timesheet only with ERPNext
 		present = [sc for sc in ws["shortcuts"] if sc["type"] != "DocType" or frappe.db.exists("DocType", sc.get("link_to"))]
 		for i, sc in enumerate(present):
 			sc_data = {
@@ -606,9 +614,11 @@ def _ensure_workspace_sidebar():
 			{"type": "Link", "label": "Dashboard", "link_type": "Workspace", "link_to": "OmniTrack", "icon": "layout-dashboard", "child": 1},
 			{"type": "Link", "label": "PWA Workstation", "link_type": "URL", "url": "/omnitrack", "icon": "smartphone", "child": 1},
 			{"type": "Section Break", "label": "Workforce & Shifts", "link_type": "DocType", "icon": "calendar", "indent": 1, "collapsible": 1},
-			{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1},
-			{"type": "Link", "label": "Employee Timesheets", "link_type": "DocType", "link_to": "Timesheet", "icon": "clock", "child": 1}
+			{"type": "Link", "label": "Planned Work Blocks", "link_type": "DocType", "link_to": "Planned Work Block", "icon": "calendar", "child": 1}
 		]
+
+		if frappe.db.exists("DocType", "Timesheet"):
+			items.append({"type": "Link", "label": "Employee Timesheets", "link_type": "DocType", "link_to": "Timesheet", "icon": "clock", "child": 1})
 
 		if frappe.db.exists("DocType", "Employee Checkin"):
 			items.append({"type": "Link", "label": "Employee Checkins", "link_type": "DocType", "link_to": "Employee Checkin", "icon": "log-in", "child": 1})

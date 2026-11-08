@@ -59,15 +59,19 @@ WORKSPACE_FIXTURES = [
 class TestWorkspaceFixtures(unittest.TestCase):
 	def test_hooks_declares_apps_screen_and_home(self):
 		"""Frappe v16 Desk needs add_to_apps_screen and app_home to resolve app branding and routes."""
+		hooks = {}
 		with open(HOOKS_PY, encoding="utf-8") as f:
-			content = f.read()
-		self.assertIn('app_home = "/desk/omnitrack"', content)
-		self.assertIn("add_to_apps_screen", content)
-		self.assertIn('"/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"', content)
+			exec(compile(f.read(), HOOKS_PY, "exec"), hooks)
+		self.assertEqual(hooks.get("app_home"), "/desk/omnitrack")
+		tiles = hooks.get("add_to_apps_screen") or []
+		self.assertEqual([t.get("name") for t in tiles], ["omnitrack"])
+		tile = tiles[0]
+		self.assertEqual(tile.get("route"), hooks["app_home"], "the apps-screen tile must open app_home")
+		self.assertTrue(tile.get("logo", "").startswith("/assets/omnitrack/"), "the apps-screen tile needs the brand logo")
+		self.assertTrue(tile.get("title"))
 
 	def test_sidebar_fixtures_branding_and_links(self):
-		"""Sidebar must carry official brand logo, Employee Timesheets, and zero low-level developer payload doctypes."""
-		brand_icon = "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg"
+		"""Sidebar header carries an icon name, Employee Timesheets, and zero low-level developer payload doctypes."""
 		banned_doctypes = {
 			"OmniTrack Task Sync",
 			"OmniTrack Remote Connection",
@@ -79,7 +83,9 @@ class TestWorkspaceFixtures(unittest.TestCase):
 				continue
 			with open(path, encoding="utf-8") as f:
 				doc = json.load(f)
-			self.assertEqual(doc.get("header_icon"), brand_icon, f"{path} header_icon is not brand icon")
+			# header_icon is an Icon field: an asset URL renders as a broken icon
+			icon = doc.get("header_icon") or ""
+			self.assertTrue(icon and not icon.startswith("/") and "://" not in icon, f"{path} header_icon {icon!r} is not an icon name")
 			items = doc.get("items", [])
 			linked_doctypes = {it.get("link_to") for it in items if it.get("link_type") == "DocType"}
 			self.assertIn("Timesheet", linked_doctypes, f"{path} missing link to Timesheet")
@@ -88,6 +94,40 @@ class TestWorkspaceFixtures(unittest.TestCase):
 			for it in items:
 				if it.get("link_to") == "OmniTrack Attendance Synthesizer Log":
 					self.assertLessEqual(len(it.get("label", "")), 20, f"Label {it.get('label')!r} too long in {path}")
+
+	def test_workspace_icon_is_an_icon_name(self):
+		"""Workspace.icon is an Icon field, in the fixture and in install.py."""
+		for path in WORKSPACE_FIXTURES:
+			with open(path, encoding="utf-8") as f:
+				icon = json.load(f).get("icon") or ""
+			self.assertTrue(icon and not icon.startswith("/"), f"{path} icon {icon!r} is not an icon name")
+		with open(INSTALL_PY, encoding="utf-8") as f:
+			source = f.read()
+		m = re.search(r'^SIDEBAR_ICON\s*=\s*"([^"]*)"', source, re.M)
+		self.assertTrue(m and m.group(1) and not m.group(1).startswith("/"), "install.py SIDEBAR_ICON must be an icon name")
+		ws_body = source.split("def _ensure_workspaces()", 1)[1].split("\ndef ", 1)[0]
+		self.assertNotRegex(ws_body, r'"icon":\s*"/', "_ensure_workspaces() sets an asset URL as the Workspace icon")
+
+	def test_sidebar_links_only_to_installed_doctypes(self):
+		"""Timesheet comes with ERPNext and Checkin/Attendance with HR: the sidebar guards each one."""
+		with open(INSTALL_PY, encoding="utf-8") as f:
+			source = f.read()
+		body = source.split("def _ensure_workspace_sidebar()", 1)[1].split("\ndef ", 1)[0]
+		unguarded = body.split("if frappe.db.exists(", 1)[0]
+		for doctype in ("Timesheet", "Employee Checkin", "Attendance"):
+			self.assertIn(f'frappe.db.exists("DocType", "{doctype}")', body, f"sidebar never checks {doctype} exists")
+			self.assertNotIn(f'"link_to": "{doctype}"', unguarded, f"sidebar links {doctype} before checking it exists")
+
+	def test_workspace_cards_keep_projects_and_tasks(self):
+		"""The desk workspace keeps its Projects & Tasks card (Project, Task)."""
+		for path in WORKSPACE_FIXTURES:
+			with open(path, encoding="utf-8") as f:
+				doc = json.load(f)
+			cards = {c["data"]["card_name"]: {l["link_to"] for l in c["data"]["links"]} for c in json.loads(doc["content"]) if c["type"] == "card"}
+			self.assertEqual(cards.get("Projects & Tasks"), {"Project", "Task"}, f"{path} lost the Projects & Tasks card")
+		with open(INSTALL_PY, encoding="utf-8") as f:
+			body = f.read().split("def _ensure_workspaces()", 1)[1].split("\ndef ", 1)[0]
+		self.assertRegex(body, r'"label": "Projects & Tasks",\s*"links": \[\s*\{"label": "Projects", "link_to": "Project"\},\s*\{"label": "Tasks", "link_to": "Task"\}')
 
 	def test_workspace_fixtures_has_timesheet_and_clean_cards(self):
 		"""Desk Workspace must include Employee Timesheets in shortcuts and Workforce & Shifts card."""

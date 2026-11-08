@@ -3,7 +3,7 @@
  "creation": "2026-09-07 19:50:00.000000",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
- "header_icon": "/assets/omnitrack/icons/desktop_icons/solid/omnitrack.svg",
+ "header_icon": "shield-check",
  "idx": 0,
  "items": [
   {
