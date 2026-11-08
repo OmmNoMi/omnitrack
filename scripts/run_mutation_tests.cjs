@@ -1119,7 +1119,7 @@ runMutationTest('Adjust stops measuring past midnight', SRC('src/session/Session
 runMutationTest('An overnight end is an hour off the night the clocks change', SRC('src/utils/timesheetEntry.js'),
   (code) => code.replace('return new Date(y, m - 1, d, 0, toMin(from) + mins).getTime();', 'return new Date(y, m - 1, d, 0, 0, 0).getTime() + (toMin(from) + mins) * 60000;'), ON, 'the clocks change that night');
 runMutationTest('A live end list laps the clock past a whole day', SRC('src/utils/clockTime.js'),
-  (code) => code.replace(' && m < start + 24 * 60; m += 15', '; m += 15'), ON, 'offers an end twice');
+  (code) => code.replace(' && m < start + 24 * 60; m += 15', '; m += 15'), ON, 'offers the start itself, a whole day on');
 runMutationTest('A live end list stops short of the hour', SRC('src/utils/clockTime.js'),
   (code) => code.replace('m <= start + maxSpan &&', 'm < start + maxSpan &&'), ON, 'should offer up to an hour');
 runMutationTest('Moving the start back past midnight keeps the day', SRC('src/components/common/DayTimeFields.vue'),
