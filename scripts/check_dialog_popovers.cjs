@@ -188,6 +188,34 @@ if (!/'remove_block_task'/.test(taskForm)) problems.push('TaskFormDialog.vue: ca
 if ((taskForm.match(/>\{\{ currentState \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (currentState)');
 if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves stage and execute on save (execute_task_workflow_action)');
 if (!/currentState\(\)\s*\{[\s\S]*?this\.stagedAction/.test(taskForm) || !/canSave\(\)\s*\{[\s\S]*?!!this\.stagedAction/.test(taskForm) || /confirming/.test(taskForm)) problems.push('TaskFormDialog.vue: status changes stage state and enable Save without confirming box');
+// The description box: Tasks only (a ToDo's description is its title), locked when it has
+// formatting, and the real converters behave (run from the component's source)
+if (!/<Textarea\s+v-if="hasDescription"/.test(taskForm) || !/hasDescription\(\)\s*\{\s*return this\.detail\.doctype === 'Task';/.test(taskForm)) problems.push('TaskFormDialog.vue: the description box is for Tasks only');
+if (!/:disabled="!editable \|\| richDescription"/.test(taskForm) || !/if \(k === 'description' && \(!this\.hasDescription \|\| this\.richDescription\)\) continue;/.test(taskForm)) problems.push('TaskFormDialog.vue: a formatted description is locked and never sent');
+{
+  const fn = (name) => (taskForm.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+  try {
+    const lib = new Function(taskForm.match(/const PLAIN_TAGS = [^\n]*/)[0] + '\n' + fn('isRichHtml') + '\n' + fn('htmlToPlainText') + '\nreturn { isRichHtml, htmlToPlainText };')();
+    const cases = [
+      [lib.htmlToPlainText('<p>a &amp;lt; b</p>'), 'a &lt; b'],
+      [lib.htmlToPlainText('<p>One<br>two</p><p>Three &amp; four</p>'), 'One\ntwo\n\nThree & four'],
+      [lib.isRichHtml('<div class="ql-editor"><p>x<br></p></div>'), false],
+      [lib.isRichHtml('<p><a href="#">x</a></p>'), true],
+      [lib.isRichHtml('<ul><li>x</li></ul>'), true],
+    ];
+    cases.forEach(([got, want], i) => { if (got !== want) problems.push(`TaskFormDialog.vue: description converter case ${i + 1} gave ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`); });
+  } catch (e) { problems.push('TaskFormDialog.vue: description converters could not run: ' + e.message); }
+}
+if (!/FIELDS\s*=\s*\[[^\]]*'description'/.test(taskForm) || !/label="Description"/.test(taskForm)) {
+  problems.push('TaskFormDialog.vue: must include Description field in form and FIELDS');
+}
+const apiTasks = read('omnitrack/api/tasks.py');
+if (!/def update_task\([^)]*description=None/.test(apiTasks) || !/def update_block_task\([^)]*description=None/.test(apiTasks) || !/def _edit_task_doc\([^)]*description=None/.test(apiTasks)) {
+  problems.push('tasks.py: update_task, update_block_task, and _edit_task_doc must accept description');
+}
+if (!/"description":\s*doc\.get\("description"\)/.test(apiTasks)) {
+  problems.push('tasks.py: _task_form must return description');
+}
 for (const f of walkVue(path.join(root, 'src'))) {
   const rel = path.relative(root, f);
   if (rel.endsWith('TaskFormDialog.vue')) continue;

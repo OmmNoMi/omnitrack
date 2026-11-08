@@ -527,6 +527,22 @@ runMutationTest('The task form hides where the task stands', taskFormFile,
   (code) => code.replace("{{ currentState }}", "{{ detail.subject }}"), DP, 'where the task stands');
 runMutationTest('Staging status does not enable Save', taskFormFile,
   (code) => code.replace('|| !!this.stagedAction', ''), DP, 'status changes stage state and enable Save without confirming box');
+runMutationTest('A ToDo gets a second description box', taskFormFile,
+  (code) => code.replace("return this.detail.doctype === 'Task';", "return true;"), DP, 'for Tasks only');
+runMutationTest('A formatted description is sent and flattened', taskFormFile,
+  (code) => code.replace("if (k === 'description' && (!this.hasDescription || this.richDescription)) continue;", "if (k === 'description' && !this.hasDescription) continue;"), DP, 'locked and never sent');
+runMutationTest('&amp; is decoded before the other entities', taskFormFile,
+  (code) => code.replace("    .replace(/&nbsp;/g, ' ')\n", "    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n"), DP, 'converter case 1');
+runMutationTest('Links count as plain text', taskFormFile,
+  (code) => code.replace("const PLAIN_TAGS = ['p', 'br', 'div', 'span'];", "const PLAIN_TAGS = ['p', 'br', 'div', 'span', 'a'];"), DP, 'converter case 4');
+runMutationTest('The task form drops the Description field', taskFormFile,
+  (code) => code.replace('label="Description"', 'label="Notes"'), DP, 'must include Description field');
+runMutationTest('FIELDS loses description in task form', taskFormFile,
+  (code) => code.replace("'description'", "'desc'"), DP, 'FIELDS');
+runMutationTest('update_task drops description argument', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('def update_task(doctype, name, subject=None, due_date=None, priority=None, description=None):', 'def update_task(doctype, name, subject=None, due_date=None, priority=None):'), DP, 'must accept description');
+runMutationTest('_task_form drops description', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('"description": doc.get("description") or "",', ''), DP, 'must return description');
 const DA = 'node scripts/check_doc_activity.mjs';
 runMutationTest('The task panel loses its Activity', drawerDir('TaskDetailDrawer.vue'),
   (code) => code.replace('<DocActivity v-if="d" :doctype="doc.doctype" :name="doc.name" :is-dark-mode="isDarkMode" />', ''), DA, "task's or to-do's own Activity");
@@ -756,6 +772,16 @@ runMutationTest('Planner serialises empty times as 00:00:00 again', path.resolve
 const TP = path.resolve(omnitrackDir,'omnitrack/utils/task_parity.py');
 const TPT = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_task_parity`;
 const PWBC = path.resolve(omnitrackDir,'omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py');
+const PH = path.resolve(omnitrackDir, 'omnitrack/utils/plain_html.py');
+const TKS = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
+runMutationTest('A saved description loses its line breaks', PH,
+  (code) => code.replace('.replace("\\n", "<br>")', ''), TPT, 'test_lines_and_paragraphs_survive');
+runMutationTest('A saved description is not escaped', PH,
+  (code) => code.replace('html.escape(p.strip())', 'p.strip()'), TPT, 'test_text_is_escaped');
+runMutationTest('Links count as a plain description', PH,
+  (code) => code.replace('_PLAIN_TAGS = {"p", "br", "div", "span"}', '_PLAIN_TAGS = {"p", "br", "div", "span", "a"}'), TPT, 'test_formatting_is_rich');
+runMutationTest('A formatted description is overwritten', TKS,
+  (code) => code.replace('\t\t\tif is_rich(doc.description):\n', '\t\t\tif False:\n'), TPT, 'test_a_rich_description_is_never_overwritten');
 runMutationTest("A block on someone else's task leaves its person off it", TP,
   (code) => code.replace('and name in task_assignees and person not in task_assignees[name]:', 'and name in task_assignees and not task_assignees[name]:'), TPT, 'test_someone_elses_task_gets_the_blocks_person_added');
 runMutationTest('A deleted task is assigned anyway', TP,
@@ -1854,6 +1880,13 @@ runMutationTest('Python compose_wrap_note keeps a blank line', SRC('omnitrack/ut
 // A plan is for time still to come (scripts/check_plan_window.mjs, test_unit_governance.TestPlanWindow)
 const PW = 'node scripts/check_plan_window.mjs';
 const GOV = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_unit_governance`;
+const TKS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
+runMutationTest('A completed task drags its moved blocks back', TKS_GOV,
+  (code) => code.replace('"status": ("in", ("Open", "Completed")),\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
+runMutationTest('A row already done is stamped again', TKS_GOV,
+  (code) => code.replace('\t\tif r.status == want:\n\t\t\tcontinue\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
+runMutationTest('A reopened task leaves its blocks done', TKS_GOV,
+  (code) => code.replace('want = "Completed" if is_done else "Open"', 'want = "Completed"'), GOV, 'test_reopening_reopens_done_rows_only');
 const PWJS = SRC('src/utils/planWindow.js');
 const PERMS = SRC('omnitrack/permissions.py');
 runMutationTest('JS plans an earlier day again', PWJS,
