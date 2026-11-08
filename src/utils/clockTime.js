@@ -34,15 +34,16 @@ export function endTimeOptions(startHHMM, opts = {}) {
     const nowHHMM = opts.nowHHMM || toHHMM(new Date().getHours() * 60 + new Date().getMinutes());
     const spanToNow = spanMins(startHHMM, nowHHMM);
     const curSpan = opts.currentEnd ? spanMins(startHHMM, opts.currentEnd) : 0;
-    maxSpan = Math.max(spanToNow, curSpan) + 15;
-    if (maxSpan < 60) maxSpan = 60;
+    // Up to now and a little past, at least an hour (the loop stops short of a whole day)
+    maxSpan = Math.max(60, Math.max(spanToNow, curSpan) + 15);
   }
 
   const curEnd = opts.currentEnd ? String(opts.currentEnd).trim().slice(0, 5) : "";
   const curSpan = curEnd && curEnd !== startHHMM ? spanMins(startHHMM, curEnd) : null;
 
   let curInserted = false;
-  for (let m = start + 15; m < start + maxSpan; m += 15) {
+  // The last step is offered (an hour reaches 10:00 from 9:00); a whole day never is
+  for (let m = start + 15; m <= start + maxSpan && m < start + 24 * 60; m += 15) {
     const span = m - start;
     if (!curInserted && curSpan != null && curSpan > 0 && curSpan < span) {
       const atCur = (start + curSpan) % (24 * 60);

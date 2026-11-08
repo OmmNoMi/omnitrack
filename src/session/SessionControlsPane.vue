@@ -53,6 +53,7 @@
         :day-offsets="dayOffsets"
         :durations="[15, 30, 60, 120]"
         :is-dark-mode="isDarkMode"
+        quick-adjust
         :scheduled-start="trackerBoundBlock ? trackerBoundBlock.start_time : ''"
       />
       <!-- Why it cannot be saved, inside the box that keeps what was typed: a day outside the
@@ -129,6 +130,7 @@
         :is-dark-mode="isDarkMode"
         :is-live="true"
         :cap-to-now="true"
+        quick-adjust
         :scheduled-start="trackerBoundBlock ? trackerBoundBlock.start_time : ''"
       />
       <!-- Time not worked yet cannot be logged; Keep running is how the clock goes on -->

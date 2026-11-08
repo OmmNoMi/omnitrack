@@ -32,24 +32,24 @@
           <span :class="mutedText" aria-hidden="true">–</span>
           <TimePicker variant="outline" :model-value="end" placeholder="End" :options="endOptions" placement="bottom-end" @update:model-value="$emit('update:end', $event)" />
         </div>
-        <div class="flex flex-wrap items-center gap-1.5 pt-0.5" role="toolbar" aria-label="Quick time adjustments">
-          <span class="text-xs font-medium" :class="mutedText">Start:</span>
-          <button
-            v-if="scheduledStart && scheduledStart.slice(0, 5) !== start"
-            type="button"
-            :class="pillClass"
-            aria-label="Set start time to scheduled start"
-            title="Snap to scheduled start"
-            @click="applyOnTime"
-          >On time</button>
-          <button type="button" :class="pillClass" aria-label="Start 30 minutes earlier" title="Started 30m ago" @click="nudgeStart(-30)">-30m</button>
-          <button type="button" :class="pillClass" aria-label="Start 15 minutes earlier" title="Started 15m ago" @click="nudgeStart(-15)">-15m</button>
-          <button type="button" :class="pillClass" aria-label="Start 10 minutes earlier" title="Started 10m ago" @click="nudgeStart(-10)">-10m</button>
-          <button type="button" :class="pillClass" aria-label="Start 5 minutes earlier" title="Started 5m ago" @click="nudgeStart(-5)">-5m</button>
-          <span class="text-xs font-medium ml-1" :class="mutedText">End:</span>
-          <button type="button" :class="pillClass" aria-label="Set end time to current time" title="Set end to now" @click="setEndNow">Now</button>
-          <button type="button" :class="pillClass" aria-label="Extend end time by 5 minutes" title="Add 5m to end" @click="nudgeEnd(5)">+5m</button>
-          <button type="button" :class="pillClass" aria-label="Extend end time by 15 minutes" title="Add 15m to end" @click="nudgeEnd(15)">+15m</button>
+        <!-- A session's quick fixes: when it really started, and when it ended -->
+        <div v-if="quickAdjust" class="flex flex-col gap-1.5 pt-0.5">
+          <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Adjust the start">
+            <span aria-hidden="true" class="text-xs font-medium w-9" :class="mutedText">Start</span>
+            <button
+              v-if="scheduledStart && scheduledStart.slice(0, 5) !== start"
+              type="button"
+              :class="pillClass"
+              title="Set the start to the planned start"
+              @click="applyOnTime"
+            >On time</button>
+            <button v-for="m in [30, 15, 10, 5]" :key="'s' + m" type="button" :class="pillClass" :aria-label="'Start ' + m + ' minutes earlier'" :title="'Start ' + m + ' minutes earlier'" @click="nudgeStart(-m)">-{{ m }}m</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Adjust the end">
+            <span aria-hidden="true" class="text-xs font-medium w-9" :class="mutedText">End</span>
+            <button type="button" :class="pillClass" title="Set the end to now" aria-label="Set the end to now" @click="setEndNow">Now</button>
+            <button v-for="m in [5, 15]" :key="'e' + m" type="button" :class="pillClass" :aria-label="'End ' + m + ' minutes later'" :title="'End ' + m + ' minutes later'" @click="nudgeEnd(m)">+{{ m }}m</button>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
@@ -82,6 +82,8 @@ export default {
     // A timesheet entry says "Worked on"; a plan says "Day"
     dayLabel: { type: String, default: "Day" },
     timeLabel: { type: String, default: "Time" },
+    // The session boxes offer quick start and end fixes; planning does not
+    quickAdjust: { type: Boolean, default: false },
     scheduledStart: { type: String, default: "" },
     isLive: { type: Boolean, default: false },
     capToNow: { type: Boolean, default: false },
@@ -123,7 +125,10 @@ export default {
     mutedText() { return this.isDarkMode ? "text-gray-300" : "text-gray-700"; },
     labelText() { return this.isDarkMode ? "text-gray-200" : "text-gray-800"; },
     pillClass() {
-      return "text-xs font-medium px-2 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1E1F22] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none transition-colors";
+      return [
+        "min-h-7 min-w-9 text-xs font-medium px-2 rounded-md border cursor-pointer select-none transition-colors tabular-nums focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
+        this.isDarkMode ? "border-gray-600 bg-[#1E1F22] text-gray-200 hover:bg-gray-800" : "border-gray-300 bg-white text-gray-800 hover:bg-gray-50",
+      ];
     },
   },
   methods: {
@@ -142,9 +147,14 @@ export default {
       const base = this.start
         ? toMin(this.start)
         : (new Date().getHours() * 60 + new Date().getMinutes());
-      const newStart = (base + deltaMins + 24 * 60) % (24 * 60);
-      const newStartHHMM = toHHMM(newStart);
-      this.$emit("update:start", newStartHHMM);
+      const moved = base + deltaMins;
+      const newStart = (moved + 24 * 60) % (24 * 60);
+      // Back past midnight is the day before: 00:10 less 30 minutes is 23:40 yesterday
+      if (moved < 0 && this.date) {
+        const [y, mo, d] = this.date.split("-").map(Number);
+        this.$emit("update:date", localISO(new Date(y, mo - 1, d - 1)));
+      }
+      this.$emit("update:start", toHHMM(newStart));
       if (!this.end || (!this.isLive && this.mins <= 0)) {
         this.$emit("update:end", toHHMM((newStart + 60) % (24 * 60)));
       }
