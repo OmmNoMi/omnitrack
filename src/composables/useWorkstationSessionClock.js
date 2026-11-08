@@ -1,5 +1,5 @@
 import { lazy } from "./workstationBag.js";
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, watch } from "vue";
 import { WORK } from "../utils/activity.js";
 import { hoursMinutes } from "../utils/clockTime.js";
 import { useWorkstationTimeline } from "./useWorkstationTimeline.js";
@@ -206,8 +206,17 @@ export function useWorkstationSessionClock(w) {
     const _ = trackerSeconds.value;
     return Math.min(Date.now(), inactivityIdleSince.value + 15 * 60 * 1000);
   });
+  watch(isTracking, (tracking) => {
+    if (!tracking) {
+      showInactivityModal.value = false;
+      lastInactivityAlertTime.value = 0;
+    }
+  });
   const checkInactivity = () => {
-    if (!isTracking.value) return;
+    if (!isTracking.value) {
+      if (showInactivityModal.value) showInactivityModal.value = false;
+      return;
+    }
     const now = Date.now();
     const act = lastNoteMs();
     const idleMs = now - act;
@@ -253,6 +262,7 @@ export function useWorkstationSessionClock(w) {
     postJSON,
     showToast,
     isTracking,
+    showInactivityModal,
     startTime,
     trackerSeconds,
     trackerTimer,

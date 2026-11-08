@@ -19,6 +19,7 @@ export function useWorkstationSessionSync({
   postJSON,
   showToast,
   isTracking,
+  showInactivityModal,
   startTime,
   trackerSeconds,
   trackerTimer,
@@ -75,6 +76,9 @@ export function useWorkstationSessionSync({
             restoreActiveSession(data.payload);
           }
         } else if (data.type === 'session_cleared') {
+          if (showInactivityModal && showInactivityModal.value) {
+            showInactivityModal.value = false;
+          }
           if (isTracking.value) {
             isTracking.value = false;
             if (trackerTimer.value) clearInterval(trackerTimer.value);
@@ -302,8 +306,11 @@ export function useWorkstationSessionSync({
 
   let _lastClearedToast = 0;
   const handleRemoteSessionCleared = (opts) => {
+    if (showInactivityModal && showInactivityModal.value) {
+      showInactivityModal.value = false;
+    }
     if (!isTracking.value) return;
-    if (Date.now() - _lastLocalUpdate < 15000) return;
+    if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 15000)) return;
 
     isTracking.value = false;
     startTime.value = null;
@@ -428,11 +435,15 @@ export function useWorkstationSessionSync({
         const active = data.message;
         if (active && active.status === 'active') {
           reconcileActiveSession(active);
-        } else if (!active && isTracking.value) {
-          if (Date.now() - _lastLocalUpdate < 15000) {
-            syncActiveSession(true);
-          } else {
-            handleRemoteSessionCleared({ silent: true });
+        } else if (!active) {
+          if (isTracking.value) {
+            if (Date.now() - _lastLocalUpdate < 15000) {
+              syncActiveSession(true);
+            } else {
+              handleRemoteSessionCleared({ silent: true });
+            }
+          } else if (showInactivityModal && showInactivityModal.value) {
+            showInactivityModal.value = false;
           }
         }
       }
