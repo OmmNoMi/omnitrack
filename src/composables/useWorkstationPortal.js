@@ -6,7 +6,7 @@ import { WORK } from "../utils/activity.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationPortal(w) {
-  const { activeBlock, fetchPlannerData, isPastBlock, isTracking, plannerBusy, plannerData, postJSON, promptSwitchSession, selectedNature, selectedProject, sessionNotesList, showBlockDrawer, showToast, toggleTrack, trackerBlockName, trackerNotes } = w;
+  const { activeBlock, fetchPlannerData, isManager, isPastBlock, isTracking, plannerBusy, plannerData, postJSON, promptSwitchSession, selectedNature, selectedProject, sessionNotesList, showBlockDrawer, showToast, toggleTrack, trackerBlockName, trackerNotes } = w;
 
   // Executive Client Portal Computed Metrics
   const clientCompletedBlocks = computed(() => {
@@ -42,7 +42,7 @@ export function useWorkstationPortal(w) {
     return Math.round((logged / total) * 100);
   });
   const removeActiveBlock = async () => {
-    if (isPastBlock(activeBlock.value)) { showToast('Past planned work blocks cannot be deleted', 'warning'); return; }
+    if (isPastBlock(activeBlock.value) && !(isManager && isManager.value)) { showToast('Past planned work blocks cannot be deleted', 'warning'); return; }
     plannerBusy.value = true;
     try {
       await postJSON('delete_work_block', { block_name: activeBlock.value.name });

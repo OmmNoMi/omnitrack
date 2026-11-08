@@ -109,8 +109,45 @@ class PlannedWorkBlock(OptionalLinks, Document):
 
 	def on_trash(self):
 		if not getattr(self.flags, "ignore_past_block_lock", False):
-			from omnitrack.permissions import get_past_block_lock_grace_hours
+			from omnitrack.permissions import get_past_block_lock_grace_hours, is_omnitrack_manager, check_approved_block_lock
 			from frappe.utils import now_datetime, get_datetime, time_diff_in_hours
+
+			user = getattr(getattr(frappe, "session", None), "user", None)
+
+			# Approved blocks are permanently locked against modifications or deletion by standard users
+			check_approved_block_lock(self, user)
+
+			# Privileged administrative deletion:
+			# System Manager, Administrator, OmniTrack Manager / Admin can delete past planned work blocks
+			# provided the block has 0 logged hours and no child work sessions.
+			if is_omnitrack_manager(user):
+				if flt(self.actual_hours) > 0 or (self.get("sessions") and len(self.sessions) > 0):
+					frappe.throw(
+						frappe._("Cannot delete a work block with logged work sessions. Adjust or delete the sessions first, or mark the block as Cancelled."),
+						frappe.ValidationError
+					)
+				# Audit logging for historical compliance and intentional administrative corrections
+				msg = (
+					f"Administrative deletion of Planned Work Block '{self.name}' for employee '{self.employee}' "
+					f"on {self.work_date} ({self.start_time} - {self.end_time}, status: {self.status}) "
+					f"by {user}."
+				)
+				frappe.logger("omnitrack").info(msg)
+				try:
+					if getattr(frappe, "db", None) and hasattr(frappe.db, "exists") and frappe.db.exists("DocType", "Activity Log"):
+						frappe.get_doc({
+							"doctype": "Activity Log",
+							"subject": msg,
+							"user": user,
+							"status": "Success",
+							"operation": "Delete",
+							"reference_doctype": "Planned Work Block",
+							"reference_name": self.name,
+						}).insert(ignore_permissions=True)
+				except Exception:
+					pass
+				return
+
 			grace_hours = get_past_block_lock_grace_hours()
 			now_dt = now_datetime()
 			if self.work_date:
@@ -124,6 +161,7 @@ class PlannedWorkBlock(OptionalLinks, Document):
 						frappe._("Past planned work blocks older than the grace period cannot be deleted."),
 						frappe.ValidationError
 					)
+
 
 
 	def resolve_project_from_task(self):
