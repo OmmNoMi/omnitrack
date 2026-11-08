@@ -412,24 +412,14 @@ export function useWorkstationEod(w) {
     window.addEventListener('keydown', unlockAudio, { passive: true });
 
     // Listen for visibility change to immediately sync timer & fetch fresh active session on phone wake
-    document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState === 'visible') {
-        await checkRemoteActiveSession();
-        fetchWorkstationData(selectedEmployee.value);
-        if (isTracking.value) {
-          checkInactivity();
-          checkBlockOverrun();
-        }
-      }
-    });
-    // A desktop window switch fires focus without visibilitychange: read the server's session first
-    window.addEventListener('focus', async () => {
+    // Phone wake and desktop window focus: read the server's session first, then check alerts
+    const onWake = async (refetch) => {
       await checkRemoteActiveSession();
-      if (isTracking.value) {
-        checkInactivity();
-        checkBlockOverrun();
-      }
-    });
+      if (refetch) fetchWorkstationData(selectedEmployee.value);
+      if (isTracking.value) { checkInactivity(); checkBlockOverrun(); }
+    };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onWake(true); });
+    window.addEventListener('focus', () => onWake(false));
 
     // 1. Rock-solid background poller (every 2s for instant multi-device reflection)
     _livePollTimer = setInterval(checkRemoteActiveSession, 2000);
