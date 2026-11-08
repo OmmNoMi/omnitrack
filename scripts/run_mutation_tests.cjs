@@ -292,7 +292,7 @@ runMutationTest(
 runMutationTest(
   "DatePicker popover loses today's accent ring",
   path.resolve(omnitrackDir, 'src/styles/main.css'),
-  (code) => code.replace('box-shadow: inset 0 0 0 1.5px var(--primary, #4285f4);', ''),
+  (code) => code.replace('box-shadow: inset 0 0 0 1.5px #1d4ed8;', ''),
   'node scripts/check_dialog_popovers.cjs',
   "visually highlight today's date"
 );
@@ -302,6 +302,13 @@ runMutationTest(
   (code) => code.replace('.dark [data-reka-popper-content-wrapper] button.font-extrabold.text-ink-gray-9:not(.bg-surface-gray-6)', '/* dark-removed */'),
   'node scripts/check_dialog_popovers.cjs',
   'dark mode styling'
+);
+runMutationTest(
+  "DatePicker today cell loses its focus outline",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('outline: 2px solid #1d4ed8;', ''),
+  'node scripts/check_dialog_popovers.cjs',
+  'visible focus outline'
 );
 runMutationTest(
   'Document Escape handler stops skipping events a popover already handled',

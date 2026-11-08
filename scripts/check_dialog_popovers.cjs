@@ -43,11 +43,14 @@ else {
     problems.push(`main.css: popper wrapper z-index ${popper[1]} must be above .dialog-overlay ${overlay[1]}`);
   }
 }
-if (!/button\.font-extrabold\.text-ink-gray-9:not\(\.bg-surface-gray-6\)[^{]*\{[^}]*box-shadow:\s*inset 0 0 0 1\.5px var\(--primary,\s*#4285f4\)/.test(css)) {
+if (!/\[data-reka-popper-content-wrapper\] button\.font-extrabold\.text-ink-gray-9:not\(\.bg-surface-gray-6\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1\.5px #1d4ed8/.test(css)) {
   problems.push("main.css: DatePicker popover must visually highlight today's date with an accent ring (.font-extrabold.text-ink-gray-9)");
 }
 if (!/\.dark\s+\[data-reka-popper-content-wrapper\]\s+button\.font-extrabold\.text-ink-gray-9:not\(\.bg-surface-gray-6\)[^{]*\{[^}]*box-shadow:\s*inset 0 0 0 1\.5px #60a5fa/.test(css)) {
   problems.push("main.css: DatePicker popover today accent must have dark mode styling");
+}
+if (!/button\.font-extrabold\.text-ink-gray-9:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css)) {
+  problems.push("main.css: today's DatePicker cell keeps a visible focus outline (its ring replaced frappe-ui's focus ring)");
 }
 
 // 2. document Escape handlers that close dialogs
