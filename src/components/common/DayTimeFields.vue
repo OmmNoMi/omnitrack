@@ -32,6 +32,25 @@
           <span :class="mutedText" aria-hidden="true">–</span>
           <TimePicker variant="outline" :model-value="end" placeholder="End" :options="endOptions" placement="bottom-end" @update:model-value="$emit('update:end', $event)" />
         </div>
+        <div class="flex flex-wrap items-center gap-1.5 pt-0.5" role="toolbar" aria-label="Quick time adjustments">
+          <span class="text-xs font-medium" :class="mutedText">Start:</span>
+          <button
+            v-if="scheduledStart && scheduledStart.slice(0, 5) !== start"
+            type="button"
+            :class="pillClass"
+            aria-label="Set start time to scheduled start"
+            title="Snap to scheduled start"
+            @click="applyOnTime"
+          >On time</button>
+          <button type="button" :class="pillClass" aria-label="Start 30 minutes earlier" title="Started 30m ago" @click="nudgeStart(-30)">-30m</button>
+          <button type="button" :class="pillClass" aria-label="Start 15 minutes earlier" title="Started 15m ago" @click="nudgeStart(-15)">-15m</button>
+          <button type="button" :class="pillClass" aria-label="Start 10 minutes earlier" title="Started 10m ago" @click="nudgeStart(-10)">-10m</button>
+          <button type="button" :class="pillClass" aria-label="Start 5 minutes earlier" title="Started 5m ago" @click="nudgeStart(-5)">-5m</button>
+          <span class="text-xs font-medium ml-1" :class="mutedText">End:</span>
+          <button type="button" :class="pillClass" aria-label="Set end time to current time" title="Set end to now" @click="setEndNow">Now</button>
+          <button type="button" :class="pillClass" aria-label="Extend end time by 5 minutes" title="Add 5m to end" @click="nudgeEnd(5)">+5m</button>
+          <button type="button" :class="pillClass" aria-label="Extend end time by 15 minutes" title="Add 15m to end" @click="nudgeEnd(15)">+15m</button>
+        </div>
         <div class="flex flex-wrap items-center gap-2">
           <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
           <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
@@ -63,6 +82,9 @@ export default {
     // A timesheet entry says "Worked on"; a plan says "Day"
     dayLabel: { type: String, default: "Day" },
     timeLabel: { type: String, default: "Time" },
+    scheduledStart: { type: String, default: "" },
+    isLive: { type: Boolean, default: false },
+    capToNow: { type: Boolean, default: false },
   },
   emits: ["update:date", "update:start", "update:end"],
   computed: {
@@ -89,11 +111,20 @@ export default {
     },
     // Every 15 minutes after the start, to the end of the day, each with its length
     endOptions() {
-      return endTimeOptions(this.start);
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      return endTimeOptions(this.start, {
+        currentEnd: this.end,
+        capToNow: this.capToNow || this.isLive,
+        nowHHMM: toHHMM(nowMin),
+      });
     },
     iconTone() { return this.isDarkMode ? "text-gray-300" : "text-gray-600"; },
     mutedText() { return this.isDarkMode ? "text-gray-300" : "text-gray-700"; },
     labelText() { return this.isDarkMode ? "text-gray-200" : "text-gray-800"; },
+    pillClass() {
+      return "text-xs font-medium px-2 py-0.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1E1F22] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer select-none transition-colors";
+    },
   },
   methods: {
     durationLabel,
@@ -106,6 +137,42 @@ export default {
     setDuration(mins) {
       if (!this.start || !mins) return;
       this.$emit("update:end", toHHMM((toMin(this.start) + mins) % (24 * 60)));
+    },
+    nudgeStart(deltaMins) {
+      const base = this.start
+        ? toMin(this.start)
+        : (new Date().getHours() * 60 + new Date().getMinutes());
+      const newStart = (base + deltaMins + 24 * 60) % (24 * 60);
+      const newStartHHMM = toHHMM(newStart);
+      this.$emit("update:start", newStartHHMM);
+      if (!this.end || (!this.isLive && this.mins <= 0)) {
+        this.$emit("update:end", toHHMM((newStart + 60) % (24 * 60)));
+      }
+    },
+    applyOnTime() {
+      if (!this.scheduledStart) return;
+      const s = this.scheduledStart.slice(0, 5);
+      this.$emit("update:start", s);
+      if (!this.end || (!this.isLive && this.mins <= 0)) {
+        this.$emit("update:end", toHHMM((toMin(s) + 60) % (24 * 60)));
+      }
+    },
+    setEndNow() {
+      const now = new Date();
+      const nowHHMM = toHHMM(now.getHours() * 60 + now.getMinutes());
+      this.$emit("update:end", nowHHMM);
+      if (!this.start) {
+        this.$emit("update:start", toHHMM((toMin(nowHHMM) - 60 + 24 * 60) % (24 * 60)));
+      }
+    },
+    nudgeEnd(deltaMins) {
+      const base = this.end
+        ? toMin(this.end)
+        : (this.start
+            ? toMin(this.start) + (this.mins > 0 ? this.mins : 30)
+            : new Date().getHours() * 60 + new Date().getMinutes());
+      const newEnd = (base + deltaMins + 24 * 60) % (24 * 60);
+      this.$emit("update:end", toHHMM(newEnd));
     },
   },
 };
