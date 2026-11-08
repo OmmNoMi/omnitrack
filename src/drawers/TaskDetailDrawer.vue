@@ -139,6 +139,7 @@ export default {
     people() { return ((this.d && this.d.assigned_to) || []).map((p) => p.name || p.user).join(', '); },
     // Every move opens the one task form at its confirm step, which asks for a comment
     stateMoves() {
+      // The server sends each move once (tasks.py _workflow_of)
       return ((this.d && this.d.actions) || []).map((a) => ({
         label: a.action,
         icon: moveIcon(a.action),

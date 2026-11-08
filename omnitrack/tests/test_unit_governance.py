@@ -617,3 +617,21 @@ class TestTaskStatusReachesBlocks(unittest.TestCase):
 			{"name": "open-row", "status": "Open"},
 		], "Open")
 		self.assertEqual(writes, {"done-row": {"status": "Open", "completed_at": None}})
+
+
+class TestWorkflowMovesShowOnce(unittest.TestCase):
+	"""A workflow has a transition row per role; each action still shows once (issue #19)."""
+
+	def test_an_action_with_a_row_per_role_shows_once(self):
+		from omnitrack.api.tasks import get_task_workflow_actions
+
+		rows = [
+			frappe._dict(action="Approve", next_state="Approved"),
+			frappe._dict(action="Approve", next_state="Approved"),
+			frappe._dict(action="Reject", next_state="Rejected"),
+		]
+		with patch("frappe.model.workflow.get_workflow_name", return_value="Task Review"), \
+			patch("frappe.model.workflow.get_transitions", return_value=rows), \
+			patch.object(frappe, "get_doc", return_value=frappe._dict(doctype="Task", name="TASK-1")):
+			actions = get_task_workflow_actions("Task", "TASK-1")
+		self.assertEqual([a["action"] for a in actions], ["Approve", "Reject"])

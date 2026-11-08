@@ -1887,6 +1887,14 @@ runMutationTest('The team list is callable from the browser', WS_GOV,
   (code) => code.replace('def get_team_members(session_user=None):', '@frappe.whitelist()\ndef get_team_members(session_user=None):'), GOV, 'test_team_list_is_not_callable_from_the_browser');
 runMutationTest('An Employee with no user is offered as one', WS_GOV,
   (code) => code.replace('\treturn team_members\n', '\treturn team_members + [{"name": e["name"]} for e in active_employees if not e.get("user_id")]\n'), GOV, 'test_unlinked_employees_are_not_offered_as_users');
+runMutationTest('A workflow action with a row per role shows twice', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('\t\t\t\tif act in seen_actions:\n\t\t\t\t\tcontinue\n', ''), GOV, 'test_an_action_with_a_row_per_role_shows_once');
+const DPF = 'node scripts/test_date_presets_and_filter_pills.cjs';
+const CAT = path.resolve(omnitrackDir, 'src/views/calendar/CalendarAssignedTasks.vue');
+runMutationTest('An icon-only filter pill has no tooltip', CAT,
+  (code) => code.replace(':tooltip="plannerTaskFilter !== tab.id ? tab.label : undefined"', ''), DPF, 'tooltip');
+runMutationTest('The picked filter pill hides its name', CAT,
+  (code) => code.replace('<span v-if="plannerTaskFilter === tab.id">{{ tab.label }}</span>', ''), DPF, 'only when selected');
 const TKS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
 runMutationTest('A completed task drags its moved blocks back', TKS_GOV,
   (code) => code.replace('"status": ("in", ("Open", "Completed")),\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
