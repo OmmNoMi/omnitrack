@@ -88,11 +88,15 @@ need(/"fieldname": "visible_to_clients"/.test(read("omnitrack/omnitrack/doctype/
 
 // The page: shown only where Projects exist, reachable, one tab stop per list and per tab bar
 const nav = read("src/components/layout/WorkstationBottomNav.vue");
-// Projects and Logged time live in the header's menu ("Go to"): seven targets crowded the bar
+// Projects lives in the header's menu ("Go to"): seven targets crowded the bar. Logged time is in both.
 const header = read("src/components/layout/WorkstationHeader.vue");
 need(/\.\.\.\(this\.hasProjects \? \[\{ label: "Projects", icon: "briefcase", onClick: \(\) => this\.\$emit\("navigate", "projects"\) \}\] : \[\]\)/.test(header), "WorkstationHeader.vue: the menu offers Projects only on a site that has Projects");
 need(/\{ label: "Logged time", icon: "clock", onClick: \(\) => this\.\$emit\("navigate", "timesheets"\) \}/.test(header) && /\{ group: "Go to", hideLabel: true, items: pages \}/.test(header), "WorkstationHeader.vue: the menu opens with Projects and Logged time, apart from its actions");
-need(!/activeTab === 'projects'|activeTab === 'timesheets'/.test(nav), "WorkstationBottomNav.vue: Projects and Logged time are not back in the bottom bar (they are in the header's menu)");
+need(!/activeTab === 'projects'/.test(nav), "WorkstationBottomNav.vue: Projects is not back in the bottom bar (it is in the header's menu)");
+// Hours (Logged time + each person's hours) is the bar's last button, for reviewing timesheets
+const navTabs = [...nav.matchAll(/\$emit\('update:activeTab', '(\w+)'\)/g)].map((m) => m[1]);
+need(navTabs[navTabs.length - 1] === "timesheets" && navTabs.filter((t) => t === "timesheets").length === 1, "WorkstationBottomNav.vue: Hours (timesheets) is the bottom bar's last button, once");
+need(/label="Hours"[\s\S]*?<span class="text-\[10px\] mt-0\.5">Hours<\/span>/.test(nav), "WorkstationBottomNav.vue: the Hours button's name matches its visible label");
 need(!/'!text-blue-500|'!text-gray-600 font-medium'/.test(nav), "WorkstationBottomNav.vue: 10px labels keep 4.5:1 contrast (no blue-500 on white, no gray-600 on the dark bar)");
 need(/:has-projects="hasProjects"\n    @go-dashboard="activeTab = 'dashboard'"\n    @navigate="activeTab = \$event"/.test(read("src/App.vue")) && /<ProjectsView v-else-if="activeTab === 'projects'" \/>/.test(read("src/App.vue")), "App.vue: the header's menu hears whether Projects exist and moves between pages, and the Projects page renders");
 need(/path: '\/projects'/.test(read("src/router/index.js")) && /'projects'/.test(read("src/composables/useWorkstationShell.js")), "router + shell: #/projects is a page");

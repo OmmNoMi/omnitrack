@@ -110,8 +110,8 @@ const getInitialTabFromHash = () => {
   const natureOptions = ACTIVITY_OPTIONS;
   const isNonWorkingNature = isNonWorking;
   const getNatureBadge = activityOption;
-const session = window.OMNITRACK_SESSION || { user: 'hardiksharma80912@gmail.com', user_fullname: 'Hardik Sharma', is_manager: true, is_client: false };
-const isManager = ref(session.is_manager !== undefined ? session.is_manager : true);
+const session = window.OMNITRACK_SESSION || { user: '', user_fullname: '', is_manager: false, is_client: false };
+const isManager = ref(!!session.is_manager);
 // OmniTrack Settings > Minimum Characters per Session Log Line, rendered into the page at boot
 const minLogLineChars = Number(session.min_log_line_chars) > 0 ? Number(session.min_log_line_chars) : 10;
 const plannerData = ref({

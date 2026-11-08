@@ -231,50 +231,17 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		limit=100
 	) if frappe.db.exists("DocType", "Task") else []
 
-	# 4. Live Team Members / Employees
-	db_users = frappe.get_all(
-		"User",
-		filters={"enabled": 1},
-		fields=["name", "full_name", "user_image", "email"],
-		limit=30
-	)
-	
-	standard_members = [
-		{"name": "hardiksharma80912@gmail.com", "full_name": "Hardik Sharma", "role": "Lead Architect"},
-		{"name": "Administrator", "full_name": "Administrator", "role": "System Admin"},
-		{"name": "Alex Vance", "full_name": "Alex Vance", "role": "Principal Engineer"},
-		{"name": "Tariq Nomi", "full_name": "Tariq Nomi", "role": "Operations Lead"},
-		{"name": "Elena Rostova", "full_name": "Elena Rostova", "role": "Full-Stack Dev"},
-		{"name": "Amara Okafor", "full_name": "Amara Okafor", "role": "Logistics Dispatcher"},
-		{"name": "Meenaxi Maxi", "full_name": "Meenaxi Maxi", "role": "Field Ops Specialist"},
-		{"name": "Devoted NoMi", "full_name": "Nomeshwer Sharma", "role": "Operations Manager"},
-		{"name": "Sophia Patel", "full_name": "Sophia Patel", "role": "Backend Engineer"}
+	# 4. Team members: the site's real desk users, never a seeded list
+	team_members = [
+		{"name": u.name, "full_name": u.full_name or u.name, "role": "Team Member"}
+		for u in frappe.get_all(
+			"User",
+			filters={"enabled": 1, "user_type": "System User", "name": ["!=", "Guest"]},
+			fields=["name", "full_name"],
+			order_by="full_name asc",
+			limit=200,
+		)
 	]
-	
-	# Merge DB users and standard members without duplicates
-	seen = set()
-	team_members = []
-	for m in standard_members:
-		m_full = (m.get("full_name") or m.get("name") or "").lower()
-		m_name = (m.get("name") or "").lower()
-		if m_full:
-			seen.add(m_full)
-		if m_name:
-			seen.add(m_name)
-		team_members.append(m)
-	for u in db_users:
-		u_full = (u.get("full_name") or u.get("name") or "").lower()
-		u_name = (u.get("name") or "").lower()
-		if (not u_full or u_full not in seen) and (not u_name or u_name not in seen):
-			if u_full:
-				seen.add(u_full)
-			if u_name:
-				seen.add(u_name)
-			team_members.append({
-				"name": u["name"],
-				"full_name": u.get("full_name") or u["name"],
-				"role": "Team Member"
-			})
 
 	# 5. PACI / PAI Calculation (Real live hours)
 	# Planned or not is the block's own fact (`unplanned`), never its activity

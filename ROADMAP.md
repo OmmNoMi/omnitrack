@@ -1389,3 +1389,35 @@ Open:
 - Chrome fires `popstate` at once on a fragment navigation; jsdom fires it later. The jsdom tests cannot see that ordering, so a Cypress check through `bench run-ui-tests` (Back closes a drawer, Back from Planner goes to Dashboard) would cover it.
 - vue-router is installed, but there is no `RouterView`. If the tabs became routes, the tab layer in `backNavigation.js` could go.
 - `test:fixtures` and the Python mutants call `../../env/bin/python`, which only exists when the app sits in a bench's `apps/` folder. A worktree anywhere else fails with exit 127, and every Python mutant reads as survived. Read the bench path from an environment variable, or fail with a clear message.
+
+## A reload drops a running session that has no lines yet (found 2026-11-08)
+
+Seen on ommnomi.local, develop at `35d690e`, while taking screenshots for PR #25. Start a session from LOG and add no line, then reload the page. The clock is back at `00:00:00`, `omnitrack_active_session` is gone from localStorage, and the elapsed time is lost with no prompt. Two reloads gave the same result.
+
+Open:
+- Decide whether a session with no lines should survive a reload. "A session needs at least one line to save" is about Stop; it does not mean the running clock should vanish. Most likely it should be restored like any other active session.
+- Check it against PR #57 (issue #56), which reworks `useWorkstationSessionSync.js` and the session clock.
+- Guard it with a test that starts a session, reloads, and expects the same `startTime`.
+
+## Admin deletions write no Activity Log row (found 2026-11-08, PR #40)
+
+- PR #40's `PlannedWorkBlock.on_trash` inserts an `Activity Log` with `operation: "Delete"`, but that field only allows Login, Logout and Impersonate. The insert raises a ValidationError, and `except Exception: pass` hides it, so no audit row is ever written. Its tests mock `frappe.logger` and never check the Activity Log.
+- Open: pick an audit home that accepts deletes (a Comment on a surviving doc, a `Deleted Document` lookup, or OmniTrack's own log), then test it against a real insert, not a mock.
+
+## PR hygiene: built bundles and real addresses (found 2026-11-08)
+
+- 13 of the 17 open PRs conflict with develop, mainly because each one commits rebuilt `omnitrack/public/dist` bundles. Rebuild after rebasing instead of merging bundle diffs.
+- Test fixtures use addresses on the ommnomi.in domain (PR #40, PR #44; #44 also pairs one with a real full name), and PR #57 adds an absolute `/Users/...` path to an agent skill. The repo is public: tests use `@example.com` and invented names, and docs use repo-relative or `../../env/bin/python` paths.
+- Already on develop: `ROADMAP.md` links to `file:///Users/...` paths, and `AGENTS.md` names which company owns early timesheets. Move these to private notes. The comment in `omnitrack/permissions.py` (`is_omnitrack_manager`) quotes a real plus-addressed account as its example; use an `@example.com` one.
+
+## Hours by person on the Logged time page (2026-11-08)
+
+Shipped (uncommitted on 2026-11-08): `api/team_hours.get_team_hours` returns each person's worked, planned, approved, awaiting and flagged hours, by day and by project, for a period of at most 92 days. Managers and HR see everyone; anyone else sees only their own hours. The Logged time page shows it as an expandable table, and the bottom bar's last button, Hours, opens the page.
+
+Open:
+- Local data has one person at 32h worked on a single day. The view surfaces it, but nothing flags it. Mark a day over 24h (and overlapping sessions) as a review problem, and find how the overlapping sessions were saved.
+- People with no hours in the period are hidden. A manager may want to see who logged nothing.
+- The "All" list below the table stops at 150 blocks, while the table covers 92 days. Page the list, or label the cap.
+- No server test for `get_team_hours` yet: night sessions split at midnight, away time kept apart, a non-manager seeing only their own row, and the 92-day and reversed-period errors.
+- Links use `#/timesheets` (hash routing). Plain `/omnitrack/timesheets` URLs would need a `website_route_rules` entry and `createWebHistory`.
+- PR #43 review is paused part way; resume it, then #44 to #57.

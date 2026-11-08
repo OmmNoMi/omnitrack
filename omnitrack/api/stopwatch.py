@@ -247,13 +247,23 @@ def quick_timer_punch(action="stop", duration_seconds=0, project=None, task=None
 	return {"status": "ignored"}
 
 
-@frappe.whitelist(allow_guest=True)
+def _caller_may_act_for(user, method):
+	"""Over HTTP, `user` must be someone the caller may act for. Python callers pass it as they need."""
+	cmd = str((getattr(frappe.local, "form_dict", None) or {}).get("cmd") or "")
+	if user and user != frappe.session.user and cmd.endswith(method):
+		from omnitrack.permissions import can_access_user_data
+		if not can_access_user_data(user, frappe.session.user):
+			frappe.throw(_("You cannot act on another person's session."), frappe.PermissionError)
+	return user
+
+
+@frappe.whitelist()
 def sync_active_session(session_data=None, user=None):
 	"""
 	Synchronizes the in-flight stopwatch session across devices (Desktop, Mobile PWA, Tablet).
 	Persists to high-speed Redis cache and durable database storage (tabDefaultValue).
 	"""
-	target_user = user or _resolve_planner_user() or frappe.session.user
+	target_user = _caller_may_act_for(user, "sync_active_session") or _resolve_planner_user() or frappe.session.user
 	if not target_user or target_user == "Guest":
 		return {"status": "ignored", "reason": "Guest"}
 
@@ -546,7 +556,7 @@ def log_catch_up_session(work_date=None, from_time=None, to_time=None, duration_
 		return {"status": "success", "mode": "new_completed_block", "punch": res}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_active_session(user=None):
 	"""
 	Returns the currently in-flight active session for the user across devices.
@@ -555,7 +565,7 @@ def get_active_session(user=None):
 	ask the person whether to log it up to the last note, keep it, or discard it. Only the
 	person's own Stop or Discard clears it (sync_active_session with no data).
 	"""
-	target_user = user or _resolve_planner_user() or frappe.session.user
+	target_user = _caller_may_act_for(user, "get_active_session") or _resolve_planner_user() or frappe.session.user
 	if not target_user or target_user == "Guest":
 		return None
 
