@@ -42,7 +42,7 @@ class TestUnitTemporalGovernance(unittest.TestCase):
 			p = patch(target, **kwargs)
 			p.start()
 			self.addCleanup(p.stop)
-		self.user = "employee@ommnomi.in"
+		self.user = "employee@example.com"
 
 	def check(self, days_ago):
 		from omnitrack.permissions import check_timesheet_date_permission
@@ -197,7 +197,7 @@ class TestPlannedWorkBlockDeletionGovernance(unittest.TestCase):
 	def setUp(self):
 		self.settings = {}
 		self.manager = False
-		self.user = "employee@ommnomi.in"
+		self.user = "employee@example.com"
 		self.logged_messages = []
 
 		class DummyLogger:
@@ -307,7 +307,7 @@ class TestPlannedWorkBlockDeletionGovernance(unittest.TestCase):
 		doc = self.make_block()
 		with patch("frappe.get_doc", return_value=doc), patch("frappe.delete_doc") as mock_delete:
 			# 1. Other employee block as standard user -> PermissionError
-			doc.employee = "other@ommnomi.in"
+			doc.employee = "other@example.com"
 			with self.assertRaises(Refused) as ctx:
 				delete_work_block(doc.name)
 			self.assertIn("Not permitted to delete this work block", str(ctx.exception))
@@ -329,6 +329,13 @@ class TestPlannedWorkBlockDeletionGovernance(unittest.TestCase):
 			with self.assertRaises(Refused) as ctx:
 				delete_work_block(doc.name)
 			self.assertIn("This block has logged work sessions", str(ctx.exception))
+
+			# 5. Manager on an unworked Cancelled block -> refused; it holds plan-vs-actual history
+			doc.actual_hours = 0.0
+			doc.status = "Cancelled"
+			with self.assertRaises(Refused) as ctx:
+				delete_work_block(doc.name)
+			self.assertIn("cannot be deleted to preserve reporting integrity", str(ctx.exception))
 
 
 if __name__ == "__main__":

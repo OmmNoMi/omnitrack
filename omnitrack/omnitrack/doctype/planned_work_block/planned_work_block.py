@@ -126,26 +126,12 @@ class PlannedWorkBlock(OptionalLinks, Document):
 						frappe._("Cannot delete a work block with logged work sessions. Adjust or delete the sessions first, or mark the block as Cancelled."),
 						frappe.ValidationError
 					)
-				# Audit logging for historical compliance and intentional administrative corrections
-				msg = (
+				# Frappe keeps a Deleted Document (full JSON and who deleted it) for every delete;
+				# this log line adds the context of an administrative removal.
+				frappe.logger("omnitrack").info(
 					f"Administrative deletion of Planned Work Block '{self.name}' for employee '{self.employee}' "
-					f"on {self.work_date} ({self.start_time} - {self.end_time}, status: {self.status}) "
-					f"by {user}."
+					f"on {self.work_date} ({self.start_time} - {self.end_time}, status: {self.status}) by {user}."
 				)
-				frappe.logger("omnitrack").info(msg)
-				try:
-					if getattr(frappe, "db", None) and hasattr(frappe.db, "exists") and frappe.db.exists("DocType", "Activity Log"):
-						frappe.get_doc({
-							"doctype": "Activity Log",
-							"subject": msg,
-							"user": user,
-							"status": "Success",
-							"operation": "Delete",
-							"reference_doctype": "Planned Work Block",
-							"reference_name": self.name,
-						}).insert(ignore_permissions=True)
-				except Exception:
-					pass
 				return
 
 			grace_hours = get_past_block_lock_grace_hours()
@@ -161,8 +147,6 @@ class PlannedWorkBlock(OptionalLinks, Document):
 						frappe._("Past planned work blocks older than the grace period cannot be deleted."),
 						frappe.ValidationError
 					)
-
-
 
 	def resolve_project_from_task(self):
 		"""
