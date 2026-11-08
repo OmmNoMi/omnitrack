@@ -1258,8 +1258,12 @@ runMutationTest('Projects shows on a site without Projects', SRC('src/components
   (code) => code.replace('...(this.hasProjects ? [{ label: "Projects"', '...(true ? [{ label: "Projects"'), PJ, 'only on a site that has Projects');
 runMutationTest('Logged time leaves the menu', SRC('src/components/layout/WorkstationHeader.vue'),
   (code) => code.replace('{ label: "Logged time", icon: "clock"', '{ label: "Timesheets", icon: "clock"'), PJ, 'opens with Projects and Logged time');
-runMutationTest('Logged time goes back in the bottom bar', SRC('src/components/layout/WorkstationBottomNav.vue'),
-  (code) => code.replace('<!-- Team: managers only -->', '<Button :aria-current="activeTab === \'timesheets\' ? \'page\' : null" label="Logged time" />\n      <!-- Team: managers only -->'), PJ, 'not back in the bottom bar');
+runMutationTest('Projects goes back in the bottom bar', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace('<!-- Team: managers only -->', '<Button :aria-current="activeTab === \'projects\' ? \'page\' : null" label="Projects" />\n      <!-- Team: managers only -->'), PJ, 'Projects is not back in the bottom bar');
+runMutationTest('Hours is no longer the bottom bar\'s last button', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace(/(<span class="text-\[10px\] mt-0\.5">Hours<\/span>\s*<\/Button>)/, "$1\n      <Button @click=\"$emit('update:activeTab', 'dashboard')\" />"), PJ, 'Hours (timesheets) is the bottom bar\'s last button');
+runMutationTest('The Hours button is named differently from its label', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace('label="Hours"', 'label="Logged time"'), PJ, "Hours button's name matches its visible label");
 runMutationTest('Bottom bar labels drop to low contrast', SRC('src/components/layout/WorkstationBottomNav.vue'),
   (code) => code.replace("(isDarkMode ? '!text-gray-300 font-medium'", "(isDarkMode ? '!text-gray-600 font-medium'"), PJ, '4.5:1 contrast');
 runMutationTest('Every project row is a tab stop', SRC('src/views/ProjectsView.vue'),

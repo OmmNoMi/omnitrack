@@ -143,28 +143,18 @@ export function useWorkstationStoreBindings(w) {
   // Dynamic Filtering of Work Blocks based on employee, nature, and status
   const filteredWorkBlocks = computed(() => {
     return workBlocks.value.filter(b => {
-      // Employee / Permission Filter
-      if (selectedEmployee.value !== 'All') {
-        const empTarget = selectedEmployee.value.toLowerCase();
-        const bEmp = (b.employee || '').toLowerCase();
-        const bAssoc = (b.associate_name || '').toLowerCase();
-        const bFull = (b.employee_full_name || '').toLowerCase();
-        const targetFirst = empTarget.split(' ')[0];
-        const targetMail = empTarget.split('@')[0];
-
-        let match = false;
-        if (empTarget.includes('hardik')) {
-          match = bEmp.includes('hardik') || bAssoc.includes('hardik') || bEmp.includes('admin') || bAssoc.includes('eager');
-        } else if (empTarget.includes('meenaxi')) {
-          match = bEmp.includes('meenaxi') || bAssoc.includes('meenaxi');
-        } else if (empTarget.includes('nomeshwer') || empTarget.includes('devoted')) {
-          match = bEmp.includes('nomeshwer') || bAssoc.includes('devoted');
-        } else {
-          match = bEmp.includes(targetFirst) || bEmp.includes(targetMail) || 
-                  bAssoc.includes(targetFirst) || bAssoc.includes(targetMail) ||
-                  bFull.includes(targetFirst);
-        }
-        if (!match) return false;
+      // One person: the block is theirs when it is booked to their user id or carries their exact name.
+      // The picker hands back a full name; teamMembers maps it to the user id.
+      if (selectedEmployee.value && selectedEmployee.value !== 'All') {
+        const target = String(selectedEmployee.value).trim().toLowerCase();
+        const ids = new Set([target]);
+        (w.teamMembers?.value || []).forEach((m) => {
+          if ((m.full_name || '').toLowerCase() === target || (m.name || '').toLowerCase() === target) ids.add((m.name || '').toLowerCase());
+        });
+        if ((w.currentUserFullName?.value || '').toLowerCase() === target && w.currentUser?.value) ids.add(String(w.currentUser.value).toLowerCase());
+        const mine = ids.has((b.employee || '').toLowerCase())
+          || [b.associate_name, b.employee_full_name].some((n) => (n || '').trim().toLowerCase() === target);
+        if (!mine) return false;
       }
 
                 // Toolbar filters
@@ -193,14 +183,14 @@ export function useWorkstationStoreBindings(w) {
           if (b.work_date !== todayStr) return false;
         } else if (timesheetHorizon.value === 'week') {
           // Current week (Monday to Sunday)
+          // Local dates: toISOString() is UTC and moves the week a day early east of Greenwich
           const nowD = new Date();
           const dayOfWeek = (nowD.getDay() + 6) % 7; // Monday = 0
-          const mondayD = new Date(nowD);
-          mondayD.setDate(nowD.getDate() - dayOfWeek);
-          const sundayD = new Date(mondayD);
-          sundayD.setDate(mondayD.getDate() + 6);
-          const mStr = mondayD.toISOString().split('T')[0];
-          const sStr = sundayD.toISOString().split('T')[0];
+          const mondayD = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate() - dayOfWeek);
+          const sundayD = new Date(mondayD.getFullYear(), mondayD.getMonth(), mondayD.getDate() + 6);
+          const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const mStr = ymd(mondayD);
+          const sStr = ymd(sundayD);
           if (b.work_date < mStr || b.work_date > sStr) return false;
         } else if (timesheetHorizon.value === 'month') {
           // Current calendar month YYYY-MM

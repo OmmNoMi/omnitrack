@@ -1,5 +1,5 @@
 <template>
-  <!-- The pages used every day, around the session button. Projects and Logged time are in
+  <!-- The pages used every day, around the session button, with Hours last. Projects is in
        the header's menu (WorkstationHeader "Go to"): seven targets crowded the bar. -->
   <nav
     class="fixed bottom-0 left-0 right-0 z-40 border-t flex items-center justify-around px-3 py-2 transition-colors pb-safe backdrop-blur-md"
@@ -132,6 +132,26 @@
           </svg>
         </template>
         <span class="text-[10px] mt-0.5">Team</span>
+      </Button>
+
+      <!-- Hours: logged time and each person's hours for the period (TimesheetsView) -->
+      <Button
+        variant="ghost"
+        :theme="activeTab === 'timesheets' ? 'blue' : 'gray'"
+        size="sm"
+        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
+        :class="activeTab === 'timesheets' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
+        :aria-current="activeTab === 'timesheets' ? 'page' : null"
+        label="Hours"
+        @click="$emit('update:activeTab', 'timesheets')"
+      >
+        <template #prefix>
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <polyline points="12 7 12 12 15 14"></polyline>
+          </svg>
+        </template>
+        <span class="text-[10px] mt-0.5">Hours</span>
       </Button>
 
     </div>

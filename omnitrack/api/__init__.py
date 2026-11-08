@@ -14,6 +14,7 @@ from omnitrack.api.planner import *
 from omnitrack.api.tasks import *
 from omnitrack.api.workstation import *
 from omnitrack.api.raven import *
+from omnitrack.api.team_hours import *
 
 # Explicitly export underscore helpers that 'from module import *' skips
 from omnitrack.api.planner import (

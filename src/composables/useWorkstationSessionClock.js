@@ -21,8 +21,8 @@ export function useWorkstationSessionClock(w) {
 
   // 7. Computed Helpers
   const currentEmployeeFirstName = computed(() => {
-    if (selectedEmployee.value === 'All') return 'Hardik';
-    return selectedEmployee.value.split(' ')[0] || 'Alex';
+    if (selectedEmployee.value === 'All') return 'Team';
+    return (selectedEmployee.value || '').split(' ')[0];
   });
   const formattedTime = computed(() => {
     const hrs = String(Math.floor(trackerSeconds.value / 3600)).padStart(2, '0');
