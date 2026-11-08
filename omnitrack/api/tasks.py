@@ -295,6 +295,7 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 	if not doctype or not docname:
 		return []
 
+	wf_name = None
 	try:
 		from frappe.model.workflow import get_workflow_name, get_transitions
 		wf_name = get_workflow_name(doctype)
@@ -314,27 +315,53 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 					"next_state": t.next_state,
 					"style": style
 				})
-			if actions:
-				return actions
+			return actions
 	except Exception:
 		pass
+	if wf_name:
+		# Under a workflow only its transitions apply; apply_workflow refuses any other action
+		return []
 
 	# Standard actions fallback if no workflow or transitions empty
 	status = (current_status or "Open").lower()
 	fallback = []
-	if status not in ("completed", "closed"):
+	if status in ("cancelled", "completed", "closed"):
+		fallback.append({
+			"action": "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
+		return fallback
+
+	if status in ("on hold", "hold"):
+		fallback.append({
+			"action": "Resume" if doctype == "Task" else "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
 		fallback.append({
 			"action": "Complete" if doctype == "Task" else "Close Task",
 			"next_state": "Completed" if doctype == "Task" else "Closed",
 			"style": "success"
 		})
-	if status != "cancelled":
 		fallback.append({
 			"action": "Cancel Task",
 			"next_state": "Cancelled",
 			"style": "danger"
 		})
-	if status not in ("on hold", "hold"):
+		return fallback
+
+	fallback.append({
+		"action": "Complete" if doctype == "Task" else "Close Task",
+		"next_state": "Completed" if doctype == "Task" else "Closed",
+		"style": "success"
+	})
+	fallback.append({
+		"action": "Cancel Task",
+		"next_state": "Cancelled",
+		"style": "danger"
+	})
+	if doctype == "Task":
 		fallback.append({
 			"action": "Put on Hold",
 			"next_state": "On Hold",
@@ -388,6 +415,8 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			doc.status = "Completed" if doctype == "Task" else "Closed"
 		elif "cancel" in act_lower:
 			doc.status = "Cancelled"
+		elif "resume" in act_lower or "reopen" in act_lower or act_lower == "open":
+			doc.status = "Open"
 		elif "hold" in act_lower:
 			doc.status = "On Hold" if doctype == "Task" else "Open"
 		elif "progress" in act_lower or "start" in act_lower or "work" in act_lower:
