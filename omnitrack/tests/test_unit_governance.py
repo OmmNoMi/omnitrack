@@ -445,6 +445,135 @@ class TestTaskWorkflowActions(unittest.TestCase):
 		     patch("frappe.model.workflow.get_transitions", return_value=[]):
 			self.assertEqual(get_task_workflow_actions("Task", "TASK-0001", "Completed"), [])
 
+class TestTeamMembersFiltering(unittest.TestCase):
+	"""Teammate dropdown lists only real OmniTrack users and active Employees, never mocks or system bots."""
+
+	def setUp(self):
+		from unittest.mock import MagicMock
+		self.orig_db = getattr(frappe.local, "db", None)
+		frappe.local.db = MagicMock()
+		self.addCleanup(lambda: setattr(frappe.local, "db", self.orig_db))
+
+		self.roles_by_user = {}
+		self.users = {}
+		self.employees = []
+
+		patches = [
+			patch("frappe.db.sql_list", side_effect=self._mock_sql_list),
+			patch("frappe.get_all", side_effect=self._mock_get_all),
+			patch("frappe.db.get_value", side_effect=self._mock_get_value),
+			patch("frappe.db.exists", side_effect=lambda dt, n=None: True if dt in ("DocType", "User") else False),
+			patch("frappe.get_roles", side_effect=lambda u: self.roles_by_user.get(u, [])),
+		]
+		for p in patches:
+			p.start()
+			self.addCleanup(p.stop)
+
+	def _mock_sql_list(self, query, params=None):
+		if "tabHas Role" in query:
+			roles = params[0] if params else ()
+			return [u for u, rlist in self.roles_by_user.items() if any(r in roles for r in rlist)]
+		return []
+
+	def _mock_get_all(self, doctype, filters=None, fields=None, **kwargs):
+		filters = filters or {}
+		if doctype == "Employee":
+			return [e for e in self.employees if e.get("status") == filters.get("status", "Active")]
+		if doctype == "User":
+			names = filters.get("name", [])
+			if isinstance(names, list) and len(names) == 2 and names[0] == "in":
+				allowed = set(names[1])
+			else:
+				allowed = set(self.users.keys())
+			res = []
+			for name, u in self.users.items():
+				if name in allowed:
+					if filters.get("enabled") is not None and u.get("enabled") != filters.get("enabled"):
+						continue
+					user_type_cond = filters.get("user_type")
+					if isinstance(user_type_cond, list) and len(user_type_cond) == 2 and user_type_cond[0] == "!=":
+						if u.get("user_type") == user_type_cond[1]:
+							continue
+					res.append(u)
+			return res
+		return []
+
+	def _mock_get_value(self, doctype, name, fieldname=None):
+		if doctype == "User" and name in self.users:
+			return self.users[name].get(fieldname)
+		return None
+
+	def test_fictional_mock_members_are_never_returned(self):
+		from omnitrack.api.workstation import get_team_members
+
+		self.users = {
+			"member.one@example.com": {"name": "member.one@example.com", "full_name": "Team Member One", "enabled": 1, "user_type": "System User"},
+		}
+		self.roles_by_user = {"member.one@example.com": ["OmniTrack User"]}
+
+		members = get_team_members()
+		names = {m.get("full_name") or m.get("name") for m in members}
+		for mock in ["Alex Vance", "Tariq Nomi", "Elena Rostova", "Amara Okafor", "Sophia Patel"]:
+			self.assertNotIn(mock, names)
+		self.assertIn("Team Member One", names)
+
+	def test_system_bots_and_non_omnitrack_users_are_excluded(self):
+		from omnitrack.api.workstation import get_team_members
+
+		self.users = {
+			"OmniStack": {"name": "OmniStack", "full_name": "OmniStack Bot", "enabled": 1, "user_type": "System User"},
+			"portal_customer@example.com": {"name": "portal_customer@example.com", "full_name": "Portal Customer", "enabled": 1, "user_type": "Website User"},
+			"engineer@example.com": {"name": "engineer@example.com", "full_name": "Active Engineer", "enabled": 1, "user_type": "System User"},
+		}
+		self.roles_by_user = {
+			"OmniStack": ["System User"],
+			"portal_customer@example.com": ["Customer"],
+			"engineer@example.com": ["OmniTrack User"],
+		}
+
+		members = get_team_members()
+		member_names = {m["name"] for m in members}
+		self.assertNotIn("OmniStack", member_names)
+		self.assertNotIn("portal_customer@example.com", member_names)
+		self.assertIn("engineer@example.com", member_names)
+
+	def test_active_employees_are_included_and_take_designation(self):
+		from omnitrack.api.workstation import get_team_members
+
+		self.users = {
+			"emp_user@example.com": {"name": "emp_user@example.com", "full_name": "Employee User", "enabled": 1, "user_type": "System User"},
+		}
+		self.employees = [
+			{"name": "EMP-001", "employee_name": "Employee User", "user_id": "emp_user@example.com", "status": "Active", "designation": "Lead Architect"},
+			{"name": "EMP-002", "employee_name": "Left Company", "user_id": "ex_user@example.com", "status": "Left", "designation": "Old Staff"},
+		]
+		self.roles_by_user = {}
+
+		members = get_team_members()
+		member_names = {m["name"] for m in members}
+		self.assertIn("emp_user@example.com", member_names)
+		self.assertNotIn("ex_user@example.com", member_names)
+
+		hit = next(m for m in members if m["name"] == "emp_user@example.com")
+		self.assertEqual(hit["role"], "Lead Architect")
+		self.assertEqual(hit["employee"], "EMP-001")
+
+	def test_unlinked_employees_are_not_offered_as_users(self):
+		"""An Employee with no user cannot be picked: its ID is not a user."""
+		from omnitrack.api.workstation import get_team_members
+
+		self.users = {}
+		self.employees = [{"name": "EMP-009", "employee_name": "No Login", "user_id": None, "status": "Active", "designation": "Field"}]
+		members = get_team_members()
+		self.assertNotIn("EMP-009", {m["name"] for m in members})
+
+	def test_team_list_is_not_callable_from_the_browser(self):
+		import inspect
+		from omnitrack.api import workstation
+
+		src = inspect.getsource(workstation)
+		self.assertNotIn("@frappe.whitelist()\ndef get_team_members", src)
+
 
 if __name__ == "__main__":
 	unittest.main()
