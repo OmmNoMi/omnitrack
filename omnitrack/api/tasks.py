@@ -397,10 +397,10 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 				doc.add_comment("Workflow", f"Action: {action}\n{comment}")
 			except Exception:
 				pass
-		frappe.db.commit()
 		state_field = frappe.get_doc("Workflow", wf_name).workflow_state_field
 		new_state = doc.get(state_field) or doc.get("status")
 		_sync_task_status_to_blocks(doctype, docname, doc, new_state)
+		frappe.db.commit()
 		return {
 			"status": "success",
 			"message": _("Workflow action '{0}' applied to {1} {2} (New State: {3})").format(
@@ -431,8 +431,8 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 				doc.add_comment("Comment", f"Status updated to {doc.status}: {comment}")
 			except Exception:
 				pass
-		frappe.db.commit()
 		_sync_task_status_to_blocks(doctype, docname, doc, doc.status)
+		frappe.db.commit()
 		return {
 			"status": "success",
 			"message": _("Status updated to '{0}' for {1} {2}").format(
@@ -445,16 +445,30 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 
 
 def _sync_task_status_to_blocks(doctype, docname, doc, new_state):
-	"""Syncs status to any Planned Work Block holding this task."""
+	"""A Task done or reopened is done or open on the blocks that hold it.
+
+	Only Open and Completed rows follow the Task. A Rescheduled row has moved to another block
+	and stays as it is, and a row already done keeps the time it was done."""
 	is_done = doc.get("status") in ("Completed", "Closed") or str(new_state).lower() in ("completed", "closed", "done")
+	want = "Completed" if is_done else "Open"
 	for r in frappe.get_all(
 		CHILD,
-		filters={"parenttype": "Planned Work Block", "reference_doctype": doctype, "reference_name": docname},
-		fields=["name"],
+		filters={
+			"parenttype": "Planned Work Block",
+			"reference_doctype": doctype,
+			"reference_name": docname,
+			"status": ("in", ("Open", "Completed")),
+		},
+		fields=["name", "status"],
 		limit_page_length=0,
 	):
-		frappe.db.set_value(CHILD, r.name, "status", "Completed" if is_done else "Open", update_modified=False)
-		frappe.db.set_value(CHILD, r.name, "completed_at", frappe.utils.now_datetime() if is_done else None, update_modified=False)
+		if r.status == want:
+			continue
+		frappe.db.set_value(
+			CHILD, r.name,
+			{"status": want, "completed_at": frappe.utils.now_datetime() if is_done else None},
+			update_modified=False,
+		)
 
 
 @frappe.whitelist()

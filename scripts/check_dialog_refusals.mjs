@@ -72,6 +72,8 @@ need("src/App.vue", /<DeleteEntryDialog \/>/, "App mounts DeleteEntryDialog");
 // 3. The task form
 const TF = "src/components/dialogs/TaskFormDialog.vue";
 inPlace(TF, "async save()", /this\.error = 'Not saved\. ' \+ this\.extractErrorMessage\(e, /, "save");
+inPlace(TF, "async save()", /this\.error = 'Your edits are saved, but the status did not change\. ' \+ this\.extractErrorMessage\(e, /, "a refused move after saved edits");
+need(TF, /<p v-if="stagedAction" role="status"[^>]*>Moves to /, "a picked status that waits for Save is said in words");
 inPlace(TF, "async remove()", /this\.error = 'Not taken off\. ' \+ this\.extractErrorMessage\(e, /, "remove");
 const load = catchOf(TF, "async load()");
 if (/closeTaskForm\(\)|showToast\(/.test(load)) problems.push(`${TF}: a task that will not open says so in the form, with Try again, not a toast and a closed form`);

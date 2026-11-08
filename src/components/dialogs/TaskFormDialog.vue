@@ -42,6 +42,8 @@
         </Dropdown>
       </div>
 
+      <!-- A picked status waits for Save; it is said here, not only in the chip's colour -->
+      <p v-if="stagedAction" role="status" class="text-sm" :class="mutedText">Moves to <span class="font-medium">{{ stagedAction.next_state }}</span> when you save. Pick it again to undo.</p>
       <p v-if="loaded && !detail.can_edit" class="text-sm" :class="mutedText">Only its owner can edit this task.</p>
       <!-- Why it did not work, inside the form and kept open, never a toast behind it -->
       <div v-if="error" class="flex flex-wrap items-center gap-2">
@@ -234,37 +236,44 @@ export default {
       if (!this.canSave) return;
       this.busy = 'save';
       this.error = '';
+      // Fields first, then the staged move. If only the move is refused, the edits are kept as
+      // saved and the form stays open on the move, so Save tries just the move again.
+      let fieldsSaved = false;
       try {
-        const hasFieldChanges = Object.keys(this.changes).length > 0;
         let res = null;
-        if (hasFieldChanges) {
+        if (Object.keys(this.changes).length > 0) {
           res = this.block
             ? await this.postJSON('update_block_task', { block_name: this.block.name, task_ref: this.task.ref, ...this.changes })
             : await this.postJSON('update_task', { doctype: this.detail.doctype, name: this.detail.name, ...this.changes });
           this.apply(res);
+          this.saved = { ...this.form };
+          fieldsSaved = true;
         }
 
         const action = this.stagedAction;
+        let movedTo = '';
         if (action && this.detail.name) {
           const wfRes = await this.postJSON('execute_task_workflow_action', {
             doctype: this.detail.doctype,
             docname: this.detail.name,
             action: action.action,
           });
-          const nextState = (wfRes && wfRes.new_state) || action.next_state || '';
-          this.detail.state = nextState;
+          movedTo = (wfRes && wfRes.new_state) || action.next_state || '';
+          this.detail.state = movedTo;
+          this.stagedAction = null;
           this.apply(res);
         }
 
         this.refreshAll();
-        const actionLabel = action ? action.action.toLowerCase() : '';
-        const toastMsg = actionLabel.includes('complete') || actionLabel.includes('close')
-          ? 'Task completed'
-          : (action ? `Task moved to ${action.next_state}` : 'Task saved');
-        this.showToast(toastMsg, 'success');
+        this.showToast(movedTo ? 'Task saved, now ' + movedTo : 'Task saved', 'success');
         closeTaskForm();
       } catch (e) {
-        this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');
+        if (fieldsSaved) {
+          this.refreshAll();
+          this.error = 'Your edits are saved, but the status did not change. ' + this.extractErrorMessage(e, 'Try again.');
+        } else {
+          this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');
+        }
       } finally {
         this.busy = '';
       }

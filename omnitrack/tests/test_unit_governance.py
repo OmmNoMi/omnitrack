@@ -418,6 +418,7 @@ class TestTaskWorkflowActions(unittest.TestCase):
 
 		with patch.object(frappe, "db", mock_db), \
 		     patch.object(frappe, "get_doc", return_value=mock_doc), \
+		     patch.object(frappe, "get_all", return_value=[]), \
 		     patch("omnitrack.api.tasks._", side_effect=lambda msg: msg), \
 		     patch("frappe.model.workflow.get_workflow_name", return_value=None):
 			res = execute_task_workflow_action("Task", "TASK-0001", "Reopen")
@@ -448,3 +449,42 @@ class TestTaskWorkflowActions(unittest.TestCase):
 if __name__ == "__main__":
 	unittest.main()
 
+
+
+class TestTaskStatusReachesBlocks(unittest.TestCase):
+	"""A Task done or reopened is done or open on its blocks; moved rows and done times stay."""
+
+	def _run(self, rows, status):
+		from omnitrack.api import tasks
+
+		from unittest.mock import MagicMock
+
+		writes = []
+		db = MagicMock()
+		db.set_value.side_effect = lambda dt, name, values, update_modified=True: writes.append((name, values))
+
+		def get_all(doctype, filters=None, fields=None, limit_page_length=None):
+			allowed = filters["status"][1]
+			return [frappe._dict(r) for r in rows if r["status"] in allowed]
+
+		with patch.object(tasks.frappe, "get_all", side_effect=get_all), \
+			patch.object(tasks.frappe, "db", db), \
+			patch.object(tasks.frappe.utils, "now_datetime", return_value="2026-11-08 10:00:00"):
+			tasks._sync_task_status_to_blocks("Task", "TASK-0001", frappe._dict(status=status), status)
+		return dict(writes)
+
+	def test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows(self):
+		writes = self._run([
+			{"name": "open-row", "status": "Open"},
+			{"name": "moved-row", "status": "Rescheduled"},
+			{"name": "done-row", "status": "Completed"},
+		], "Completed")
+		self.assertEqual(writes, {"open-row": {"status": "Completed", "completed_at": "2026-11-08 10:00:00"}})
+
+	def test_reopening_reopens_done_rows_only(self):
+		writes = self._run([
+			{"name": "done-row", "status": "Completed"},
+			{"name": "moved-row", "status": "Rescheduled"},
+			{"name": "open-row", "status": "Open"},
+		], "Open")
+		self.assertEqual(writes, {"done-row": {"status": "Open", "completed_at": None}})

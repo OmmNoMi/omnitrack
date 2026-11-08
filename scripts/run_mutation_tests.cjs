@@ -1751,6 +1751,10 @@ runMutationTest('The delete dialog is never mounted', SRC('src/App.vue'),
   (code) => code.replace('<DeleteEntryDialog />', ''), DR, 'App mounts DeleteEntryDialog');
 runMutationTest('A refused task save is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not save this task: ' + (e && e.message || e), 'danger');"), DR, 'save says why in the dialog');
+runMutationTest('A refused move after saved edits says nothing was saved', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Your edits are saved, but the status did not change. ' + this.extractErrorMessage(e, 'Try again.');", "this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');"), DR, 'a refused move after saved edits');
+runMutationTest('A picked status is shown only by colour', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace('<p v-if="stagedAction" role="status"', '<p v-if="false" role="status"'), DR, 'said in words');
 runMutationTest('A refused task removal is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Not taken off. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not remove: ' + (e && e.message || e), 'danger');"), DR, 'remove');
 runMutationTest('A task that will not open closes the form', SRC('src/components/dialogs/TaskFormDialog.vue'),
