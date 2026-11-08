@@ -9,8 +9,9 @@ class OmniTrackSettings(Document):
 
 	@frappe.whitelist()
 	def generate_vapid_keys(self):
+		frappe.only_for("System Manager")
 		self.vapid_public_key = f"VAPID_PUB_{secrets.token_hex(16)}"
 		self.vapid_private_key = secrets.token_hex(32)
 		if not self.is_new():
-			self.save(ignore_permissions=True)
+			self.save()
 		return {"public_key": self.vapid_public_key}
