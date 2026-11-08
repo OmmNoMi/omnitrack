@@ -326,13 +326,13 @@ print(json.dumps(clean_session_tasks("not json")))`]).toString().trim();
   if (got !== '[["T1", "todo:T1", 200, "Completed"], ["TASK-9", "TASK-9", 0, "Open"]]\n[]') problems.push(`omnitrack/utils/block_tasks.py: clean_session_tasks must dedupe by ref, cap text at 200, derive id and keep only Completed/Open (got ${JSON.stringify(got)})`);
 }
 
-// 14. The session clock's toolbar is icon-only below 480px. frappe-ui keeps the hidden
-//     label's wrapper and its gap, which pushed each icon off centre: every tool is squared
-//     at the same breakpoint the label hides at.
+// 14. The session clock's toolbar is icon-only below 480px. Square them up with 40px touch targets
+//     (!w-10, !h-10) and 24px icons ([&_svg]:!w-6, [&_svg]:!h-6), removing the hidden label's wrapper
+//     and gap so icons stay centered.
 const toolSquare = (pane.match(/const TOOL_SQUARE = '([^']*)'/) || [])[1] || '';
 const clockSection = pane.slice(pane.indexOf('aria-label="Session clock"'));
 const tools = [...clockSection.matchAll(/<Button\s+data-session-tool[\s\S]*?<\/Button>/g)].map((m) => m[0]);
-if (!/max-\[479px\]:w-7/.test(toolSquare) || !/max-\[479px\]:px-0/.test(toolSquare) || !/max-\[479px\]:gap-0/.test(toolSquare)) problems.push('SessionControlsPane.vue: TOOL_SQUARE squares the icon-only tools below 480px (w-7, px-0, gap-0)');
+if (!/max-\[479px\]:!w-10/.test(toolSquare) || !/max-\[479px\]:!h-10/.test(toolSquare) || !/max-\[479px\]:!px-0/.test(toolSquare) || !/max-\[479px\]:!gap-0/.test(toolSquare) || !/max-\[479px\]:\[&_svg\]:!w-6/.test(toolSquare) || !/max-\[479px\]:\[&_svg\]:!h-6/.test(toolSquare)) problems.push('SessionControlsPane.vue: TOOL_SQUARE squares the icon-only tools below 480px (!w-10, !h-10, !px-0, !gap-0, [&_svg]:!w-6, [&_svg]:!h-6)');
 if (tools.length !== 3 || tools.some((t) => !/:class="TOOL_SQUARE"/.test(t) || !/class="hidden min-\[480px\]:inline"/.test(t))) problems.push('SessionControlsPane.vue: each of the 3 session tools is squared (TOOL_SQUARE) and hides its label below 480px');
 
 // 15. The Escape that closes an FDialog stops there. Page-level handlers (minimise the session

@@ -146,7 +146,7 @@
 
         <div
           ref="toolbarRef"
-          class="flex items-center gap-1.5 shrink-0 ml-auto"
+          class="flex items-center gap-2 shrink-0 ml-auto"
           role="toolbar"
           aria-orientation="horizontal"
           aria-label="Session controls"
@@ -256,9 +256,9 @@ import { spanMins, durationLabel } from '../utils/clockTime.js';
 import { entryEndMs } from '../utils/timesheetEntry.js';
 import { popoverOpen } from '../utils/popover.js';
 
-// Under 480px the toolbar buttons are icon only. frappe-ui still renders their (hidden)
-// label's wrapper and the 8px gap, which pushed each icon off centre: square them up.
-const TOOL_SQUARE = 'max-[479px]:w-7 max-[479px]:px-0 max-[479px]:gap-0';
+// Under 480px the toolbar buttons are icon only. Square them up with 40px touch targets
+// (w-10 h-10) and prominent 24px icons, removing the hidden label gap so icons stay centered.
+const TOOL_SQUARE = 'max-[479px]:!w-10 max-[479px]:!h-10 max-[479px]:!px-0 max-[479px]:!gap-0 max-[479px]:rounded-lg max-[479px]:[&_svg]:!w-6 max-[479px]:[&_svg]:!h-6';
 
 export default {
   name: 'SessionControlsPane',
