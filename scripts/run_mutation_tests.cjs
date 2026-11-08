@@ -535,6 +535,8 @@ runMutationTest('&amp; is decoded before the other entities', taskFormFile,
   (code) => code.replace("    .replace(/&nbsp;/g, ' ')\n", "    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n"), DP, 'converter case 1');
 runMutationTest('Links count as plain text', taskFormFile,
   (code) => code.replace("const PLAIN_TAGS = ['p', 'br', 'div', 'span'];", "const PLAIN_TAGS = ['p', 'br', 'div', 'span', 'a'];"), DP, 'converter case 4');
+runMutationTest('Complete draws the picked check mark', path.resolve(omnitrackDir, 'src/utils/taskState.js'),
+  (code) => code.replace("  if (/cancel|reject|drop/.test(a)) return 'x';", "  if (/complete/.test(a)) return 'check';\n  if (/cancel|reject|drop/.test(a)) return 'x';"), DP, 'never uses the check mark');
 runMutationTest('The task form drops the Description field', taskFormFile,
   (code) => code.replace('label="Description"', 'label="Notes"'), DP, 'must include Description field');
 runMutationTest('FIELDS loses description in task form', taskFormFile,

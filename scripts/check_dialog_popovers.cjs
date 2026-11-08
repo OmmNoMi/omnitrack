@@ -206,6 +206,8 @@ if (!/:disabled="!editable \|\| richDescription"/.test(taskForm) || !/if \(k ===
     cases.forEach(([got, want], i) => { if (got !== want) problems.push(`TaskFormDialog.vue: description converter case ${i + 1} gave ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`); });
   } catch (e) { problems.push('TaskFormDialog.vue: description converters could not run: ' + e.message); }
 }
+// The check mark in the status menu means "picked, saves on Save"; no move draws it as its own icon
+if (/return 'check'/.test(read('src/utils/taskState.js'))) problems.push('taskState.js: moveIcon never uses the check mark, which marks the picked status');
 if (!/FIELDS\s*=\s*\[[^\]]*'description'/.test(taskForm) || !/label="Description"/.test(taskForm)) {
   problems.push('TaskFormDialog.vue: must include Description field in form and FIELDS');
 }
