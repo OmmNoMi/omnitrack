@@ -1886,7 +1886,7 @@ const WS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/workstation.py');
 runMutationTest('The team list is callable from the browser', WS_GOV,
   (code) => code.replace('def get_team_members(session_user=None):', '@frappe.whitelist()\ndef get_team_members(session_user=None):'), GOV, 'test_team_list_is_not_callable_from_the_browser');
 runMutationTest('An Employee with no user is offered as one', WS_GOV,
-  (code) => code.replace('\t\tfor u in db_users:\n', '\t\tfor u in db_users + [{"name": e["name"]} for e in active_employees if not e.get("user_id")]:\n'), GOV, 'test_unlinked_employees_are_not_offered_as_users');
+  (code) => code.replace('\treturn team_members\n', '\treturn team_members + [{"name": e["name"]} for e in active_employees if not e.get("user_id")]\n'), GOV, 'test_unlinked_employees_are_not_offered_as_users');
 const TKS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
 runMutationTest('A completed task drags its moved blocks back', TKS_GOV,
   (code) => code.replace('"status": ("in", ("Open", "Completed")),\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
