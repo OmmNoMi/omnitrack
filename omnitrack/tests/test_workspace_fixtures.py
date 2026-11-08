@@ -15,6 +15,7 @@ These tests are filesystem-only (no site, no DB) so they run in milliseconds
 and cannot be skipped by a missing bench.
 """
 
+import ast
 import json
 import os
 import re
@@ -59,9 +60,16 @@ WORKSPACE_FIXTURES = [
 class TestWorkspaceFixtures(unittest.TestCase):
 	def test_hooks_declares_apps_screen_and_home(self):
 		"""Frappe v16 Desk needs add_to_apps_screen and app_home to resolve app branding and routes."""
-		hooks = {}
+		# Read the literal assignments without running hooks.py
 		with open(HOOKS_PY, encoding="utf-8") as f:
-			exec(compile(f.read(), HOOKS_PY, "exec"), hooks)
+			tree = ast.parse(f.read(), HOOKS_PY)
+		hooks = {
+			t.id: ast.literal_eval(node.value)
+			for node in tree.body
+			if isinstance(node, ast.Assign)
+			for t in node.targets
+			if isinstance(t, ast.Name) and t.id in ("app_home", "add_to_apps_screen")
+		}
 		self.assertEqual(hooks.get("app_home"), "/desk/omnitrack")
 		tiles = hooks.get("add_to_apps_screen") or []
 		self.assertEqual([t.get("name") for t in tiles], ["omnitrack"])
