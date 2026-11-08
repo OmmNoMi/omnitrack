@@ -310,6 +310,8 @@ export function useWorkstationSessionSync({
       showInactivityModal.value = false;
     }
     if (!isTracking.value) return;
+    // A clear for an earlier session (stop A, start B) must not end the one running now
+    if (opts && opts.startTime && startTime.value && Number(opts.startTime) !== Number(startTime.value)) return;
     if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 15000)) return;
 
     isTracking.value = false;

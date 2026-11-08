@@ -173,7 +173,7 @@ When team members collaborate synchronously (e.g. mentoring, joint code review, 
    - Create the primary user's `Planned Work Block` (`employee = primary_user`).
    - Create the reciprocal collaborator's `Planned Work Block` (`employee = collaborator_user`) with mirrored parameters:
      - Same `work_date`, `start_time`, `end_time`, `duration_hours`, and `project`.
-     - Reciprocal `work_item_label` (e.g., `... (with Neha Thakur)` on Nomeshwer's block, and `... (with Nomeshwer)` on Neha's block).
+     - Reciprocal `work_item_label` (e.g., `... (with Partner B)` on Partner A's block, and `... (with Partner A)` on Partner B's block).
 2. **Synchronized Active Timers**:
    - Both users receive in-memory active session synchronization via `sync_active_session`:
      ```python

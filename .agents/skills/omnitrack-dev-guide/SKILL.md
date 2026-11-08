@@ -80,7 +80,7 @@ npm run test:fast && npm run test:static
 npm run test:mutation
 
 # HTML5 spec-compliant tree validation
-/Users/ommnomi/frappe-bench/version-16/env/bin/python ./scripts/check_www_html.py
+../../env/bin/python ./scripts/check_www_html.py
 ```
 
 ### Bench Operations

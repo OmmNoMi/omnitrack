@@ -409,7 +409,9 @@ export function useWorkstationEod(w) {
         }
       }
     });
-    window.addEventListener('focus', () => {
+    // A desktop window switch fires focus without visibilitychange: read the server's session first
+    window.addEventListener('focus', async () => {
+      await checkRemoteActiveSession();
       if (isTracking.value) {
         checkInactivity();
         checkBlockOverrun();
@@ -447,8 +449,8 @@ export function useWorkstationEod(w) {
             reconcileActiveSession(data);
           }
         });
-        socket.on('omnitrack:active_session_cleared', () => {
-          handleRemoteSessionCleared({ authoritative: true });
+        socket.on('omnitrack:active_session_cleared', (data) => {
+          handleRemoteSessionCleared({ authoritative: true, startTime: data && data.startTime });
         });
         socket.on('omnitrack:block_alert', (data) => {
           handleIncomingBlockAlert(data);
@@ -463,8 +465,8 @@ export function useWorkstationEod(w) {
       frappe.realtime.on('omnitrack:active_session_updated', (data) => {
         if (data && data.status === 'active') reconcileActiveSession(data);
       });
-      frappe.realtime.on('omnitrack:active_session_cleared', () => {
-        handleRemoteSessionCleared({ authoritative: true });
+      frappe.realtime.on('omnitrack:active_session_cleared', (data) => {
+        handleRemoteSessionCleared({ authoritative: true, startTime: data && data.startTime });
       });
       frappe.realtime.on('omnitrack:block_alert', (data) => {
         handleIncomingBlockAlert(data);
