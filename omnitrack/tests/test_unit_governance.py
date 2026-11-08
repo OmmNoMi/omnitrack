@@ -203,16 +203,18 @@ class TestPlannedWorkBlockDeletionGovernance(unittest.TestCase):
 		class DummyLogger:
 			def __init__(dummy, target):
 				dummy.target = target
-			def info(dummy, msg):
+			def info(dummy, msg, **kwargs):
 				dummy.target.logged_messages.append(msg)
-			def warning(dummy, msg):
+			def warning(dummy, msg, **kwargs):
 				dummy.target.logged_messages.append(msg)
-			def error(dummy, msg):
+			def error(dummy, msg, **kwargs):
 				dummy.target.logged_messages.append(msg)
 
 		for target, kwargs in [
 			("frappe.utils.data.get_system_timezone", {"return_value": "Asia/Kolkata"}),
 			("omnitrack.permissions._", {"side_effect": lambda msg: msg}),
+			# planner imports _ itself: a language another test set would load translations
+			("omnitrack.api.planner._", {"side_effect": lambda msg, *a, **k: msg}),
 			("omnitrack.permissions.formatdate", {"side_effect": lambda d: str(getdate(d))}),
 			("omnitrack.permissions.frappe.throw", {"side_effect": _throw}),
 			("omnitrack.permissions._setting", {"side_effect": lambda fn: self.settings.get(fn)}),
