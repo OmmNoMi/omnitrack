@@ -81,6 +81,7 @@ const SHORT_MENUS = new Set([
   'statusMenu',                 // task form: the workflow moves open from one state
   'moreMenu',                   // task details: workflow steps past the first two, then Open in Desk; entry sheet: Delete entry
   'priorityMenu',               // task form: the DocType's priorities (3 on ToDo, 4 on Task)
+  'dueMenu',                    // task details: 3 quick days, Pick a date…, Clear deadline
   'plannerNatureMenuItems'      // multi-select toggles; ROADMAP: move to a searchable multi-select
 ]);
 for (const f of vueFiles) {

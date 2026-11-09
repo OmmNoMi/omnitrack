@@ -111,13 +111,14 @@ if (/except Exception:\s*\n\s*pass/.test(fn)) problems.push("omnitrack/api/tasks
 // Presets count local calendar days: IST just after midnight is still the day before in UTC
 process.env.TZ = "Asia/Kolkata";
 const { deadlinePresets } = await import("../src/utils/deadlinePresets.js");
-const presetIso = (p, id) => p.find((x) => x.id === id).iso;
+const presetIso = (p, id) => (p.find((x) => x.id === id) || {}).iso;
+if (deadlinePresets(new Date()).length > 3) problems.push("src/utils/deadlinePresets.js: at most three quick days, so the date's menu stays at five entries");
 for (const [now, want] of [
-  [new Date(2026, 10, 9, 0, 15), { today: "2026-11-09", tomorrow: "2026-11-10", friday: "2026-11-13", nextweek: "2026-11-16" }], // Mon
-  [new Date(2026, 10, 13, 0, 15), { today: "2026-11-13", friday: "2026-11-20" }], // Fri: next Fri
+  [new Date(2026, 10, 9, 0, 15), { tomorrow: "2026-11-10", friday: "2026-11-13", nextweek: "2026-11-16" }], // Mon
+  [new Date(2026, 10, 13, 0, 15), { tomorrow: "2026-11-14", friday: "2026-11-20" }], // Fri: next Fri
   [new Date(2026, 10, 14, 12), { friday: "2026-11-20" }], // Sat
   [new Date(2026, 10, 15, 12), { friday: "2026-11-20" }], // Sun
-  [new Date(2026, 11, 31, 23, 59), { tomorrow: "2027-01-01", in2days: "2027-01-02" }], // year end
+  [new Date(2026, 11, 31, 23, 59), { tomorrow: "2027-01-01", nextweek: "2027-01-07" }], // year end
 ]) {
   const p = deadlinePresets(now);
   for (const [id, v] of Object.entries(want)) if (presetIso(p, id) !== v) problems.push(`deadlinePresets(${now}): ${id} is ${presetIso(p, id)}, want ${v}`);

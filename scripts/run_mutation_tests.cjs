@@ -1431,6 +1431,8 @@ runMutationTest('A composable reads a chime no composable publishes', SRC('src/c
   (code) => { const a = '    playStartOnTimeChime,\n    playOverrunChime,\n'; const i = code.lastIndexOf(a); return code.slice(0, i) + '    playStartOnTimeChime,\n' + code.slice(i + a.length); }, 'node scripts/check_workstation_wiring.mjs', 'reads playOverrunChime from w');
 runMutationTest('Deadline presets count days in UTC', SRC('src/utils/deadlinePresets.js'),
   (code) => code.replace('localISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n))', 'new Date(now.getFullYear(), now.getMonth(), now.getDate() + n).toISOString().slice(0, 10)'), DK, 'deadlinePresets(');
+runMutationTest('Date menu grows past five entries', SRC('src/utils/deadlinePresets.js'),
+  (code) => code.replace("  return [\n", "  return [\n    { id: 'today', label: 'Today', iso: plus(now, 0), tooltip: 'Due today' },\n"), DK, 'at most three quick days');
 runMutationTest('Friday preset lands on today', SRC('src/utils/deadlinePresets.js'),
   (code) => code.replace('(5 - day + 7) % 7 || 7', '(5 - day + 7) % 7'), DK, 'deadlinePresets(');
 runMutationTest('Saving a deadline disables the focused preset', SRC('src/drawers/TaskDetailDrawer.vue'),
