@@ -27,55 +27,25 @@
             </template>
             <template v-if="d">
               <dt :class="mutedText">Due</dt>
-              <dd class="min-w-0 space-y-1.5">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span :class="due ? (overdue ? lateText : strongText) : mutedText">
-                    {{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template>
-                  </span>
-                  <button
-                    v-if="canEdit && due"
-                    type="button"
-                    class="p-0.5 text-xs text-gray-700 dark:text-gray-300 hover:text-red-700 dark:hover:text-red-300 rounded transition-colors"
-                    title="Clear deadline"
-                    aria-label="Clear deadline"
+              <dd ref="dueCell" class="min-w-0 space-y-1.5">
+                <!-- The date is the control: its menu holds the quick days, any other date, and Clear -->
+                <Dropdown v-if="canEdit && !showCustomPicker" :options="dueMenu" placement="left">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon-right="chevron-down"
+                    class="!-ml-2 !font-normal"
+                    :class="due ? (overdue ? lateText : strongText) : mutedText"
+                    :label="dueLabel"
+                    aria-haspopup="menu"
                     :aria-disabled="savingDue ? 'true' : null"
-                    @click="setDeadline('')"
-                  >
-                    <FeatherIcon name="x" class="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
-                </div>
+                  >{{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template></Button>
+                </Dropdown>
+                <span v-else-if="!showCustomPicker" :class="due ? (overdue ? lateText : strongText) : mutedText">
+                  {{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template>
+                </span>
 
-                <!-- Quick deadline presets -->
-                <div v-if="canEdit && !showCustomPicker" class="flex items-center gap-1 flex-wrap pt-0.5" role="group" aria-label="Quick deadline presets">
-                  <button
-                    v-for="p in quickPresets"
-                    :key="p.id"
-                    type="button"
-                    class="px-2 py-0.5 text-xs font-medium rounded border transition-colors shadow-sm"
-                    :class="dueISO === p.iso
-                      ? (isDarkMode ? 'border-blue-500 bg-blue-950/60 text-blue-200' : 'border-blue-400 bg-blue-50 text-blue-800')
-                      : (isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white' : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900')"
-                    :title="p.tooltip"
-                    :aria-pressed="dueISO === p.iso ? 'true' : 'false'"
-                    :aria-disabled="savingDue ? 'true' : null"
-                    @click="setDeadline(p.iso)"
-                  >
-                    {{ p.label }}
-                  </button>
-                  <button
-                    type="button"
-                    class="px-2 py-0.5 text-xs font-medium rounded border transition-colors shadow-sm"
-                    :class="isDarkMode ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white' : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-gray-900'"
-                    ref="customDueBtn"
-                    title="Pick custom deadline"
-                    :aria-disabled="savingDue ? 'true' : null"
-                    @click="openCustomPicker"
-                  >
-                    Custom…
-                  </button>
-                </div>
-
-                <!-- Custom date picker when toggled -->
+                <!-- Any other date, from "Pick a date…" in the menu -->
                 <div v-if="showCustomPicker" ref="customDuePicker" class="flex items-center gap-1.5 pt-1" @keydown.esc.stop.prevent="closeCustomPicker">
                   <div v-input-attrs="{ 'aria-label': 'Pick task deadline', 'aria-haspopup': 'dialog' }" class="flex-1 max-w-[200px]">
                     <DatePicker
@@ -156,7 +126,14 @@ import { deadlinePresets } from '../utils/deadlinePresets.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// "Mon, Nov 9" for a YYYY-MM-DD day, with the year only when it is not this year
+const dayLabel = (iso) => {
+  if (!iso || iso.length < 10) return '';
+  const [y, m, day] = iso.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+};
+
+const FOCUSABLE ='button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default {
   name: 'TaskDetailDrawer',
@@ -190,11 +167,9 @@ export default {
     },
     finished() { return ['green', 'red'].includes(stateTone(this.state)) || ['green', 'red'].includes(stateTone(this.d && this.d.status)); },
     dueISO() { return String((this.d && this.d.due_date) || (taskDetail.task && taskDetail.task.due_date) || '').slice(0, 10); },
-    due() {
-      if (this.dueISO.length < 10) return '';
-      const [y, m, day] = this.dueISO.split('-').map(Number);
-      return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
-    },
+    due() { return dayLabel(this.dueISO); },
+    // The button's name starts with what it shows, then says what it does
+    dueLabel() { return (this.due || 'No deadline') + (this.due && this.overdue ? ', overdue' : '') + '. Change deadline'; },
     overdue() {
       if (!this.d || this.finished || this.dueISO.length < 10) return false;
       const now = new Date();
@@ -203,6 +178,19 @@ export default {
     },
     // Read on each open (this.d is new per load), so a tab left open overnight gets today's dates
     quickPresets() { return this.d ? deadlinePresets(new Date()) : []; },
+    // Each quick day shows its date; the current one is ticked (the tick is read out, not just a colour)
+    dueMenu() {
+      const days = this.quickPresets.map((p) => ({
+        label: p.label,
+        description: dayLabel(p.iso) + (this.dueISO === p.iso ? ', current' : ''),
+        icon: this.dueISO === p.iso ? 'check' : 'calendar',
+        selected: this.dueISO === p.iso,
+        onClick: () => this.setDeadline(p.iso),
+      }));
+      const other = [{ label: 'Pick a date…', icon: 'edit-3', onClick: () => this.openCustomPicker() }];
+      if (this.due) other.push({ label: 'Clear deadline', icon: 'x', onClick: () => this.setDeadline('') });
+      return [{ group: 'Quick days', hideLabel: true, items: days }, { group: 'Other', hideLabel: true, items: other }];
+    },
     project() {
       const t = taskDetail.task || {};
       return (this.d && (this.d.project_name || this.d.project)) || t.project_name || t.project || '';
@@ -296,10 +284,10 @@ export default {
         if (typeof opts.onChange === 'function') {
           opts.onChange(res && res.task ? res.task : { ...(taskDetail.task || {}), due_date: targetDate });
         }
-        // The control pressed may be gone (the picker, or Clear once nothing is due): focus goes to Custom…
-        const refocus = this.showCustomPicker || !targetDate;
+        // After the picker, focus goes back to the date button it replaced (the menu returns it itself)
+        const refocus = this.showCustomPicker;
         this.showCustomPicker = false;
-        if (refocus) this.$nextTick(() => this.$refs.customDueBtn && this.$refs.customDueBtn.focus());
+        if (refocus) this.focusDueBtn();
       } catch (e) {
         this.showToast('Could not set deadline: ' + (this.extractErrorMessage ? this.extractErrorMessage(e, 'Try again.') : (e.message || e)), 'danger');
       } finally {
@@ -313,11 +301,16 @@ export default {
     },
     openCustomPicker() {
       this.showCustomPicker = true;
-      this.$nextTick(() => { const i = this.$refs.customDuePicker && this.$refs.customDuePicker.querySelector('input'); if (i) i.focus(); });
+      // After the menu has closed and handed focus back to its button, which this then replaces
+      setTimeout(() => { const i = this.$refs.customDuePicker && this.$refs.customDuePicker.querySelector('input'); if (i) i.focus(); }, 0);
     },
     closeCustomPicker() {
       this.showCustomPicker = false;
-      this.$nextTick(() => { if (this.$refs.customDueBtn) this.$refs.customDueBtn.focus(); });
+      this.focusDueBtn();
+    },
+    focusDueBtn() {
+      // The button sits inside the dropdown's trigger, so find it in the cell rather than through a component ref
+      this.$nextTick(() => { const el = this.$refs.dueCell && this.$refs.dueCell.querySelector('button[aria-haspopup="menu"]'); if (el) el.focus(); });
     },
     // The one task form, opened as the list that showed this task would have opened it. A save
     // or a move there reads this panel again.

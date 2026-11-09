@@ -68,7 +68,10 @@ for (const label of ["Status", "Due", "Priority", "Project", "Assigned to"]) {
   if (!new RegExp(`<dt :class="mutedText">${label}</dt>`).test(drawer)) problems.push(`src/drawers/TaskDetailDrawer.vue: the ${label} fact is named by a <dt>`);
 }
 if (!/<template v-if="d">\s*<dt :class="mutedText">Due<\/dt>/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: Due is always shown when the task is loaded");
-if (!/quickPresets\(\) \{/.test(drawer) || !/v-for="p in quickPresets"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: quick deadline presets are offered");
+if (!/quickPresets\(\) \{/.test(drawer) || !/const days = this\.quickPresets\.map\(/.test(drawer) || !/<Dropdown v-if="canEdit && !showCustomPicker" :options="dueMenu"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: quick deadline presets are offered in the date's menu");
+// The current day is said in words, not only by the row's colour, and the button's name starts with the date it shows
+if (!/this\.dueISO === p\.iso \? ', current' : ''/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: the deadline menu says which day is current");
+if (!/dueLabel\(\) \{ return \(this\.due \|\| 'No deadline'\)/.test(drawer) || !/:label="dueLabel"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: the deadline button's name starts with the date it shows");
 if (!/setDeadline\(iso\)/.test(drawer) || !/postJSON\('update_task'/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: setDeadline persists the date via update_task");
 if (/<Badge[^>]*>\{\{ d\.status \}\}<\/Badge>|priority<\/Badge>|>Overdue<\/Badge>/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: an unnamed status, priority or overdue chip is back");
 if (!/<div v-if="d \|\| failed" class="flex items-center gap-2 flex-wrap" role="group" aria-label="Task actions">\s*<Button v-for="\(m, i\) in shownMoves"/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: the first workflow steps are buttons at the start of the action bar");
@@ -120,7 +123,7 @@ for (const [now, want] of [
   for (const [id, v] of Object.entries(want)) if (presetIso(p, id) !== v) problems.push(`deadlinePresets(${now}): ${id} is ${presetIso(p, id)}, want ${v}`);
 }
 // Keyboard focus survives a deadline save: nothing focused is disabled or removed under it
-if (/:disabled="savingDue"/.test(drawer) || !/closeCustomPicker\(\) \{[^}]*customDueBtn/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: deadline controls keep keyboard focus (aria-disabled, focus back to Custom…)");
+if (/:disabled="savingDue"/.test(drawer) || !/closeCustomPicker\(\) \{[^}]*focusDueBtn\(\)/.test(drawer) || !/focusDueBtn\(\) \{[^}]*dueCell/.test(drawer)) problems.push("src/drawers/TaskDetailDrawer.vue: deadline controls keep keyboard focus (aria-disabled, focus back to the date button)");
 
 if (problems.length) {
   console.error("FAIL: details panels name their kind\n  " + problems.join("\n  "));

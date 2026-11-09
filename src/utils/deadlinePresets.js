@@ -9,7 +9,7 @@ export const deadlinePresets = (now = new Date()) => {
   return [
     { id: 'today', label: 'Today', iso: plus(now, 0), tooltip: 'Due today' },
     { id: 'tomorrow', label: 'Tomorrow', iso: plus(now, 1), tooltip: 'Due tomorrow' },
-    { id: 'in2days', label: '+2d', iso: plus(now, 2), tooltip: 'Due in 2 days' },
+    { id: 'in2days', label: 'In 2 days', iso: plus(now, 2), tooltip: 'Due in 2 days' },
     { id: 'friday', label: fri, iso: plus(now, toFri), tooltip: 'Due ' + fri },
     { id: 'nextweek', label: 'Next week', iso: plus(now, 7), tooltip: 'Due in 7 days' },
   ];

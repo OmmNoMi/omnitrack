@@ -1419,7 +1419,13 @@ runMutationTest('The task panel shows a bare status chip again', SRC('src/drawer
 runMutationTest('The task panel hides the Due row when unset', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<template v-if="d">\n              <dt :class="mutedText">Due</dt>', '<template v-if="due">\n              <dt :class="mutedText">Due</dt>'), DK, 'Due is always shown when the task is loaded');
 runMutationTest('The task panel drops quick deadline presets', SRC('src/drawers/TaskDetailDrawer.vue'),
-  (code) => code.replace('v-for="p in quickPresets"', 'v-for="p in []"'), DK, 'quick deadline presets are offered');
+  (code) => code.replace('const days = this.quickPresets.map(', 'const days = [].map('), DK, 'quick deadline presets are offered');
+runMutationTest('The deadline menu marks the current day by colour only', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace("this.dueISO === p.iso ? ', current' : ''", "''"), DK, 'says which day is current');
+runMutationTest('The deadline button is named without its date', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace(':label="dueLabel"', 'label="Change deadline"'), DK, 'starts with the date it shows');
+runMutationTest('Closing the date picker drops focus', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('this.showCustomPicker = false;\n      this.focusDueBtn();', 'this.showCustomPicker = false;'), DK, 'keep keyboard focus');
 runMutationTest('A composable reads a chime no composable publishes', SRC('src/composables/useWorkstationSessionClock.js'),
   // The last match is the return list (the publish); the first is the read from the audio store
   (code) => { const a = '    playStartOnTimeChime,\n    playOverrunChime,\n'; const i = code.lastIndexOf(a); return code.slice(0, i) + '    playStartOnTimeChime,\n' + code.slice(i + a.length); }, 'node scripts/check_workstation_wiring.mjs', 'reads playOverrunChime from w');
@@ -1428,7 +1434,7 @@ runMutationTest('Deadline presets count days in UTC', SRC('src/utils/deadlinePre
 runMutationTest('Friday preset lands on today', SRC('src/utils/deadlinePresets.js'),
   (code) => code.replace('(5 - day + 7) % 7 || 7', '(5 - day + 7) % 7'), DK, 'deadlinePresets(');
 runMutationTest('Saving a deadline disables the focused preset', SRC('src/drawers/TaskDetailDrawer.vue'),
-  (code) => code.replace(`:aria-disabled="savingDue ? 'true' : null"\n                    @click="setDeadline(p.iso)"`, `:disabled="savingDue"\n                    @click="setDeadline(p.iso)"`), DK, 'keep keyboard focus');
+  (code) => code.replace(`aria-haspopup="menu"\n                    :aria-disabled="savingDue ? 'true' : null"`, `aria-haspopup="menu"\n                    :disabled="savingDue"`), DK, 'keep keyboard focus');
 runMutationTest('Setting deadline does not persist via update_task', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace("postJSON('update_task'", "postJSON('skip_task'"), DK, 'setDeadline persists the date via update_task');
 runMutationTest('Workflow steps leave the action bar', SRC('src/drawers/TaskDetailDrawer.vue'),
