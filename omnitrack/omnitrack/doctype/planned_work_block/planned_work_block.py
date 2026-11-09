@@ -12,6 +12,7 @@ class PlannedWorkBlock(OptionalLinks, Document):
 		self.validate_past_plan_immutability()
 		self.validate_timesheet_session_horizons()
 		self.validate_no_future_sessions()
+		self.validate_session_hours_fit_times()
 		self.resolve_project_from_task()
 		self.sync_primary_task()
 		self.put_person_on_tasks()
@@ -106,6 +107,29 @@ class PlannedWorkBlock(OptionalLinks, Document):
 				continue
 			if ends_in_future(sess, now):
 				frappe.throw(frappe._("That time hasn't happened yet. Log a session once it is over."), frappe.ValidationError)
+
+	def validate_session_hours_fit_times(self):
+		"""Rule: a session's hours fit between its start and end (past midnight once at most).
+		A stopwatch left running for days once saved 342.5h on a 09:34-16:04 row, and a person's
+		month read 401h. Fewer hours than the times is fine (a break taken out). Only new or
+		changed rows are checked, so a block that already holds such a row can still be saved."""
+		from omnitrack.utils.session_time import session_span_hours
+
+		before = self.get_doc_before_save()
+		row = lambda r: (str(r.session_date), str(r.from_time), str(r.to_time), flt(r.hours))
+		old = {r.name: row(r) for r in (before.sessions if before else [])}
+		for sess in self.sessions or []:
+			if old.get(sess.name) == row(sess):
+				continue
+			span = session_span_hours(sess)
+			# Times are kept to the minute and hours to the hundredth, so a little over is rounding
+			if span is not None and flt(sess.hours) > span + 0.05:
+				frappe.throw(
+					frappe._("{0}h does not fit between {1} and {2}. If the stopwatch ran on after the work stopped, set when it really ended.").format(
+						flt(sess.hours, 2), str(sess.from_time)[:5], str(sess.to_time)[:5]
+					),
+					frappe.ValidationError,
+				)
 
 	def on_trash(self):
 		if not getattr(self.flags, "ignore_past_block_lock", False):

@@ -123,6 +123,20 @@ export function useWorkstationShortcuts(w) {
       return;
     }
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    // A dialog on screen owns the keyboard (WCAG 2.4.3): with focus outside it (on the page, or
+    // after a click on its backdrop) "/" went to the log box behind it. "/" now goes to the
+    // dialog's own log, and no letter shortcut reaches the page under it. The session card is
+    // the one dialog whose log the shortcuts below already serve.
+    const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+    const dialog = dialogs[dialogs.length - 1];
+    if (dialog && !dialog.querySelector('[data-session-input]')) {
+      if (ev.key !== '/' || _typingIn(ev.target)) return;
+      const line = dialog.querySelector('[data-entry-line]');
+      if (!line) return;
+      ev.preventDefault();
+      line.focus();
+      return;
+    }
     if (ev.shiftKey && !_typingIn(ev.target)) {
       const k = String(ev.key || '').toLowerCase();
       if (k === 't') {

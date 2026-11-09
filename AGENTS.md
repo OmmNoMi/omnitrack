@@ -42,6 +42,7 @@ These rules apply to all tasks and agents in the **`omnitrack`** repository.
 - **Frappe returns HTTP 417 for *any* server-side `frappe.throw` / `ValidationError`, not only CSRF failures.** When a whitelisted call 417s, read `response.exception` / `_server_messages` before assuming it is a token problem — it is usually a Select-field option mismatch or a validation error.
 - **A saved desktop layout hides tiles added after it was saved (Frappe 16, upstream-bug candidate).** Once a user arranges `/desk` (Edit Layout, drag, folders), Frappe stores a `Desktop Layout` for them, and `frappe.desktop_utils.arrange_layout` (`desktop_icons.bundle.js`) draws only the icons in that saved list. A Desktop Icon created later, like OmniTrack's from `_ensure_desktop_icon`, exists, is not hidden and passes every permission check, yet never shows for that user, with no error. On ommnomi.local (no saved layouts) the tile shows. On ommnomi.in (2026-10-12) it was missing while OmniDesk and OmniQuery showed. The user fix: right-click an empty spot on `/desk` → Reset Layout (it deletes their `Desktop Layout`; their arrangement is lost). Don't work around it from OmniTrack by editing other users' layouts. The real fix is upstream: `arrange_layout` should append permitted boot icons that the layout doesn't mention.
 - **Select-field option changes need `bench --site <site> migrate`.** Editing `options` in `planned_work_block.json` (e.g. adding `🌴 Leave` / `🤒 Absent` to `task_nature`) does nothing until migrate syncs the DocType; until then inserts with the new value throw "cannot be … It should be one of …".
+- **To check a Frappe Cloud deploy, fetch the bundle with the page's `?v=`.** On ommnomi.in the bare `/assets/omnitrack/dist/omnitrack.bundle.js` is served from the proxy cache (`cache-control: immutable`, `x-proxy-cache: HIT`) and keeps the old code after a successful deploy. `www/omnitrack.html` loads it with a new `?v=` on each deploy, so people get the new code on their next page load. Read that `v` from the signed-in `/omnitrack` page (2026-11-09: 1794190151 before, 1794214695 after). A deploy with no DocType or patch change runs as a "Pull" site update, with no migrate.
 
 ## Jinja2 & Vue.js 3 Template Rules
 - **Escape Vue Mustache Syntax**: When building single-page applications or portals inside Frappe's `www/` directory (e.g., `omnitrack.html`), always wrap Vue 3 template tags in Jinja2 `{% raw %} ... {% endraw %}` blocks to prevent Jinja evaluation collisions and **Server Error 417**.
@@ -283,8 +284,18 @@ reka's Combobox and MultiSelect are the exception: they close on Escape **withou
 ## Gotcha: TimePicker and Combobox attrs (frappe-ui 0.1.278)
 * `TimePicker` drops every attr (its Popover has `inheritAttrs: false`), so `aria-label`, `class` and `id` passed to it do nothing. Style its input from a wrapper (`[&_input]:h-9`).
 * `TimePicker` with `:options` shows the option's `label` in the list but formats the input itself ("1:45 pm").
+* `TimePicker` (with `allowCustom`) selects its whole value on **every** click (`onClickInput` calls `selectAll()` after `nextTick`), and there is no prop to turn that off: `allowCustom: false` makes the input readonly. On a phone that means a tap can never place the caret. The browser also moves the caret only after the click handlers have run, so the selection read in a click handler is stale. `DayTimeFields.vue` notes the tap point on `pointerdown` (only when the field already had focus), then after the click places the caret with the browser's own `document.caretPositionFromPoint`, keeping a range the person dragged. Don't measure text yourself.
 * `Combobox` puts `id` and any other attrs (`data-autofocus`) on its input, so `<label for="that-id">` names it and FDialog can focus it.
 * `Combobox` accepts `variant` and `size` (they render as `data-variant`/`data-size` on its anchor). The anchor is `inline-flex`, so make it full width from a wrapper: `[&_div[data-variant]]:w-full`.
+
+## Gotcha: a dialog owns the keyboard
+The app's "is a dialog open" test is `document.querySelector('[role="dialog"][aria-modal="true"]')`; reuse it, don't write another. SessionOverlay sets `aria-modal` only while it is raised. Page shortcuts in `useWorkstationShortcuts.js` must stop at the top dialog: "/" goes to that dialog's own log (`[data-entry-line]`), and letter shortcuts do nothing. The running session's card is the one dialog whose log (`[data-session-input]`) the shortcuts already serve.
+
+## Gotcha: the scroll lock follows what is shown
+A dialog component can stay mounted while hidden. Locking the page because it is mounted left TimeLog impossible to scroll. Lock on the surface that is shown (`shown`), and guard it in `check_scroll_lock.mjs`.
+
+## Gotcha: `bench run-tests` on ommnomi.local
+It fails before any OmniTrack test runs, because ERPNext's test records need setup data this site does not have. Don't create that data on ommnomi.local to get past it (tests must leave nothing there). Add `--skip-before-tests` and name the module: `bench --site ommnomi.local run-tests --skip-before-tests --module omnitrack.omnitrack.doctype.planned_work_block.test_planned_work_block`.
 
 ## Gotcha: Raven's routes
 `/app/raven` (→ `/desk/raven`) is Raven's Desk *workspace*, a list of DocTypes. The chat app is `/raven`. The OmniTrack Desk workspace is `/desk/omnitrack`.

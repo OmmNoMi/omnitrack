@@ -209,6 +209,11 @@ for (const [what, at] of [["at the start", () => minuteAgo(90).getTime()], ["aft
   check(/nudgeEnd\(deltaMins\) \{\n\s*const base = this\.end\n\s*\? toMin\(this\.end\)/.test(dtf), "DayTimeFields: a step adds to the current end, so pressing again adds again");
   check(/<ChoiceChips v-if="!quickAdjust" :options="durationOptions"/.test(dtf), "DayTimeFields: the session boxes show no length chips");
   check(/<button v-if="lastEdit"[^\n]*@click="\$emit\('update:end', lastEdit\)">Last edit \{\{ lastEdit \}\}<\/button>/.test(dtf), "DayTimeFields: Last edit sets the end");
+  check(/aria-label="Adjust the end">\n\s*<span[^\n]*>End<\/span>\n(?:\s*<!--[^\n]*-->\n)?\s*<button v-if="lastEdit"[^\n]*>Last edit \{\{ lastEdit \}\}<\/button>\n\s*<button[^\n]*@click="setEndNow">Now<\/button>/.test(dtf), "DayTimeFields: the End row reads Last edit, then Now (the later time)");
+  check(/@pointerdown\.capture="noteTimeTap" @click\.capture="keepTapCaret"/.test(dtf), "DayTimeFields: a tap in a time field is read before TimePicker selects all of it");
+  check(/this\._tap = input instanceof HTMLInputElement && document\.activeElement === input\s*\? \{ x: e\.clientX, y: e\.clientY \} : null;/.test(dtf), "DayTimeFields: the tap that focuses a time field still selects it all");
+  check(/const at = caretAtPoint\(input, tap\.x, tap\.y\); input\.setSelectionRange\(at, at\);/.test(dtf) && /const dragged = to > from && !\(from === 0 && to === len\);/.test(dtf) && /if \(dragged\) input\.setSelectionRange\(from, to\);/.test(dtf), "DayTimeFields: a tap in a focused time field puts the cursor at the tap point (the selection at click time is still the old one), and a dragged range stays");
+  check(/return pos && pos\.offsetNode === input \? pos\.offset : input\.value\.length;/.test(dtf) && !/measureText/.test(dtf), "DayTimeFields: the tap caret comes from the browser (caretPositionFromPoint), with no text measuring of our own");
   check(/:last-edit="liveAdjust\.last_edit \|\| ''"/.test(pane), "SessionControlsPane: the Adjust box passes the log's last edit");
   check(!/:durations=/.test(pane), "SessionControlsPane: the session boxes pass no lengths");
   const sync = rd("src/composables/useWorkstationSessionSync.js");

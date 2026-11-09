@@ -54,6 +54,13 @@ const uses = (file, owner) => {
 uses("src/composables/useWorkstationEod.js", "workstation-dialogs");
 uses("src/composables/useWorkstationPickers.js", "session-popup");
 
+// The session popup's lock follows the card on screen, which shows only while a session runs.
+// A session ended elsewhere (another device, the server) turned tracking off but left the card
+// raised: the card was gone and the page could not scroll until a reload.
+const pickers = fs.readFileSync(path.join(root, "src/composables/useWorkstationPickers.js"), "utf8");
+if (!/watch\(\(\) => isSessionElevated\.value && isTracking\.value, \(shown\) => \{\s*setScrollLock\('session-popup', shown\);/.test(pickers)) problems.push("useWorkstationPickers: the session popup's lock follows isSessionElevated && isTracking");
+if (!/watch\(isTracking, \(tracking\) => \{\s*if \(!tracking && isSessionElevated\.value\) isSessionElevated\.value = false;/.test(pickers)) problems.push("useWorkstationPickers: a session ending, however it ends, lowers its raised card");
+
 if (problems.length) {
   console.error("FAIL: scroll lock\n  " + problems.join("\n  "));
   process.exit(1);

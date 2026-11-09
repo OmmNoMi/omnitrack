@@ -1078,7 +1078,7 @@ const SL = 'node scripts/check_scroll_lock.mjs';
 runMutationTest('A watcher locks body again', SRC('src/composables/useWorkstationEod.js'),
   (code) => code.replace("      document.addEventListener('keydown', onPlannerKeydown);\n    } else {", "      document.addEventListener('keydown', onPlannerKeydown);\n      document.body.style.overflow = 'hidden';\n    } else {"), SL, 'sets page overflow itself');
 runMutationTest('The session popup stops using the shared lock', SRC('src/composables/useWorkstationPickers.js'),
-  (code) => code.replace("    setScrollLock('session-popup', open);\n", ''), SL, "setScrollLock('session-popup'");
+  (code) => code.replace("    setScrollLock('session-popup', shown);\n", ''), SL, "setScrollLock('session-popup'");
 runMutationTest('One owner closing unlocks the page under another', SRC('src/utils/scrollLock.js'),
   (code) => code.replace('else owners.delete(owner);', 'else owners.clear();'), SL, 'still open');
 runMutationTest('The lock also writes body', SRC('src/utils/scrollLock.js'),
@@ -1576,6 +1576,17 @@ runMutationTest('The end steps lose +1h', DTF, mustChange('const END_STEPS = [5,
 runMutationTest('An end step sets the end instead of adding to it', DTF,
   mustChange('    nudgeEnd(deltaMins) {\n      const base = this.end\n        ? toMin(this.end)', '    nudgeEnd(deltaMins) {\n      const base = this.start\n        ? toMin(this.start)'), LA, 'pressing again adds again');
 runMutationTest('The session boxes show length chips again', DTF, mustChange('<ChoiceChips v-if="!quickAdjust" :options="durationOptions"', '<ChoiceChips :options="durationOptions"'), LA, 'no length chips');
+runMutationTest('Now comes before Last edit', DTF, mustChange('            <button v-if="lastEdit" type="button" :class="pillClass" :aria-label="\'End at the last log edit, \' + lastEdit" :title="\'Set the end to the last log edit\'" @click="$emit(\'update:end\', lastEdit)">Last edit {{ lastEdit }}</button>\n' + '            <button type="button" :class="pillClass" title="Set the end to now" aria-label="Set the end to now" @click="setEndNow">Now</button>\n', '            <button type="button" :class="pillClass" title="Set the end to now" aria-label="Set the end to now" @click="setEndNow">Now</button>\n' + '            <button v-if="lastEdit" type="button" :class="pillClass" :aria-label="\'End at the last log edit, \' + lastEdit" :title="\'Set the end to the last log edit\'" @click="$emit(\'update:end\', lastEdit)">Last edit {{ lastEdit }}</button>\n'), LA, 'Last edit, then Now');
+runMutationTest('A time tap restores the stale selection', DTF, mustChange('else { const at = caretAtPoint(input, tap.x, tap.y); input.setSelectionRange(at, at); }', 'else input.setSelectionRange(from, to);'), LA, 'puts the cursor at the tap point');
+runMutationTest('A dragged range in a time field is lost', DTF, mustChange('if (dragged) input.setSelectionRange(from, to);', ''), LA, 'a dragged range stays');
+runMutationTest('The tap caret ignores the browser answer', DTF, mustChange('return pos && pos.offsetNode === input ? pos.offset : input.value.length;', 'return input.value.length;'), LA, 'caretPositionFromPoint');
+runMutationTest('"/" reaches past an open dialog', SRC('src/composables/useWorkstationShortcuts.js'), mustChange("if (dialog && !dialog.querySelector('[data-session-input]')) {", 'if (false) {'), DP, 'goes to its own log line');
+runMutationTest('"/" in a dialog focuses nothing', SRC('src/composables/useWorkstationShortcuts.js'), mustChange('      line.focus();\n', ''), DP, 'goes to its own log line');
+runMutationTest('The first dialog, not the top one, takes "/"', SRC('src/composables/useWorkstationShortcuts.js'), mustChange('const dialog = dialogs[dialogs.length - 1];', 'const dialog = dialogs[0];'), DP, 'goes to its own log line');
+runMutationTest('The session dialog does not say whose time it is', SRC('src/components/dialogs/WorkSessionEntry.vue'), mustChange('For {{ currentUserFullName }} (you)', ''), DP, 'names whose time it is');
+runMutationTest('A time tap is read after TimePicker selected it all', DTF, mustChange('@click.capture="keepTapCaret"', '@click="keepTapCaret"'), LA, 'before TimePicker selects');
+runMutationTest('The focusing tap keeps a caret too', DTF, mustChange('this._tap = input instanceof HTMLInputElement && document.activeElement === input', 'this._tap = input instanceof HTMLInputElement'), LA, 'still selects it all');
+runMutationTest('A tap in a focused time field is selected again', DTF, mustChange('input.setSelectionRange(at, at);', 'input.select();'), LA, 'puts the cursor at the tap point');
 runMutationTest('Last edit moves the start', DTF, mustChange("@click=\"$emit('update:end', lastEdit)\"", "@click=\"$emit('update:start', lastEdit)\""), LA, 'Last edit sets the end');
 runMutationTest('The Adjust box drops the last edit', SRC('src/session/SessionControlsPane.vue'), mustChange("        :last-edit=\"liveAdjust.last_edit || ''\"\n", ''), LA, 'passes the log');
 runMutationTest('Last edit is offered at the start', WSM, mustChange('edited >= start.getTime() + 60000 && ', ''), LA, 'edited at the start');
@@ -1667,6 +1678,10 @@ runMutationTest('The overrun notification asks what it cannot take an answer to'
   (code) => code.replace('The session is still running.`;', 'Wrap up or continue?`;'), PR, 'it asks nothing');
 runMutationTest('The overrun notification reads as the still-working question', SRC('src/composables/useWorkstationAudioSync.js'),
   (code) => code.replace("dispatchInactivityNotification(msg, 'omnitrack-block-overrun', 'OmniTrack: Planned block ended');", "dispatchInactivityNotification(msg, 'omnitrack-block-overrun');"), PR, 'its own heading');
+runMutationTest('The server still-working alert opens the box itself', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('if (isTracking.value && !showInactivityModal.value) checkInactivity();', 'if (isTracking.value && !showInactivityModal.value) showInactivityModal.value = true;'), PR, 'only asks the page to check');
+runMutationTest('The server still-working alert falls through to its own notification', SRC('src/composables/useWorkstationEod.js'),
+  (code) => code.replace('checkInactivity();\n        return;', 'checkInactivity();'), PR, 'only asks the page to check');
 runMutationTest('The runaway options-plus-Apply dialog comes back', SRC('src/components/dialogs/DialogCoordinator.vue'),
   (code) => code.replace('    <EODWrapUpModal\n', '    <RunawayTimerModal :model-value="false" />\n    <EODWrapUpModal\n'), PR, 'the runaway options-plus-Apply dialog is gone');
 
@@ -2179,9 +2194,9 @@ runMutationTest('The page says nothing about waiting', SRC('src/views/Timesheets
 runMutationTest('An employee is told nothing waits for their review', SRC('src/views/TimesheetsView.vue'),
   (code) => code.replace("hours.can_review_team ? 'Nothing is waiting for your review.' : 'All your logged time is approved.'", "'Nothing is waiting for your review.'"), HR, 'said for who is reading');
 runMutationTest('An employee is told to review their own time', SRC('src/utils/timeLog.js'),
-  (code) => code.replace("mine ? ' waiting for approval' : ' to review'", "' to review'"), HR, 'worded for its owner');
+  (code) => { const a = "mine ? n(total) + ' not approved yet' : "; if (!code.includes(a)) throw new Error('mutator: anchor missing'); return code.replace(a, 'false ? 0 : '); }, HR, 'said as theirs');
 runMutationTest('Waiting time outside the period cannot be reached', SRC('src/views/TimesheetsView.vue'),
-  (code) => code.replace('<Button v-if="!hours.can_review_team && waitingOutside"', '<Button v-if="false"'), HR, 'outside the period can be shown');
+  (code) => { if (!code.includes('<Button v-if="waitingOutside"')) throw new Error('mutator: anchor missing'); return code.replace('<Button v-if="waitingOutside"', '<Button v-if="false"'); }, HR, 'outside the period can be shown');
 runMutationTest('Showing waiting time opens nobody', SRC('src/views/TimesheetsView.vue'),
   (code) => code.replace('this.focusAfterLoad = { person, open: true };', 'this.focusAfterLoad = { person };'), HR, 'opens whoever comes first');
 runMutationTest('The person asked for stays closed', SRC('src/views/TimesheetsView.vue'),
@@ -2212,8 +2227,38 @@ runMutationTest('Closed payroll days are not said', SRC('src/utils/timeLog.js'),
   (code) => { if (!code.includes('closed: !!closedThrough && date <= closedThrough,')) throw new Error('mutator: anchor missing'); return code.replace('closed: !!closedThrough && date <= closedThrough,', 'closed: false,'); }, HR, 'a day payroll has closed says so');
 runMutationTest('Team totals are hidden', SRC('src/views/TimesheetsView.vue'),
   (code) => { if (!code.includes('v-if="hours && hours.can_review_team && hours.totals')) throw new Error('mutator: anchor missing'); return code.replace('v-if="hours && hours.can_review_team && hours.totals', 'v-if="false && hours.totals'); }, HR, "a reviewer sees the team's totals");
-runMutationTest('A waiting name no longer opens its person', SRC('src/views/TimesheetsView.vue'),
-  (code) => { if (!code.includes('@click="showWaiting(w)"')) throw new Error('mutator: anchor missing'); return code.replace('@click="showWaiting(w)"', '@click="noop"'); }, HR, 'a waiting name opens that person');
+runMutationTest("Show all waiting does nothing", SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes("@click=\"showWaiting()\"")) throw new Error('mutator: anchor missing'); return code.replace("@click=\"showWaiting()\"", "@click=\"noop\""); }, HR, "outside the period can be shown");
+runMutationTest("The waiting summary lists the people again", SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes("v-for=\"(c, i) in waitingLine\"")) throw new Error('mutator: anchor missing'); return code.replace("v-for=\"(c, i) in waitingLine\"", "v-for=\"(w, i) in hours.waiting\""); }, HR, "one line, not a second list");
+runMutationTest("The waiting line adds up hours, not entries", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("const total = flagged + sum('awaiting_entries');")) throw new Error('mutator: anchor missing'); return code.replace("const total = flagged + sum('awaiting_entries');", "const total = flagged + sum('awaiting');"); }, HR, "counts entries");
+runMutationTest("The waiting line forgets flagged entries", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("if (flagged) out.push({ tone: 'flagged', label: flagged")) throw new Error('mutator: anchor missing'); return code.replace("if (flagged) out.push({ tone: 'flagged', label: flagged", "if (false) out.push({ tone: 'flagged', label: flagged"); }, HR, "flagged and the oldest day once");
+runMutationTest("Empty days are not folded", SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes("out[p.user] = foldEmptyDays(personDays(p, opts));")) throw new Error('mutator: anchor missing'); return code.replace("out[p.user] = foldEmptyDays(personDays(p, opts));", "out[p.user] = personDays(p, opts);"); }, HR, "one line, named by their first and last day");
+runMutationTest("Empty days fold across a payroll close", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("if (g.missing && run && run.missing && run.closed === g.closed) {")) throw new Error('mutator: anchor missing'); return code.replace("if (g.missing && run && run.missing && run.closed === g.closed) {", "if (g.missing && run && run.missing) {"); }, HR, "a payroll close breaks a run");
+runMutationTest("A run of empty days loses its plan", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("      run.planned += g.planned;\n")) throw new Error('mutator: anchor missing'); return code.replace("      run.planned += g.planned;\n", ""); }, HR, "with their plan added");
+runMutationTest("A run of empty days is named by one day", SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes("dayHeading(g) { return g.count > 1 ? shortDate(g.through) + ' to ' + shortDate(g.date) : longDay(g.date); },")) throw new Error('mutator: anchor missing'); return code.replace("dayHeading(g) { return g.count > 1 ? shortDate(g.through) + ' to ' + shortDate(g.date) : longDay(g.date); },", "dayHeading(g) { return longDay(g.date); },"); }, HR, "one line, named by their first and last day");
+runMutationTest("Hours past a session's times are not marked", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("if (Number(r.s.hours || 0) > held + 0.05) r.checks.push(")) throw new Error('mutator: anchor missing'); return code.replace("if (Number(r.s.hours || 0) > held + 0.05) r.checks.push(", "if (false) r.checks.push("); }, HR, "more hours than a session's times hold");
+runMutationTest("A session past midnight is marked as over its times", SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("const held = (((to0 - from + 1440) % 1440) || 1440) / 60;")) throw new Error('mutator: anchor missing'); return code.replace("const held = (((to0 - from + 1440) % 1440) || 1440) / 60;", "const held = (to0 - from) / 60;"); }, HR, "past midnight too");
+runMutationTest("The server takes hours that do not fit the times", SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py'),
+  (code) => { if (!code.includes("\t\tself.validate_session_hours_fit_times()\n")) throw new Error('mutator: anchor missing'); return code.replace("\t\tself.validate_session_hours_fit_times()\n", ""); }, HR, "each session's hours against its times");
+runMutationTest("The server refuses every old row again", SRC('omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py'),
+  (code) => { if (!code.includes("\t\t\tif old.get(sess.name) == row(sess):\n\t\t\t\tcontinue\n")) throw new Error('mutator: anchor missing'); return code.replace("\t\t\tif old.get(sess.name) == row(sess):\n\t\t\t\tcontinue\n", ""); }, HR, "only new or changed rows");
+runMutationTest("A days-long stopwatch saves as it stands", SRC('src/composables/useWorkstationApi.js'),
+  (code) => { if (!code.includes("if (!customEndMs && Date.now() - runFrom >= DAY_MS) {")) throw new Error('mutator: anchor missing'); return code.replace("if (!customEndMs && Date.now() - runFrom >= DAY_MS) {", "if (false) {"); }, SLN, "a day or more is checked");
+runMutationTest("A days-long Stop saves without asking when it ended", SRC('src/composables/useWorkstationApi.js'),
+  (code) => { if (!code.includes("if (typeof w.openAdjustModal === 'function') w.openAdjustModal({ endMs });\n        return;")) throw new Error('mutator: anchor missing'); return code.replace("if (typeof w.openAdjustModal === 'function') w.openAdjustModal({ endMs });\n        return;", "if (typeof w.openAdjustModal === 'function') w.openAdjustModal({ endMs });"); }, SLN, "opens Adjust on a likely end and saves nothing");
+runMutationTest("The session popup keeps the page locked after the session ends", SRC('src/composables/useWorkstationPickers.js'),
+  (code) => { if (!code.includes("watch(() => isSessionElevated.value && isTracking.value, (shown) => {")) throw new Error('mutator: anchor missing'); return code.replace("watch(() => isSessionElevated.value && isTracking.value, (shown) => {", "watch(() => isSessionElevated.value, (shown) => {"); }, SL, "follows isSessionElevated && isTracking");
+runMutationTest("A session ended elsewhere leaves its card raised", SRC('src/composables/useWorkstationPickers.js'),
+  (code) => { if (!code.includes("if (!tracking && isSessionElevated.value) isSessionElevated.value = false;")) throw new Error('mutator: anchor missing'); return code.replace("if (!tracking && isSessionElevated.value) isSessionElevated.value = false;", "if (false) isSessionElevated.value = false;"); }, SL, "lowers its raised card");
 runMutationTest("HR may change someone else's times", SRC('omnitrack/permissions.py'),
   (code) => { if (!code.includes('TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin"}')) throw new Error('mutator: anchor missing'); return code.replace('TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin"}', 'TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin", "HR Manager"}'); }, HR, 'only OmniTrack Manager and Admin change');
 runMutationTest('Edit is offered to any reviewer', SRC('src/drawers/SessionDetailDrawer.vue'),

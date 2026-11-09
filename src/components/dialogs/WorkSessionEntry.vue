@@ -18,12 +18,18 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="entry-session-title"
+        aria-describedby="entry-session-who"
         @keydown.capture="noteEscape"
         @keydown="onKey"
       >
         <!-- The popup's header, as when a session is raised: what this is, and the way out -->
         <div class="flex items-center justify-between gap-3">
-          <h2 id="entry-session-title" class="min-w-0 text-base font-semibold break-words text-gray-900 dark:text-white">{{ title }}</h2>
+          <!-- Whose time this is, which a row in TimeLog under several people does not say; it is
+               always the signed-in person's own (the server refuses anyone else's) -->
+          <div class="min-w-0">
+            <h2 id="entry-session-title" class="text-base font-semibold break-words text-gray-900 dark:text-white">{{ title }}</h2>
+            <p id="entry-session-who" class="text-sm text-gray-700 dark:text-gray-300 break-words">For {{ currentUserFullName }} (you)</p>
+          </div>
           <Button variant="ghost" icon="x" label="Close" tooltip="Close · Esc" aria-keyshortcuts="Escape" data-sheet-close @click="close" />
         </div>
 
@@ -82,7 +88,7 @@ export default {
   emits: ["update:modelValue", "save"],
   setup(props, { emit }) {
     useOverlayHistory("session-entry", () => props.modelValue, () => emit("update:modelValue", false));
-    const ws = useWorkstationContext(["editSessionTargetBlock", "editSessionError", "logWindowRefusal", "projects", "natureOptions", "minLogLineChars", "modKey"]);
+    const ws = useWorkstationContext(["editSessionTargetBlock", "editSessionError", "logWindowRefusal", "projects", "natureOptions", "minLogLineChars", "modKey", "currentUserFullName"]);
     return { ...ws, block: ws.editSessionTargetBlock, SESSION_BACKDROP, SESSION_PANEL };
   },
   data() {

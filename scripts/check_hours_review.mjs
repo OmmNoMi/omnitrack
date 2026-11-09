@@ -109,8 +109,10 @@ need(/out\.sort\(key=lambda w: \(not w\["flagged"\], w\["oldest"\]/.test(waiting
 need(/out\.sort\(key=lambda p: \(not \(p\["awaiting"\] or p\["flagged"\]\), -p\["worked"\]/.test(py), "team_hours: people with time to review come first");
 need(/<div v-if="hours && hours\.waiting" data-waiting/.test(view), "TimesheetsView: the page says what is waiting");
 need(/hours\.can_review_team \? 'Nothing is waiting for your review\.' : 'All your logged time is approved\.'/.test(view), "TimesheetsView: an empty waiting list is said for who is reading");
-need(/mine \? ' flagged for you to fix' : ' flagged'/.test(tl) && /mine \? ' waiting for approval' : ' to review'/.test(tl) && /waitingMarks\(w, !this\.hours\.can_review_team\)/.test(view), "TimesheetsView: waiting time is worded for its owner or for the manager");
-need(/<Button v-if="!hours\.can_review_team && waitingOutside"[^>]*@click="showWaiting\(\)"/.test(view), "TimesheetsView: waiting time outside the period can be shown");
+need(/mine \? ' flagged for you to fix' : ' flagged'/.test(tl) && /mine \? n\(total\) \+ ' not approved yet' : n\(total\) \+ ' from '/.test(tl) && /waitingLine\(h\.waiting \|\| \[\], !h\.can_review_team\)/.test(view), "TimesheetsView: waiting time is worded for its owner or for the manager");
+need(/<Button v-if="waitingOutside"[^>]*@click="showWaiting\(\)"/.test(view), "TimesheetsView: waiting time outside the period can be shown");
+// Said once, as one line: who and how much is on each person's card, so the summary never lists them again
+need(!/v-for="\(w, i\) in hours\.waiting"/.test(view) && /v-for="\(c, i\) in waitingLine"/.test(view), "TimesheetsView: the waiting summary is one line, not a second list of the people below");
 need(/this\.focusAfterLoad = \{ person, open: true \};[\s\S]*?this\.timesheetHorizon = 'range';\s*this\.rangeFrom = w\.from;\s*this\.rangeTo = w\.to;/.test(view), "TimesheetsView: showing waiting time reads its days and opens whoever comes first");
 need(/if \(want && people\.some\(\(p\) => p\.user === want\)\) this\.openPerson = want;/.test(view), "TimesheetsView: the person asked for is opened once read");
 need(/end\.getDate\(\) - \(maxDays - 1\)/.test(tl) && /spanOf\(ws, this\.maxDays\)/.test(view), "TimesheetsView: the waiting range stays within the longest period the server reads");
@@ -122,6 +124,7 @@ need(/this\.\$emit\('close'\);\s*this\.showToast\('This entry no longer exists\.
 // Days not logged, planned against worked, what to look at twice, approving by day or by pick
 need(/for \(const d of p\.not_logged \|\| \[\]\) if \(!byDate\.has\(d\)\) byDate\.set\(d, \[\]\);/.test(tl), "TimeLog: a working day with nothing logged is a day of its own");
 need(/<div v-if="g\.missing" data-not-logged/.test(view) && /<ul v-else :aria-labelledby="dayId\(p, g\.date\)">/.test(view), "TimeLog: a day with nothing logged says so instead of an empty list");
+need(/out\[p\.user\] = foldEmptyDays\(personDays\(p, opts\)\);/.test(view) && /\{\{ dayHeading\(g\) \}\}/.test(view) && view.includes("dayHeading(g) { return g.count > 1 ? shortDate(g.through) + ' to ' + shortDate(g.date) : longDay(g.date); },") && /'Nothing logged on ' \+ g\.count \+ ' working days'/.test(view), "TimeLog: empty working days in a row are one line, named by their first and last day");
 need(/return p\.user === this\.currentUser && !logDayRefusal\(d, \{ daysBack: h\.log_days_back, payrollClosedThrough: h\.payroll_closed_through, isManager: h\.log_any_day \}\);/.test(view), "TimeLog: Log time is offered only on the viewer's own day, and only a day the entry box would take");
 need(/<Button v-if="canLogDay\(p, g\.date\)"[^>]*@click="logDay\(p, g\.date\)"/.test(view) && /this\.quickLogTimelineGap\(logDayTimes\(d\)\);/.test(view), "TimeLog: Log time opens the one entry box on that day");
 need(/planned: Number\(plannedOn\[date\] \|\| 0\),/.test(tl) && /fmt\(g\.total\) \+ 'h of ' \+ fmt\(g\.planned\) \+ 'h planned' \+ off/.test(tl), "TimeLog: a day says its worked time against what was planned ahead");
@@ -134,10 +137,9 @@ need(/else if \(ev\.key === ' ' \|\| ev\.key === 'Spacebar'\) \{[\s\S]*?if \(!r 
 need(/@click="approveSelected\(p\)"/.test(view) && /approveSelected\(p\) \{ return this\.approve\(p, this\.picked\(p\),/.test(view), "TimeLog: the picked entries are approved together");
 need(/pickable\(r\) \{ return !!\(r\.s && this\.canReview\(r\.e\)\); \}/.test(view), "TimeLog: only entries still to approve can be picked");
 need(/closed: !!closedThrough && date <= closedThrough,/.test(tl) && /v-if="g\.closed"[^>]*>\{\{ ' ' \}\}· Payroll closed/.test(view), "TimeLog: a day payroll has closed says so");
-need(/if \(w\.closed\) out\.push/.test(tl) && /closed_hours|"closed":/.test(py), "TimeLog: waiting time on a closed payroll day is warned about");
+need(/if \(closed\) out\.push/.test(tl) && /closed_hours|"closed":/.test(py), "TimeLog: waiting time on a closed payroll day is warned about");
 need(/v-if="hours && hours\.can_review_team && hours\.totals/.test(view) && /fmt\(t\.approved\) \+ 'h approved', fmt\(waiting\) \+ 'h waiting'/.test(tl), "TimeLog: a reviewer sees the team's totals, approved against waiting");
-need(/<button\s+v-if="hours\.can_review_team"\s+type="button"\s+:data-wait="i"[\s\S]*?@click="showWaiting\(w\)"/.test(view), "TimeLog: a waiting name opens that person");
-need(/w\.awaiting_entries != null/.test(tl), "TimeLog: the waiting list counts entries, so its numbers are not the person line's hours again");
+need(/const flagged = sum\('flagged_entries'\);/.test(tl) && /const total = flagged \+ sum\('awaiting_entries'\);/.test(tl), "TimeLog: the waiting line counts entries, so its numbers are not the person cards' hours again");
 
 // Changing someone's time is an OmniTrack Manager's or Admin's; HR reviews only
 const perms = read("omnitrack/permissions.py");
@@ -149,6 +151,31 @@ need(/<p v-if="othersLocked" data-times-locked/.test(drawer), "SessionDetailDraw
 const sendBack = ts.slice(ts.indexOf("def send_back_for_review"), ts.indexOf("@frappe.whitelist()", ts.indexOf("def send_back_for_review")));
 need(/_require_time_owner\(b_doc\)/.test(sendBack) && /if b_doc\.approval_status not in \("Flagged", "Rejected"\):/.test(sendBack) && /b_doc\.approval_status = "Pending Approval"/.test(sendBack), "send_back_for_review: only a flagged entry, by who may change it, goes back to waiting");
 need(/canSendBack\(\) \{ return !!this\.session\.name && this\.mayChange && \['Flagged', 'Rejected'\]\.includes/.test(drawer) && /postJSON\('send_back_for_review'/.test(read("src/composables/useWorkstationEod.js")), "SessionDetailDrawer: a flagged entry can be sent back for review");
+
+// A session's hours fit between its times: the server refuses new or changed rows that do not
+const pwb = read("omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py");
+need(/self\.validate_no_future_sessions\(\)\n\t\tself\.validate_session_hours_fit_times\(\)/.test(pwb), "Planned Work Block: validate checks each session's hours against its times");
+need(/if old\.get\(sess\.name\) == row\(sess\):\n\t\t\t\tcontinue/.test(pwb) && /if span is not None and flt\(sess\.hours\) > span \+ 0\.05:/.test(pwb), "Planned Work Block: only new or changed rows with more hours than their times are refused");
+
+// Behaviour, run on timeLog.js itself
+const T = await import("../src/utils/timeLog.js");
+{
+  // A stopwatch left on for days saved 342.5h on a 09:34-16:04 row: the reviewer is told
+  const rows = (list) => T.markRows(list.map(([f, t, h]) => ({ e: { deliverable_notes: "x" }, s: { from_time: f, to_time: t, hours: h, notes: "x" } })));
+  const [bad, fine, night] = [rows([["09:34", "16:04", 342.5]]), rows([["09:34", "16:04", 6.5]]), rows([["22:00", "02:00", 4]])];
+  need(bad[0].checks.some((c) => /^342\.50h but its times hold 6\.50h$/.test(c)), "TimeLog: more hours than a session's times hold is marked");
+  need(!fine[0].checks.length && !night[0].checks.length, "TimeLog: hours that fit the times, past midnight too, are not marked");
+  // Empty days in a row fold; a day with time on it, or payroll closing, breaks the run
+  const day = (date, missing, closed = false, planned = 0) => ({ date, missing, closed, planned, rows: missing ? [] : [{}] });
+  const folded = T.foldEmptyDays([day("2026-10-20", true, false, 1), day("2026-10-19", true, false, 2), day("2026-10-16", true), day("2026-10-15", false), day("2026-10-14", true), day("2026-10-13", true, true)]);
+  need(folded.length === 4 && folded[0].count === 3 && folded[0].date === "2026-10-20" && folded[0].through === "2026-10-16" && folded[0].planned === 3, "TimeLog: three empty working days in a row are one line, newest to oldest, with their plan added");
+  need(!folded[1].missing && folded[2].count === 1 && folded[3].count === 1, "TimeLog: a logged day or a payroll close breaks a run of empty days");
+  // The summary adds everyone up once
+  const line = T.waitingLine([{ awaiting_entries: 290, flagged_entries: 1, oldest: "2026-09-13" }, { awaiting_entries: 6, flagged_entries: 0, oldest: "2026-10-01" }], false).map((c) => c.label);
+  need(line[0] === "297 entries from 2 people wait for your review" && line[1] === "1 flagged" && /^oldest /.test(line[line.length - 1]), "TimeLog: the waiting line says entries, people, flagged and the oldest day once");
+  const own = T.waitingLine([{ awaiting_entries: 1, flagged_entries: 0, oldest: "2026-10-01" }], true).map((c) => c.label);
+  need(own[0] === "1 entry not approved yet", "TimeLog: someone's own waiting time is said as theirs");
+}
 
 if (problems.length) {
   console.error("FAIL: Hours review\n  " + problems.join("\n  "));

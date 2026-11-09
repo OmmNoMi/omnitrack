@@ -46,6 +46,15 @@ else {
   if ((stop.match(/\} catch \(err\) \{\s*keepSession\(err\);/g) || []).length !== 2) problems.push("src/composables/useWorkstationApi.js: a refused save (block or free entry) puts the session back");
   if (!/unmarkSessionEnded\(keptSession\.startTime\);\s*restoreActiveSession\(keptSession\);\s*syncActiveSession\(true\);/.test(stop)) problems.push("src/composables/useWorkstationApi.js: keepSession restores the session and sends it back up");
   if (!/sessionNotesList: \[\.\.\.\(sessionNotesList\.value \|\| \[\]\)\]/.test(stop)) problems.push("src/composables/useWorkstationApi.js: the kept session holds the log as it was");
+  // A stopwatch left on for a day or more is never saved as it stands (342h once landed on a
+  // 6h row): Stop opens Adjust to ask when the work ended, before anything is torn down or sent
+  const dayCheck = stop.indexOf("if (!customEndMs && Date.now() - runFrom >= DAY_MS) {");
+  if (dayCheck === -1 || dayCheck < check || dayCheck > teardown) problems.push("src/composables/useWorkstationApi.js: a session run for a day or more is checked after the words and before the clock is torn down");
+  else {
+    const branch = stop.slice(dayCheck, stop.indexOf("\n      }\n", dayCheck));
+    if (!/w\.openAdjustModal\(\{ endMs \}\);\s*return;/.test(branch) || /postJSON/.test(branch)) problems.push("src/composables/useWorkstationApi.js: a day-long Stop opens Adjust on a likely end and saves nothing");
+  }
+  if (!/const DAY_MS = 24 \* 3600 \* 1000;/.test(api)) problems.push("src/composables/useWorkstationApi.js: a day is 24 hours");
   if (/Add it again from Log|Focus session \(|Tracked Focus \(/.test(stop)) problems.push("src/composables/useWorkstationApi.js: no invented notes and no 'add it again'; the session is kept");
 }
 

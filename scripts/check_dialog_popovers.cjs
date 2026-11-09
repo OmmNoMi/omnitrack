@@ -385,6 +385,22 @@ if (!/<div ref="panel"[^>]*@keydown\.esc="keepEscape"/.test(fdialog) || !/if \(t
 const slash = (read('src/composables/useWorkstationShortcuts.js').match(/const _slashFocus = \(ev\) => \{[\s\S]*?isSessionElevated\.value = false;/) || [''])[0];
 if (!/if \(ev\.key === 'Escape' && isSessionElevated\.value\) \{\s*if \(ev\.defaultPrevented \|\| popoverOpen\(\)\) return;/.test(slash) || !/import \{ popoverOpen \} from "\.\.\/utils\/popover\.js"/.test(read('src/composables/useWorkstationShortcuts.js'))) problems.push('useWorkstationShortcuts.js: _slashFocus skips an Escape while a list is open or one already handled it (ev.defaultPrevented || popoverOpen()), so closing a list does not also minimise the session popup');
 
+// 16b. A dialog on screen owns the keyboard: with focus outside it, "/" went to the session log
+//      behind it. "/" goes to the dialog's own log line and no letter shortcut passes it; the
+//      session card, whose log "/" already serves, is the one exception.
+{
+  const keys = read('src/composables/useWorkstationShortcuts.js');
+  if (!/const dialogs = document\.querySelectorAll\('\[role="dialog"\]\[aria-modal="true"\]'\);\s*const dialog = dialogs\[dialogs\.length - 1\];\s*if \(dialog && !dialog\.querySelector\('\[data-session-input\]'\)\) \{\s*if \(ev\.key !== '\/' \|\| _typingIn\(ev\.target\)\) return;\s*const line = dialog\.querySelector\('\[data-entry-line\]'\);\s*if \(!line\) return;\s*ev\.preventDefault\(\);\s*line\.focus\(\);\s*return;\s*\}\s*if \(ev\.shiftKey/.test(keys)) problems.push('useWorkstationShortcuts.js: with a dialog open, "/" goes to its own log line and no shortcut reaches the page behind it');
+  if (!/:data-entry-line="isEntry \? '' : null"/.test(read('src/session/SessionLogPane.vue'))) problems.push('SessionLogPane.vue: the entry dialog\'s log line is marked data-entry-line, for "/"');
+}
+
+// 16c. The work session dialog says whose time it is: opened from a row in TimeLog, among
+//      several people, nothing else did. It is always the signed-in person's own.
+{
+  const entry = read('src/components/dialogs/WorkSessionEntry.vue');
+  if (!/aria-describedby="entry-session-who"/.test(entry) || !/<p id="entry-session-who"[^>]*>For \{\{ currentUserFullName \}\} \(you\)<\/p>/.test(entry) || !/"currentUserFullName"\]\)/.test(entry)) problems.push('WorkSessionEntry.vue: the dialog names whose time it is ("For <name> (you)"), read out with its title');
+}
+
 // 17. Inline (the session popup's Details tab) the block drawer is facts only: no sheet, title,
 //     actions, task list or activity, which the popup already has. Open block brings the sheet.
 for (const [what, re] of [

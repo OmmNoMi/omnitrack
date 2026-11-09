@@ -6,7 +6,7 @@ import { setScrollLock } from "../utils/scrollLock.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationPickers(w) {
-  const { currentUserFullName, filteredTeamMembers, isDarkMode, isManager, isSessionElevated, natureOptions, openNewTaskModal, projects, selectedEmployee, selectedNature, selectedProject, sessionNotesScroll, sessionPointInput, syncActiveSession, todoDropdownOpen, toggleTheme } = w;
+  const { currentUserFullName, filteredTeamMembers, isDarkMode, isManager, isSessionElevated, isTracking, natureOptions, openNewTaskModal, projects, selectedEmployee, selectedNature, selectedProject, sessionNotesScroll, sessionPointInput, syncActiveSession, todoDropdownOpen, toggleTheme } = w;
   const onEmployeeChange = (...args) => w.onEmployeeChange(...args);
   const openSessionCard = (...args) => w.openSessionCard(...args);
   const removeSessionPoint = (...args) => w.removeSessionPoint(...args);
@@ -148,8 +148,17 @@ export function useWorkstationPickers(w) {
       first.focus();
     }
   };
+  // The lock follows the card on screen: it shows only while a session runs. A session ended
+  // elsewhere (another device, the server's sync) turned tracking off but left the card raised,
+  // so the card vanished and the page could not scroll until a reload.
+  watch(() => isSessionElevated.value && isTracking.value, (shown) => {
+    setScrollLock('session-popup', shown);
+  }, { immediate: true });
+  // However a session ends, its raised card comes down with it
+  watch(isTracking, (tracking) => {
+    if (!tracking && isSessionElevated.value) isSessionElevated.value = false;
+  });
   watch(isSessionElevated, (open) => {
-    setScrollLock('session-popup', open);
     if (open) {
       _sessionPopupReturnFocus = document.activeElement;
       nextTick(() => {

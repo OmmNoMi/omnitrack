@@ -27,7 +27,7 @@
         <p class="text-sm font-medium" :class="labelText"><span aria-hidden="true">{{ timeLabel }}</span><span v-if="mins > 0 && (quickAdjust || !durations.includes(mins))" class="font-normal tabular-nums" :class="mutedText">{{ ' · ' }}{{ durationLabel(mins) }}</span></p>
         <!-- As in Google Calendar: the end list starts after the start and names each length.
              Both accept typing ("2pm", "14:30"); the list is every 15 minutes. -->
-        <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 [&_input]:h-9 [&_input]:text-base">
+        <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 [&_input]:h-9 [&_input]:text-base" @pointerdown.capture="noteTimeTap" @click.capture="keepTapCaret">
           <TimePicker variant="outline" :model-value="start" placeholder="Start" :interval="15" @update:model-value="setStart" />
           <span :class="mutedText" aria-hidden="true">–</span>
           <TimePicker variant="outline" :model-value="end" placeholder="End" :options="endOptions" placement="bottom-end" @update:model-value="$emit('update:end', $event)" />
@@ -47,14 +47,15 @@
           </div>
           <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Adjust the end">
             <span aria-hidden="true" class="text-xs font-medium w-9" :class="mutedText">End</span>
+            <!-- The log's last edit is always earlier than now, so it comes first -->
+            <button v-if="lastEdit" type="button" :class="pillClass" :aria-label="'End at the last log edit, ' + lastEdit" :title="'Set the end to the last log edit'" @click="$emit('update:end', lastEdit)">Last edit {{ lastEdit }}</button>
             <button type="button" :class="pillClass" title="Set the end to now" aria-label="Set the end to now" @click="setEndNow">Now</button>
             <!-- Each press adds again, as -5m takes off again: a few steps reach any end -->
             <button v-for="m in endSteps" :key="'e' + m" type="button" :class="pillClass" :aria-label="'End ' + stepWords(m) + ' later'" :title="'End ' + stepWords(m) + ' later'" @click="nudgeEnd(m)">+{{ stepLabel(m) }}</button>
           </div>
-          <!-- Where the session really ended: the log's last edit, and whether it ran past midnight -->
-          <div v-if="lastEdit || nextDay" class="flex flex-wrap items-center gap-1.5">
+          <!-- Whether the session ran past midnight -->
+          <div v-if="nextDay" class="flex flex-wrap items-center gap-1.5">
             <span aria-hidden="true" class="w-9"></span>
-            <button v-if="lastEdit" type="button" :class="pillClass" :aria-label="'End at the last log edit, ' + lastEdit" :title="'Set the end to the last log edit'" @click="$emit('update:end', lastEdit)">Last edit {{ lastEdit }}</button>
             <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
           </div>
         </div>
@@ -78,6 +79,12 @@ import { toMin, toHHMM, spanMins, localISO, durationLabel, endTimeOptions } from
 const END_STEPS = [5, 15, 60];
 const stepLabel = (m) => (m % 60 ? m + "m" : m / 60 + "h");
 const stepWords = (m) => (m % 60 ? m + " minutes" : m / 60 + (m === 60 ? " hour" : " hours"));
+
+// Where a tap lands in a text field, from the browser itself; the end where it cannot say
+function caretAtPoint(input, x, y) {
+  const pos = document.caretPositionFromPoint ? document.caretPositionFromPoint(x, y) : null;
+  return pos && pos.offsetNode === input ? pos.offset : input.value.length;
+}
 
 export default {
   name: "DayTimeFields",
@@ -151,6 +158,32 @@ export default {
     durationLabel,
     stepLabel,
     stepWords,
+    // TimePicker selects its whole text on every click (frappe-ui 0.1.278), so on a phone a tap
+    // could never place the cursor: the time stayed highlighted. The tap that focuses the field
+    // still selects it all (typing replaces the time); a tap in a field already focused puts
+    // the cursor where the finger landed. The browser moves the caret only after the click
+    // handlers run, so the selection seen at click time is still the old one: the caret is
+    // worked out from the tap point instead. A range dragged with a mouse stays selected.
+    noteTimeTap(e) {
+      const input = e.target;
+      this._tap = input instanceof HTMLInputElement && document.activeElement === input
+        ? { x: e.clientX, y: e.clientY } : null;
+    },
+    keepTapCaret(e) {
+      const input = e.target;
+      const tap = this._tap;
+      this._tap = null;
+      if (!(input instanceof HTMLInputElement) || !tap) return;
+      const len = input.value.length;
+      const from = input.selectionStart;
+      const to = input.selectionEnd;
+      const dragged = to > from && !(from === 0 && to === len);
+      setTimeout(() => {
+        if (document.activeElement !== input) return;
+        if (dragged) input.setSelectionRange(from, to);
+        else { const at = caretAtPoint(input, tap.x, tap.y); input.setSelectionRange(at, at); }
+      }, 0);
+    },
     // Moving the start keeps the length, as in a calendar
     setStart(value) {
       const keep = this.mins > 0 ? this.mins : 60;

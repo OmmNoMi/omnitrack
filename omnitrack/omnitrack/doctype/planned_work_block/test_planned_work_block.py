@@ -76,6 +76,29 @@ class TestPlannedWorkBlock(FrappeTestCase):
 		self.assertEqual(doc.actual_hours, 4.0)
 		self.assertEqual(doc.variance_hours, 1.0)  # overran the plan
 
+	def test_session_hours_fit_between_its_times(self):
+		"""A stopwatch left running for days once saved 342.5h on a 09:34-16:04 row. Hours never
+		exceed what a session's times hold (past midnight once); fewer is a break taken out."""
+		doc = _block()
+		doc.append("sessions", {"session_date": "2026-09-10", "from_time": "09:34:00", "to_time": "16:04:00", "hours": 342.5})
+		self.assertRaises(frappe.ValidationError, doc.insert)
+
+		doc = _block()
+		doc.append("sessions", {"session_date": "2026-09-10", "from_time": "09:34:00", "to_time": "16:04:00", "hours": 6.5})
+		doc.append("sessions", {"session_date": "2026-09-10", "from_time": "22:00:00", "to_time": "02:00:00", "hours": 4.0})
+		doc.append("sessions", {"session_date": "2026-09-10", "from_time": "17:00:00", "to_time": "18:00:00", "hours": 0.5})
+		doc.insert()
+		self.assertEqual(doc.actual_hours, 11.0)
+
+		# A row already stored that way does not stop the block being saved for something else
+		frappe.db.set_value("OmniTrack Work Session", doc.sessions[0].name, "hours", 342.5)
+		doc.reload()
+		doc.deliverable_notes = "Reviewed"
+		doc.save()
+		# but changing that row asks for hours that fit
+		doc.sessions[0].to_time = "16:05:00"
+		self.assertRaises(frappe.ValidationError, doc.save)
+
 	def test_status_tracks_reality_unless_cancelled(self):
 		today = frappe.utils.nowdate()
 		doc = _block(work_date=today, start_time="09:00:00", end_time="12:00:00").insert()

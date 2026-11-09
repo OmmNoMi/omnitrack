@@ -28,6 +28,14 @@ def _span(session):
 	return start, end
 
 
+def session_span_hours(session):
+	"""Hours between a session's start and end, past midnight once at most; None without times."""
+	span = _span(session)
+	if span is None:
+		return None
+	return (span[1] - span[0]).total_seconds() / 3600.0
+
+
 def block_start(work_date, start_time):
 	if not (work_date and start_time):
 		return None

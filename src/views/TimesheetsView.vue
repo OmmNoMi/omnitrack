@@ -27,30 +27,15 @@
           <Button v-if="offset < 0" variant="ghost" :label="currentLabel" @click="offset = 0">{{ currentLabel }}</Button>
         </div>
       </div>
-      <!-- What is not approved yet, on any day: a manager sees who is waiting on them,
-           anyone else sees what of theirs is waiting, and what was flagged back to fix -->
-      <div v-if="hours && hours.waiting" data-waiting class="text-sm space-y-1.5">
+      <!-- What is not approved yet, on any day, said once: who and how much is on each person's card.
+           A manager reads what waits on them; anyone else, what of theirs waits. -->
+      <div v-if="hours && hours.waiting" data-waiting class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         <p v-if="!hours.waiting.length" :class="mutedText">{{ hours.can_review_team ? 'Nothing is waiting for your review.' : 'All your logged time is approved.' }}</p>
         <template v-else>
-          <p v-if="hours.can_review_team" id="waiting-heading" :class="strongText">Waiting for your review</p>
-          <!-- Counted in entries here; a person's line below says the period's hours -->
-          <ul class="space-y-1" :aria-labelledby="hours.can_review_team ? 'waiting-heading' : null" :aria-label="hours.can_review_team ? null : 'Your time not approved yet'" @keydown="onWaitKey">
-            <li v-for="(w, i) in hours.waiting" :key="w.user" class="flex flex-wrap items-center gap-x-3 gap-y-0.5 tabular-nums">
-              <!-- A name opens that person over the days their waiting time is on -->
-              <button
-                v-if="hours.can_review_team"
-                type="button"
-                :data-wait="i"
-                :tabindex="i === waitStop ? 0 : -1"
-                class="font-medium rounded underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                :class="strongText"
-                @click="showWaiting(w)"
-                @focus="waitAt = i">{{ w.full_name }}</button>
-              <span v-for="c in waitingMarks(w)" :key="c.label" class="inline-flex items-center gap-1.5" :class="mark(c.tone).text"><span class="h-2 w-2 rounded-full shrink-0" :class="mark(c.tone).dot" aria-hidden="true"></span>{{ c.label }}</span>
-              <span :class="mutedText">since {{ shortDate(w.oldest) }}</span>
-            </li>
-          </ul>
-          <Button v-if="!hours.can_review_team && waitingOutside" variant="outline" label="Show waiting time" @click="showWaiting()">Show waiting time</Button>
+          <p class="tabular-nums" :class="strongText">
+            <template v-for="(c, i) in waitingLine" :key="c.label"><span v-if="i" :class="mutedText" aria-hidden="true">{{ ' · ' }}</span><span :class="c.tone ? mark(c.tone).text : (i ? mutedText : 'font-medium')">{{ c.label }}</span></template>
+          </p>
+          <Button v-if="waitingOutside" variant="outline" size="sm" :label="hours.can_review_team ? 'Show all waiting' : 'Show waiting time'" @click="showWaiting()">{{ hours.can_review_team ? 'Show all waiting' : 'Show waiting time' }}</Button>
         </template>
       </div>
       <!-- The team's period: how much was planned ahead, and where the review stands -->
@@ -111,7 +96,7 @@
             <div v-else @keydown="onRowKey(p, $event)">
               <div v-for="g in layout[p.user]" :key="g.date" class="mt-4" :data-day="g.date">
                 <div class="flex items-center justify-between gap-x-3 gap-y-1 flex-wrap pb-1.5 border-b" :class="lineTone">
-                  <h4 :id="dayId(p, g.date)" class="text-sm font-medium" :class="strongText">{{ longDay(g.date) }}<span v-if="g.closed" class="font-normal" :class="mutedText">{{ ' ' }}· Payroll closed</span></h4>
+                  <h4 :id="dayId(p, g.date)" class="text-sm font-medium" :class="strongText">{{ dayHeading(g) }}<span v-if="g.closed" class="font-normal" :class="mutedText">{{ ' ' }}· Payroll closed</span></h4>
                   <span class="flex items-center gap-3">
                     <span class="text-sm tabular-nums" :class="mutedText">{{ dayLine(g) }}</span>
                     <Button
@@ -122,9 +107,10 @@
                       @click="approveDay(p, g)">Approve day</Button>
                   </span>
                 </div>
-                <!-- A working day with nothing on it: said, and for the viewer's own day, a way to fill it -->
+                <!-- Working days with nothing on them: not entries, so nothing to open or delete. Days in a
+                     row are one line, and the viewer's own newest day offers a way to fill it. -->
                 <div v-if="g.missing" data-not-logged class="flex items-center justify-between gap-3 flex-wrap py-2.5">
-                  <span class="inline-flex items-center gap-1.5 text-sm" :class="mutedText"><span class="h-2 w-2 rounded-full shrink-0" :class="mark('missing').dot" aria-hidden="true"></span>Nothing logged</span>
+                  <span class="inline-flex items-center gap-1.5 text-sm" :class="mutedText"><span class="h-2 w-2 rounded-full shrink-0" :class="mark('missing').dot" aria-hidden="true"></span>{{ g.count > 1 ? 'Nothing logged on ' + g.count + ' working days' : 'Nothing logged' }}</span>
                   <Button v-if="canLogDay(p, g.date)" variant="outline" size="sm" icon-left="plus" :label="'Log time for ' + longDay(g.date)" @click="logDay(p, g.date)">Log time</Button>
                 </div>
                 <ul v-else :aria-labelledby="dayId(p, g.date)">
@@ -195,7 +181,7 @@ import { clock, toMin } from '../utils/clockTime.js';
 import { noteLines } from '../utils/wrapNote.js';
 import { vInputAttrs } from '../utils/popover.js';
 import { logDayRefusal } from '../utils/timesheetEntry.js';
-import { fmt, longDay, shortDate, lastMonth, periodFor, rangeRefusal, personDays, planLine, dayLine, totalsLine, waitingMarks, spanOf, logDayTimes, sheetBlock, personMarks } from '../utils/timeLog.js';
+import { fmt, longDay, shortDate, lastMonth, periodFor, rangeRefusal, personDays, foldEmptyDays, planLine, dayLine, totalsLine, waitingLine, spanOf, logDayTimes, sheetBlock, personMarks } from '../utils/timeLog.js';
 
 export default {
   name: 'TimesheetsView',
@@ -230,7 +216,6 @@ export default {
       // Blocks picked to approve together, by name (a block's sessions are picked as one)
       selected: {},
       // The waiting name the list is entered on
-      waitAt: 0,
     };
   },
   computed: {
@@ -250,7 +235,7 @@ export default {
       const out = {};
       const closedThrough = (this.hours && this.hours.payroll_closed_through) || '';
       const opts = { closedThrough, span: this.span, noteOf: this.noteOf };
-      for (const p of (this.hours && this.hours.people) || []) out[p.user] = personDays(p, opts);
+      for (const p of (this.hours && this.hours.people) || []) out[p.user] = foldEmptyDays(personDays(p, opts));
       return out;
     },
     // Any of the entry's own sheets or dialogs still open
@@ -281,7 +266,7 @@ export default {
       return 'Open a person, then an entry to approve or flag it' + (h.can_edit_times ? ' or change its times' : '') + '. Space picks entries to approve together.';
     },
     totalsLine() { return totalsLine(this.hours.totals); },
-    waitStop() { const n = ((this.hours && this.hours.waiting) || []).length; return this.waitAt < n ? this.waitAt : 0; },
+    waitingLine() { const h = this.hours || {}; return waitingLine(h.waiting || [], !h.can_review_team); },
   },
   watch: {
     timesheetHorizon() { this.offset = 0; this.openPerson = ''; this.loadHours(); },
@@ -329,12 +314,12 @@ export default {
       return { label: { running: 'Running', approved: 'Approved', flagged: 'Flagged', awaiting: 'Awaiting' }[tone], ...this.mark(tone) };
     },
     personMarks(p) { return personMarks(p, this.layout[p.user]); },
-    waitingMarks(w) { return waitingMarks(w, !this.hours.can_review_team); },
-    // Read the days someone's waiting time is on (everyone's, with no one named), open them and put focus there
-    showWaiting(who) {
-      const ws = this.hours.waiting;
-      const w = who ? spanOf([who], this.maxDays) : this.waitingSpan;
-      const person = (who || ws[0]).user;
+    // A run of empty days names its first and last
+    dayHeading(g) { return g.count > 1 ? shortDate(g.through) + ' to ' + shortDate(g.date) : longDay(g.date); },
+    // Read the days all waiting time is on, open whoever comes first and put focus there
+    showWaiting() {
+      const w = this.waitingSpan;
+      const person = this.hours.waiting[0].user;
       this.focusAfterLoad = { person, open: true };
       // Already on screen: open them without reading again
       if (this.hours.from_date <= w.from && w.to <= this.hours.to_date) {
@@ -345,18 +330,6 @@ export default {
       this.timesheetHorizon = 'range';
       this.rangeFrom = w.from;
       this.rangeTo = w.to;
-    },
-    // Up/Down/Home/End between the waiting names; Tab leaves the list
-    onWaitKey(ev) {
-      const cur = ev.target.closest && ev.target.closest('[data-wait]');
-      if (!cur) return;
-      const list = [...ev.currentTarget.querySelectorAll('[data-wait]')];
-      const at = list.indexOf(cur);
-      const to = { ArrowDown: Math.min(list.length - 1, at + 1), ArrowUp: Math.max(0, at - 1), Home: 0, End: list.length - 1 }[ev.key];
-      if (to == null) return;
-      ev.preventDefault();
-      this.waitAt = to;
-      list[to].focus();
     },
     // Only on the viewer's own day, and only a day they may still log on
     canLogDay(p, d) {

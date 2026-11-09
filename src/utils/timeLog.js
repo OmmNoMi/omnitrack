@@ -46,6 +46,9 @@ export function markRows(rows) {
     const to = to0 > from ? to0 : 1440;
     if (end > from) r.checks.push('Overlaps the entry before');
     if (Number(r.s.hours || 0) > 10) r.checks.push('Over 10 hours');
+    // More hours than its times hold: a stopwatch left running saved days on a few hours' row
+    const held = (((to0 - from + 1440) % 1440) || 1440) / 60;
+    if (Number(r.s.hours || 0) > held + 0.05) r.checks.push(fmt(r.s.hours) + 'h but its times hold ' + fmt(held) + 'h');
     if (!String(r.s.notes || '').trim() && !r.e.deliverable_notes) r.checks.push('No description');
     end = Math.max(end, to);
   }
@@ -105,17 +108,40 @@ export function totalsLine(t) {
     .filter(Boolean).join(' · ');
 }
 
-// One person's waiting time, said for who is reading (a manager reviews it, its owner waits on it),
-// in entries so it does not repeat the hours on the person's line
-export function waitingMarks(w, mine) {
+// Everything not approved yet, said once above the people: each person's card says their own.
+// For a manager it is what waits on them; for anyone else, what of theirs waits.
+export function waitingLine(ws, mine) {
   const n = (k) => k + ' ' + (k === 1 ? 'entry' : 'entries');
-  const out = [];
-  const flagged = w.flagged_entries != null ? w.flagged_entries : (w.flagged ? 1 : 0);
-  const awaiting = w.awaiting_entries != null ? w.awaiting_entries : (w.awaiting ? 1 : 0);
-  if (flagged) out.push({ tone: 'flagged', label: n(flagged) + (mine ? ' flagged for you to fix' : ' flagged') });
-  if (awaiting) out.push({ tone: 'awaiting', label: n(awaiting) + (mine ? ' waiting for approval' : ' to review') });
+  const sum = (k) => ws.reduce((t, w) => t + Number(w[k] || 0), 0);
+  const flagged = sum('flagged_entries');
+  const total = flagged + sum('awaiting_entries');
+  const people = ws.length;
+  const out = [{ tone: '', label: mine ? n(total) + ' not approved yet' : n(total) + ' from ' + people + (people === 1 ? ' person' : ' people') + ' wait for your review' }];
+  if (flagged) out.push({ tone: 'flagged', label: flagged + (mine ? ' flagged for you to fix' : ' flagged') });
   // Payroll has run over it: it is paid as it stands, so it needs a word with HR
-  if (w.closed) out.push({ tone: 'flagged', label: fmt(w.closed) + 'h on days payroll has closed' });
+  const closed = sum('closed');
+  if (closed) out.push({ tone: 'flagged', label: fmt(closed) + 'h on days payroll has closed' });
+  const oldest = ws.map((w) => w.oldest).filter(Boolean).sort()[0];
+  if (oldest) out.push({ tone: '', label: 'oldest ' + shortDate(oldest) });
+  return out;
+}
+
+// Working days in a row with nothing logged read as one line, not a heading each: a gap of
+// two weeks was fourteen "Nothing logged" days a reviewer could do nothing with.
+// Days come newest first and every day with time on it is in the list, so two empty days side by
+// side have nothing logged between them. A run keeps its newest day as `date`, its oldest as `through`.
+export function foldEmptyDays(days) {
+  const out = [];
+  for (const g of days) {
+    const run = out[out.length - 1];
+    if (g.missing && run && run.missing && run.closed === g.closed) {
+      run.through = g.date;
+      run.count += 1;
+      run.planned += g.planned;
+      continue;
+    }
+    out.push(g.missing ? { ...g, through: g.date, count: 1 } : g);
+  }
   return out;
 }
 

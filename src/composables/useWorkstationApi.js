@@ -3,6 +3,9 @@ import { blockTitle } from '../utils/blockTitle.js';
 import { composeWrapNote } from '../utils/wrapNote.js';
 import { countSessionWords, minSessionWords } from '../utils/sessionWords.js';
 
+// One session spans at most this; a longer run is a stopwatch left on
+const DAY_MS = 24 * 3600 * 1000;
+
 /**
  * Workstation API methods.
  * Shares state with its sibling modules through the `w` context bag.
@@ -243,6 +246,17 @@ export function useWorkstationApi(w) {
       // session refused there for being short was once already cleared, and an hour was lost.
       const notesNow = composeWrapNote(trackerNotes.value, sessionNotesList.value);
       if (!sessionHasLines.value || countSessionWords(notesNow) < minSessionWords(window.OMNITRACK_SESSION)) { refuseEmptySession(); return; }
+      // A stopwatch left running for a day or more cannot be saved as it stands: its times would
+      // say a few hours and its hours days (one such stop once put 342h on a 6h row). The Adjust
+      // box asks when the work ended, offering the log's last edit when it was on the first day.
+      const runFrom = Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000);
+      if (!customEndMs && Date.now() - runFrom >= DAY_MS) {
+        const edited = Number(typeof w.linesEditedAt === 'function' ? w.linesEditedAt() : 0) || 0;
+        const endMs = edited > runFrom && edited < runFrom + DAY_MS ? edited : runFrom + 3600 * 1000;
+        showToast('This session has run for over a day. Set when the work ended, then Stop and log.', 'warning');
+        if (typeof w.openAdjustModal === 'function') w.openAdjustModal({ endMs });
+        return;
+      }
       triggerHaptic([40, 50, 40]);
       let sTime = null;
       try {

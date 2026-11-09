@@ -318,12 +318,11 @@ export function useWorkstationEod(w) {
         playStartOnTimeChime();
         showToast(data.title || 'Time to start your planned block', 'success');
       } else if (aType === 'inactivity' || (data.title || '').includes('still working')) {
-        // Only for a session still running here, and once: the server alert can land after a stop
-        if (!isTracking.value || showInactivityModal.value) return;
-        if (w.lastInactivityAlertTime) w.lastInactivityAlertTime.value = Date.now();
-        showToast(data.title || 'Are you still working?', 'warning');
-        playInactivityChime();
-        showInactivityModal.value = true;
+        // The server reads its stored copy of the session, which can be minutes behind this page.
+        // Its alert only asks the page to check: the page's own rule (30 minutes since the last
+        // note here) decides, sounds and notifies, so the box never says "1 min ago".
+        if (isTracking.value && !showInactivityModal.value) checkInactivity();
+        return;
       } else if (aType === 'block_overrun' || (data.title || '').includes('Planned block ended') || (data.title || '').includes('Planned Block Ended')) {
         // The visual first, so a sound that fails never hides the alert
         showToast(data.message || data.title || 'Planned block ended', 'warning');

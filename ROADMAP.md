@@ -1552,3 +1552,26 @@ Reported: lines added within the first 3 minutes of a session, and the "Are you 
 - A page opened before this fix keeps the old bundle until it is reloaded.
 - Found while checking the fix: at 13:21:32 a `sync_active_session` call failed with a 500. It was sent 2 seconds after another save from the same page, both from before the fix. `frappe.log` only says "New Exception collected in error log", and no Error Log row was kept, so the cause is unknown. Two saves landing together, both writing the cache and `tabDefaultValue`, is the likely suspect. A failure like this now shows an error on the page. The server side still needs a test with two saves sent at once.
 - Checking the fix: the lines that looked lost in a second browser were on another server, a deployed site still on the old bundle, not on the dev bench. They were safe in that server's copy. Still worth a guard: a page whose bundle is older than the server's should say so and offer a reload, because a tab left open keeps old code for hours.
+
+### TimeLog review, second pass (2026-11-09, later)
+
+Done in the working tree (not yet committed):
+- **A month read 401h for one person.** A stopwatch was left running for days, and Stop saved 342.5h on a row whose times read 09:34 to 16:04. Three fixes. The server now refuses a new or changed row whose hours do not fit between its From and To (`validate_session_hours_fit_times`, past midnight once at most; rows already saved are left alone). Stop on a session that has run for a day or more opens Adjust instead, with the end set to the log's last edit when that falls on the first day. TimeLog marks a row whose hours do not fit its times, so a reviewer sees it before approving.
+- The "Waiting for your review" summary is one line per person instead of a block.
+- Working days with nothing logged in a row fold into one line ("Nov 2 to Nov 6, nothing logged"), so a quiet stretch no longer fills the page.
+- The page could not be scrolled. The scroll lock followed a dialog that was mounted but hidden. It now follows the surface that is actually shown.
+- In Adjust, End lists Last edit before Now.
+- Tapping a time field that already has focus put the whole value back into a selection, so on a phone the caret could not be placed. The caret now goes where the tap lands, and a dragged range stays. Checked on desktop; not yet on a real phone.
+- "/" with Add or Edit work session open focused the log of the page behind the dialog (WCAG 2.4.3). A dialog on screen now owns "/", and no letter shortcut reaches the page under it.
+- Add and Edit work session say whose time it is ("For <name> (you)"), and the dialog is described by that line. An entry is always the signed-in person's own: `canLogDay` allows only your own day, and the server checks `_require_time_owner`.
+- "Are you still working? No activity since 4:17 pm (1 min ago)" appeared a minute after a log line. The box was opened by the server's alert, which reads its own stored copy of the session, and that copy can be minutes behind the page. The page opened the box without checking its own activity. The server's alert now only asks the page to check: the page's 30-minute rule decides, sounds and notifies. `check_prompts.mjs` guards it, with two mutants.
+
+Open:
+- Two production rows still hold the bad hours (342.5h and one more). Correcting them is a data change on ommnomi.in and needs the owner's yes.
+- Cmd+D and Cmd+E can still act on the page behind an open dialog. "/" and the letter shortcuts are fixed, these two are not.
+- One of the long sessions overlaps another on the same day (Oct 7). Check it once the hours are corrected.
+- Stop through the server path (`fac.py`) has no day-long check of its own. The new validation refuses the save there, but the person gets the error, not the Adjust box.
+- Plain `bench run-tests` stops on ommnomi.local before any OmniTrack test, because ERPNext's test records need setup data the site does not have. The new rule's tests pass with `--skip-before-tests` (10 of 10 in `test_planned_work_block`).
+- A tenant using a manager's view may one day need to log time for someone else. Today nobody can, and the dialog says it is your own.
+- The "Next day" toggle on End, and the 30-minute "still working?" rule, are still waiting for a decision.
+- The server still sends its "still working?" push from a stored copy that can lag the page by minutes. The page now ignores a push that its own rule does not agree with, but a closed tab or a phone can still get a push that is minutes early. The page could refresh that copy whenever a line is written, or the server could skip the push while the copy is recent.

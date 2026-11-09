@@ -89,6 +89,9 @@ need(/dispatchInactivityNotification\(msg, 'omnitrack-block-overrun', '[^'?]+'\)
 const clockSrc = read("src/composables/useWorkstationSessionClock.js");
 const idleMsg = (clockSrc.match(/dispatchInactivityNotification\(`([^`]*)`\)/) || [])[1] || "";
 need(idleMsg && !idleMsg.includes("?"), "useWorkstationSessionClock.js: the still-working notification's body states the gap; its heading is the question");
+const eodSrc = read("src/composables/useWorkstationEod.js");
+const serverIdle = eodSrc.slice(eodSrc.indexOf("aType === 'inactivity'"), eodSrc.indexOf("aType === 'block_overrun'"));
+need(/checkInactivity\(\);\s*\n\s*return;/.test(serverIdle) && !/showInactivityModal\.value = true/.test(serverIdle), "useWorkstationEod.js: the server's still-working alert only asks the page to check (checkInactivity), it never opens the box itself (its copy can be minutes old)");
 
 if (problems.length) {
   console.error("FAIL: prompts:\n  " + problems.join("\n  "));
