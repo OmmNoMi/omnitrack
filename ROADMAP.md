@@ -1433,4 +1433,9 @@ Found while fixing, still open:
 - There is no switch to turn reminder sounds off. Add one in settings.
 - The session box's quick buttons (On time, -30 to -5, Now, +5, +15) were checked locally only. Check them on the hosted site on a phone.
 - The task form's Description box edits plain text only. A Task whose description has links, lists or images is edited in the desk. A rich editor would lift that.
-- PR #46 duplicates #47, and #39 is superseded. Close them once the owner agrees.
+- PRs #39, #46 and #52 were closed on 2026-11-09 with the owner's OK.
+- #26 (OmniTrack on the `/desk` apps screen): `add_to_apps_screen` came in with #54, but it has no `has_permission`, so the app entry is offered to users who cannot open OmniTrack. Add a permission check, decide which roles should see the tile, and decide whether it should open `/omnitrack` instead of `/desk/omnitrack`.
+- The issues the batch closes (#24, #27, #29 to #35, #37, #42, #56) stay open until `develop` is released to `main`, because GitHub only acts on "Closes" in the default branch. Close them by hand then, or after the release.
+- The deadline menu on a task's details offers Tomorrow, Friday and Next week only, so it stays at five entries. If people miss "Today", consider a searchable picker instead of a longer menu.
+- The repo's "PR Labeler" and "Stale Issue & PR Manager" workflows fail on every run (seen on #58 and #59). Fix their setup or remove them, so a red check means something.
+- PR #57 committed a bench build output, `omnitrack/public/dist/js/omnitrack.bundle.NFRJ4BSX.js` (and its map), and each local `bench build` writes a new hashed copy next to it. Remove the committed one and ignore `omnitrack/public/dist/js/`; the app's own bundle is the Vite one in `omnitrack/public/dist/`.
