@@ -12,7 +12,7 @@
 
 import * as Vue from "vue";
 import { toKind } from "../utils/activity.js";
-import { remoteLinesWin } from "../utils/sessionLines.js";
+import { remoteLinesWin, ownSessionCopies } from "../utils/sessionLines.js";
 const { ref, nextTick, watch } = Vue;
 
 export function useWorkstationSessionSync({
@@ -62,6 +62,17 @@ export function useWorkstationSessionSync({
     _linesRev = Number(rev) || 0;
   };
   let _isRestoring = false;
+  // Older copies of this session (sessionLines.js) go back up, never in as another session
+  const own = ownSessionCopies();
+  watch(isTracking, (on) => { if (!on) own.forget(); }, { flush: 'sync' });
+  const isOwnOlderCopy = (copy) => isTracking.value && own.isOlder(copy, startTime.value, trackerBlockName.value);
+  // A save the server refused was dropped without a word; the page now says so, once a minute
+  let _lastSyncFailToast = 0;
+  const reportSyncFailure = (e) => {
+    if (Date.now() - _lastSyncFailToast < 60000) return;
+    _lastSyncFailToast = Date.now();
+    showToast(`This session could not be saved to the server${e && e.message ? ': ' + e.message : ''}. It is still here and is sent again on the next check.`, 'error');
+  };
 
   // Phase 4: Instant Cross-Tab Broadcast Channel Sync
   let _omnitrackChannel = null;
@@ -183,6 +194,7 @@ export function useWorkstationSessionSync({
     _lastLocalUpdate = Date.now();
 
     const curStart = Number(startTime.value) || (Date.now() - (trackerSeconds.value * 1000));
+    own.note(curStart, trackerBlockName.value);
     const payload = {
       startTime: curStart,
       selectedNature: selectedNature.value,
@@ -204,7 +216,7 @@ export function useWorkstationSessionSync({
     } catch (e) {}
 
     const sendToServer = () => {
-      postJSON('sync_active_session', { session_data: payload }).catch(() => {});
+      postJSON('sync_active_session', { session_data: payload }).catch(reportSyncFailure);
     };
 
     if (immediate) {
@@ -220,6 +232,7 @@ export function useWorkstationSessionSync({
     if (!sessionData || !sessionData.startTime) return false;
     if (sessionData.status && sessionData.status !== 'active') return false;
     if (_isStoppingSession || (Date.now() - _lastLocalStop < 10000)) return false;
+    if (isOwnOlderCopy(sessionData)) { syncActiveSession(true); return false; }
 
     if (wasEndedHere(sessionData.startTime)) {
       const remoteHeartbeat = Number(sessionData.lastUpdated || sessionData.startTime || 0);
@@ -268,6 +281,8 @@ export function useWorkstationSessionSync({
       trackerProject.value = sessionData.selectedProject || '';
       // The same session, with a newer log here: keep it, and send it back up
       const sameSession = wasTracking && Math.abs(startMs - (Number(prevStart) || 0)) <= 60000;
+      if (!sameSession) own.forget();
+      own.note(startMs, sessionData.trackerBlockName);
       const keepLocalLines = sameSession && !remoteLinesWin(sessionData.linesRev, _linesRev);
       if (!keepLocalLines) adoptRemoteLines(() => {
         let rawN = sessionData.trackerNotes || '';
@@ -366,9 +381,8 @@ export function useWorkstationSessionSync({
       return;
     }
 
-    if (remote.startTime && (remote.trackerBlockName !== trackerBlockName.value || Math.abs(Number(remote.startTime) - (Number(startTime.value) || 0)) > 60000)) {
-      restoreActiveSession(remote);
-      showToast('Switched to active session from cloud', 'info');
+    if (remote.startTime && ((remote.trackerBlockName || null) !== (trackerBlockName.value || null) || Math.abs(Number(remote.startTime) - (Number(startTime.value) || 0)) > 60000)) {
+      if (restoreActiveSession(remote)) showToast('Switched to active session from cloud', 'info');
       return;
     }
 
@@ -394,7 +408,8 @@ export function useWorkstationSessionSync({
       }
     }
 
-    if (remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
+    // The title is part of the log's copy: an older copy never puts back an older title
+    if (!keptLocal && remote.trackerNotes !== undefined && remote.trackerNotes !== trackerNotes.value) {
       const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
       const isNotesFocused = activeEl && (
         activeEl.getAttribute('aria-label') === 'Deliverable or task title' ||
@@ -472,6 +487,8 @@ export function useWorkstationSessionSync({
     setLastLocalUpdate,
     getLastLocalUpdate,
     cancelSyncDebounce,
+    // When the title, log or tasks were last edited (the Adjust box's "Last edit" end)
+    linesEditedAt: () => _linesRev,
     isRestoring: () => _isRestoring
   };
 }

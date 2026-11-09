@@ -176,8 +176,8 @@ export function useWorkstationStoreBindings(w) {
         return false;
       }
 
-      // Timesheet Horizon Review Filter (Day / Week / Month / All)
-      if (timesheetHorizon.value && timesheetHorizon.value !== 'all' && b.work_date) {
+      // Timesheet Horizon Review Filter (Day / Week / Month; a Range on Hours filters nothing here)
+      if (timesheetHorizon.value && b.work_date) {
         const todayStr = getLocalTodayISO();
         if (timesheetHorizon.value === 'day') {
           if (b.work_date !== todayStr) return false;

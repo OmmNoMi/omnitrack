@@ -11,105 +11,95 @@ import { dropUrlQuery } from "../utils/backNavigation.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playOverrunChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isTracking, lastActivityTime, nowMinute, playInactivityChime, playOverrunChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
   // ----------------------------------------------------
-  // Team Work Block & Timesheet Approvals (Manager Governance)
+  // Approving and flagging logged time (managers). Hours and the block drawer both review here.
   // ----------------------------------------------------
-  const pendingApprovals = ref([]);
-  const loadingApprovals = ref(false);
-  const fetchPendingApprovals = async () => {
-    if (!isManager.value) return;
-    loadingApprovals.value = true;
-    try {
-      const res = await postJSON('get_pending_team_approvals', {
-        employee: selectedEmployee.value || 'All'
-      });
-      pendingApprovals.value = (res && res.message) || res || [];
-    } catch (e) {
-      pendingApprovals.value = [];
-    } finally {
-      loadingApprovals.value = false;
-    }
-  };
+  // Bumped after every review, so the Hours page reads its numbers again (an Undo comes later)
+  const reviewRev = ref(0);
   const refreshReviews = async () => {
-    await fetchPendingApprovals();
+    reviewRev.value += 1;
     await fetchWorkstationData(selectedEmployee.value);
     if (typeof fetchPlannerData === 'function') await fetchPlannerData();
   };
   // An approval can be taken back for a few seconds (the server keeps what it replaced)
   const UNDO_APPROVAL_MS = 5000;
-  const undoApproval = async (b) => {
-    try {
-      const res = await postJSON('undo_block_approval', { block_name: b.name });
-      b.approval_status = (res && res.approval_status) || 'Draft';
-      showToast('Approval undone', 'info');
-      await refreshReviews();
-    } catch (e) {
-      showToast('Could not undo: ' + (e && e.message || e), 'danger');
+  const undoApprovals = async (blocks) => {
+    let undone = 0;
+    let refused = '';
+    for (const b of blocks) {
+      try {
+        const res = await postJSON('undo_block_approval', { block_name: b.name });
+        b.approval_status = (res && res.approval_status) || 'Draft';
+        undone += 1;
+      } catch (e) {
+        refused = refused || (e && e.message) || String(e);
+      }
     }
+    if (undone) showToast(undone === 1 ? 'Approval undone' : `${undone} approvals undone`, 'info');
+    if (refused) showToast('Could not undo: ' + refused, 'danger');
+    await refreshReviews();
   };
-  const approveOne = async (b, message) => {
-    if (!b || !b.name) return;
-    loadingApprovals.value = true;
+  // Approves the blocks given and says how many. A block whose session is still running is
+  // skipped by the server and named here; everything approved can be undone together.
+  const approveBlocks = async (blocks, message) => {
+    const list = (blocks || []).filter((b) => b && b.name);
+    if (!list.length) return false;
     try {
-      await postJSON('approve_work_blocks', {
-        block_names: [b.name]
-      });
-      b.approval_status = 'Approved'; // the open drawer shows the new state at once
-      showToast(message, 'success', { action: { label: 'Undo', onClick: () => undoApproval(b) }, duration: UNDO_APPROVAL_MS });
+      const raw = await postJSON('approve_work_blocks', { block_names: list.map((b) => b.name) });
+      const res = (raw && raw.message) || raw || {};
+      const done = new Set((res.approved_blocks || list.map((b) => ({ block_name: b.name }))).map((r) => r.block_name));
+      const approved = list.filter((b) => done.has(b.name));
+      approved.forEach((b) => { b.approval_status = 'Approved'; }); // an open drawer shows it at once
+      const running = (res.still_recording || []).length;
+      const said = (typeof message === 'function' ? message(approved.length) : message)
+        + (running ? ` (${running} still running, not approved)` : '');
+      showToast(said, 'success', { action: { label: 'Undo', onClick: () => undoApprovals(approved) }, duration: UNDO_APPROVAL_MS });
       await refreshReviews();
+      return true;
     } catch (e) {
       showToast('Failed to approve: ' + (e && e.message || e), 'danger');
-    } finally {
-      loadingApprovals.value = false;
+      return false;
     }
   };
-  const approveWorkBlockSingle = (b) => approveOne(b, `Approved for ${b && (b.associate_name || b.employee)}`);
-  const quickApproveBlock = (b) => approveOne(b, 'Logged time approved');
-  // The drawer passes the reason it collected; other callers fall back to a prompt.
+  const quickApproveBlock = (b) => approveBlocks([b], 'Logged time approved');
+  // The caller passes the reason it collected (the drawer and Hours ask for it in place).
   const quickFlagBlock = async (b, givenReason) => {
-    if (!b || !b.name) return;
-    const reason = typeof givenReason === 'string'
-      ? givenReason
-      : window.prompt('What needs clarifying?', (b.approval_status === 'Flagged' && b.approval_notes) || '');
-    if (reason === null || !reason.trim()) return;
-    loadingApprovals.value = true;
+    if (!b || !b.name) return false;
+    const reason = typeof givenReason === 'string' ? givenReason.trim() : '';
+    if (!reason) return false;
     try {
       await postJSON('flag_work_block', {
         block_name: b.name,
-        reason: reason.trim()
+        reason
       });
       b.approval_status = 'Flagged';
-      b.approval_notes = reason.trim();
-      showToast(`Flagged ${b.name} for clarification`, 'warning');
-      await fetchPendingApprovals();
-      await fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+      b.approval_notes = reason;
+      showToast('Flagged for clarification', 'warning');
+      await refreshReviews();
+      return true;
     } catch (e) {
       showToast('Failed to flag block: ' + (e && e.message || e), 'danger');
-    } finally {
-      loadingApprovals.value = false;
+      return false;
     }
   };
-  const approveAllPending = async () => {
-    if (!pendingApprovals.value.length) return;
-    loadingApprovals.value = true;
+  // The person fixed what was flagged and sends it back: the block goes to Pending Approval
+  // again, and what they changed is a Comment on it, beside the flag in its Activity.
+  // Returns '' when sent, or why not, for the sheet to say in place.
+  const sendBackBlock = async (b, note) => {
+    if (!b || !b.name) return 'No entry to send back.';
     try {
-      const names = pendingApprovals.value.map(b => b.name);
-      await postJSON('approve_work_blocks', {
-        block_names: names
-      });
-      showToast(`Approved ${names.length} team work block(s)`, 'success');
-      await fetchPendingApprovals();
-      await fetchWorkstationData(selectedEmployee.value);
-      if (typeof fetchPlannerData === 'function') await fetchPlannerData();
+      const res = await postJSON('send_back_for_review', { block_name: b.name, note: String(note || '').trim() || null });
+      b.approval_status = (res && res.approval_status) || 'Pending Approval';
+      b.approval_notes = '';
+      showToast('Sent back for review', 'success');
+      await refreshReviews();
+      return '';
     } catch (e) {
-      showToast('Failed to approve blocks: ' + (e && e.message || e), 'danger');
-    } finally {
-      loadingApprovals.value = false;
+      return (e && e.message) || String(e);
     }
   };
   // Whether a popover was open when this Escape started. By the time the key bubbles to
@@ -162,8 +152,6 @@ export function useWorkstationEod(w) {
       scrollPlannerToMorning();
     } else if (t === 'dashboard') {
       fetchWorkstationData(selectedEmployee.value);
-    } else if (t === 'attendance') {
-      fetchPendingApprovals();
     }
   });
   // The day turns over at midnight with the page open: today moves on, a dashboard showing
@@ -483,12 +471,10 @@ export function useWorkstationEod(w) {
   });
 
   Object.assign(w, {
-    pendingApprovals,
-    loadingApprovals,
-    fetchPendingApprovals,
-    approveWorkBlockSingle,
+    reviewRev,
+    approveBlocks,
     quickApproveBlock,
     quickFlagBlock,
-    approveAllPending,
+    sendBackBlock,
   });
 }

@@ -8,7 +8,7 @@ import { blockTitle } from '../utils/blockTitle.js';
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationShortcuts(w) {
-  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, markSessionEnded, newSessionPoint, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
+  const { _errText, _explicitBoundBlock, activeBlock, activeTab, appendSessionLine, checkInactivity, discardConfirm, extractErrorMessage, fmtHrs, focusSessionPointInput, getLocalTodayISO, hhmm, isManager, isSessionElevated, isTracking, linesEditedAt, markSessionEnded, newSessionPoint, postJSON, recordUserActivity, selectedDashboardDate, selectedEmployee, selectedNature, selectedProject, sessionNotesList, sessionPointInput, showToast, showTrackerPopup, startTime, stopConfirmName, syncActiveSession, todayDate, todayISO, trackerBlockName, trackerBoundBlock, trackerNotes, trackerSeconds, trackerTimer, triggerHaptic } = w;
   const discardSession = (...args) => w.discardSession(...args);
   const fetchPlannerData = (...args) => w.fetchPlannerData(...args);
   const fetchWorkstationData = (...args) => w.fetchWorkstationData(...args);
@@ -204,6 +204,7 @@ export function useWorkstationShortcuts(w) {
     recordUserActivity: () => recordUserActivity(),
     checkInactivity: () => checkInactivity(),
     markSessionEnded: (t) => markSessionEnded(t),
+    linesEditedAt: () => (typeof linesEditedAt === 'function' ? linesEditedAt() : 0),
     trackBlock: (b, epoch) => trackBlock(b, epoch),
     fetchWorkstationData: (emp) => fetchWorkstationData(emp),
     fetchPlannerData: () => { if (typeof fetchPlannerData === 'function') fetchPlannerData(); },

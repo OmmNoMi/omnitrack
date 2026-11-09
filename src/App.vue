@@ -104,7 +104,6 @@
       <ProjectsView v-else-if="activeTab === 'projects'" />
       <TasksView v-else-if="activeTab === 'tasks'" />
       <TimesheetsView v-else-if="activeTab === 'timesheets'" />
-      <AttendanceView v-else-if="activeTab === 'attendance'" />
       <CalendarView v-else-if="activeTab === 'planner'" />
     </div>
   </main>
@@ -133,7 +132,7 @@
     :is-block-reschedulable="isBlockReschedulable"
     :is-block-cancellable="isBlockCancellable"
     :can-log-timesheet="canLogTimesheet"
-    :can-review="isManager"
+    :can-review="canReviewTime"
     :show-session-drawer="showSessionDrawer"
     :session-entry="sessionEntry"
     :show-task-raven-drawer="showTaskRavenDrawer"
@@ -166,7 +165,6 @@
   <WorkstationBottomNav
     :is-dark-mode="isDarkMode"
     v-model:active-tab="activeTab"
-    :is-manager="isManager"
     :is-tracking="isTracking"
     :bottom-bar-timer="bottomBarTimer"
     :formatted-time="formattedTime"

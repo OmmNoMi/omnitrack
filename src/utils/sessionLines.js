@@ -5,3 +5,27 @@
 export function remoteLinesWin(remoteRev, localRev) {
   return (Number(remoteRev) || 0) >= (Number(localRev) || 0);
 }
+
+// The starts and blocks the session running here has had. Keep running moves the start and
+// binding a block changes the block; until that save lands, a poll still brings the copy as it
+// was. That copy is this session's own, out of date, and goes back up: taken for another
+// session, it replaced the start and the log, and lines just added were gone.
+export function ownSessionCopies() {
+  let starts = [];
+  let blocks = new Set();
+  const near = (a, b) => Math.abs(a - b) <= 60000;
+  return {
+    note(start, block) {
+      if (start && !starts.some(t => near(t, start))) starts.push(start);
+      blocks.add(block || null);
+    },
+    forget() { starts = []; blocks = new Set(); },
+    // A copy with a start or block this session has had, but not the ones it has now
+    isOlder(copy, curStart, curBlock) {
+      if (!copy || !copy.startTime) return false;
+      const start = Number(copy.startTime), block = copy.trackerBlockName || null;
+      const differs = !near(start, Number(curStart) || 0) || block !== (curBlock || null);
+      return differs && starts.some(t => near(t, start)) && blocks.has(block);
+    },
+  };
+}

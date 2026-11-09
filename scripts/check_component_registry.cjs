@@ -45,6 +45,14 @@ for (const file of walk(src)) {
   for (const m of setup.matchAll(/^import\s*\{([^}]*)\}\s*from/gm)) for (const n of m[1].split(',')) if (n.trim()) local.add(pascal(n.trim().split(/\s+as\s+/).pop()));
   const selfName = script.match(/name:\s*['"]([^'"]+)['"]/);
   if (selfName) local.add(pascal(selfName[1]));
+  // Vue resolves a string `is` through the registered components first, ignoring case, so
+  // <component :is="x ? 'button' : 'div'"> renders frappe-ui's Button, not a native button.
+  for (const m of d.template.content.replace(/<!--[\s\S]*?-->/g, '').matchAll(/<component\b[^>]*?\s:?is="([^"]*)"/g)) {
+    const names = m[0].includes(':is=') ? [...m[1].matchAll(/'([a-z][\w-]*)'/g)].map((x) => x[1]) : [m[1]];
+    for (const n of names) {
+      if (globals.has(pascal(n)) || FRAPPE_UI.has(pascal(n))) problems.push(`${path.relative(src, file)}: <component is="${n}"> resolves to the registered <${pascal(n)}>, not the HTML tag; write the elements out with v-if/v-else`);
+    }
+  }
   for (const n of used) {
     checked++;
     if (!globals.has(pascal(n)) && !FRAPPE_UI.has(pascal(n)) && !local.has(pascal(n))) problems.push(`${path.relative(src, file)}: <${n}> is not registered (main.js or local components)`);

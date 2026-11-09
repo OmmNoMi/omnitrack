@@ -10,6 +10,8 @@
 //   6. A session that ends takes the open box and the prompt with it.
 //   7. With nothing running, Adjust is the free-entry panel for the last hour.
 //   8. A session past midnight stops the next morning, never on its start day.
+//  10. The log's last edit is offered as the end, only between the start and now, and the
+//      session boxes end with Now, +5m, +15m and +1h (pressed again to add again), no length chips.
 //   9. Adjust times from the still-working question starts on the suggested end, and a closing
 //      dialog does not take focus back.
 import { useWorkstationSessionModals } from "../src/composables/useWorkstationSessionModals.js";
@@ -29,7 +31,7 @@ const pad = (n) => String(n).padStart(2, "0");
 const clockOf = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const minuteAgo = (n) => { const d = new Date(Date.now() - n * 60000); d.setSeconds(0, 0); return d; };
 
-function setup({ tracking = true, tab = "planner" } = {}) {
+function setup({ tracking = true, tab = "planner", editedAt = 0 } = {}) {
   const started = minuteAgo(90);
   const s = {
     isTracking: ref(tracking),
@@ -69,7 +71,8 @@ function setup({ tracking = true, tab = "planner" } = {}) {
     hhmm: (t) => String(t || "").slice(0, 5),
     postJSON: async () => ({}),
     fetchWorkstationData: () => {},
-    fetchPlannerData: () => {}
+    fetchPlannerData: () => {},
+    linesEditedAt: () => editedAt
   });
   return { s, m, started };
 }
@@ -179,6 +182,41 @@ const stopClock = (s) => { if (s.trackerTimer.value) clearInterval(s.trackerTime
   m.openAdjustModal();
   check(m.liveAdjust.value === null && m.showEditSessionModal.value && m.editSessionForm.value.mode === "free", "with nothing running, Adjust is the free entry for the last hour");
   stopClock(s);
+}
+
+// 10. The log's last edit is a likely end: offered from the session's own edit time, never at
+// the start's own minute (a fresh session's stamp) or after now
+{
+  const edited = minuteAgo(20);
+  const { s, m } = setup({ editedAt: edited.getTime() });
+  m.openAdjustModal({ inPlace: true });
+  check(m.liveAdjust.value && m.liveAdjust.value.last_edit === clockOf(edited), `Adjust offers the log's last edit (${clockOf(edited)}) as the end, got "${m.liveAdjust.value && m.liveAdjust.value.last_edit}"`);
+  stopClock(s);
+}
+for (const [what, at] of [["at the start", () => minuteAgo(90).getTime()], ["after now", () => Date.now() + 10 * 60000], ["never edited", () => 0]]) {
+  const { s, m } = setup({ editedAt: at() });
+  m.openAdjustModal({ inPlace: true });
+  check(m.liveAdjust.value && m.liveAdjust.value.last_edit === "", `no Last edit end when the log was edited ${what}`);
+  stopClock(s);
+}
+{
+  const fs = await import("node:fs");
+  const rd = (f) => fs.readFileSync(new URL("../" + f, import.meta.url), "utf8");
+  const dtf = rd("src/components/common/DayTimeFields.vue");
+  const pane = rd("src/session/SessionControlsPane.vue");
+  check(/const END_STEPS = \[5, 15, 60\];/.test(dtf), "DayTimeFields: the end steps are +5m, +15m and +1h");
+  check(/<button v-for="m in endSteps"[^\n]*@click="nudgeEnd\(m\)">/.test(dtf), "DayTimeFields: each end step adds to the end");
+  check(/nudgeEnd\(deltaMins\) \{\n\s*const base = this\.end\n\s*\? toMin\(this\.end\)/.test(dtf), "DayTimeFields: a step adds to the current end, so pressing again adds again");
+  check(/<ChoiceChips v-if="!quickAdjust" :options="durationOptions"/.test(dtf), "DayTimeFields: the session boxes show no length chips");
+  check(/<button v-if="lastEdit"[^\n]*@click="\$emit\('update:end', lastEdit\)">Last edit \{\{ lastEdit \}\}<\/button>/.test(dtf), "DayTimeFields: Last edit sets the end");
+  check(/:last-edit="liveAdjust\.last_edit \|\| ''"/.test(pane), "SessionControlsPane: the Adjust box passes the log's last edit");
+  check(!/:durations=/.test(pane), "SessionControlsPane: the session boxes pass no lengths");
+  const sync = rd("src/composables/useWorkstationSessionSync.js");
+  check(/linesEditedAt: \(\) => _linesRev,/.test(sync), "useWorkstationSessionSync: linesEditedAt reads the lines' edit stamp");
+  const sc = rd("src/composables/useWorkstationShortcuts.js");
+  check(/linesEditedAt: \(\) => \(typeof linesEditedAt === 'function' \? linesEditedAt\(\) : 0\),/.test(sc) && /isTracking, linesEditedAt, markSessionEnded,/.test(sc), "useWorkstationShortcuts: hands linesEditedAt to the session modals");
+  const clk = rd("src/composables/useWorkstationSessionClock.js");
+  check((clk.match(/\n    linesEditedAt,?\n/g) || []).length === 2, "useWorkstationSessionClock: takes linesEditedAt from the sync store and passes it on");
 }
 
 if (problems.length) {

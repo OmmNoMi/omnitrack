@@ -24,7 +24,7 @@
       <FeatherIcon name="clock" class="w-5 h-5 mt-7 shrink-0" :class="iconTone" aria-hidden="true" />
       <div class="flex-1 min-w-0 space-y-2">
         <!-- A length no chip names sits beside the label, so the chip row stays one line at 375px -->
-        <p class="text-sm font-medium" :class="labelText"><span aria-hidden="true">{{ timeLabel }}</span><span v-if="mins > 0 && !durations.includes(mins)" class="font-normal tabular-nums" :class="mutedText">{{ ' · ' }}{{ durationLabel(mins) }}</span></p>
+        <p class="text-sm font-medium" :class="labelText"><span aria-hidden="true">{{ timeLabel }}</span><span v-if="mins > 0 && (quickAdjust || !durations.includes(mins))" class="font-normal tabular-nums" :class="mutedText">{{ ' · ' }}{{ durationLabel(mins) }}</span></p>
         <!-- As in Google Calendar: the end list starts after the start and names each length.
              Both accept typing ("2pm", "14:30"); the list is every 15 minutes. -->
         <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 [&_input]:h-9 [&_input]:text-base">
@@ -48,12 +48,19 @@
           <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Adjust the end">
             <span aria-hidden="true" class="text-xs font-medium w-9" :class="mutedText">End</span>
             <button type="button" :class="pillClass" title="Set the end to now" aria-label="Set the end to now" @click="setEndNow">Now</button>
-            <button v-for="m in [5, 15]" :key="'e' + m" type="button" :class="pillClass" :aria-label="'End ' + m + ' minutes later'" :title="'End ' + m + ' minutes later'" @click="nudgeEnd(m)">+{{ m }}m</button>
+            <!-- Each press adds again, as -5m takes off again: a few steps reach any end -->
+            <button v-for="m in endSteps" :key="'e' + m" type="button" :class="pillClass" :aria-label="'End ' + stepWords(m) + ' later'" :title="'End ' + stepWords(m) + ' later'" @click="nudgeEnd(m)">+{{ stepLabel(m) }}</button>
+          </div>
+          <!-- Where the session really ended: the log's last edit, and whether it ran past midnight -->
+          <div v-if="lastEdit || nextDay" class="flex flex-wrap items-center gap-1.5">
+            <span aria-hidden="true" class="w-9"></span>
+            <button v-if="lastEdit" type="button" :class="pillClass" :aria-label="'End at the last log edit, ' + lastEdit" :title="'Set the end to the last log edit'" @click="$emit('update:end', lastEdit)">Last edit {{ lastEdit }}</button>
+            <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
           </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <ChoiceChips :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
-          <span v-if="nextDay" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
+        <div v-if="!quickAdjust || (start && end && mins <= 0)" class="flex flex-wrap items-center gap-2">
+          <ChoiceChips v-if="!quickAdjust" :options="durationOptions" :model-value="mins" aria-label="Length" @update:model-value="setDuration" />
+          <span v-if="nextDay && !quickAdjust" class="text-sm font-medium text-blue-600 dark:text-blue-400">Ends next day</span>
           <span v-if="start && end && mins <= 0" class="text-sm text-ink-red-4" role="alert">End is the same as start</span>
         </div>
       </div>
@@ -65,6 +72,12 @@
 import ChoiceChips from "./ChoiceChips.vue";
 import { vInputAttrs } from "../../utils/popover.js";
 import { toMin, toHHMM, spanMins, localISO, durationLabel, endTimeOptions } from "../../utils/clockTime.js";
+
+// The end moves by these, pressed as often as needed; the length chips are gone from the
+// session boxes, where these and Now reach any end
+const END_STEPS = [5, 15, 60];
+const stepLabel = (m) => (m % 60 ? m + "m" : m / 60 + "h");
+const stepWords = (m) => (m % 60 ? m + " minutes" : m / 60 + (m === 60 ? " hour" : " hours"));
 
 export default {
   name: "DayTimeFields",
@@ -85,6 +98,8 @@ export default {
     // The session boxes offer quick start and end fixes; planning does not
     quickAdjust: { type: Boolean, default: false },
     scheduledStart: { type: String, default: "" },
+    // HH:MM the running session's log was last edited, offered as its end ("" hides it)
+    lastEdit: { type: String, default: "" },
     isLive: { type: Boolean, default: false },
     capToNow: { type: Boolean, default: false },
   },
@@ -105,6 +120,7 @@ export default {
     mins() {
       return spanMins(this.start, this.end);
     },
+    endSteps() { return END_STEPS; },
     nextDay() {
       return !!(this.start && this.end) && toMin(this.end) < toMin(this.start);
     },
@@ -133,6 +149,8 @@ export default {
   },
   methods: {
     durationLabel,
+    stepLabel,
+    stepWords,
     // Moving the start keeps the length, as in a calendar
     setStart(value) {
       const keep = this.mins > 0 ? this.mins : 60;

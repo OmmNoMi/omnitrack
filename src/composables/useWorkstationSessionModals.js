@@ -20,7 +20,7 @@ export function useWorkstationSessionModals(opts) {
     isSessionElevated, activeTab, isManager, activeBlock, selectedEmployee,
     selectedDashboardDate, newSessionPoint, stopConfirmName, discardConfirm,
     toggleTrack, discardSession, appendSessionLine, syncActiveSession,
-    recordUserActivity, checkInactivity, markSessionEnded, trackBlock,
+    recordUserActivity, checkInactivity, markSessionEnded, linesEditedAt, trackBlock,
     fetchWorkstationData, fetchPlannerData, getLocalTodayISO, hhmm,
     fmtHrs, extractErrorMessage, _errText
   } = opts;
@@ -160,11 +160,16 @@ export function useWorkstationSessionModals(opts) {
     const start = new Date(Number(startTime.value) || (Date.now() - trackerSeconds.value * 1000));
     // endMs: an end already suggested (the still-working question's "15 min after your last activity")
     const cap = opt && opt.endMs ? new Date(Math.min(now.getTime(), Math.max(start.getTime(), opt.endMs))) : now;
+    // The log's last edit, a likely end when the person stopped working and forgot the clock.
+    // Offered only when it falls after the start's minute and before now.
+    const edited = Number(linesEditedAt && linesEditedAt()) || 0;
+    const lastEdit = edited >= start.getTime() + 60000 && edited <= now.getTime() ? clockOf(new Date(edited)) : '';
     liveAdjust.value = {
       session_date: dayOf(start),
       from_time: clockOf(start),
       to_time: clockOf(cap),
       started_at: clockOf(start),
+      last_edit: lastEdit,
       // A suggested end is what the person came to check, so focus starts there
       focus: opt && opt.endMs ? 'end' : 'start'
     };

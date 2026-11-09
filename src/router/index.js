@@ -4,7 +4,6 @@ import CalendarView from '../views/CalendarView.vue';
 import ProjectsView from '../views/ProjectsView.vue';
 import TasksView from '../views/TasksView.vue';
 import TimesheetsView from '../views/TimesheetsView.vue';
-import AttendanceView from '../views/AttendanceView.vue';
 
 const routes = [
   {
@@ -41,12 +40,8 @@ const routes = [
     component: TimesheetsView,
     meta: { tab: 'timesheets' }
   },
-  {
-    path: '/attendance',
-    name: 'Attendance',
-    component: AttendanceView,
-    meta: { tab: 'attendance' }
-  }
+  // The Team page was folded into Hours: an old link lands there
+  { path: '/attendance', redirect: '/timesheets' }
 ];
 
 export const router = createRouter({

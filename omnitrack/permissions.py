@@ -22,6 +22,24 @@ def is_omnitrack_manager(user=None):
 	return False
 
 
+TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin"}
+
+
+def can_change_others_time(user=None):
+	"""Who may add, change or delete Work Sessions on someone else's block: an OmniTrack Manager or
+	OmniTrack Admin (and Administrator). HR reviews time (approve, flag) but does not change it, and
+	neither does a System Manager without one of those roles."""
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
+	if TIME_EDITOR_ROLES & set(frappe.get_roles(user)):
+		return True
+	if user and "+" in user and "@" in user:
+		base_user = f"{user.split('@')[0].split('+')[0]}@{user.split('@')[1]}"
+		return bool(TIME_EDITOR_ROLES & set(frappe.get_roles(base_user)))
+	return False
+
+
 def can_access_user_data(target_user, session_user=None):
 	"""Generic permission check: Can session_user view/manage target_user's OmniTrack data?
 

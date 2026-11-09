@@ -88,6 +88,8 @@
       user: {{ user | tojson }},
       user_fullname: {{ user_fullname | tojson }},
       is_manager: {{ 'true' if is_manager else 'false' }},
+      can_review: {{ 'true' if can_review else 'false' }},
+      can_change_times: {{ 'true' if can_change_times else 'false' }},
       is_client: {{ 'true' if is_client else 'false' }},
       has_projects: {{ 'true' if has_projects else 'false' }},
       min_log_line_chars: {{ min_log_line_chars | int }},

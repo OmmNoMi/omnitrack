@@ -8,3 +8,6 @@ export function approvalState(b) {
   if (Number(b.actual_hours) > 0) return { tone: 'pending', short: 'Awaiting approval', label: 'Awaiting approval' };
   return null;
 }
+
+// The chip tone for each state, shared by the entry sheet and TimeLog (toneChipClass reads it)
+export const APPROVAL_CHIP = { approved: 'green', flagged: 'amber', pending: 'gray' };

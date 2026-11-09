@@ -11,7 +11,7 @@ describe("OmniTrack golden path", () => {
 	it("boots and every tab renders", () => {
 		cy.visit("/omnitrack");
 		cy.get(".omnitrack-view-coordinator", { timeout: 30000 }).invoke("text").its("length").should("be.gt", 40);
-		for (const tab of ["planner", "timesheets", "attendance", "dashboard"]) {
+		for (const tab of ["planner", "timesheets", "dashboard"]) {
 			cy.window().then((w) => {
 				w.location.hash = `#/${tab}`;
 			});

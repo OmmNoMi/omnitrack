@@ -50,24 +50,37 @@
           </dl>
 
           <!-- Actions in one bar: the review first for a manager, then Edit; the rest under More -->
-          <div v-if="!flagging" class="space-y-2">
+          <div v-if="!flagging && !sendingBack" class="space-y-2">
             <div class="flex items-center gap-2 flex-wrap" role="group" aria-label="Session actions">
               <template v-if="canApprove">
                 <Button variant="solid" size="md" icon-left="check" label="Approve this block's logged time" class="!bg-green-700 hover:!bg-green-800 !text-white" @click="$emit('approve-block', entry.block)">Approve</Button>
-                <Button variant="subtle" size="md" icon-left="flag" label="Flag for clarification" @click="startFlag">Flag</Button>
+                <Button variant="subtle" size="md" icon-left="flag" label="Flag for clarification" data-flag @click="startFlag">Flag</Button>
               </template>
+              <!-- Fixed what was flagged: back to the reviewer, the same Pending Approval as before -->
+              <Button v-if="canSendBack" variant="solid" theme="blue" size="md" icon-left="send" label="Send back for review" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" data-send-back @click="startSendBack">Send back for review</Button>
               <Button v-if="canEdit" variant="subtle" size="md" icon-left="edit-2" label="Edit session" @click="$emit('edit-session', session, entry.block)">Edit</Button>
               <Dropdown v-if="moreMenu.length" :options="moreMenu" placement="right">
                 <Button variant="outline" size="md" icon-right="chevron-down" label="More" aria-haspopup="menu">More</Button>
               </Dropdown>
             </div>
             <p v-if="canApprove && block.entries > 1" class="text-sm" :class="mutedText">Approval covers all {{ block.entries }} entries in this work block.</p>
+            <p v-if="canSendBack" class="text-sm" :class="mutedText">Fix the entry with Edit, then send it back. Your reviewer sees it as waiting again.</p>
+            <!-- Changing someone else's times is an OmniTrack Manager's or Admin's, not a reviewer's -->
+            <p v-if="othersLocked" data-times-locked class="text-sm" :class="mutedText">Only an OmniTrack Manager or Admin can change someone else's times.</p>
+          </div>
+          <div v-else-if="flagging" class="space-y-2">
+            <TextInput ref="flagInput" v-model="flagReason" variant="outline" placeholder="What needs clarifying?" aria-label="Reason for flagging" @keydown.enter="sendFlag" @keydown.esc.stop="cancelFlag" />
+            <div class="flex justify-end gap-2">
+              <Button variant="ghost" label="Cancel" @click="cancelFlag">Cancel</Button>
+              <Button variant="solid" label="Send flag" :disabled="!flagReason.trim()" @click="sendFlag">Flag</Button>
+            </div>
           </div>
           <div v-else class="space-y-2">
-            <TextInput ref="flagInput" v-model="flagReason" variant="outline" placeholder="What needs clarifying?" aria-label="Reason for flagging" @keydown.enter="sendFlag" @keydown.esc.stop="flagging = false" />
+            <TextInput ref="sendBackInput" v-model="sendBackNote" variant="outline" placeholder="What did you change? (optional)" aria-label="What you changed, for your reviewer (optional)" @keydown.enter="sendBack" @keydown.esc.stop="cancelSendBack" />
+            <p v-if="sendBackError" role="alert" class="text-sm" :class="flagText">Not sent. {{ sendBackError }}</p>
             <div class="flex justify-end gap-2">
-              <Button variant="ghost" label="Cancel" @click="flagging = false">Cancel</Button>
-              <Button variant="solid" label="Send flag" :disabled="!flagReason.trim()" @click="sendFlag">Flag</Button>
+              <Button variant="ghost" label="Cancel" @click="cancelSendBack">Cancel</Button>
+              <Button variant="solid" theme="blue" label="Send back for review" class="enabled:!bg-blue-700 enabled:hover:!bg-blue-800 enabled:!text-white" :loading="sendingNow" @click="sendBack">Send back</Button>
             </div>
           </div>
 
@@ -161,11 +174,10 @@ import { hrs } from '../utils/taskMeta.js';
 import { WORK, toKind } from '../utils/activity.js';
 import { blockTitle } from '../utils/blockTitle.js';
 import { openTaskDetail } from '../composables/useTaskForm.js';
-import { approvalState } from '../utils/approval.js';
+import { approvalState, APPROVAL_CHIP } from '../utils/approval.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
-const APPROVAL_CHIP = { approved: 'green', flagged: 'amber', pending: 'gray' };
 const VIA = { Manual: 'Typed in', Stopwatch: 'Timed with the stopwatch', Import: 'Imported', 'AI Assistant': 'Logged by the assistant' };
 
 export default {
@@ -182,10 +194,10 @@ export default {
   emits: ['close', 'open-block', 'edit-session', 'delete-session', 'approve-block', 'flag-block'],
   setup(props, { emit }) {
     useOverlayHistory('session-drawer', () => props.show && !!props.entry, () => emit('close'));
-    return useWorkstationContext(['postJSON', 'workBlocks', 'isManager', 'currentUser']);
+    return useWorkstationContext(['postJSON', 'workBlocks', 'isManager', 'currentUser', 'showToast', 'canChangeTimes', 'sendBackBlock']);
   },
   data() {
-    return { details: null, failed: false, flagging: false, flagReason: '', taskCell: 0, seq: 0 };
+    return { details: null, failed: false, flagging: false, flagReason: '', sendingBack: false, sendBackNote: '', sendBackError: '', sendingNow: false, taskCell: 0, seq: 0 };
   },
   computed: {
     loaded() { return !!this.details; },
@@ -223,11 +235,20 @@ export default {
       const on = b.approval_date ? whenLine(b.approval_date) : '';
       return ['Approved' + (by ? ' by ' + by : ''), on, b.approval_notes].filter(Boolean).join(' · ');
     },
-    // The one entry form, for the people who may log on this block; an approved entry is a manager's
+    // Whose time this is: the server says once it answers; the row's block until then
+    owner() { return (this.details && this.details.employee) || this.block.employee || this.currentUser; },
+    mine() { return this.owner === this.currentUser; },
+    // Someone's own time, or an OmniTrack Manager or Admin (HR reviews, it does not change times)
+    mayChange() { return this.mine || !!this.canChangeTimes; },
+    // The one entry form, for the people who may log on this block; an approved entry is a time editor's
     canEdit() {
       const b = this.entry && this.entry.block;
-      return !!b && !!this.session.name && this.canLogTimesheet(b) && (this.block.approval_status !== 'Approved' || this.isManager);
+      return !!b && !!this.session.name && this.mayChange && this.canLogTimesheet(b) && (this.block.approval_status !== 'Approved' || !!this.canChangeTimes);
     },
+    // Said once the server has named the owner, so a reviewer is not told it before it is known
+    othersLocked() { return this.loaded && !this.mayChange; },
+    // A flagged entry, fixed, goes back to the reviewer (send_back_for_review)
+    canSendBack() { return !!this.session.name && this.mayChange && ['Flagged', 'Rejected'].includes(this.block.approval_status); },
     // A manager reviews time not yet approved
     canApprove() { return this.canReview && this.block.approval_status !== 'Approved'; },
     // What the bar leaves out: removing the entry. Talk is in Activity below, not Raven.
@@ -290,6 +311,9 @@ export default {
       this.details = null;
       this.flagging = false;
       this.flagReason = '';
+      this.sendingBack = false;
+      this.sendBackNote = '';
+      this.sendBackError = '';
       this.taskCell = 0;
       this.load();
       // Focus moves into the sheet (frappe-ui's Button root is not always the <button>)
@@ -301,6 +325,7 @@ export default {
     // Back to the bar that opened it, unless focus has moved somewhere on purpose
     closed() {
       this.flagging = false;
+      this.sendingBack = false;
       const opener = this.opener;
       this.opener = null;
       const here = document.activeElement;
@@ -319,8 +344,11 @@ export default {
         this.clampCell();
       } catch (e) {
         if (seq !== this.seq) return;
-        // Deleted (here or elsewhere): there is nothing left to show
-        if (/not found/i.test(String((e && e.message) || e))) this.$emit('close');
+        // Deleted (here or elsewhere): there is nothing left to show, so close and say why
+        if (/not found/i.test(String((e && e.message) || e))) {
+          this.$emit('close');
+          this.showToast('This entry no longer exists. It may have been deleted.', 'error');
+        }
         else this.failed = true;
       }
     },
@@ -365,6 +393,37 @@ export default {
       if (!reason) return;
       this.$emit('flag-block', this.entry.block, reason);
       this.flagging = false;
+    },
+    // Back to the button that opened the step (a Button's $el is not the <button>)
+    // Focus a control in the sheet, or its Close button when that control is gone
+    focusIn(sel, fallback = '[data-sheet-close]') {
+      this.$nextTick(() => {
+        const box = this.$refs.sheet;
+        const el = box && (box.querySelector(sel) || box.querySelector(fallback));
+        if (el) el.focus();
+      });
+    },
+    cancelFlag() { this.flagging = false; this.focusIn('[data-flag]'); },
+    startSendBack() {
+      this.sendBackNote = '';
+      this.sendBackError = '';
+      this.sendingBack = true;
+      this.$nextTick(() => {
+        const el = this.$refs.sendBackInput && (this.$refs.sendBackInput.$el || this.$refs.sendBackInput);
+        const input = el && el.querySelector ? el.querySelector('input') : null;
+        if (input) input.focus();
+      });
+    },
+    cancelSendBack() { this.sendingBack = false; this.focusIn('[data-send-back]'); },
+    async sendBack() {
+      if (this.sendingNow) return;
+      this.sendingNow = true;
+      this.sendBackError = '';
+      const refused = await this.sendBackBlock(this.entry.block, this.sendBackNote);
+      this.sendingNow = false;
+      if (refused) { this.sendBackError = refused; return; }
+      this.sendingBack = false;
+      this.focusIn('[data-sheet-close]');
     },
   },
 };

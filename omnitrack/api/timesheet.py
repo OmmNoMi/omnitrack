@@ -29,9 +29,17 @@ from omnitrack.utils import (
 	mins_of,
 	require_session_notes as _require_session_notes,
 	resolve_planner_user as _resolve_planner_user,
-	is_planner_manager as _is_planner_manager,
 )
 from omnitrack.api.tasks import update_task_kpi_progress
+from omnitrack.permissions import can_change_others_time
+
+
+
+def _require_time_owner(doc):
+	"""A person changes their own Work Sessions. On someone else's block only an OmniTrack Manager
+	or Admin may (permissions.can_change_others_time): HR approves and flags, but does not change times."""
+	if doc.employee != frappe.session.user and not can_change_others_time():
+		frappe.throw(_("Only an OmniTrack Manager or Admin can change someone else's time."), frappe.PermissionError)
 
 
 def _require_session_notes(notes):
@@ -315,8 +323,7 @@ def log_work_session(block_name, from_time=None, to_time=None, hours=None,
 	"""Record a REAL work session against a planned block. Actual vs planned variance
 	is recomputed on the block. Many sessions may be logged against one block."""
 	doc = frappe.get_doc("Planned Work Block", block_name)
-	if doc.employee != frappe.session.user and not _is_planner_manager():
-		frappe.throw(_("Not permitted to log time on this work block."), frappe.PermissionError)
+	_require_time_owner(doc)
 
 	notes = _require_session_notes(notes)
 
@@ -451,8 +458,7 @@ def update_work_session(session_name, block_name=None, from_time=None, to_time=N
 		frappe.throw(_("Planned Work Block not found for session."))
 
 	doc = frappe.get_doc("Planned Work Block", block_name)
-	if doc.employee != frappe.session.user and not _is_planner_manager():
-		frappe.throw(_("Not permitted to modify sessions on this work block."), frappe.PermissionError)
+	_require_time_owner(doc)
 
 	from omnitrack.permissions import check_approved_block_lock, check_timesheet_date_permission
 	check_approved_block_lock(doc, frappe.session.user)
@@ -533,8 +539,7 @@ def delete_work_session(session_name, block_name=None):
 		frappe.throw(_("Planned Work Block not found for session."))
 
 	doc = frappe.get_doc("Planned Work Block", block_name)
-	if doc.employee != frappe.session.user and not _is_planner_manager():
-		frappe.throw(_("Not permitted to delete sessions on this work block."), frappe.PermissionError)
+	_require_time_owner(doc)
 
 	from omnitrack.permissions import check_approved_block_lock, check_session_deletion_permission, check_timesheet_date_permission
 	check_approved_block_lock(doc, frappe.session.user)
@@ -898,6 +903,33 @@ def flag_work_block(block_name, reason=None):
 	}
 
 
+@frappe.whitelist(methods=["POST"])
+def send_back_for_review(block_name, note=None):
+	"""A flagged entry, fixed, goes back to whoever reviews it: Pending Approval again, with the
+	flag's reason, reviewer and date cleared. Nothing is lost: the block tracks changes, so its
+	Version history keeps the flag, and what was changed is said as a Comment on the block, the way
+	Desk's comment box would. Its owner sends it back, or someone who may change their time."""
+	if not block_name or not frappe.db.exists("Planned Work Block", block_name):
+		frappe.throw(_("Planned Work Block not found."))
+	b_doc = frappe.get_doc("Planned Work Block", block_name)
+	_require_time_owner(b_doc)
+	if b_doc.approval_status not in ("Flagged", "Rejected"):
+		frappe.throw(_("Only a flagged entry is sent back for review."))
+	b_doc.approval_status = "Pending Approval"
+	b_doc.approval_notes = ""
+	b_doc.approved_by = None
+	b_doc.approval_date = None
+	b_doc.flags.ignore_permissions = True
+	if not frappe.db.exists("DocType", "Project") or not frappe.db.exists("DocType", "Task"):
+		b_doc.flags.ignore_links = True
+	b_doc.save()
+	if (note or "").strip():
+		from omnitrack.api.activity import add_comment
+
+		add_comment("Planned Work Block", b_doc.name, note)
+	return {"status": "success", "name": b_doc.name, "approval_status": b_doc.approval_status}
+
+
 @frappe.whitelist()
 def get_pending_team_approvals(work_date=None, employee=None):
 	"""
@@ -923,7 +955,8 @@ def get_pending_team_approvals(work_date=None, employee=None):
 	if work_date:
 		filters["work_date"] = work_date
 	if employee and employee != "All":
-		filters["employee"] = employee
+		# The page may send a person's name or email; the block holds the User's email
+		filters["employee"] = _resolve_planner_user(employee)
 
 	blocks = frappe.get_all(
 		"Planned Work Block",

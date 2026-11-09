@@ -20,6 +20,12 @@ def get_context(context):
 	ctx.user_fullname = frappe.utils.get_fullname(user) or user
 	from omnitrack.permissions import is_omnitrack_manager
 	ctx.is_manager = 1 if is_omnitrack_manager(user) else 0
+	# Reviewing time (approve, flag) is a manager's or HR's; changing someone else's times is an
+	# OmniTrack Manager's or Admin's only (team_hours.can_review_team, permissions.can_change_others_time)
+	from omnitrack.api.team_hours import can_review_team
+	from omnitrack.permissions import can_change_others_time
+	ctx.can_review = 1 if can_review_team(user) else 0
+	ctx.can_change_times = 1 if can_change_others_time(user) else 0
 	user_roles = frappe.get_roles(user)
 	ctx.is_client = 1 if ("OmniTrack Client" in user_roles and not ctx.is_manager) else 0
 	from omnitrack.utils.validators import get_min_log_line_chars, get_min_session_words

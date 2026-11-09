@@ -131,7 +131,7 @@ function unresolvedComponents() {
   check('app mounted', !!w.document.querySelector('#app').children.length);
 
   // 1. Every tab renders real content.
-  for (const tab of ['dashboard', 'planner', 'timesheets', 'attendance', 'dashboard']) {
+  for (const tab of ['dashboard', 'planner', 'timesheets', 'dashboard']) {
     w.location.hash = `#/${tab}`;
     w.dispatchEvent(new w.HashChangeEvent('hashchange'));
     await tick(250);

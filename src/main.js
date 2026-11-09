@@ -27,7 +27,6 @@ import CalendarView from "./views/CalendarView.vue";
 import ProjectsView from "./views/ProjectsView.vue";
 import TasksView from "./views/TasksView.vue";
 import TimesheetsView from "./views/TimesheetsView.vue";
-import AttendanceView from "./views/AttendanceView.vue";
 
 import WorkstationHeader from "./components/layout/WorkstationHeader.vue";
 import WorkstationBottomNav from "./components/layout/WorkstationBottomNav.vue";
@@ -69,8 +68,7 @@ if (typeof window !== "undefined") {
 		CalendarView,
 		ProjectsView,
 		TasksView,
-		TimesheetsView,
-		AttendanceView
+		TimesheetsView
 	};
 }
 
@@ -121,7 +119,6 @@ function mountApp(target = "#app") {
 	app.component("ProjectsView", ProjectsView);
 	app.component("TasksView", TasksView);
 	app.component("TimesheetsView", TimesheetsView);
-	app.component("AttendanceView", AttendanceView);
 
 	// The root proxy is exposed so the smoke test can drive tabs and dialogs.
 	app.rootProxy = app.mount(container);

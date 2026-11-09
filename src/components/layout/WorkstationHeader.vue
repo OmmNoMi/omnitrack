@@ -88,7 +88,7 @@ export default {
       // Pages the bottom bar has no room for, first and apart from the actions
       const pages = [
         ...(this.hasProjects ? [{ label: "Projects", icon: "briefcase", onClick: () => this.$emit("navigate", "projects") }] : []),
-        { label: "Logged time", icon: "clock", onClick: () => this.$emit("navigate", "timesheets") },
+        { label: "TimeLog", icon: "clock", onClick: () => this.$emit("navigate", "timesheets") },
       ];
       return [
         { group: "Go to", hideLabel: true, items: pages },

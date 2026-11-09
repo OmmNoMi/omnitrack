@@ -103,7 +103,7 @@ need(/for \(const t of items\) left\.splice/.test(tasksView), "TasksView.vue: a 
 need(/tabindex\(t, col\) \{ return this\.current\[0\] === t\.ref && this\.current\[1\] === col \? 0 : -1; \}/.test(tasksView) && /e\.key === 'ArrowDown'/.test(tasksView) && /e\.key === 'ArrowRight'/.test(tasksView) && /e\.key === 'Home'/.test(tasksView), "TasksView.vue: one tab stop, arrows rove rows and actions");
 need(/openTaskDetail\(t, \{ onChange:/.test(tasksView) && /@click="planAttentionTask\(t\)"/.test(tasksView) && /@click="startTaskImmediately\(t\)"/.test(tasksView) && !/execute_task_workflow_action|<Dialog|<FDialog/.test(tasksView), "TasksView.vue: rows open the task details panel (its Edit the one task form), Plan the one plan dialog, play the one start flow");
 need(/<Combobox[^>]*aria-label="Show tasks for project"/.test(tasksView) && /<Combobox[^>]*aria-label="Show tasks for"/.test(tasksView), "TasksView.vue: project and person filters are searchable Comboboxes");
-need(!/role="tab/.test(navSrc) && /:aria-current="activeTab === 'attendance' \? 'page' : null"/.test(navSrc), "WorkstationBottomNav.vue: a navigation bar marks the current page with aria-current, no tab roles");
+need(!/role="tab/.test(navSrc) && /:aria-current="activeTab === 'timesheets' \? 'page' : null"/.test(navSrc), "WorkstationBottomNav.vue: a navigation bar marks the current page with aria-current, no tab roles");
 // Planner blocks: the title wraps onto the lines the block has, never one clipped line
 const gridSrc = read("src/views/calendar/CalendarPlannerGrid.vue");
 need(/:style="clampStyle\(titleLines\(seg\)\)"/.test(gridSrc) && /isSplit\(seg\) \? 'px-1' : 'px-2'/.test(gridSrc), "CalendarPlannerGrid.vue: a block's title wraps, and a split lane gives it its width");
@@ -122,7 +122,7 @@ need(/b_doc\.approval_notes = b_doc\.flagged_reason/.test(tsPy),"timesheet.py: f
 need(/before = \{f: b_doc\.get\(f\) for f in REVIEW_FIELDS\}/.test(tsPy) && /_remember_review\(b_name, approver, before\)/.test(tsPy), "timesheet.py: approve_work_blocks keeps what each approval replaced, so it can be undone");
 need(/if not saved or saved\.get\("by"\) != user:/.test(tsPy) && /b_doc\.approved_by != user:/.test(tsPy), "timesheet.py: only the approver can undo an approval, and only while it stands as they left it");
 need(/docstatus"\) != 0:/.test(tsPy) && /frappe\.delete_doc\("Timesheet", made/.test(tsPy), "timesheet.py: undo removes the draft Timesheet its approval made, never a submitted one");
-need(/action: \{ label: 'Undo', onClick: \(\) => undoApproval\(b\) \}, duration: UNDO_APPROVAL_MS/.test(eodSrc) && /const UNDO_APPROVAL_MS = 5000;/.test(eodSrc), "useWorkstationEod.js: an approval offers Undo for 5 seconds");
+need(/action: \{ label: 'Undo', onClick: \(\) => undoApprovals\(approved\) \}, duration: UNDO_APPROVAL_MS/.test(eodSrc) && /const UNDO_APPROVAL_MS = 5000;/.test(eodSrc), "useWorkstationEod.js: an approval offers Undo for 5 seconds");
 const appSrc = read("src/App.vue");
 const bindSrc = read("src/composables/useWorkstationStoreBindings.js");
 need(/v-if="toast\.action"[^>]*@click="runToastAction"/.test(appSrc) && /@mouseenter="holdToast"[^>]*@focusin="holdToast"/.test(appSrc), "App.vue: the toast shows its action, and waits while it is hovered or focused");

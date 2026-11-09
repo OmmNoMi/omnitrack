@@ -115,8 +115,8 @@ for (const list of [...chipLists, dflt ? dflt[1] : ""]) {
   if (list.split(",").filter((x) => x.trim()).length > 4) problems.push(`quick lengths [${list}]: four at most, so they fit on one line`);
 }
 const dtf = read("src/components/common/DayTimeFields.vue");
-if (!/<span aria-hidden="true">\{\{ timeLabel \}\}<\/span><span v-if="mins > 0 && !durations\.includes\(mins\)"[^>]*>\{\{ ' · ' \}\}\{\{ durationLabel\(mins\) \}\}<\/span><\/p>/.test(dtf) || /<ChoiceChips :options="durationOptions"[^\n]*\n\s*<span v-if="mins > 0/.test(dtf)) problems.push("src/components/common/DayTimeFields.vue: a length no chip names sits beside the label, not alone under the chips");
-if (chipLists.length !== 2) problems.push("src/session/SessionControlsPane.vue: both session boxes pass their own short list of lengths");
+if (!/<span aria-hidden="true">\{\{ timeLabel \}\}<\/span><span v-if="mins > 0 && \(quickAdjust \|\| !durations\.includes\(mins\)\)"[^>]*>\{\{ ' · ' \}\}\{\{ durationLabel\(mins\) \}\}<\/span><\/p>/.test(dtf) || /<ChoiceChips[^\n]*:options="durationOptions"[^\n]*\n\s*<span v-if="mins > 0/.test(dtf)) problems.push("src/components/common/DayTimeFields.vue: a length no chip names sits beside the label, not alone under the chips");
+if (chipLists.length) problems.push("src/session/SessionControlsPane.vue: the session boxes show no length chips, so they pass no lengths");
 
 // 8. A live session's end list stops at now (plus a step), never laps the clock: started at
 // 01:00 and still running at 00:30 the next night, no end is offered twice or at the start.

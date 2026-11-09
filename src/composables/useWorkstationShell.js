@@ -14,7 +14,8 @@ export function useWorkstationShell(w) {
 const getInitialTabFromHash = () => {
     if (typeof window !== 'undefined' && window.location.hash) {
       const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
-      if (['dashboard', 'projects', 'planner', 'tasks', 'timesheets', 'attendance'].includes(raw)) {
+      if (raw === 'attendance') return 'timesheets'; // Team was folded into Hours
+      if (['dashboard', 'projects', 'planner', 'tasks', 'timesheets'].includes(raw)) {
         return raw;
       }
     }
@@ -112,6 +113,9 @@ const getInitialTabFromHash = () => {
   const getNatureBadge = activityOption;
 const session = window.OMNITRACK_SESSION || { user: '', user_fullname: '', is_manager: false, is_client: false };
 const isManager = ref(!!session.is_manager);
+// Approve and flag (managers and HR) apart from changing someone else's times (OmniTrack Manager or Admin)
+const canReviewTime = ref(!!session.can_review);
+const canChangeTimes = ref(!!session.can_change_times);
 // OmniTrack Settings > Minimum Characters per Session Log Line, rendered into the page at boot
 const minLogLineChars = Number(session.min_log_line_chars) > 0 ? Number(session.min_log_line_chars) : 10;
 const plannerData = ref({
@@ -141,6 +145,8 @@ const plannerData = ref({
     getNatureBadge,
     session,
     isManager,
+    canReviewTime,
+    canChangeTimes,
     minLogLineChars,
     plannerData,
   });

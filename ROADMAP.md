@@ -1439,3 +1439,116 @@ Found while fixing, still open:
 - The deadline menu on a task's details offers Tomorrow, Friday and Next week only, so it stays at five entries. If people miss "Today", consider a searchable picker instead of a longer menu.
 - The repo's "PR Labeler" and "Stale Issue & PR Manager" workflows fail on every run (seen on #58 and #59). Fix their setup or remove them, so a red check means something.
 - PR #57 committed a bench build output, `omnitrack/public/dist/js/omnitrack.bundle.NFRJ4BSX.js` (and its map), and each local `bench build` writes a new hashed copy next to it. Remove the committed one and ignore `omnitrack/public/dist/js/`; the app's own bundle is the Vite one in `omnitrack/public/dist/`.
+
+## Using it for a day on the live site (2026-11-09)
+
+A session started at 3:34 PM on Sunday was still running at 8 AM on Monday (16h). It was corrected with Adjust to end at 4:37 PM, and Hours and the Sunday dashboard now show 3:34–4:37 PM, 1.05h. Found while doing that:
+
+- **A forgotten timer runs all night and nothing asks.** When the app opens on a session that has run past the working day (or longer than, say, 10 hours), ask "Still working? When did you stop?" and suggest the time of the last log line as the end. A server-side reminder (Web Push or email) after N hours would catch it even with the app closed.
+- **The end time box ignores what you type.** Typing "4:37 pm" leaves the list on the next-day times (6:49 am to 8:04 am next day), and the value only counts after Enter. Filter the list as you type, and include same-day times when the session started yesterday.
+- **The Adjust header uses 24-hour time.** It says "Started 15:34", while the fields and the rest of the app say "3:34 pm".
+- **Two numbers for the same day disagree during a night session.** With the session running past midnight, Day at a glance said "Logged 8.0h" for today while "Close your day" said "0h of 8h logged". Both should read from one source.
+- **Weekends carry the 8h target.** Sunday shows "1.1h of 8h logged · 7h to go". The target should come from the person's working days and hours (see "No commitment-hours source exists" above).
+- **The Hours page cannot step to last week.** Week shows Mon–Sun of this week only, with no previous or next. Yesterday's Sunday was reachable only through Month. Add period stepping.
+- **Hours shows "Loading hours…" and "Nothing logged in this period." at the same time.** Show one or the other.
+- **Hours entries show only a duration.** A reviewer checking a timesheet needs start and end times too. The dashboard's "What happened" list already shows them.
+- **Planned hours equal worked hours in Hours by person** (27.98 planned against 28.01 worked). This is the known "Stop must not create a Planned Work Block" problem above, and it makes the Planned column meaningless until fixed.
+- **"Needs your attention" is mostly old work.** 10 of 11 items are overdue, the oldest by 205 days, and each card offers only Plan or Start session. Add reschedule, snooze, or close from the card, so the list stays worth reading.
+- **Nothing is approved.** Every November entry for the team is "Awaiting approval". If managers are meant to approve, add an "Approve this person's week" action on the Hours table.
+- **Accessibility: the day strip reads out ISO dates.** Each day is named "2026-11-08", which a screen reader reads as digits. Name it "Sunday, 8 November", and mark today with `aria-current="date"`.
+- **Team and Hours show the same work twice, and they disagree.** Team (`#/attendance`) is "Team approvals" and says "0 Pending / Nothing is waiting for your approval". Hours lists every November entry for four people (65.5h) as "Awaiting approval". So a manager has nowhere that actually approves this time. Proposal: merge them into one Hours page. The table by person stays. Expanding a person shows their entries with start and end times, with Approve and Flag on each entry and on the person's week. Non-managers see only "My hours". That frees a slot in the bottom bar.
+- **The "Split-Shift Synthesizer Multi-Session Logs" table on Team is not readable as it stands.** It names people by Employee ID (`HR-EMP-001`) instead of their names. It stops at 2026-10-15. It marks 6.5h days as "Absent". The title is internal jargon. Either fix it and move it under Hours as an attendance view, or move it to the desk.
+
+## TimeLog: one review page, for the person and the manager (2026-11-09)
+
+Done in the working tree (not yet in a PR):
+- Team and Hours are merged into one page, **TimeLog** (`#/timesheets`; `#/attendance` redirects there). Today / Week / Month / Range sit on ChoiceChips, and Range replaces All, defaults to last month, and uses frappe-ui's DatePicker (at most 92 days).
+- Entries are grouped under one date heading each, Google-style, with a dot and a word for status (no pills). A row opens the entry sheet, where a manager approves, flags or changes the times. There are no inline buttons.
+- `get_team_hours` now sends each session's notes (cut at 400 characters), and a row shows them in two lines under the title.
+- **Who is waiting, on any day.** `get_team_hours` returns `waiting`: logged time not approved yet, per person, on any day, not just the period shown. A manager sees "Waiting for your review", listing each person's flagged and to-review hours, how many entries, and since when. Anyone else sees only their own: "flagged for you to fix" and "waiting for approval", or "All your logged time is approved." "Show waiting time" switches to a Range covering it, opens the first person and puts focus on them. People with time to review are listed first.
+- Fixed: rows rendered as frappe-ui Buttons, because a string `<component :is="'button'">` resolves to the registered `Button` component first. `scripts/check_component_registry.cjs` now refuses a `<component is>` that names a registered component, app-wide.
+
+Open, found while building it:
+- A flagged entry stays Flagged after its owner fixes it. Fixing it should send it back to awaiting review, with the reason kept in history.
+- Waiting time older than 92 days before the newest waiting entry is counted in the summary, but "Show waiting time" cannot reach it, because a range is at most 92 days. Offer a second step ("Show older"), or let the summary list link to each person's oldest week.
+- A running session's block counts as waiting in the summary, though it cannot be approved until it stops.
+- The waiting summary lists everyone with no cap. On a large team, show the first ten and a "Show all".
+- `get_pending_team_approvals` has no caller in the SPA any more. It also stops at 100 rows and uses a different manager check from `can_review_team`. Remove it or make it share one rule.
+- The entry sheet's flag dialog does not return focus to the Flag button on Cancel.
+- Dashboard KPIs follow the TimeLog period, so changing the range here changes numbers elsewhere. Give each page its own period.
+- `afterSave` in the entry sheet does not bump `reviewRev`, so TimeLog's numbers can stay stale after an edit until Refresh.
+- A tenant without an OmniTrack subscription gets a raw error toast at start-up. Show a sentence that says what to ask for, once.
+- The "Split-Shift Synthesizer" data on the old Team page is no longer shown anywhere. Decide whether it is still needed.
+- frappe-ui's DateRangePicker was considered for Range and set aside: two DatePickers read more clearly on a phone. Revisit if it gets a clearer trigger.
+- Not yet seen on a phone with real entries. The empty page fits at 375px with no sideways scroll.
+- Fixed: the entry sheet closed itself with no message when its session no longer existed, so a click looked like it did nothing. It now says "This entry no longer exists. It may have been deleted."
+
+### TimeLog, read as each persona (2026-11-09)
+
+**The person checking their own time**
+- Days with nothing logged are invisible: a day with no entries simply does not appear. Show working days in the period with nothing logged ("Tue, Nov 3: nothing logged"), with a way to add time for that day.
+- Their own name, avatar and chevron sit above their entries even though "My hours" only ever has one person. Drop the person header for them and show the entries straight away.
+- Planning matters, and so does how far the work drifted from it: the goal is that everyone plans more, gets better at it, and what was promised to a client is delivered. Today "Planned" on TimeLog counts every block, including the `unplanned` ones Stop creates for time nobody planned, so planned looks equal to worked and the drift is hidden. Count only blocks planned ahead (`unplanned` = 0, as `analytics.py` and `workstation.py` already do), show unplanned time on its own, and show planned vs worked per day and per person, so the variance is visible to the person and the manager. (Direction from the product owner, 2026-11-09.)
+- A flagged entry shows the reason, but there is no clear "fix and send back" step, and a fix leaves it Flagged (see above). It must have one. Build it on the existing approval fields and Frappe-native pieces (the document's Comment / version history for the reason, the existing review states) rather than a new mechanism. (Direction from the product owner, 2026-11-09.)
+
+**The manager reviewing the team**
+- The names in "Waiting for your review" are plain text. Each should open that person in a range covering their own waiting time.
+- The same "flagged" and "awaiting" numbers appear twice, in the summary (any date) and on the person row (this period), and they can differ. Label the summary's scope, or show it only where the period hides some of it.
+- Nothing points out what looks wrong: overlapping sessions on one day, a session over 10 hours, a day over 24 hours, or an entry with no description. A small mark on those rows would tell a manager where to look before approving.
+- "Approve all N awaiting" approves the whole period in one click. Approving one day at a time (from the day heading) suits a careful reviewer.
+
+**HR preparing salary for last month**
+- No export. A CSV for the period (person, day, worked, approved, waiting, away) is what goes to payroll.
+- The payroll lock (`payroll_closed_through`) is not shown here. Say which days are closed, and warn when time inside a closed period is still waiting.
+- No totals across the team for the month (approved vs still waiting), so HR has to open each person to know whether payroll can be run.
+- HR Users can review but cannot change times (`can_edit_times` is managers only), and the sheet does not say so.
+
+**Keyboard and screen reader**
+- Check that the "This entry no longer exists" toast is announced (an `aria-live` region), and that focus goes back to the row after the sheet closes on its own.
+
+### TimeLog review items, built (2026-11-09)
+
+Done (tests and mutation suite at 100%; browser check of both personas still to do, see below):
+- Working days with nothing logged are shown as days of their own, with a way to log time for that day.
+- Planned vs worked: only blocks planned ahead count as planned, unplanned time is shown on its own, and each day and person shows worked against plan with the difference.
+- Send back for review: a flagged entry, once fixed, goes back to Pending Approval through the existing approval fields (`send_back_for_review`).
+- Names under "Waiting for your review" open that person over the days their waiting time covers.
+- Waiting time is counted in entries, so it no longer repeats the hours on the person's line.
+- Row marks: overlaps the entry before, over 10 hours, no description.
+- Approve a day from its heading, and select several entries (Space) to approve together.
+- Payroll lock: `payroll_closed_through` in OmniTrack Settings. Closed days are labelled, and waiting time on closed days is called out.
+- Team totals line (worked, planned ahead, unplanned, approved, waiting).
+- Only OmniTrack Manager / OmniTrack Admin can change someone else's times. HR reviews only.
+- The page's rules moved to `src/utils/timeLog.js` to keep the page under the file-size gate.
+
+Still open:
+- Check both personas in the browser (the pane had a running session, so it was not reloaded onto the new bundle).
+- Does the OmniTrack Settings form show `payroll_closed_through` clearly, with a description of what it locks?
+- CSV export for payroll (from the HR persona list above).
+
+### Session Adjust box: fewer chips, repeatable steps (2026-11-09)
+
+Done:
+- End now has Now, +5m, +15m, +1h. Each press adds again from the current end, the same way the Start steps take time off again.
+- The 30m / 1h / 2h / 4h length chips are removed from the session boxes. They stay in the manual entry sheet.
+- Below End, a "Last edit HH:MM" button sets the end to when the session's log, title or tasks were last edited. It shows only when that time is after the start and before now. "Ends next day" still shows there when the end is past midnight.
+
+Ideas:
+- The Start and End chip rows are one Tab stop per button. Make each row a roving-tabindex group (arrows inside, Tab out), like the other chip groups.
+- A "Next day" toggle on End, if the indicator plus next-day times in the End list is not enough.
+
+### "Are you still working?" after logging early, then the lines vanished (reported 2026-11-09, fixed)
+
+Reported: lines added within the first 3 minutes of a session, and the "Are you still working?" prompt still came.
+- By design, the prompt comes 30 minutes after the last line (`checkInactivity`, `INACTIVITY_MS`), so 3 lines at minute 3 still bring it at about minute 33. If that is the complaint, the rule needs a decision (for example, a longer gap once the session has lines, or counting any edit in the box as activity).
+- In the reported session, the server copy and the browser copy both had no lines, and their last update and line stamp both equalled the start time. So no line save reached the server, and typed text was still sitting unsent in the Add field. Find out whether lines were added and then lost, or never added. If they were lost, that is a data-loss bug.
+- When the socket is down, the page polls `get_active_session` every 2 seconds. That fills the browser's resource-timing buffer within minutes and makes later requests hard to trace. Consider a slower poll, or backing off.
+- Root cause (reproduced): when the running session's start moved here (Keep running in the "still working?" box, or Adjust), any copy with the old start counted as a different session. That included a poll still in flight, the server's copy after a refused save, a page-load fetch, or another tab. `reconcileActiveSession` then called `restoreActiveSession` with `sameSession` false, which put the old start and the old (often empty) log back and said "Switched to active session from cloud". A block bound here, and a copy with no block field (undefined vs null), went down the same path. Older copies also put back an older title even when this page's log was newer.
+- Fixed: the page remembers the starts and blocks its running session has had (`ownSessionCopies` in `src/utils/sessionLines.js`, forgotten when the session ends). A copy that carries one of those, and not the current ones, is this session's own older copy, and this page sends its own copy back up. That holds in reconcile, restore, page load and BroadcastChannel alike. "Switched…" is said only when another session really was taken. The title follows the log's revision. A missing block field is the same as no block.
+- Fixed: a save the server refused (`sync_active_session`) used to be dropped without a word. Now it shows an error with the server's reason, at most once a minute. Polls keep re-sending it.
+- Guard: `scripts/check_session_identity.mjs` drives the real composable against a fake server that keeps the stored log the way `omnitrack/utils/session_lines.py` does, with 11 mutants in `run_mutation_tests.cjs`.
+- Still open: a session has no stable id, so a start moved on another device still reads as a different session there, and that device takes the other copy as a whole. A `sessionId` minted at Start and carried by every copy would let the lines be merged by id instead of guessed from the start time.
+- Still open: the 30-minute "still working?" rule itself (first bullet) needs a decision.
+- A page opened before this fix keeps the old bundle until it is reloaded.
+- Found while checking the fix: at 13:21:32 a `sync_active_session` call failed with a 500. It was sent 2 seconds after another save from the same page, both from before the fix. `frappe.log` only says "New Exception collected in error log", and no Error Log row was kept, so the cause is unknown. Two saves landing together, both writing the cache and `tabDefaultValue`, is the likely suspect. A failure like this now shows an error on the page. The server side still needs a test with two saves sent at once.
+- Checking the fix: the lines that looked lost in a second browser were on another server, a deployed site still on the old bundle, not on the dev bench. They were safe in that server's copy. Still worth a guard: a page whose bundle is older than the server's should say so and offer a reload, because a tab left open keeps old code for hours.

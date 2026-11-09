@@ -171,8 +171,8 @@ runMutationTest(
 // Mutant 10: a long data list goes back into a search-less Dropdown
 runMutationTest(
   'Teammate picker reverts from searchable Combobox to Dropdown',
-  path.resolve(omnitrackDir,'src/views/TimesheetsView.vue'),
-  (code) => code.replace('<div v-if="isManager" class="w-52">', '<Dropdown :options="employeeOptions"><Button label="Member">Member</Button></Dropdown><div v-if="isManager" class="w-52">'),
+  path.resolve(omnitrackDir,'src/views/TasksView.vue'),
+  (code) => code.replace('<Combobox open-on-click :model-value="selectedEmployee"', '<Dropdown :options="employeeOptions"><Button label="Member">Member</Button></Dropdown><Combobox open-on-click :model-value="selectedEmployee"'),
   'node scripts/test_workstation_interactions.cjs',
   'data lists use a searchable <Combobox>'
 );
@@ -1151,8 +1151,8 @@ runMutationTest('A moved block can be moved again', SRC('omnitrack/api/planner.p
 // The switch dialog never asks to retype the log
 runMutationTest('A length reads as a rounded decimal again', SRC('src/utils/clockTime.js'),
   (code) => code.replace('return m ? `${h}h ${m}m` : h + "h";', 'return m ? (mins / 60).toFixed(1) + "h" : h + "h";'), ON, 'want 7h 15m');
-runMutationTest('The session box offers six lengths again', SRC('src/session/SessionControlsPane.vue'),
-  (code) => code.replace(':durations="[15, 30, 60, 120]"', ':durations="[15, 30, 60, 90, 120, 180]"'), ON, 'four at most');
+runMutationTest('The session box passes lengths again', SRC('src/session/SessionControlsPane.vue'),
+  (code) => { const out = code.replace(":day-offsets=\"dayOffsets\"\n", ":day-offsets=\"dayOffsets\"\n        :durations=\"[15, 30, 60, 120]\"\n"); if (out === code) throw new Error('mutator: anchor missing'); return out; }, ON, 'pass no lengths');
 runMutationTest('The odd length drops under the chips again', SRC('src/components/common/DayTimeFields.vue'),
   (code) => code.replace('aria-label="Length" @update:model-value="setDuration" />', 'aria-label="Length" @update:model-value="setDuration" />\n          <span v-if="mins > 0 && !durations.includes(mins)">{{ durationLabel(mins) }}</span>'), ON, 'beside the label');
 runMutationTest('The default lengths wrap again', SRC('src/components/common/DayTimeFields.vue'),
@@ -1173,7 +1173,7 @@ runMutationTest('Undo overwrites a review made since', SRC('omnitrack/api/timesh
 runMutationTest('Undo removes a submitted Timesheet', SRC('omnitrack/api/timesheet.py'),
   (code) => code.replace('"docstatus") != 0:', '"docstatus") > 1:'), BR, 'never a submitted one');
 runMutationTest('Approving offers no Undo', SRC('src/composables/useWorkstationEod.js'),
-  (code) => code.replace("action: { label: 'Undo', onClick: () => undoApproval(b) }, ", ''), BR, 'offers Undo for 5 seconds');
+  (code) => code.replace("action: { label: 'Undo', onClick: () => undoApprovals(approved) }, ", ''), BR, 'offers Undo for 5 seconds');
 runMutationTest('The Undo window shrinks', SRC('src/composables/useWorkstationEod.js'),
   (code) => code.replace('const UNDO_APPROVAL_MS = 5000;', 'const UNDO_APPROVAL_MS = 1000;'), BR, 'offers Undo for 5 seconds');
 runMutationTest('The toast hides its action', SRC('src/App.vue'),
@@ -1318,13 +1318,13 @@ runMutationTest('The page boot loads blocks again', SRC('omnitrack/www/omnitrack
 runMutationTest('Projects shows on a site without Projects', SRC('src/components/layout/WorkstationHeader.vue'),
   (code) => code.replace('...(this.hasProjects ? [{ label: "Projects"', '...(true ? [{ label: "Projects"'), PJ, 'only on a site that has Projects');
 runMutationTest('Logged time leaves the menu', SRC('src/components/layout/WorkstationHeader.vue'),
-  (code) => code.replace('{ label: "Logged time", icon: "clock"', '{ label: "Timesheets", icon: "clock"'), PJ, 'opens with Projects and Logged time');
+  (code) => code.replace('{ label: "TimeLog", icon: "clock"', '{ label: "Timesheets", icon: "clock"'), PJ, 'opens with Projects and TimeLog');
 runMutationTest('Projects goes back in the bottom bar', SRC('src/components/layout/WorkstationBottomNav.vue'),
-  (code) => code.replace('<!-- Team: managers only -->', '<Button :aria-current="activeTab === \'projects\' ? \'page\' : null" label="Projects" />\n      <!-- Team: managers only -->'), PJ, 'Projects is not back in the bottom bar');
+  (code) => code.replace('<!-- TimeLog: everyone', '<Button :aria-current="activeTab === \'projects\' ? \'page\' : null" label="Projects" />\n      <!-- TimeLog: everyone'), PJ, 'Projects is not back in the bottom bar');
 runMutationTest('Hours is no longer the bottom bar\'s last button', SRC('src/components/layout/WorkstationBottomNav.vue'),
-  (code) => code.replace(/(<span class="text-\[10px\] mt-0\.5">Hours<\/span>\s*<\/Button>)/, "$1\n      <Button @click=\"$emit('update:activeTab', 'dashboard')\" />"), PJ, 'Hours (timesheets) is the bottom bar\'s last button');
+  (code) => code.replace(/(<span class="text-\[10px\] mt-0\.5">TimeLog<\/span>\s*<\/Button>)/, "$1\n      <Button @click=\"$emit('update:activeTab', 'dashboard')\" />"), PJ, 'TimeLog (timesheets) is the bottom bar\'s last button');
 runMutationTest('The Hours button is named differently from its label', SRC('src/components/layout/WorkstationBottomNav.vue'),
-  (code) => code.replace('label="Hours"', 'label="Logged time"'), PJ, "Hours button's name matches its visible label");
+  (code) => code.replace('label="TimeLog"', 'label="Logged time"'), PJ, "the TimeLog button's name matches its visible label");
 runMutationTest('Bottom bar labels drop to low contrast', SRC('src/components/layout/WorkstationBottomNav.vue'),
   (code) => code.replace("(isDarkMode ? '!text-gray-300 font-medium'", "(isDarkMode ? '!text-gray-600 font-medium'"), PJ, '4.5:1 contrast');
 runMutationTest('Every project row is a tab stop', SRC('src/views/ProjectsView.vue'),
@@ -1569,6 +1569,20 @@ runMutationTest('Stop puts an overnight end on the start day again', WSM,
   (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const end = msOf(f.session_date, f.to_time);'), LA, 'an overnight Stop');
 runMutationTest('Stop puts an overnight end on the start day, spelt another way', WSM,
   (code) => code.replace('const end = entryEndMs(f.session_date, f.from_time, mins);', 'const { session_date: day, to_time: until } = f;\n    const end = mins >= 0 ? msOf(day, until) : 0;'), LA, 'an overnight Stop');
+// The session box's end: Now, +5m, +15m, +1h, and the log's last edit
+const mustChange = (from, to) => (code) => { const out = code.replace(from, to); if (out === code) throw new Error('mutator: anchor missing'); return out; };
+const DTF = SRC('src/components/common/DayTimeFields.vue');
+runMutationTest('The end steps lose +1h', DTF, mustChange('const END_STEPS = [5, 15, 60];', 'const END_STEPS = [5, 15];'), LA, '+5m, +15m and +1h');
+runMutationTest('An end step sets the end instead of adding to it', DTF,
+  mustChange('    nudgeEnd(deltaMins) {\n      const base = this.end\n        ? toMin(this.end)', '    nudgeEnd(deltaMins) {\n      const base = this.start\n        ? toMin(this.start)'), LA, 'pressing again adds again');
+runMutationTest('The session boxes show length chips again', DTF, mustChange('<ChoiceChips v-if="!quickAdjust" :options="durationOptions"', '<ChoiceChips :options="durationOptions"'), LA, 'no length chips');
+runMutationTest('Last edit moves the start', DTF, mustChange("@click=\"$emit('update:end', lastEdit)\"", "@click=\"$emit('update:start', lastEdit)\""), LA, 'Last edit sets the end');
+runMutationTest('The Adjust box drops the last edit', SRC('src/session/SessionControlsPane.vue'), mustChange("        :last-edit=\"liveAdjust.last_edit || ''\"\n", ''), LA, 'passes the log');
+runMutationTest('Last edit is offered at the start', WSM, mustChange('edited >= start.getTime() + 60000 && ', ''), LA, 'edited at the start');
+runMutationTest('Last edit is offered after now', WSM, mustChange(' && edited <= now.getTime()', ''), LA, 'edited after now');
+runMutationTest('Last edit forgets the log', SRC('src/composables/useWorkstationSessionSync.js'), mustChange('linesEditedAt: () => _linesRev,', 'linesEditedAt: () => 0,'), LA, 'lines\' edit stamp');
+runMutationTest('The modals never hear of the last edit', SRC('src/composables/useWorkstationShortcuts.js'),
+  mustChange("    linesEditedAt: () => (typeof linesEditedAt === 'function' ? linesEditedAt() : 0),\n", ''), LA, 'hands linesEditedAt');
 runMutationTest('Adjust from the box itself pops the box up', WSM,
   (code) => code.replace('    if (!(opt && opt.inPlace)) showSessionBox();\n', '    showSessionBox();\n'), LA, 'leaves the box where it is');
 runMutationTest('Adjust from elsewhere leaves the box hidden', WSM,
@@ -2109,6 +2123,209 @@ runMutationTest('The hash sync acts on entries backNavigation wrote', SRC('src/c
   (code) => code.replace('      if (isManagedEntry()) return;\n', ''), BACKNAV_TEST, 'handleHashSync must skip entries backNavigation wrote');
 runMutationTest('A URL clean-up writes the history directly', SRC('src/composables/useWorkstationEod.js'),
   (code) => code.replace('dropUrlQuery();', 'window.history.replaceState({}, document.title, window.location.pathname);'), BACKNAV_TEST, 'only src/utils/backNavigation.js may write the history');
+
+// TimeLog is the one review page (check_hours_review.mjs)
+const HR = 'node scripts/check_hours_review.mjs';
+runMutationTest('The Team route renders a page again', SRC('src/router/index.js'),
+  (code) => code.replace("{ path: '/attendance', redirect: '/timesheets' }", "{ path: '/attendance', component: TimesheetsView, meta: { tab: 'attendance' } }"), HR, '/attendance redirects to /timesheets');
+runMutationTest('#/attendance no longer opens Hours', SRC('src/composables/useWorkstationShell.js'),
+  (code) => code.replace("      if (raw === 'attendance') return 'timesheets'; // Team was folded into Hours\n", ''), HR, '#/attendance opens Hours');
+runMutationTest('The nav gets a Team button back', SRC('src/components/layout/WorkstationBottomNav.vue'),
+  (code) => code.replace(":aria-current=\"activeTab === 'tasks' ? 'page' : null\"", ":aria-current=\"activeTab === 'attendance' ? 'page' : null\""), HR, 'no Team tab');
+runMutationTest('TimeLog offers Approve all on a running entry', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(" && !e.recording; }", "; }"), HR, 'never approved or running entries');
+runMutationTest('TimeLog offers Approve all to someone who cannot review', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("canReview(e) { return this.hours && this.hours.can_review_team && ", "canReview(e) { return this.hours && "), HR, 'only a reviewer approves');
+runMutationTest('TimeLog stops reloading after a review', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("reviewRev() { this.loadHours(); },", "reviewRev() {},"), HR, 'reloads the hours');
+runMutationTest('Approve all approves one by one', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('this.approveBlocks(list,', 'list.forEach((b) => this.quickApproveBlock(b)) || (('), HR, 'one Undo covers them');
+runMutationTest('A flag reason is sent on every entry', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"approval_notes": (b.approval_notes or "") if review == "flagged" else ""', '"approval_notes": b.approval_notes or ""'), HR, 'only on a flagged entry');
+runMutationTest('The running block is not marked on Hours', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('e["recording"] = bool(running) and e["name"] == running', 'e["recording"] = False'), HR, 'the running block is marked');
+runMutationTest('Pending approvals match on the raw name again', SRC('omnitrack/api/timesheet.py'),
+  (code) => code.replace('filters["employee"] = _resolve_planner_user(employee)', 'filters["employee"] = employee'), HR, "resolved to the person's email");
+
+// TimeLog opens the entry sheet; it has no approve, flag or edit form of its own
+runMutationTest('TimeLog grows its own flag again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('approveAll(p) {', 'async sendFlag(e, reason) { return this.quickFlagBlock(e, reason); },\n    approveAll(p) {'), HR, 'no inline flag or time-edit form');
+runMutationTest('TimeLog grows its own time edit again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('approveAll(p) {', "saveTimes(b) { return this.postJSON('update_work_session', b); },\n    approveAll(p) {"), HR, 'no inline flag or time-edit form');
+runMutationTest('An entry row becomes <component is="button"> again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('<button\n                      v-if="r.s"', '<component\n                      :is="r.s ? \'button\' : \'div\'"'), 'node scripts/check_component_registry.cjs', 'resolves to the registered <Button>');
+runMutationTest('Session notes are not read', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"to_time", "hours", "notes"]', '"to_time", "hours"]'), HR, 'sessions are read with notes');
+runMutationTest('Session notes are not sent', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"notes": (s.notes or "")[:NOTES_CHARS],', ''), HR, 'each session carries its notes');
+runMutationTest('A row shows the raw notes, bullets and all', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('noteOf(s, e) { return noteLines(s.notes, blockTitle(e)).map((l) => l.text).join(\' · \'); },', 'noteOf(s) { return s.notes || \'\'; },'), HR, 'read with noteLines');
+runMutationTest('A row has no description', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(/<span v-if="r\.note"[^\n]*\n/, ''), HR, 'the row shows its description');
+runMutationTest('Anyone sees the whole team waiting', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('\tif not everyone:\n\t\tq = q.where(pwb.employee == user)\n', ''), HR, 'only their own waiting time');
+runMutationTest('The reply says nothing about waiting time', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"waiting": _waiting(user, everyone, closed),', ''), HR, 'what is waiting, on any day');
+runMutationTest('Approved time counts as waiting', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('(Coalesce(pwb.approval_status, "") != "Approved") & ', ''), HR, 'logged time not approved yet');
+runMutationTest('Away time waits for approval', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('\t\tif is_away(r.task_nature):\n\t\t\tcontinue\n', ''), HR, 'never waiting for approval');
+runMutationTest('Waiting list loses its order', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('out.sort(key=lambda w: (not w["flagged"], w["oldest"], w["full_name"].lower()))', 'out.sort(key=lambda w: w["full_name"].lower())'), HR, 'flagged time is listed first');
+runMutationTest('People to review are not first', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('(not (p["awaiting"] or p["flagged"]), -p["worked"]', '(-p["worked"]'), HR, 'time to review come first');
+runMutationTest('The page says nothing about waiting', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('<div v-if="hours && hours.waiting" data-waiting', '<div v-if="false" data-waiting'), HR, 'the page says what is waiting');
+runMutationTest('An employee is told nothing waits for their review', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("hours.can_review_team ? 'Nothing is waiting for your review.' : 'All your logged time is approved.'", "'Nothing is waiting for your review.'"), HR, 'said for who is reading');
+runMutationTest('An employee is told to review their own time', SRC('src/utils/timeLog.js'),
+  (code) => code.replace("mine ? ' waiting for approval' : ' to review'", "' to review'"), HR, 'worded for its owner');
+runMutationTest('Waiting time outside the period cannot be reached', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('<Button v-if="!hours.can_review_team && waitingOutside"', '<Button v-if="false"'), HR, 'outside the period can be shown');
+runMutationTest('Showing waiting time opens nobody', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('this.focusAfterLoad = { person, open: true };', 'this.focusAfterLoad = { person };'), HR, 'opens whoever comes first');
+runMutationTest('The person asked for stays closed', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('if (want && people.some((p) => p.user === want)) this.openPerson = want;', 'if (false) this.openPerson = want;'), HR, 'opened once read');
+runMutationTest('The waiting range can exceed the server limit', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('end.getDate() - (maxDays - 1)', 'end.getDate() - 400'), HR, 'within the longest period');
+runMutationTest('The sheet closes without a word', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => code.replace("this.showToast('This entry no longer exists. It may have been deleted.', 'error');", ''), HR, 'closing on a missing entry says why');
+runMutationTest('Days not logged are dropped from TimeLog', SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes('for (const d of p.not_logged || []) if (!byDate.has(d)) byDate.set(d, []);')) throw new Error('mutator: anchor missing'); return code.replace('for (const d of p.not_logged || []) if (!byDate.has(d)) byDate.set(d, []);', ''); }, HR, 'a working day with nothing logged is a day of its own');
+runMutationTest("Log time is offered on someone else's day", SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('return p.user === this.currentUser && !logDayRefusal')) throw new Error('mutator: anchor missing'); return code.replace('return p.user === this.currentUser && !logDayRefusal', 'return !logDayRefusal'); }, HR, "Log time is offered only on the viewer's own day");
+runMutationTest('Log time ignores the log window', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('&& !logDayRefusal(d, { daysBack: h.log_days_back, payrollClosedThrough: h.payroll_closed_through, isManager: h.log_any_day });')) throw new Error('mutator: anchor missing'); return code.replace('&& !logDayRefusal(d, { daysBack: h.log_days_back, payrollClosedThrough: h.payroll_closed_through, isManager: h.log_any_day });', '&& !!d;'); }, HR, "Log time is offered only on the viewer's own day");
+runMutationTest('A day stops saying what was planned', SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes('planned: Number(plannedOn[date] || 0),')) throw new Error('mutator: anchor missing'); return code.replace('planned: Number(plannedOn[date] || 0),', 'planned: 0,'); }, HR, 'a day says its worked time against what was planned ahead');
+runMutationTest('Unplanned time counts as planned', SRC('omnitrack/api/team_hours.py'),
+  (code) => { if (!code.includes('if work_date in in_range and not b.unplanned and b.status')) throw new Error('mutator: anchor missing'); return code.replace('if work_date in in_range and not b.unplanned and b.status', 'if work_date in in_range and b.status'); }, HR, 'planned-ahead time is counted per day');
+runMutationTest('Overlaps are not marked', SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes("if (end > from) r.checks.push('Overlaps the entry before');")) throw new Error('mutator: anchor missing'); return code.replace("if (end > from) r.checks.push('Overlaps the entry before');", ''); }, HR, 'overlapping, over-10-hour and undescribed sessions are marked');
+runMutationTest('Approve day is gone', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('@click="approveDay(p, g)"')) throw new Error('mutator: anchor missing'); return code.replace('@click="approveDay(p, g)"', '@click="noop"'); }, HR, 'a reviewer approves a day at once');
+runMutationTest('Space no longer picks a row', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('        this.togglePick(r.e);\n        return;')) throw new Error('mutator: anchor missing'); return code.replace('        this.togglePick(r.e);\n        return;', '        return;'); }, HR, 'Space on a row picks it');
+runMutationTest('An approved entry can be picked', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('pickable(r) { return !!(r.s && this.canReview(r.e)); }')) throw new Error('mutator: anchor missing'); return code.replace('pickable(r) { return !!(r.s && this.canReview(r.e)); }', 'pickable(r) { return !!r.s; }'); }, HR, 'only entries still to approve can be picked');
+runMutationTest('Closed payroll days are not said', SRC('src/utils/timeLog.js'),
+  (code) => { if (!code.includes('closed: !!closedThrough && date <= closedThrough,')) throw new Error('mutator: anchor missing'); return code.replace('closed: !!closedThrough && date <= closedThrough,', 'closed: false,'); }, HR, 'a day payroll has closed says so');
+runMutationTest('Team totals are hidden', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('v-if="hours && hours.can_review_team && hours.totals')) throw new Error('mutator: anchor missing'); return code.replace('v-if="hours && hours.can_review_team && hours.totals', 'v-if="false && hours.totals'); }, HR, "a reviewer sees the team's totals");
+runMutationTest('A waiting name no longer opens its person', SRC('src/views/TimesheetsView.vue'),
+  (code) => { if (!code.includes('@click="showWaiting(w)"')) throw new Error('mutator: anchor missing'); return code.replace('@click="showWaiting(w)"', '@click="noop"'); }, HR, 'a waiting name opens that person');
+runMutationTest("HR may change someone else's times", SRC('omnitrack/permissions.py'),
+  (code) => { if (!code.includes('TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin"}')) throw new Error('mutator: anchor missing'); return code.replace('TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin"}', 'TIME_EDITOR_ROLES = {"OmniTrack Manager", "OmniTrack Admin", "HR Manager"}'); }, HR, 'only OmniTrack Manager and Admin change');
+runMutationTest('Edit is offered to any reviewer', SRC('src/drawers/SessionDetailDrawer.vue'),
+  (code) => { if (!code.includes('this.mayChange && this.canLogTimesheet(b)')) throw new Error('mutator: anchor missing'); return code.replace('this.mayChange && this.canLogTimesheet(b)', 'this.canLogTimesheet(b)'); }, HR, "Edit is offered on someone else's entry only");
+runMutationTest('Send back skips the owner check', SRC('omnitrack/api/timesheet.py'),
+  (code) => { if (!code.includes('\t_require_time_owner(b_doc)\n\tif b_doc.approval_status not in')) throw new Error('mutator: anchor missing'); return code.replace('\t_require_time_owner(b_doc)\n\tif b_doc.approval_status not in', '\tif b_doc.approval_status not in'); }, HR, 'only a flagged entry, by who may change it');
+runMutationTest('Send back takes any entry', SRC('omnitrack/api/timesheet.py'),
+  (code) => { if (!code.includes('if b_doc.approval_status not in ("Flagged", "Rejected"):')) throw new Error('mutator: anchor missing'); return code.replace('if b_doc.approval_status not in ("Flagged", "Rejected"):', 'if False:'); }, HR, 'only a flagged entry, by who may change it');
+runMutationTest('A row no longer opens its entry', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('@click="openEntry(p, r)"', ''), HR, 'an entry\'s row opens it');
+runMutationTest('The sheet opens on the block, not the session', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('{ name: s.name, session_date: s.date, from_time: s.from_time, to_time: s.to_time, hours: s.hours }', '{}'), HR, 'opens the entry sheet on that session');
+runMutationTest('The sheet is not told the entry is approved', SRC('src/utils/timeLog.js'),
+  (code) => code.replace("approval_status: REVIEW_STATUS[e.review] || '',", "approval_status: '',"), HR, 'Approve and Edit show right');
+runMutationTest('The sheet is not told whose entry it is', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('    employee: p.user,\n', ''), HR, 'Approve and Edit show right');
+runMutationTest('An edit in the sheet is not read back', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('this.sheetFrom = false;\n      this.loadHours();', 'this.sheetFrom = false;'), HR, 'once the sheet it opened closes');
+runMutationTest('A delete in the sheet is not read back', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(' || this.deleteEntry ||', ' ||'), HR, 'any of the entry\'s sheets or dialogs');
+runMutationTest('TimeLog reloads on every sheet anywhere', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('if (open || !this.sheetFrom) return;', 'if (open) return;'), HR, 'once the sheet it opened closes');
+runMutationTest('Every entry row is a tab stop', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(':tabindex="r.i === rowStop(p) ? 0 : -1"', ':tabindex="0"'), HR, 'only one entry row per person is a tab stop');
+runMutationTest('End no longer jumps to the last entry', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("else if (ev.key === 'End') to = rows.length - 1;", ''), HR, 'Up, Down, Home and End');
+runMutationTest('Arrows move the tab stop but not focus', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('      rows[to].focus();\n', ''), HR, 'Up, Down, Home and End');
+runMutationTest('Focus is lost when the sheet closes', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(':data-session="r.s.name"', ''), HR, 'focus goes back to the entry\'s row');
+runMutationTest('Focus is pulled while the sheet is open', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('if (!want || this.sheetOpen) return;', 'if (!want) return;'), HR, 'focus goes back to the entry\'s row');
+
+// TimeLog periods: the app's ChoiceChips, and a Range (last month by default) on frappe-ui's DatePicker
+runMutationTest('All comes back on TimeLog', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("{ id: 'range', label: 'Range' }", "{ id: 'all', label: 'All' }"), HR, 'a Range replaces All');
+runMutationTest('A Range opens on this month', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('now.getMonth() - 1, 1)', 'now.getMonth(), 1)'), HR, 'a Range opens on last month');
+runMutationTest('A backwards range is sent', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('if (from > to) return', 'if (false) return'), HR, 'a backwards range is explained');
+runMutationTest('A range over the limit is sent', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('if (days > maxDays) return', 'if (false) return'), HR, "over the server's limit is explained");
+runMutationTest('A refused range is still asked for', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace("      if (this.rangeError) { this.hours = null; this.hoursError = ''; this.hoursLoading = false; return; }\n", ''), HR, 'nothing is asked of the server');
+runMutationTest('Changing the end date does not reload', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('    rangeTo() { this.loadHours(); },\n', ''), HR, 'changing a date reads the hours again');
+runMutationTest('The range goes back to the browser date input', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(/<DatePicker variant="outline" :model-value="\$data\[f\.key\]"[^>]*\/>/, '<input type="date" v-model.lazy="rangeFrom" />'), HR, 'frappe-ui\'s DatePicker');
+runMutationTest('The dates lose their visible label', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('aria-hidden="true">{{ f.label }}</span>', 'aria-hidden="true"></span>'), HR, 'each date has a visible label');
+runMutationTest('The range limit drifts from the server', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('maxDays: 92,', 'maxDays: 120,'), HR, 'matches team_hours.MAX_DAYS');
+runMutationTest('The range problem is not tied to the dates', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(", 'aria-describedby': rangeError ? 'hours-range-error' : null", ''), HR, 'announced and tied to the dates');
+runMutationTest('The period becomes a hand-rolled radiogroup again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('<ChoiceChips :options="periodOptions"', '<div role="radiogroup" @keydown="onPeriodKey"></div><ChoiceChips :options="periodOptions"'), HR, 'no second radiogroup of its own');
+runMutationTest('The period loses its name', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(':model-value="timesheetHorizon" aria-label="Period"', ':model-value="timesheetHorizon"'), HR, 'the period is the app\'s ChoiceChips');
+// TimeLog: the name, sessions under one heading per day, the state as a dot and a word
+runMutationTest('The page is called Logged time again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('>TimeLog</h2>', '>Logged time</h2>'), HR, 'the page is called TimeLog');
+runMutationTest('Entries are listed in one run, not by day', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('v-for="g in layout[p.user]"', 'v-for="g in [{ date: p.user, rows: [], total: 0 }]"'), HR, 'entries are listed under their day');
+runMutationTest('Each entry repeats its date', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('<span class="min-w-0 flex-1">', '<span>{{ shortDate(r.e.work_date) }}</span><span class="min-w-0 flex-1">'), HR, 'repeats neither its day\'s date');
+runMutationTest('Each row lists all its block\'s times again', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('{{ r.span }}</span>', '{{ spans(r.e) }}</span>'), HR, 'nor all its times');
+runMutationTest("A day's list has no name", SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace(' :aria-labelledby="dayId(p, g.date)"', ''), HR, 'named by its date heading');
+runMutationTest('Sessions sit on the block\'s day, not the day worked', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('e.sessions.forEach((s) => add(s.date,', 'e.sessions.forEach((s) => add(e.work_date,'), HR, 'on the day it was worked');
+runMutationTest('Oldest day comes first', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('[...byDate.keys()].sort().reverse()', '[...byDate.keys()].sort()'), HR, 'newest day first');
+runMutationTest('A day runs backwards', SRC('src/utils/timeLog.js'),
+  (code) => code.replace('.sort((a, b) => (a.from < b.from ? -1', '.sort((a, b) => (a.from > b.from ? -1'), HR, 'as the day went');
+runMutationTest('The state goes back to a pill', SRC('src/views/TimesheetsView.vue'),
+  (code) => code.replace('{{ status(r.e).label }}', '<Badge>{{ status(r.e).label }}</Badge>'), HR, 'not a pill');
+runMutationTest('Entries are read without their titles', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"work_item_label", "deliverable_notes", "approval_notes",', '"deliverable_notes", "approval_notes",'), HR, 'blocks are read with work_item_label');
+runMutationTest('Sessions are read without their times', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"session_date", "from_time", "to_time", "hours"', '"session_date", "hours"'), HR, 'sessions are read with from_time');
+runMutationTest('Sessions are sent without their name', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"name": s.name, "date": d,', '"date": d,'), HR, 'each session carries its name');
+runMutationTest('Everyone who reviews is told they may edit', SRC('omnitrack/api/team_hours.py'),
+  (code) => code.replace('"can_edit_times": can_change_others_time(user),', '"can_edit_times": everyone,'), HR, 'may change times, as update_work_session decides');
+runMutationTest('Anyone can change anyone\'s session', SRC('omnitrack/api/timesheet.py'),
+  (code) => { const at = code.indexOf('def update_work_session'); return code.slice(0, at) + code.slice(at).replace('\t_require_time_owner(doc)\n', '', 1); }, HR, 'only the owner or an OmniTrack Manager or Admin changes a session');
+
+// An older copy of the running session is that session, never "another session from the cloud"
+const SID = 'node scripts/check_session_identity.mjs';
+runMutationTest('An older copy of this session is taken for another one', WSYNC,
+  (code) => code.replace('    if (isOwnOlderCopy(sessionData)) { syncActiveSession(true); return false; }\n', ''), SID, 'the lines added here must stay');
+runMutationTest('An older copy of this session is not sent back up', WSYNC,
+  (code) => code.replace('if (isOwnOlderCopy(sessionData)) { syncActiveSession(true); return false; }', 'if (isOwnOlderCopy(sessionData)) { return false; }'), SID, 'goes back up');
+runMutationTest('The page forgets the starts it has had', WSYNC,
+  (code) => code.replace('    own.note(curStart, trackerBlockName.value);\n', ''), SID, 'must not put its older start back');
+runMutationTest('The page forgets the blocks it has had', SRC('src/utils/sessionLines.js'),
+  (code) => code.replace('      blocks.add(block || null);\n', ''), SID, 'a block bound here');
+runMutationTest('An ended session\'s starts are kept', WSYNC,
+  (code) => code.replace("watch(isTracking, (on) => { if (!on) own.forget(); }, { flush: 'sync' });", ''), SID, 'its starts are forgotten');
+runMutationTest('A copy without a block field is another session', WSYNC,
+  (code) => code.replace('((remote.trackerBlockName || null) !== (trackerBlockName.value || null) ||', '(remote.trackerBlockName !== trackerBlockName.value ||'), SID, 'without a block field');
+runMutationTest('Switched is said when nothing switched', WSYNC,
+  (code) => code.replace("if (restoreActiveSession(remote)) showToast('Switched to active session from cloud', 'info');", "restoreActiveSession(remote); showToast('Switched to active session from cloud', 'info');"), SID, 'is not "Switched');
+runMutationTest('An older copy puts back an older title', WSYNC,
+  (code) => code.replace('if (!keptLocal && remote.trackerNotes !== undefined', 'if (remote.trackerNotes !== undefined'), SID, 'older title');
+runMutationTest('A refused save is dropped without a word', WSYNC,
+  (code) => code.replace(".catch(reportSyncFailure);", ".catch(() => {});"), SID, 'a refused save says so');
+runMutationTest('A refused save is said on every try', WSYNC,
+  (code) => code.replace('    if (Date.now() - _lastSyncFailToast < 60000) return;\n', ''), SID, 'once a minute');
+runMutationTest('A different session is never taken', SRC('src/utils/sessionLines.js'),
+  (code) => code.replace('return differs && starts.some(', 'return differs || starts.some('), SID, 'never had is still taken');
 
 // Summary Report
 console.log('\n===========================================================');

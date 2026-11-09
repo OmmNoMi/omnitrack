@@ -51,7 +51,6 @@
         day-label="Worked on"
         time-label="From – to"
         :day-offsets="dayOffsets"
-        :durations="[15, 30, 60, 120]"
         :is-dark-mode="isDarkMode"
         quick-adjust
         :scheduled-start="trackerBoundBlock ? trackerBoundBlock.start_time : ''"
@@ -126,7 +125,7 @@
         day-label="Started on"
         time-label="Start – end"
         :day-offsets="[0, -1]"
-        :durations="[30, 60, 120, 240]"
+        :last-edit="liveAdjust.last_edit || ''"
         :is-dark-mode="isDarkMode"
         :is-live="true"
         :cap-to-now="true"

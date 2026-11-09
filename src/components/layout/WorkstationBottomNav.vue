@@ -1,5 +1,5 @@
 <template>
-  <!-- The pages used every day, around the session button, with Hours last. Projects is in
+  <!-- The pages used every day, around the session button, with TimeLog last. Projects is in
        the header's menu (WorkstationHeader "Go to"): seven targets crowded the bar. -->
   <nav
     class="fixed bottom-0 left-0 right-0 z-40 border-t flex items-center justify-around px-3 py-2 transition-colors pb-safe backdrop-blur-md"
@@ -114,27 +114,7 @@
         <span class="text-[10px] mt-0.5">Tasks</span>
       </Button>
 
-      <!-- Team: managers only -->
-      <Button
-        v-if="isManager"
-        variant="ghost"
-        :theme="activeTab === 'attendance' ? 'blue' : 'gray'"
-        size="sm"
-        class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
-        :class="activeTab === 'attendance' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
-        :aria-current="activeTab === 'attendance' ? 'page' : null"
-        label="Team"
-        @click="$emit('update:activeTab', 'attendance')"
-      >
-        <template #prefix>
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-          </svg>
-        </template>
-        <span class="text-[10px] mt-0.5">Team</span>
-      </Button>
-
-      <!-- Hours: logged time and each person's hours for the period (TimesheetsView) -->
+      <!-- TimeLog: everyone's logged time for the period, approved and flagged in place (TimesheetsView) -->
       <Button
         variant="ghost"
         :theme="activeTab === 'timesheets' ? 'blue' : 'gray'"
@@ -142,7 +122,7 @@
         class="flex-1 basis-0 !flex-col !h-auto !py-1 !px-1 !rounded-2xl transition-all cursor-pointer"
         :class="activeTab === 'timesheets' ? (isDarkMode ? '!text-blue-300 font-bold' : '!text-blue-700 font-bold') : (isDarkMode ? '!text-gray-300 font-medium' : '!text-gray-700 font-medium')"
         :aria-current="activeTab === 'timesheets' ? 'page' : null"
-        label="Hours"
+        label="TimeLog"
         @click="$emit('update:activeTab', 'timesheets')"
       >
         <template #prefix>
@@ -151,7 +131,7 @@
             <polyline points="12 7 12 12 15 14"></polyline>
           </svg>
         </template>
-        <span class="text-[10px] mt-0.5">Hours</span>
+        <span class="text-[10px] mt-0.5">TimeLog</span>
       </Button>
 
     </div>
@@ -164,7 +144,6 @@ export default {
   props: {
     isDarkMode: { type: Boolean, default: false },
     activeTab: { type: String, default: "dashboard" },
-    isManager: { type: Boolean, default: false },
     isTracking: { type: Boolean, default: false },
     bottomBarTimer: { type: Object, default: () => ({ isHours: false, primary: "00:00", hours: "0", minutes: "00", seconds: "00" }) },
     formattedTime: { type: String, default: "00:00:00" }

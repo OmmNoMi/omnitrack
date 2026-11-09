@@ -304,7 +304,8 @@ export function useWorkstationSessionClock(w) {
     getLastLocalStop,
     setLastLocalUpdate,
     getLastLocalUpdate,
-    cancelSyncDebounce
+    cancelSyncDebounce,
+    linesEditedAt
   } = sessionSyncStore;
   // A timesheet line is often a paragraph, not a phrase: the field grows with the
   // text, Shift+Enter breaks a line, and plain Enter still files the entry.
@@ -410,6 +411,7 @@ const plannerAnchor = ref('');
     setLastLocalUpdate,
     getLastLocalUpdate,
     cancelSyncDebounce,
+    linesEditedAt,
     growSessionPoint,
     onSessionPointEnter,
     onSessionPointUp,

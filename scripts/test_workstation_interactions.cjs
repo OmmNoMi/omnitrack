@@ -11,7 +11,6 @@ const composablePath = path.resolve(__dirname, '..', 'src', 'composables', 'useO
 const appVuePath = path.resolve(__dirname, '..', 'src', 'App.vue');
 const calVuePath = path.resolve(__dirname, '..', 'src', 'views', 'CalendarView.vue');
 const timeVuePath = path.resolve(__dirname, '..', 'src', 'views', 'TimesheetsView.vue');
-const attVuePath = path.resolve(__dirname, '..', 'src', 'views', 'AttendanceView.vue');
 const dashVuePath = path.resolve(__dirname, '..', 'src', 'views', 'DashboardView.vue');
 const calSectionDir = path.resolve(__dirname, '..', 'src', 'views', 'calendar');
 const calSectionPaths = fs.existsSync(calSectionDir) ? fs.readdirSync(calSectionDir).filter((f) => f.endsWith('.vue')).map((f) => path.join(calSectionDir, f)) : [];
@@ -46,7 +45,7 @@ const composableFiles = fs.existsSync(composablesDir)
   : [composablePath];
 
 const filesToInspect = [
-  omnitrackHtmlPath, ...composableFiles, appVuePath, calVuePath, timeVuePath, attVuePath, dashVuePath, ...dashSectionPaths, ...calSectionPaths,
+  omnitrackHtmlPath, ...composableFiles, appVuePath, calVuePath, timeVuePath, dashVuePath, ...dashSectionPaths, ...calSectionPaths,
   blockDrawerPath, ravenDrawerPath, sessionBoxPath, ...sessionSplitPaths,
   headerVuePath, bottomNavVuePath, hoverCardVuePath, sessionOverlayVuePath,
   drawerCoordinatorVuePath, ...storeFiles, ...dialogFiles
