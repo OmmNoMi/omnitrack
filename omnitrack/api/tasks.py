@@ -23,6 +23,7 @@ from omnitrack.services import (
 	TimesheetBridge,
 )
 from omnitrack.api.projects import CLOSED_TASK
+from omnitrack.utils.plain_html import is_rich, plain_to_html
 from omnitrack.utils.block_tasks import (
 	CHILD,
 	block_tasks as _block_tasks,
@@ -295,6 +296,7 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 	if not doctype or not docname:
 		return []
 
+	wf_name = None
 	try:
 		from frappe.model.workflow import get_workflow_name, get_transitions
 		wf_name = get_workflow_name(doctype)
@@ -302,8 +304,12 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 			doc = frappe.get_doc(doctype, docname)
 			transitions = get_transitions(doc)
 			actions = []
+			seen_actions = set()
 			for t in transitions:
 				act = t.action
+				if act in seen_actions:
+					continue
+				seen_actions.add(act)
 				act_l = act.lower()
 				style = "danger" if any(w in act_l for w in ("cancel", "reject", "drop")) \
 					else "success" if any(w in act_l for w in ("close", "complete", "approve", "done")) \
@@ -314,27 +320,53 @@ def get_task_workflow_actions(doctype, docname, current_status=None):
 					"next_state": t.next_state,
 					"style": style
 				})
-			if actions:
-				return actions
+			return actions
 	except Exception:
 		pass
+	if wf_name:
+		# Under a workflow only its transitions apply; apply_workflow refuses any other action
+		return []
 
 	# Standard actions fallback if no workflow or transitions empty
 	status = (current_status or "Open").lower()
 	fallback = []
-	if status not in ("completed", "closed"):
+	if status in ("cancelled", "completed", "closed"):
+		fallback.append({
+			"action": "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
+		return fallback
+
+	if status in ("on hold", "hold"):
+		fallback.append({
+			"action": "Resume" if doctype == "Task" else "Reopen",
+			"next_state": "Open",
+			"style": "primary"
+		})
 		fallback.append({
 			"action": "Complete" if doctype == "Task" else "Close Task",
 			"next_state": "Completed" if doctype == "Task" else "Closed",
 			"style": "success"
 		})
-	if status != "cancelled":
 		fallback.append({
 			"action": "Cancel Task",
 			"next_state": "Cancelled",
 			"style": "danger"
 		})
-	if status not in ("on hold", "hold"):
+		return fallback
+
+	fallback.append({
+		"action": "Complete" if doctype == "Task" else "Close Task",
+		"next_state": "Completed" if doctype == "Task" else "Closed",
+		"style": "success"
+	})
+	fallback.append({
+		"action": "Cancel Task",
+		"next_state": "Cancelled",
+		"style": "danger"
+	})
+	if doctype == "Task":
 		fallback.append({
 			"action": "Put on Hold",
 			"next_state": "On Hold",
@@ -370,9 +402,10 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 				doc.add_comment("Workflow", f"Action: {action}\n{comment}")
 			except Exception:
 				pass
-		frappe.db.commit()
 		state_field = frappe.get_doc("Workflow", wf_name).workflow_state_field
 		new_state = doc.get(state_field) or doc.get("status")
+		_sync_task_status_to_blocks(doctype, docname, doc, new_state)
+		frappe.db.commit()
 		return {
 			"status": "success",
 			"message": _("Workflow action '{0}' applied to {1} {2} (New State: {3})").format(
@@ -388,6 +421,8 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			doc.status = "Completed" if doctype == "Task" else "Closed"
 		elif "cancel" in act_lower:
 			doc.status = "Cancelled"
+		elif "resume" in act_lower or "reopen" in act_lower or act_lower == "open":
+			doc.status = "Open"
 		elif "hold" in act_lower:
 			doc.status = "On Hold" if doctype == "Task" else "Open"
 		elif "progress" in act_lower or "start" in act_lower or "work" in act_lower:
@@ -401,6 +436,7 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 				doc.add_comment("Comment", f"Status updated to {doc.status}: {comment}")
 			except Exception:
 				pass
+		_sync_task_status_to_blocks(doctype, docname, doc, doc.status)
 		frappe.db.commit()
 		return {
 			"status": "success",
@@ -411,6 +447,33 @@ def execute_task_workflow_action(doctype, docname, action, comment=None):
 			"docname": docname,
 			"new_state": doc.status
 		}
+
+
+def _sync_task_status_to_blocks(doctype, docname, doc, new_state):
+	"""A Task done or reopened is done or open on the blocks that hold it.
+
+	Only Open and Completed rows follow the Task. A Rescheduled row has moved to another block
+	and stays as it is, and a row already done keeps the time it was done."""
+	is_done = doc.get("status") in ("Completed", "Closed") or str(new_state).lower() in ("completed", "closed", "done")
+	want = "Completed" if is_done else "Open"
+	for r in frappe.get_all(
+		CHILD,
+		filters={
+			"parenttype": "Planned Work Block",
+			"reference_doctype": doctype,
+			"reference_name": docname,
+			"status": ("in", ("Open", "Completed")),
+		},
+		fields=["name", "status"],
+		limit_page_length=0,
+	):
+		if r.status == want:
+			continue
+		frappe.db.set_value(
+			CHILD, r.name,
+			{"status": want, "completed_at": frappe.utils.now_datetime() if is_done else None},
+			update_modified=False,
+		)
 
 
 @frappe.whitelist()
@@ -603,7 +666,13 @@ def _workflow_of(doc):
 	if wf:
 		field = frappe.get_cached_value("Workflow", wf, "workflow_state_field") or "workflow_state"
 		try:
-			moves = [{"action": t.action, "next_state": t.next_state} for t in get_transitions(doc)]
+			# A move is sent by its action alone, so one action shows once (it has a row per role)
+			seen = set()
+			moves = []
+			for t in get_transitions(doc):
+				if t.action not in seen:
+					seen.add(t.action)
+					moves.append({"action": t.action, "next_state": t.next_state})
 		except Exception:
 			moves = []
 		return {"workflow": wf, "state": doc.get(field) or "", "actions": moves}
@@ -622,19 +691,29 @@ def _task_form(doc):
 		"priority": doc.get("priority") or "",
 		"priorities": _priorities(doc.doctype),
 		"project": doc.get("project") or (doc.get("reference_name") if doc.get("reference_type") == "Project" else "") or "",
+		"description": doc.get("description") or "",
 		"can_edit": bool(doc.has_permission("write")),
 		**_workflow_of(doc),
 	}
 
 
-def _edit_task_doc(doc, subject=None, due_date=None, priority=None):
+def _edit_task_doc(doc, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the edits on the Task or ToDo, then every work block's copy of its name."""
 	if not doc.has_permission("write"):
 		frappe.throw(_("You can't edit {0} {1}. Ask its owner.").format(_(doc.doctype), doc.name), frappe.PermissionError)
 	is_task = doc.doctype == "Task"
 	old_label = doc.subject if is_task else _todo_subject(doc.description)
-	if subject is not None:
-		doc.set("subject" if is_task else "description", subject[:140] if is_task else subject)
+	if is_task:
+		if subject is not None:
+			doc.subject = subject[:140]
+		if description is not None:
+			# The form's box is plain text; a description with links or lists is edited in the desk
+			if is_rich(doc.description):
+				frappe.throw(_("This description has formatting. Edit it in the desk so it is kept."))
+			doc.description = plain_to_html(description)
+	elif subject is not None:
+		# A ToDo's description is its title, so only the title edits it
+		doc.description = subject
 	if due_date is not None:
 		doc.set("exp_end_date" if is_task else "date", due_date or None)
 	if priority:
@@ -674,10 +753,10 @@ def get_task(doctype, name):
 
 
 @frappe.whitelist()
-def update_task(doctype, name, subject=None, due_date=None, priority=None):
+def update_task(doctype, name, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the task form for a Task or ToDo, wherever it was opened from."""
 	doc = _task_doc(doctype, name, "write")
-	_edit_task_doc(doc, _clean_subject(subject), due_date, priority)
+	_edit_task_doc(doc, _clean_subject(subject), due_date, priority, description)
 	return {"status": "success", "task": _task_form(doc)}
 
 
@@ -687,7 +766,7 @@ def get_block_task(block_name, task_ref):
 	row = _block_row(_get_block(block_name, write=False), task_ref)
 	doc = _linked_doc(row)
 	out = {"doctype": "Item", "name": None, "subject": row.subject, "status": row.status, "due_date": "",
-		"priority": "", "priorities": [], "project": row.project or "", "can_edit": True,
+		"priority": "", "priorities": [], "project": row.project or "", "description": "", "can_edit": True,
 		"workflow": None, "state": row.status or "Open", "actions": []}
 	if doc:
 		out.update(_task_form(doc))
@@ -706,7 +785,7 @@ def _title_follows(block, subject):
 
 
 @frappe.whitelist()
-def update_block_task(block_name, task_ref, subject=None, due_date=None, priority=None):
+def update_block_task(block_name, task_ref, subject=None, due_date=None, priority=None, description=None):
 	"""Saves the task form for one of a block's tasks: on the Task or ToDo itself, then the block's copy."""
 	block = _get_block(block_name)
 	row = _block_row(block, task_ref)
@@ -714,7 +793,7 @@ def update_block_task(block_name, task_ref, subject=None, due_date=None, priorit
 	subject = _clean_subject(subject)
 	doc = _linked_doc(row)
 	if doc:
-		row.subject = _edit_task_doc(doc, subject, due_date, priority)
+		row.subject = _edit_task_doc(doc, subject, due_date, priority, description)
 	elif subject is not None:
 		row.subject = subject[:140]
 	if block.work_item == row.work_item and _title_follows(block, old_subject):

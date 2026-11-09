@@ -11,7 +11,7 @@ import { dropUrlQuery } from "../utils/backNavigation.js";
  * Shares state with its sibling modules through the `w` context bag.
  */
 export function useWorkstationEod(w) {
-  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
+  const { _appMenuOutside, _dropdownOutside, _slashFocus, activeBlock, activeTab, applyTheme, checkBlockOverrun, checkInactivity, checkRemoteActiveSession, confirmStillWorking, fetchPlannerData, fetchTaskRavenDetails, fetchWorkstationData, getLocalTodayISO, handleRemoteSessionCleared, handleResize, isDarkMode, isManager, isTracking, lastActivityTime, nowMinute, playInactivityChime, playOverrunChime, playStartOnTimeChime, playUpcoming10mChime, postJSON, ravenChannel, ravenTask, reconcileActiveSession, recordUserActivity, restoreActiveSession, scrollPlannerToMorning, selectedDashboardDate, selectedEmployee, session, showAppMenu, showBlockDrawer, showBookModal, showCancelModal, showEditSessionModal, showInactivityModal, showNatureFilter, showStartTimeChoiceModal, showSwitchConfirmModal, showSessionDrawer, showTaskRavenDrawer, showToast, showTrackerPopup, startNowClock, stopNowClock, todayDate, toggleTrack, trackerTimer, unlockAudio } = w;
   let _livePollTimer = null;
   let _reminderTimer = null;
 
@@ -308,7 +308,9 @@ export function useWorkstationEod(w) {
     // this window is not in front, not only when its tab is hidden.
     const alertKeyFor = (data) => {
       const kind = data.alert_type || '';
-      if (!data.block_name || (kind !== 'upcoming_10m' && kind !== 'start_on_time')) return '';
+      if (!data.block_name || (kind !== 'upcoming_10m' && kind !== 'start_on_time')) {
+        return kind === 'inactivity' ? `omnitrack:inact:${localISO(new Date())}:${new Date().getHours()}:${data.user || ''}` : '';
+      }
       return reminderKey(localISO(new Date()), data.block_name, kind);
     };
     const handleIncomingBlockAlert = (data) => {
@@ -327,6 +329,17 @@ export function useWorkstationEod(w) {
       } else if (aType === 'start_on_time') {
         playStartOnTimeChime();
         showToast(data.title || 'Time to start your planned block', 'success');
+      } else if (aType === 'inactivity' || (data.title || '').includes('still working')) {
+        // Only for a session still running here, and once: the server alert can land after a stop
+        if (!isTracking.value || showInactivityModal.value) return;
+        if (w.lastInactivityAlertTime) w.lastInactivityAlertTime.value = Date.now();
+        showToast(data.title || 'Are you still working?', 'warning');
+        playInactivityChime();
+        showInactivityModal.value = true;
+      } else if (aType === 'block_overrun' || (data.title || '').includes('Planned block ended') || (data.title || '').includes('Planned Block Ended')) {
+        // The visual first, so a sound that fails never hides the alert
+        showToast(data.message || data.title || 'Planned block ended', 'warning');
+        playOverrunChime();
       } else {
         playInactivityChime();
         showToast(data.title || 'OmniTrack Alert', 'info');
@@ -399,18 +412,14 @@ export function useWorkstationEod(w) {
     window.addEventListener('keydown', unlockAudio, { passive: true });
 
     // Listen for visibility change to immediately sync timer & fetch fresh active session on phone wake
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        checkRemoteActiveSession();
-        fetchWorkstationData(selectedEmployee.value);
-        checkInactivity();
-        checkBlockOverrun();
-      }
-    });
-    window.addEventListener('focus', () => {
-      checkInactivity();
-      checkBlockOverrun();
-    });
+    // Phone wake and desktop window focus: read the server's session first, then check alerts
+    const onWake = async (refetch) => {
+      await checkRemoteActiveSession();
+      if (refetch) fetchWorkstationData(selectedEmployee.value);
+      if (isTracking.value) { checkInactivity(); checkBlockOverrun(); }
+    };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onWake(true); });
+    window.addEventListener('focus', () => onWake(false));
 
     // 1. Rock-solid background poller (every 2s for instant multi-device reflection)
     _livePollTimer = setInterval(checkRemoteActiveSession, 2000);
@@ -443,15 +452,11 @@ export function useWorkstationEod(w) {
             reconcileActiveSession(data);
           }
         });
-        socket.on('omnitrack:active_session_cleared', () => {
-          handleRemoteSessionCleared({ authoritative: true });
+        socket.on('omnitrack:active_session_cleared', (data) => {
+          handleRemoteSessionCleared({ authoritative: true, startTime: data && data.startTime });
         });
-        socket.on('omnitrack:block_alert', (data) => {
-          handleIncomingBlockAlert(data);
-        });
-        socket.on('omnitrack:timesheet_reminder', (data) => {
-          handleIncomingBlockAlert(data);
-        });
+        socket.on('omnitrack:block_alert', (data) => handleIncomingBlockAlert(data));
+        socket.on('omnitrack:timesheet_reminder', (data) => handleIncomingBlockAlert(data));
       } catch (e) {
         console.debug('Socket.io connection bypassed, live poller active', e);
       }
@@ -459,15 +464,11 @@ export function useWorkstationEod(w) {
       frappe.realtime.on('omnitrack:active_session_updated', (data) => {
         if (data && data.status === 'active') reconcileActiveSession(data);
       });
-      frappe.realtime.on('omnitrack:active_session_cleared', () => {
-        handleRemoteSessionCleared({ authoritative: true });
+      frappe.realtime.on('omnitrack:active_session_cleared', (data) => {
+        handleRemoteSessionCleared({ authoritative: true, startTime: data && data.startTime });
       });
-      frappe.realtime.on('omnitrack:block_alert', (data) => {
-        handleIncomingBlockAlert(data);
-      });
-      frappe.realtime.on('omnitrack:timesheet_reminder', (data) => {
-        handleIncomingBlockAlert(data);
-      });
+      frappe.realtime.on('omnitrack:block_alert', (data) => handleIncomingBlockAlert(data));
+      frappe.realtime.on('omnitrack:timesheet_reminder', (data) => handleIncomingBlockAlert(data));
     }
   });
   onUnmounted(() => {

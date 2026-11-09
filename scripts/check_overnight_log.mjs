@@ -118,6 +118,43 @@ const dtf = read("src/components/common/DayTimeFields.vue");
 if (!/<span aria-hidden="true">\{\{ timeLabel \}\}<\/span><span v-if="mins > 0 && !durations\.includes\(mins\)"[^>]*>\{\{ ' · ' \}\}\{\{ durationLabel\(mins\) \}\}<\/span><\/p>/.test(dtf) || /<ChoiceChips :options="durationOptions"[^\n]*\n\s*<span v-if="mins > 0/.test(dtf)) problems.push("src/components/common/DayTimeFields.vue: a length no chip names sits beside the label, not alone under the chips");
 if (chipLists.length !== 2) problems.push("src/session/SessionControlsPane.vue: both session boxes pass their own short list of lengths");
 
+// 8. A live session's end list stops at now (plus a step), never laps the clock: started at
+// 01:00 and still running at 00:30 the next night, no end is offered twice or at the start.
+const { localISO, toMin, toHHMM } = await import("../src/utils/clockTime.js");
+const lap = endTimeOptions("01:00", { capToNow: true, nowHHMM: "00:30", currentEnd: "00:45" });
+const lapValues = lap.map((o) => o.value);
+if (new Set(lapValues).size !== lapValues.length) problems.push(`endTimeOptions("01:00", now 00:30) offers an end twice: ${lapValues.filter((v, i) => lapValues.indexOf(v) !== i).join(", ")}`);
+if (lapValues.includes("01:00")) problems.push(`endTimeOptions("01:00", now 00:30) offers the start itself, a whole day on`);
+const short = endTimeOptions("09:00", { capToNow: true, nowHHMM: "09:10" });
+if (!short.some((o) => o.value === "10:00") || short.some((o) => spanMins("09:00", o.value) > 60)) problems.push(`endTimeOptions("09:00", now 09:10) should offer up to an hour: ${short.map((o) => o.value).join(", ")}`);
+
+// 9. Moving the start back past midnight moves the day back too (the real method, run here).
+const dtfSrc = read("src/components/common/DayTimeFields.vue");
+const nudgeAt = dtfSrc.indexOf("nudgeStart(deltaMins) {");
+const nudgeBody = nudgeAt < 0 ? "" : dtfSrc.slice(nudgeAt + "nudgeStart(deltaMins) {".length, dtfSrc.indexOf("\n    },\n", nudgeAt));
+const runNudge = (props, delta) => {
+  const emitted = {};
+  const self = { ...props, isLive: true, mins: spanMins(props.start, props.end), $emit: (ev, v) => { emitted[ev] = v; } };
+  new Function("localISO", "toMin", "toHHMM", "deltaMins", nudgeBody).call(self, localISO, toMin, toHHMM, delta);
+  return emitted;
+};
+try {
+  const back = runNudge({ date: "2026-11-01", start: "00:10", end: "01:00" }, -30);
+  if (back["update:start"] !== "23:40" || back["update:date"] !== "2026-10-31") problems.push(`00:10 on Nov 1 less 30 minutes is ${back["update:date"]} ${back["update:start"]}, want 2026-10-31 23:40`);
+  const same = runNudge({ date: "2026-11-01", start: "09:00", end: "10:00" }, -15);
+  if (same["update:start"] !== "08:45" || "update:date" in same) problems.push(`09:00 less 15 minutes should stay on the day at 08:45; got ${JSON.stringify(same)}`);
+} catch (e) {
+  problems.push(`src/components/common/DayTimeFields.vue nudgeStart: could not run it (${e.message})`);
+}
+
+// 10. The quick start/end buttons are the session boxes' alone, in two labelled groups.
+if (!/<div v-if="quickAdjust"/.test(dtfSrc)) problems.push("src/components/common/DayTimeFields.vue: the quick start/end buttons show only with quick-adjust");
+if ((dtfSrc.match(/role="group" aria-label="Adjust the (?:start|end)"/g) || []).length !== 2) problems.push("src/components/common/DayTimeFields.vue: the quick buttons sit in two labelled groups, start and end");
+if ((read("src/session/SessionControlsPane.vue").match(/^\s*quick-adjust$/gm) || []).length !== 2) problems.push("src/session/SessionControlsPane.vue: both session boxes pass quick-adjust");
+for (const f of ["src/components/dialogs/PlanWorkBlockDialog.vue", "src/drawers/RescheduleBlockDialog.vue"]) {
+  if (/quick-adjust|quickAdjust/.test(read(f))) problems.push(`${f}: planning has no quick start/end buttons`);
+}
+
 if (problems.length) {
   console.error("FAIL: overnight work\n  " + problems.join("\n  "));
   process.exit(1);

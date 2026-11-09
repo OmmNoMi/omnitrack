@@ -733,16 +733,17 @@ def delete_work_block(block_name):
 	if doc.employee != frappe.session.user and not _is_planner_manager():
 		frappe.throw(_("Not permitted to delete this work block."), frappe.PermissionError)
 
-	from omnitrack.permissions import check_planned_block_past_lock
-	# Past planned work blocks cannot be deleted by anyone
-	check_planned_block_past_lock(doc)
+	from omnitrack.permissions import check_planned_block_past_lock, is_omnitrack_manager
+	# Past blocks are locked for everyone except managers, who may remove unworked past blocks.
+	if not is_omnitrack_manager(frappe.session.user):
+		check_planned_block_past_lock(doc)
 
 	if flt(doc.actual_hours) > 0:
 		frappe.throw(_("This block has logged work sessions. Cancel it with a reason instead of deleting."))
+	# Applies to managers too: these blocks hold plan-vs-actual history and their reasons.
 	if doc.status in ("In Progress", "Completed", "Logged (Full)", "Logged (Partial)", "Logged (Over)", "Rescheduled", "Cancelled"):
 		frappe.throw(_("Committed, rescheduled, or cancelled blocks cannot be deleted to preserve reporting integrity."))
-	doc.flags.ignore_permissions = True
-	doc.flags.ignore_past_block_lock = True
+	# frappe.delete_doc loads its own copy, so on_trash runs its own checks.
 	frappe.delete_doc("Planned Work Block", block_name, force=True)
 	return {"status": "success"}
 

@@ -1,5 +1,5 @@
 import { lazy } from "./workstationBag.js";
-import { ref, computed, nextTick } from "vue";
+import { ref, computed, nextTick, watch } from "vue";
 import { WORK } from "../utils/activity.js";
 import { hoursMinutes } from "../utils/clockTime.js";
 import { useWorkstationTimeline } from "./useWorkstationTimeline.js";
@@ -206,8 +206,17 @@ export function useWorkstationSessionClock(w) {
     const _ = trackerSeconds.value;
     return Math.min(Date.now(), inactivityIdleSince.value + 15 * 60 * 1000);
   });
+  watch(isTracking, (tracking) => {
+    if (!tracking) {
+      showInactivityModal.value = false;
+      lastInactivityAlertTime.value = 0;
+    }
+  });
   const checkInactivity = () => {
-    if (!isTracking.value) return;
+    if (!isTracking.value) {
+      if (showInactivityModal.value) showInactivityModal.value = false;
+      return;
+    }
     const now = Date.now();
     const act = lastNoteMs();
     const idleMs = now - act;
@@ -221,6 +230,7 @@ export function useWorkstationSessionClock(w) {
         idleSinceMs.value = act;
         showInactivityModal.value = true;
         playInactivityChime();
+        showToast(`Nothing logged for ${hoursMinutes(Math.floor(idleMs / 60000))}. Are you still working?`, 'warning');
         dispatchInactivityNotification(`Nothing logged on "${trackerNotes.value || 'the running session'}" for ${hoursMinutes(Math.floor(idleMs / 60000))}.`);
       }
     }
@@ -253,6 +263,7 @@ export function useWorkstationSessionClock(w) {
     postJSON,
     showToast,
     isTracking,
+    showInactivityModal,
     startTime,
     trackerSeconds,
     trackerTimer,
@@ -364,6 +375,7 @@ const plannerAnchor = ref('');
     recordUserActivity,
     playUpcoming10mChime,
     playStartOnTimeChime,
+    playOverrunChime,
     playInactivityChime,
     unlockAudio,
     notificationPermission,

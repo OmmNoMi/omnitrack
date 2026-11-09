@@ -290,6 +290,27 @@ runMutationTest(
   'needs !important'
 );
 runMutationTest(
+  "DatePicker popover loses today's accent ring",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('box-shadow: inset 0 0 0 1.5px #1d4ed8;', ''),
+  'node scripts/check_dialog_popovers.cjs',
+  "visually highlight today's date"
+);
+runMutationTest(
+  "DatePicker popover today accent loses dark mode styling",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('.dark [data-reka-popper-content-wrapper] button.font-extrabold.text-ink-gray-9:not(.bg-surface-gray-6)', '/* dark-removed */'),
+  'node scripts/check_dialog_popovers.cjs',
+  'dark mode styling'
+);
+runMutationTest(
+  "DatePicker today cell loses its focus outline",
+  path.resolve(omnitrackDir, 'src/styles/main.css'),
+  (code) => code.replace('outline: 2px solid #1d4ed8;', ''),
+  'node scripts/check_dialog_popovers.cjs',
+  'visible focus outline'
+);
+runMutationTest(
   'Document Escape handler stops skipping events a popover already handled',
   path.resolve(omnitrackDir,'src/composables/useWorkstationEod.js'),
   (code) => code.replace('    if (e.defaultPrevented) return;\n', ''),
@@ -500,12 +521,30 @@ runMutationTest('Every task row becomes a tab stop', drawerDir('BlockTasksSectio
 const taskFormFile = path.resolve(omnitrackDir,'src/components/dialogs/TaskFormDialog.vue');
 runMutationTest('Saving a task sends every field', taskFormFile,
   (code) => code.replace('...this.changes', '...this.form'), DP, 'only what changed');
-runMutationTest('A workflow move skips its confirm', taskFormFile,
-  (code) => code.replace('onClick: () => this.ask(a),', 'onClick: () => { this.confirming = a; this.move(); },'), DP, 'ask first');
+runMutationTest('A workflow move is not staged', taskFormFile,
+  (code) => code.replace('onClick: () => this.ask(a),', 'onClick: () => {},'), DP, 'stage and execute on save');
 runMutationTest('The task form hides where the task stands', taskFormFile,
-  (code) => code.replace("{{ detail.state || 'Open' }}", "{{ detail.subject }}"), DP, 'where the task stands');
-runMutationTest('Escape closes the form from a move\'s confirm', taskFormFile,
-  (code) => code.replace(':esc-back="!!confirming"', ''), DP, 'steps back');
+  (code) => code.replace("{{ currentState }}", "{{ detail.subject }}"), DP, 'where the task stands');
+runMutationTest('Staging status does not enable Save', taskFormFile,
+  (code) => code.replace('|| !!this.stagedAction', ''), DP, 'status changes stage state and enable Save without confirming box');
+runMutationTest('A ToDo gets a second description box', taskFormFile,
+  (code) => code.replace("return this.detail.doctype === 'Task';", "return true;"), DP, 'for Tasks only');
+runMutationTest('A formatted description is sent and flattened', taskFormFile,
+  (code) => code.replace("if (k === 'description' && (!this.hasDescription || this.richDescription)) continue;", "if (k === 'description' && !this.hasDescription) continue;"), DP, 'locked and never sent');
+runMutationTest('&amp; is decoded before the other entities', taskFormFile,
+  (code) => code.replace("    .replace(/&nbsp;/g, ' ')\n", "    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n"), DP, 'converter case 1');
+runMutationTest('Links count as plain text', taskFormFile,
+  (code) => code.replace("const PLAIN_TAGS = ['p', 'br', 'div', 'span'];", "const PLAIN_TAGS = ['p', 'br', 'div', 'span', 'a'];"), DP, 'converter case 4');
+runMutationTest('Complete draws the picked check mark', path.resolve(omnitrackDir, 'src/utils/taskState.js'),
+  (code) => code.replace("  if (/cancel|reject|drop/.test(a)) return 'x';", "  if (/complete/.test(a)) return 'check';\n  if (/cancel|reject|drop/.test(a)) return 'x';"), DP, 'never uses the check mark');
+runMutationTest('The task form drops the Description field', taskFormFile,
+  (code) => code.replace('label="Description"', 'label="Notes"'), DP, 'must include Description field');
+runMutationTest('FIELDS loses description in task form', taskFormFile,
+  (code) => code.replace("'description'", "'desc'"), DP, 'FIELDS');
+runMutationTest('update_task drops description argument', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('def update_task(doctype, name, subject=None, due_date=None, priority=None, description=None):', 'def update_task(doctype, name, subject=None, due_date=None, priority=None):'), DP, 'must accept description');
+runMutationTest('_task_form drops description', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('"description": doc.get("description") or "",', ''), DP, 'must return description');
 const DA = 'node scripts/check_doc_activity.mjs';
 runMutationTest('The task panel loses its Activity', drawerDir('TaskDetailDrawer.vue'),
   (code) => code.replace('<DocActivity v-if="d" :doctype="doc.doctype" :name="doc.name" :is-dark-mode="isDarkMode" />', ''), DA, "task's or to-do's own Activity");
@@ -735,6 +774,16 @@ runMutationTest('Planner serialises empty times as 00:00:00 again', path.resolve
 const TP = path.resolve(omnitrackDir,'omnitrack/utils/task_parity.py');
 const TPT = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_task_parity`;
 const PWBC = path.resolve(omnitrackDir,'omnitrack/omnitrack/doctype/planned_work_block/planned_work_block.py');
+const PH = path.resolve(omnitrackDir, 'omnitrack/utils/plain_html.py');
+const TKS = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
+runMutationTest('A saved description loses its line breaks', PH,
+  (code) => code.replace('.replace("\\n", "<br>")', ''), TPT, 'test_lines_and_paragraphs_survive');
+runMutationTest('A saved description is not escaped', PH,
+  (code) => code.replace('html.escape(p.strip())', 'p.strip()'), TPT, 'test_text_is_escaped');
+runMutationTest('Links count as a plain description', PH,
+  (code) => code.replace('_PLAIN_TAGS = {"p", "br", "div", "span"}', '_PLAIN_TAGS = {"p", "br", "div", "span", "a"}'), TPT, 'test_formatting_is_rich');
+runMutationTest('A formatted description is overwritten', TKS,
+  (code) => code.replace('\t\t\tif is_rich(doc.description):\n', '\t\t\tif False:\n'), TPT, 'test_a_rich_description_is_never_overwritten');
 runMutationTest("A block on someone else's task leaves its person off it", TP,
   (code) => code.replace('and name in task_assignees and person not in task_assignees[name]:', 'and name in task_assignees and not task_assignees[name]:'), TPT, 'test_someone_elses_task_gets_the_blocks_person_added');
 runMutationTest('A deleted task is assigned anyway', TP,
@@ -862,6 +911,10 @@ runMutationTest('clean_session_tasks keeps duplicate refs', SRC('omnitrack/utils
   (code) => code.replace(' or t["ref"] in seen', ''), DP, 'clean_session_tasks must dedupe');
 runMutationTest('A session tool is no longer squared', SRC('src/session/SessionControlsPane.vue'),
   (code) => code.replace(':class="TOOL_SQUARE"\n            :tabindex="activeToolIndex === 2', ':tabindex="activeToolIndex === 2'), DP, 'each of the 3 session tools');
+runMutationTest('Mobile session tools drop 40px touch target', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('max-[479px]:!w-10', 'max-[479px]:w-7'), DP, '!w-10');
+runMutationTest('Mobile session tools shrink their icons', SRC('src/session/SessionControlsPane.vue'),
+  (code) => code.replace('max-[479px]:[&_svg]:!w-6 max-[479px]:[&_svg]:!h-6', ''), DP, '[&_svg]:!w-6');
 runMutationTest('Escape on a time list in a dialog drops focus to the page', SRC('src/components/common/FDialog.vue'),
   (code) => code.replace('          if (field && field.isConnected && now !== field && (now === document.body || (panel && panel.contains(now)))) focusBack(field);\n', ''), DP, 'focus stays on its field');
 runMutationTest('A closed day calendar leaves focus on another field', SRC('src/components/common/FDialog.vue'),
@@ -1065,6 +1118,14 @@ runMutationTest('Adjust stops measuring past midnight', SRC('src/session/Session
   (code) => code.replace('spanMins(ws.liveAdjust.value.from_time, ws.liveAdjust.value.to_time)', 'Math.max(0, toMin(ws.liveAdjust.value.to_time) - toMin(ws.liveAdjust.value.from_time))'), ON, 'SessionControlsPane.vue');
 runMutationTest('An overnight end is an hour off the night the clocks change', SRC('src/utils/timesheetEntry.js'),
   (code) => code.replace('return new Date(y, m - 1, d, 0, toMin(from) + mins).getTime();', 'return new Date(y, m - 1, d, 0, 0, 0).getTime() + (toMin(from) + mins) * 60000;'), ON, 'the clocks change that night');
+runMutationTest('A live end list laps the clock past a whole day', SRC('src/utils/clockTime.js'),
+  (code) => code.replace(' && m < start + 24 * 60; m += 15', '; m += 15'), ON, 'offers the start itself, a whole day on');
+runMutationTest('A live end list stops short of the hour', SRC('src/utils/clockTime.js'),
+  (code) => code.replace('m <= start + maxSpan &&', 'm < start + maxSpan &&'), ON, 'should offer up to an hour');
+runMutationTest('Moving the start back past midnight keeps the day', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace('if (moved < 0 && this.date) {', 'if (false) {'), ON, 'less 30 minutes is');
+runMutationTest('Planning shows the session quick buttons', SRC('src/components/common/DayTimeFields.vue'),
+  (code) => code.replace('<div v-if="quickAdjust"', '<div'), ON, 'show only with quick-adjust');
 runMutationTest('An overnight end lands on its start day', SRC('src/utils/timesheetEntry.js'),
   (code) => code.replace('0, toMin(from) + mins)', '0, (toMin(from) + mins) % 1440)'), ON, 'a session from 20:19 stopped at 01:10');
 
@@ -1355,6 +1416,29 @@ runMutationTest('The kind and record name run together for a screen reader', SRC
   (code) => code.replace('<span class="sr-only">, </span>{{ docName }}', '{{ docName }}'), DK, 'a hidden comma parts the kind');
 runMutationTest('The task panel shows a bare status chip again', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<dt :class="mutedText">Status</dt>', ''), DK, 'the Status fact is named');
+runMutationTest('The task panel hides the Due row when unset', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('<template v-if="d">\n              <dt :class="mutedText">Due</dt>', '<template v-if="due">\n              <dt :class="mutedText">Due</dt>'), DK, 'Due is always shown when the task is loaded');
+runMutationTest('The task panel drops quick deadline presets', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('const days = this.quickPresets.map(', 'const days = [].map('), DK, 'quick deadline presets are offered');
+runMutationTest('The deadline menu marks the current day by colour only', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace("this.dueISO === p.iso ? ', current' : ''", "''"), DK, 'says which day is current');
+runMutationTest('The deadline button is named without its date', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace(':label="dueLabel"', 'label="Change deadline"'), DK, 'starts with the date it shows');
+runMutationTest('Closing the date picker drops focus', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace('this.showCustomPicker = false;\n      this.focusDueBtn();', 'this.showCustomPicker = false;'), DK, 'keep keyboard focus');
+runMutationTest('A composable reads a chime no composable publishes', SRC('src/composables/useWorkstationSessionClock.js'),
+  // The last match is the return list (the publish); the first is the read from the audio store
+  (code) => { const a = '    playStartOnTimeChime,\n    playOverrunChime,\n'; const i = code.lastIndexOf(a); return code.slice(0, i) + '    playStartOnTimeChime,\n' + code.slice(i + a.length); }, 'node scripts/check_workstation_wiring.mjs', 'reads playOverrunChime from w');
+runMutationTest('Deadline presets count days in UTC', SRC('src/utils/deadlinePresets.js'),
+  (code) => code.replace('localISO(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n))', 'new Date(now.getFullYear(), now.getMonth(), now.getDate() + n).toISOString().slice(0, 10)'), DK, 'deadlinePresets(');
+runMutationTest('Date menu grows past five entries', SRC('src/utils/deadlinePresets.js'),
+  (code) => code.replace("  return [\n", "  return [\n    { id: 'today', label: 'Today', iso: plus(now, 0), tooltip: 'Due today' },\n"), DK, 'at most three quick days');
+runMutationTest('Friday preset lands on today', SRC('src/utils/deadlinePresets.js'),
+  (code) => code.replace('(5 - day + 7) % 7 || 7', '(5 - day + 7) % 7'), DK, 'deadlinePresets(');
+runMutationTest('Saving a deadline disables the focused preset', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace(`aria-haspopup="menu"\n                    :aria-disabled="savingDue ? 'true' : null"`, `aria-haspopup="menu"\n                    :disabled="savingDue"`), DK, 'keep keyboard focus');
+runMutationTest('Setting deadline does not persist via update_task', SRC('src/drawers/TaskDetailDrawer.vue'),
+  (code) => code.replace("postJSON('update_task'", "postJSON('skip_task'"), DK, 'setDeadline persists the date via update_task');
 runMutationTest('Workflow steps leave the action bar', SRC('src/drawers/TaskDetailDrawer.vue'),
   (code) => code.replace('<Button v-for="(m, i) in shownMoves"', '<Button v-if="false" v-for="(m, i) in shownMoves"'), DK, 'buttons at the start of the action bar');
 runMutationTest("A block's task title opens nothing", SRC('src/drawers/BlockTasksSection.vue'),
@@ -1704,8 +1788,12 @@ runMutationTest('The delete dialog is never mounted', SRC('src/App.vue'),
   (code) => code.replace('<DeleteEntryDialog />', ''), DR, 'App mounts DeleteEntryDialog');
 runMutationTest('A refused task save is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not save this task: ' + (e && e.message || e), 'danger');"), DR, 'save says why in the dialog');
-runMutationTest('A refused workflow move is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
-  (code) => code.replace("this.error = 'Not moved. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not move this task: ' + (e && e.message || e), 'danger');"), DR, 'a workflow move says why in the dialog');
+runMutationTest('A refused move after saved edits says nothing was saved', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Your edits are saved, but the status did not change. ' + this.extractErrorMessage(e, 'Try again.');", "this.error = 'Not saved. ' + this.extractErrorMessage(e, 'Try again.');"), DR, 'a refused move after saved edits');
+runMutationTest('A picked status is shown only by colour', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace('<p v-if="stagedAction" role="status"', '<p v-if="false" role="status"'), DR, 'said in words');
+runMutationTest('A refused task removal is a toast again', SRC('src/components/dialogs/TaskFormDialog.vue'),
+  (code) => code.replace("this.error = 'Not taken off. ' + this.extractErrorMessage(e, 'Try again.');", "this.showToast('Could not remove: ' + (e && e.message || e), 'danger');"), DR, 'remove');
 runMutationTest('A task that will not open closes the form', SRC('src/components/dialogs/TaskFormDialog.vue'),
   (code) => code.replace("this.error = 'Could not open this task. ' + this.extractErrorMessage(e, 'Try again.');", "this.error = 'Could not open this task.';\n        closeTaskForm();"), DR, 'not a toast and a closed form');
 runMutationTest('A refused block edit is a toast again', SRC('src/drawers/EditBlockDialog.vue'),
@@ -1803,6 +1891,26 @@ runMutationTest('Python compose_wrap_note keeps a blank line', SRC('omnitrack/ut
 // A plan is for time still to come (scripts/check_plan_window.mjs, test_unit_governance.TestPlanWindow)
 const PW = 'node scripts/check_plan_window.mjs';
 const GOV = `${path.resolve(appDir, '../../env/bin/python')} -m unittest omnitrack.tests.test_unit_governance`;
+const WS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/workstation.py');
+runMutationTest('The team list is callable from the browser', WS_GOV,
+  (code) => code.replace('def get_team_members(session_user=None):', '@frappe.whitelist()\ndef get_team_members(session_user=None):'), GOV, 'test_team_list_is_not_callable_from_the_browser');
+runMutationTest('An Employee with no user is offered as one', WS_GOV,
+  (code) => code.replace('\treturn team_members\n', '\treturn team_members + [{"name": e["name"]} for e in active_employees if not e.get("user_id")]\n'), GOV, 'test_unlinked_employees_are_not_offered_as_users');
+runMutationTest('A workflow action with a row per role shows twice', path.resolve(omnitrackDir, 'omnitrack/api/tasks.py'),
+  (code) => code.replace('\t\t\t\tif act in seen_actions:\n\t\t\t\t\tcontinue\n', ''), GOV, 'test_an_action_with_a_row_per_role_shows_once');
+const DPF = 'node scripts/test_date_presets_and_filter_pills.cjs';
+const CAT = path.resolve(omnitrackDir, 'src/views/calendar/CalendarAssignedTasks.vue');
+runMutationTest('An icon-only filter pill has no tooltip', CAT,
+  (code) => code.replace(':tooltip="plannerTaskFilter !== tab.id ? tab.label : undefined"', ''), DPF, 'tooltip');
+runMutationTest('The picked filter pill hides its name', CAT,
+  (code) => code.replace('<span v-if="plannerTaskFilter === tab.id">{{ tab.label }}</span>', ''), DPF, 'only when selected');
+const TKS_GOV = path.resolve(omnitrackDir, 'omnitrack/api/tasks.py');
+runMutationTest('A completed task drags its moved blocks back', TKS_GOV,
+  (code) => code.replace('"status": ("in", ("Open", "Completed")),\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
+runMutationTest('A row already done is stamped again', TKS_GOV,
+  (code) => code.replace('\t\tif r.status == want:\n\t\t\tcontinue\n', ''), GOV, 'test_completing_marks_open_rows_done_and_keeps_moved_and_done_rows');
+runMutationTest('A reopened task leaves its blocks done', TKS_GOV,
+  (code) => code.replace('want = "Completed" if is_done else "Open"', 'want = "Completed"'), GOV, 'test_reopening_reopens_done_rows_only');
 const PWJS = SRC('src/utils/planWindow.js');
 const PERMS = SRC('omnitrack/permissions.py');
 runMutationTest('JS plans an earlier day again', PWJS,
@@ -1827,6 +1935,13 @@ runMutationTest('check_plan_date lets a refusal through', PERMS,
   (code) => code.replace('\tif refusal:\n\t\tfrappe.throw(refusal, frappe.ValidationError)', '\tif False:\n\t\tfrappe.throw(refusal, frappe.ValidationError)'), GOV, 'test_check_plan_date_refuses_with_the_reason');
 runMutationTest('Python says the past-day words differently', PERMS,
   (code) => code.replace('"You can plan from today on. Time already worked is logged, not planned."', '"You can plan from today on."'), PW, 'as src/utils/planWindow.js does');
+const TASKS_PY = SRC('omnitrack/api/tasks.py');
+runMutationTest('Completed tasks offer cancel or hold', TASKS_PY,
+  (code) => code.replace('if status in ("cancelled", "completed", "closed"):', 'if status in ("cancelled",):'), GOV, 'test_completed_task_offers_only_reopen');
+runMutationTest('Reopen action does not restore Open status', TASKS_PY,
+  (code) => code.replace('elif "resume" in act_lower or "reopen" in act_lower or act_lower == "open":', 'elif False:'), GOV, 'test_execute_reopen_and_resume_transitions_to_open');
+runMutationTest('On hold tasks do not offer resume', TASKS_PY,
+  (code) => code.replace('if status in ("on hold", "hold"):', 'if False:'), GOV, 'test_on_hold_task_offers_resume_complete_cancel');
 const PLN = SRC('omnitrack/api/planner.py');
 runMutationTest('book_work_block plans the past again', PLN,
   (code) => code.replace('\t\tcheck_plan_date(work_date or nowdate(), start_time, end_time)', '\t\tpass'), PW, 'book_work_block');

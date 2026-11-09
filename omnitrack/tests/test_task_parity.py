@@ -35,7 +35,11 @@ def body_of(src, name):
 	return src[start:end if end != -1 else len(src)]
 
 
+API_TASKS = open(os.path.join(APP_DIR, "api", "tasks.py")).read()
+
+
 class TestTaskParity(unittest.TestCase):
+
 	def gaps(self, rows, task_assignees=None, todo_owners=None, is_copy=False):
 		return task_parity.parity_gaps(NEHA, rows, task_assignees or {}, todo_owners or {}, is_copy)
 
@@ -97,6 +101,56 @@ class TestTaskParity(unittest.TestCase):
 		"""When employee lacks Task permission, put_person_on_tasks must catch assignment errors."""
 		body = body_of(CONTROLLER, "put_person_on_tasks")
 		self.assertIn("try:\n\t\t\t\t\tadd_assignment", body)
+
+	def test_task_form_returns_description(self):
+		"""_task_form must include description in its returned dict."""
+		body = body_of(API_TASKS, "_task_form")
+		self.assertIn('"description": doc.get("description") or "",', body)
+
+	def test_task_edit_and_update_accept_description(self):
+		"""_edit_task_doc, update_task, and update_block_task must accept and persist description."""
+		edit_body = body_of(API_TASKS, "_edit_task_doc")
+		self.assertIn("description=None", edit_body)
+		self.assertIn("doc.description = plain_to_html(description)", edit_body)
+		update_body = body_of(API_TASKS, "update_task")
+		self.assertIn("description=None", update_body)
+		self.assertIn("_edit_task_doc(doc, _clean_subject(subject), due_date, priority, description)", update_body)
+		block_task_body = body_of(API_TASKS, "update_block_task")
+		self.assertIn("description=None", block_task_body)
+		self.assertIn("row.subject = _edit_task_doc(doc, subject, due_date, priority, description)", block_task_body)
+
+
+_pspec = importlib.util.spec_from_file_location("plain_html", os.path.join(APP_DIR, "utils", "plain_html.py"))
+plain_html = importlib.util.module_from_spec(_pspec)
+_pspec.loader.exec_module(plain_html)
+
+
+class TestPlainDescription(unittest.TestCase):
+	"""The form's plain-text description, stored in a Task's HTML field."""
+
+	def test_lines_and_paragraphs_survive(self):
+		self.assertEqual(plain_html.plain_to_html("Step one\nStep two\n\nNotes"), "<p>Step one<br>Step two</p><p>Notes</p>")
+
+	def test_text_is_escaped(self):
+		self.assertEqual(plain_html.plain_to_html("a < b & <script>"), "<p>a &lt; b &amp; &lt;script&gt;</p>")
+
+	def test_empty_clears(self):
+		self.assertEqual(plain_html.plain_to_html("  \n "), "")
+
+	def test_formatting_is_rich_and_plain_is_not(self):
+		self.assertFalse(plain_html.is_rich('<div class="ql-editor"><p>One<br>two</p></div>'))
+		self.assertFalse(plain_html.is_rich(""))
+		for rich in ('<p><a href="x">link</a></p>', "<ul><li>a</li></ul>", '<img src="x">', "<p><strong>b</strong></p>"):
+			self.assertTrue(plain_html.is_rich(rich), rich)
+
+	def test_a_rich_description_is_never_overwritten(self):
+		body = body_of(API_TASKS, "_edit_task_doc")
+		self.assertLess(body.index("if is_rich(doc.description):"), body.index("doc.description = plain_to_html(description)"))
+
+	def test_a_todo_description_is_only_its_title(self):
+		body = body_of(API_TASKS, "_edit_task_doc")
+		todo = body[body.index("elif subject is not None:"):]
+		self.assertNotIn("description)", todo.split("if due_date")[0])
 
 
 if __name__ == "__main__":

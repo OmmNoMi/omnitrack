@@ -35,6 +35,98 @@ from omnitrack.utils.block_tasks import tasks_by_block
 from omnitrack.utils.session_time import counted_hours
 
 
+OMNITRACK_ROLES = ("OmniTrack User", "OmniTrack Manager", "OmniTrack Admin")
+
+
+def get_team_members(session_user=None):
+	"""Returns active users eligible for OmniTrack team operations.
+
+	Server-side only (get_workstation_data sends it); not callable from the browser.
+
+	A user must be enabled, not Guest, and must:
+	1. Hold an OmniTrack role ('OmniTrack User', 'OmniTrack Manager', 'OmniTrack Admin'), OR
+	2. Be linked to an active Employee record, OR
+	3. Be the Administrator account (if enabled).
+
+	Non-OmniTrack users, website users, external contacts, and system bots are excluded.
+	"""
+	# 1. Users with OmniTrack roles
+	role_users = set(
+		frappe.db.sql_list(
+			"SELECT DISTINCT parent FROM `tabHas Role` WHERE parenttype = 'User' AND role IN %s",
+			(OMNITRACK_ROLES,),
+		)
+	)
+
+	# 2. Users linked to active Employees
+	employee_users = set()
+	employee_map = {}
+	if frappe.db.exists("DocType", "Employee"):
+		active_employees = frappe.get_all(
+			"Employee",
+			filters={"status": "Active"},
+			fields=["name", "employee_name", "user_id", "designation", "image"],
+			limit=300,
+		)
+		for emp in active_employees:
+			uid = emp.get("user_id")
+			# An Employee with no user cannot sign in or be picked as one, so is not offered
+			if uid:
+				employee_users.add(uid)
+				employee_map[uid] = emp
+
+	# 3. Combine candidates
+	eligible = role_users | employee_users
+	if frappe.db.get_value("User", "Administrator", "enabled"):
+		eligible.add("Administrator")
+	if session_user and session_user != "Guest" and frappe.db.get_value("User", session_user, "enabled"):
+		eligible.add(session_user)
+	eligible.discard("Guest")
+
+	team_members = []
+	seen = set()
+
+	if eligible:
+		db_users = frappe.get_all(
+			"User",
+			filters={
+				"name": ["in", list(eligible)],
+				"enabled": 1,
+				"user_type": ["!=", "Website User"],
+			},
+			fields=["name", "full_name", "user_image", "email"],
+			order_by="full_name asc",
+			limit=200,
+		)
+		for u in db_users:
+			uname = u["name"]
+			if uname in seen:
+				continue
+			seen.add(uname)
+			emp = employee_map.get(uname)
+
+			if emp and emp.get("designation"):
+				role_label = emp.get("designation")
+			elif uname == "Administrator":
+				role_label = "System Admin"
+			else:
+				u_roles = frappe.get_roles(uname) if hasattr(frappe, "get_roles") else []
+				if "OmniTrack Manager" in u_roles or "OmniTrack Admin" in u_roles or "System Manager" in u_roles:
+					role_label = "Manager"
+				else:
+					role_label = "Team Member"
+
+			team_members.append({
+				"name": uname,
+				"full_name": u.get("full_name") or (emp.get("employee_name") if emp else uname),
+				"user_image": u.get("user_image") or (emp.get("image") if emp else None),
+				"role": role_label,
+				"employee": emp.get("name") if emp else None,
+			})
+
+	return team_members
+
+
 @frappe.whitelist()
 def get_workstation_data(employee=None, work_date=None, project=None):
 	"""
@@ -231,17 +323,8 @@ def get_workstation_data(employee=None, work_date=None, project=None):
 		limit=100
 	) if frappe.db.exists("DocType", "Task") else []
 
-	# 4. Team members: the site's real desk users, never a seeded list
-	team_members = [
-		{"name": u.name, "full_name": u.full_name or u.name, "role": "Team Member"}
-		for u in frappe.get_all(
-			"User",
-			filters={"enabled": 1, "user_type": "System User", "name": ["!=", "Guest"]},
-			fields=["name", "full_name"],
-			order_by="full_name asc",
-			limit=200,
-		)
-	]
+	# 4. Team members: the site's real desk users and active Employees, never a seeded list
+	team_members = get_team_members(session_user=current_user)
 
 	# 5. PACI / PAI Calculation (Real live hours)
 	# Planned or not is the block's own fact (`unplanned`), never its activity

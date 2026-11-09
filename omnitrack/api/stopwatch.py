@@ -275,6 +275,9 @@ def sync_active_session(session_data=None, user=None):
 
 	# If session_data is empty or status is stopped/cleared, delete the active session
 	if not session_data or session_data.get("status") in ("stopped", "cleared", "discarded"):
+		# Says which session ended, so a device that already started the next one keeps it
+		prev = frappe.cache.hget("omnitrack:active_session", target_user)
+		cleared_start = int(flt(prev.get("startTime") or 0)) if isinstance(prev, dict) else 0
 		frappe.cache.hdel("omnitrack:active_session", target_user)
 		frappe.defaults.clear_default("omnitrack_active_session", parent=target_user)
 		frappe.db.set_default("omnitrack_active_session", None, parent=target_user)
@@ -285,7 +288,7 @@ def sync_active_session(session_data=None, user=None):
 		frappe.clear_cache(user=target_user)
 		frappe.db.commit()
 		try:
-			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": target_user}, user=target_user)
+			frappe.publish_realtime("omnitrack:active_session_cleared", {"user": target_user, "startTime": cleared_start}, user=target_user)
 		except Exception:
 			pass
 		return {"status": "cleared"}

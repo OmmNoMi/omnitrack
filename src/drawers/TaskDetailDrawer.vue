@@ -25,9 +25,40 @@
               <dt :class="mutedText">Status</dt>
               <dd class="min-w-0"><Badge variant="subtle" size="md" :class="stateChip(state)" :title="stateHint">{{ state }}</Badge></dd>
             </template>
-            <template v-if="due">
+            <template v-if="d">
               <dt :class="mutedText">Due</dt>
-              <dd class="min-w-0" :class="overdue ? lateText : strongText">{{ due }}<template v-if="overdue">, overdue</template></dd>
+              <dd ref="dueCell" class="min-w-0 space-y-1.5">
+                <!-- The date is the control: its menu holds the quick days, any other date, and Clear -->
+                <Dropdown v-if="canEdit && !showCustomPicker" :options="dueMenu" placement="left">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon-right="chevron-down"
+                    class="!-ml-2 !font-normal"
+                    :class="due ? (overdue ? lateText : strongText) : mutedText"
+                    :label="dueLabel"
+                    aria-haspopup="menu"
+                    :aria-disabled="savingDue ? 'true' : null"
+                  >{{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template></Button>
+                </Dropdown>
+                <span v-else-if="!showCustomPicker" :class="due ? (overdue ? lateText : strongText) : mutedText">
+                  {{ due || 'No deadline' }}<template v-if="due && overdue">, overdue</template>
+                </span>
+
+                <!-- Any other date, from "Pick a date…" in the menu -->
+                <div v-if="showCustomPicker" ref="customDuePicker" class="flex items-center gap-1.5 pt-1" @keydown.esc.stop.prevent="closeCustomPicker">
+                  <div v-input-attrs="{ 'aria-label': 'Pick task deadline', 'aria-haspopup': 'dialog' }" class="flex-1 max-w-[200px]">
+                    <DatePicker
+                      variant="subtle"
+                      :model-value="dueISO"
+                      format="ddd, D MMM YYYY"
+                      placeholder="Pick deadline"
+                      @update:model-value="onCustomDueSelected($event)"
+                    />
+                  </div>
+                  <Button variant="ghost" size="sm" icon="x" label="Cancel custom deadline" title="Cancel custom deadline" @click="closeCustomPicker" />
+                </div>
+              </dd>
             </template>
             <template v-if="d && d.priority">
               <dt :class="mutedText">Priority</dt>
@@ -89,23 +120,38 @@ import { stateChipClass, stateTone, isDangerMove, moveIcon } from '../utils/task
 import { hrs } from '../utils/taskMeta.js';
 import { setScrollLock } from '../utils/scrollLock.js';
 import { useOverlayHistory } from '../composables/useOverlayHistory.js';
+import { vInputAttrs } from '../utils/popover.js';
+import { localISO } from '../utils/clockTime.js';
+import { deadlinePresets } from '../utils/deadlinePresets.js';
 import DetailKind from '../components/common/DetailKind.vue';
 import DocActivity from '../components/common/DocActivity.vue';
 
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// "Mon, Nov 9" for a YYYY-MM-DD day, with the year only when it is not this year
+const dayLabel = (iso) => {
+  if (!iso || iso.length < 10) return '';
+  const [y, m, day] = iso.split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+};
+
+const FOCUSABLE ='button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default {
   name: 'TaskDetailDrawer',
   components: { DetailKind, DocActivity },
+  directives: { inputAttrs: vInputAttrs },
   setup() {
-    const ctx = useWorkstationContext(['postJSON', 'getTaskDeskUrl', 'openTaskRavenDrawer', 'isDarkMode']);
+    const ctx = useWorkstationContext([
+      'postJSON', 'getTaskDeskUrl', 'openTaskRavenDrawer', 'isDarkMode',
+      'showToast', 'fetchPlannerData', 'fetchWorkstationData', 'extractErrorMessage', 'selectedEmployee',
+    ]);
     useOverlayHistory('task-detail', () => taskDetail.open, closeTaskDetail);
     return { ...ctx, taskDetail, closeTaskDetail };
   },
   data() {
-    return { d: null, failed: false, seq: 0, opener: null };
+    return { d: null, failed: false, seq: 0, opener: null, savingDue: false, showCustomPicker: false };
   },
   computed: {
+    canEdit() { return !!(this.d && this.d.can_edit); },
     doc() { return taskDocRef(taskDetail.task) || { doctype: 'Task', name: '' }; },
     title() {
       const t = taskDetail.task || {};
@@ -121,16 +167,29 @@ export default {
     },
     finished() { return ['green', 'red'].includes(stateTone(this.state)) || ['green', 'red'].includes(stateTone(this.d && this.d.status)); },
     dueISO() { return String((this.d && this.d.due_date) || (taskDetail.task && taskDetail.task.due_date) || '').slice(0, 10); },
-    due() {
-      if (this.dueISO.length < 10) return '';
-      const [y, m, day] = this.dueISO.split('-').map(Number);
-      return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
-    },
+    due() { return dayLabel(this.dueISO); },
+    // The button's name starts with what it shows, then says what it does
+    dueLabel() { return (this.due || 'No deadline') + (this.due && this.overdue ? ', overdue' : '') + '. Change deadline'; },
     overdue() {
       if (!this.d || this.finished || this.dueISO.length < 10) return false;
       const now = new Date();
       const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
       return this.dueISO < today;
+    },
+    // Read on each open (this.d is new per load), so a tab left open overnight gets today's dates
+    quickPresets() { return this.d ? deadlinePresets(new Date()) : []; },
+    // Each quick day shows its date; the current one is ticked (the tick is read out, not just a colour)
+    dueMenu() {
+      const days = this.quickPresets.map((p) => ({
+        label: p.label,
+        description: dayLabel(p.iso) + (this.dueISO === p.iso ? ', current' : ''),
+        icon: this.dueISO === p.iso ? 'check' : 'calendar',
+        selected: this.dueISO === p.iso,
+        onClick: () => this.setDeadline(p.iso),
+      }));
+      const other = [{ label: 'Pick a date…', icon: 'edit-3', onClick: () => this.openCustomPicker() }];
+      if (this.due) other.push({ label: 'Clear deadline', icon: 'x', onClick: () => this.setDeadline('') });
+      return [{ group: 'Quick days', hideLabel: true, items: days }, { group: 'Other', hideLabel: true, items: other }];
     },
     project() {
       const t = taskDetail.task || {};
@@ -139,6 +198,7 @@ export default {
     people() { return ((this.d && this.d.assigned_to) || []).map((p) => p.name || p.user).join(', '); },
     // Every move opens the one task form at its confirm step, which asks for a comment
     stateMoves() {
+      // The server sends each move once (tasks.py _workflow_of)
       return ((this.d && this.d.actions) || []).map((a) => ({
         label: a.action,
         icon: moveIcon(a.action),
@@ -194,6 +254,8 @@ export default {
       const seq = ++this.seq;
       this.d = null;
       this.failed = false;
+      this.showCustomPicker = false;
+      this.savingDue = false;
       try {
         const res = await this.postJSON('tasks.get_task_details', { task_id: r.name, doctype: r.doctype });
         if (seq === this.seq) this.d = res && res.name ? res : null;
@@ -201,6 +263,54 @@ export default {
       } catch (e) {
         if (seq === this.seq) this.failed = true;
       }
+    },
+    async setDeadline(iso) {
+      if (!this.canEdit || this.savingDue) return;
+      const targetDate = iso ? String(iso).slice(0, 10) : '';
+      if (targetDate === this.dueISO && !this.showCustomPicker) return;
+      this.savingDue = true;
+      try {
+        const res = await this.postJSON('update_task', {
+          doctype: this.doc.doctype,
+          name: this.doc.name,
+          due_date: targetDate,
+        });
+        if (this.d) this.d.due_date = targetDate;
+        if (taskDetail.task) taskDetail.task.due_date = targetDate;
+        this.showToast(targetDate ? 'Deadline set to ' + (this.due || targetDate) : 'Deadline cleared', 'success');
+        this.fetchPlannerData();
+        this.fetchWorkstationData(this.selectedEmployee);
+        const opts = taskDetail.opts || {};
+        if (typeof opts.onChange === 'function') {
+          opts.onChange(res && res.task ? res.task : { ...(taskDetail.task || {}), due_date: targetDate });
+        }
+        // After the picker, focus goes back to the date button it replaced (the menu returns it itself)
+        const refocus = this.showCustomPicker;
+        this.showCustomPicker = false;
+        if (refocus) this.focusDueBtn();
+      } catch (e) {
+        this.showToast('Could not set deadline: ' + (this.extractErrorMessage ? this.extractErrorMessage(e, 'Try again.') : (e.message || e)), 'danger');
+      } finally {
+        this.savingDue = false;
+      }
+    },
+    onCustomDueSelected(val) {
+      if (!val) return;
+      const iso = typeof val === 'string' ? val.slice(0, 10) : localISO(new Date(val));
+      this.setDeadline(iso);
+    },
+    openCustomPicker() {
+      this.showCustomPicker = true;
+      // After the menu has closed and handed focus back to its button, which this then replaces
+      setTimeout(() => { const i = this.$refs.customDuePicker && this.$refs.customDuePicker.querySelector('input'); if (i) i.focus(); }, 0);
+    },
+    closeCustomPicker() {
+      this.showCustomPicker = false;
+      this.focusDueBtn();
+    },
+    focusDueBtn() {
+      // The button sits inside the dropdown's trigger, so find it in the cell rather than through a component ref
+      this.$nextTick(() => { const el = this.$refs.dueCell && this.$refs.dueCell.querySelector('button[aria-haspopup="menu"]'); if (el) el.focus(); });
     },
     // The one task form, opened as the list that showed this task would have opened it. A save
     // or a move there reads this panel again.

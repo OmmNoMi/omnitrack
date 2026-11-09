@@ -43,6 +43,15 @@ else {
     problems.push(`main.css: popper wrapper z-index ${popper[1]} must be above .dialog-overlay ${overlay[1]}`);
   }
 }
+if (!/\[data-reka-popper-content-wrapper\] button\.font-extrabold\.text-ink-gray-9:not\(\.bg-surface-gray-6\)\s*\{[^}]*box-shadow:\s*inset 0 0 0 1\.5px #1d4ed8/.test(css)) {
+  problems.push("main.css: DatePicker popover must visually highlight today's date with an accent ring (.font-extrabold.text-ink-gray-9)");
+}
+if (!/\.dark\s+\[data-reka-popper-content-wrapper\]\s+button\.font-extrabold\.text-ink-gray-9:not\(\.bg-surface-gray-6\)[^{]*\{[^}]*box-shadow:\s*inset 0 0 0 1\.5px #60a5fa/.test(css)) {
+  problems.push("main.css: DatePicker popover today accent must have dark mode styling");
+}
+if (!/button\.font-extrabold\.text-ink-gray-9:focus-visible\s*\{[^}]*outline:\s*2px solid/.test(css)) {
+  problems.push("main.css: today's DatePicker cell keeps a visible focus outline (its ring replaced frappe-ui's focus ring)");
+}
 
 // 2. document Escape handlers that close dialogs
 function walkVue(dir) {
@@ -176,9 +185,39 @@ if (!/openTaskDetail\(row, \{ block: this\.block, canRemove: this\.canAdd \}\)/.
 if (!/const openTaskDetails = \(task\) => \{\s*openTaskDetail\(task\);/.test(plannerSelect)) problems.push('useWorkstationPlannerSelect.js: openTaskDetails opens the task details panel');
 if (!/'update_block_task'/.test(taskForm) || !/'update_task'/.test(taskForm) || (taskForm.match(/\.\.\.this\.changes/g) || []).length !== 2) problems.push('TaskFormDialog.vue: saves only what changed (update_block_task / update_task)');
 if (!/'remove_block_task'/.test(taskForm)) problems.push('TaskFormDialog.vue: can take a task off its block (remove_block_task)');
-if ((taskForm.match(/>\{\{ detail\.state \|\| 'Open' \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (detail.state)');
-if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves ask first, then apply (execute_task_workflow_action)');
-if (!/:esc-back="!!confirming"/.test(taskForm) || !/this\.\$emit\('back'\)/.test(fdialog)) problems.push('TaskFormDialog.vue: Escape steps back out of a move\'s confirm before it closes the form');
+if ((taskForm.match(/>\{\{ currentState \}\}<\/(Button|Badge)>/g) || []).length !== 2) problems.push('TaskFormDialog.vue: must show where the task stands (currentState)');
+if (!/detail\.actions\.map\(\(a\) => \(\{[\s\S]*?onClick: \(\) => this\.ask\(a\)/.test(taskForm) || !/<Dropdown v-if="statusMenu\.length" :options="statusMenu"/.test(taskForm) || !/'execute_task_workflow_action'/.test(taskForm)) problems.push('TaskFormDialog.vue: workflow moves stage and execute on save (execute_task_workflow_action)');
+if (!/currentState\(\)\s*\{[\s\S]*?this\.stagedAction/.test(taskForm) || !/canSave\(\)\s*\{[\s\S]*?!!this\.stagedAction/.test(taskForm) || /confirming/.test(taskForm)) problems.push('TaskFormDialog.vue: status changes stage state and enable Save without confirming box');
+// The description box: Tasks only (a ToDo's description is its title), locked when it has
+// formatting, and the real converters behave (run from the component's source)
+if (!/<Textarea\s+v-if="hasDescription"/.test(taskForm) || !/hasDescription\(\)\s*\{\s*return this\.detail\.doctype === 'Task';/.test(taskForm)) problems.push('TaskFormDialog.vue: the description box is for Tasks only');
+if (!/:disabled="!editable \|\| richDescription"/.test(taskForm) || !/if \(k === 'description' && \(!this\.hasDescription \|\| this\.richDescription\)\) continue;/.test(taskForm)) problems.push('TaskFormDialog.vue: a formatted description is locked and never sent');
+{
+  const fn = (name) => (taskForm.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n\\}')) || [''])[0];
+  try {
+    const lib = new Function(taskForm.match(/const PLAIN_TAGS = [^\n]*/)[0] + '\n' + fn('isRichHtml') + '\n' + fn('htmlToPlainText') + '\nreturn { isRichHtml, htmlToPlainText };')();
+    const cases = [
+      [lib.htmlToPlainText('<p>a &amp;lt; b</p>'), 'a &lt; b'],
+      [lib.htmlToPlainText('<p>One<br>two</p><p>Three &amp; four</p>'), 'One\ntwo\n\nThree & four'],
+      [lib.isRichHtml('<div class="ql-editor"><p>x<br></p></div>'), false],
+      [lib.isRichHtml('<p><a href="#">x</a></p>'), true],
+      [lib.isRichHtml('<ul><li>x</li></ul>'), true],
+    ];
+    cases.forEach(([got, want], i) => { if (got !== want) problems.push(`TaskFormDialog.vue: description converter case ${i + 1} gave ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`); });
+  } catch (e) { problems.push('TaskFormDialog.vue: description converters could not run: ' + e.message); }
+}
+// The check mark in the status menu means "picked, saves on Save"; no move draws it as its own icon
+if (/return 'check'/.test(read('src/utils/taskState.js'))) problems.push('taskState.js: moveIcon never uses the check mark, which marks the picked status');
+if (!/FIELDS\s*=\s*\[[^\]]*'description'/.test(taskForm) || !/label="Description"/.test(taskForm)) {
+  problems.push('TaskFormDialog.vue: must include Description field in form and FIELDS');
+}
+const apiTasks = read('omnitrack/api/tasks.py');
+if (!/def update_task\([^)]*description=None/.test(apiTasks) || !/def update_block_task\([^)]*description=None/.test(apiTasks) || !/def _edit_task_doc\([^)]*description=None/.test(apiTasks)) {
+  problems.push('tasks.py: update_task, update_block_task, and _edit_task_doc must accept description');
+}
+if (!/"description":\s*doc\.get\("description"\)/.test(apiTasks)) {
+  problems.push('tasks.py: _task_form must return description');
+}
 for (const f of walkVue(path.join(root, 'src'))) {
   const rel = path.relative(root, f);
   if (rel.endsWith('TaskFormDialog.vue')) continue;
@@ -326,13 +365,13 @@ print(json.dumps(clean_session_tasks("not json")))`]).toString().trim();
   if (got !== '[["T1", "todo:T1", 200, "Completed"], ["TASK-9", "TASK-9", 0, "Open"]]\n[]') problems.push(`omnitrack/utils/block_tasks.py: clean_session_tasks must dedupe by ref, cap text at 200, derive id and keep only Completed/Open (got ${JSON.stringify(got)})`);
 }
 
-// 14. The session clock's toolbar is icon-only below 480px. frappe-ui keeps the hidden
-//     label's wrapper and its gap, which pushed each icon off centre: every tool is squared
-//     at the same breakpoint the label hides at.
+// 14. The session clock's toolbar is icon-only below 480px. Square them up with 40px touch targets
+//     (!w-10, !h-10) and 24px icons ([&_svg]:!w-6, [&_svg]:!h-6), removing the hidden label's wrapper
+//     and gap so icons stay centered.
 const toolSquare = (pane.match(/const TOOL_SQUARE = '([^']*)'/) || [])[1] || '';
 const clockSection = pane.slice(pane.indexOf('aria-label="Session clock"'));
 const tools = [...clockSection.matchAll(/<Button\s+data-session-tool[\s\S]*?<\/Button>/g)].map((m) => m[0]);
-if (!/max-\[479px\]:w-7/.test(toolSquare) || !/max-\[479px\]:px-0/.test(toolSquare) || !/max-\[479px\]:gap-0/.test(toolSquare)) problems.push('SessionControlsPane.vue: TOOL_SQUARE squares the icon-only tools below 480px (w-7, px-0, gap-0)');
+if (!/max-\[479px\]:!w-10/.test(toolSquare) || !/max-\[479px\]:!h-10/.test(toolSquare) || !/max-\[479px\]:!px-0/.test(toolSquare) || !/max-\[479px\]:!gap-0/.test(toolSquare) || !/max-\[479px\]:\[&_svg\]:!w-6/.test(toolSquare) || !/max-\[479px\]:\[&_svg\]:!h-6/.test(toolSquare)) problems.push('SessionControlsPane.vue: TOOL_SQUARE squares the icon-only tools below 480px (!w-10, !h-10, !px-0, !gap-0, [&_svg]:!w-6, [&_svg]:!h-6)');
 if (tools.length !== 3 || tools.some((t) => !/:class="TOOL_SQUARE"/.test(t) || !/class="hidden min-\[480px\]:inline"/.test(t))) problems.push('SessionControlsPane.vue: each of the 3 session tools is squared (TOOL_SQUARE) and hides its label below 480px');
 
 // 15. The Escape that closes an FDialog stops there. Page-level handlers (minimise the session

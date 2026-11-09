@@ -194,8 +194,9 @@ export function useWorkSessionStore({
   };
 
   const handleRemoteSessionCleared = (opts) => {
+    if (showInactivityModal.value) showInactivityModal.value = false;
     if (!isTracking.value) return;
-    if (Date.now() - _lastLocalUpdate < 15000) return;
+    if (!(opts && opts.authoritative) && (Date.now() - _lastLocalUpdate < 15000)) return;
 
     isTracking.value = false;
     startTime.value = null;

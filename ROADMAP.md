@@ -1412,7 +1412,7 @@ Open:
 
 ## Hours by person on the Logged time page (2026-11-08)
 
-Shipped (uncommitted on 2026-11-08): `api/team_hours.get_team_hours` returns each person's worked, planned, approved, awaiting and flagged hours, by day and by project, for a period of at most 92 days. Managers and HR see everyone; anyone else sees only their own hours. The Logged time page shows it as an expandable table, and the bottom bar's last button, Hours, opens the page.
+Shipped 2026-11-08 (PR #58): `api/team_hours.get_team_hours` returns each person's worked, planned, approved, awaiting and flagged hours, by day and by project, for a period of at most 92 days. Managers and HR see everyone; anyone else sees only their own hours. The Logged time page shows it as an expandable table, and the bottom bar's last button, Hours, opens the page.
 
 Open:
 - Local data has one person at 32h worked on a single day. The view surfaces it, but nothing flags it. Mark a day over 24h (and overlapping sessions) as a review problem, and find how the overlapping sessions were saved.
@@ -1420,4 +1420,17 @@ Open:
 - The "All" list below the table stops at 150 blocks, while the table covers 92 days. Page the list, or label the cap.
 - No server test for `get_team_hours` yet: night sessions split at midnight, away time kept apart, a non-manager seeing only their own row, and the 92-day and reversed-period errors.
 - Links use `#/timesheets` (hash routing). Plain `/omnitrack/timesheets` URLs would need a `website_route_rules` entry and `createWebHistory`.
-- PR #43 review is paused part way; resume it, then #44 to #57.
+
+## Batch of reviewed PRs (2026-11-08)
+
+Merged into develop together, each with the review's fixes on top: #54 (workspace and sidebar), #43 (session quick adjust), #51 (task status saved with the form), #50 (task description), #52 (status menu icon), #44 (team list), #28 (filter pills, one action per move).
+
+Found while fixing, still open:
+- "Put on Hold" is offered for a Task, but ERPNext's Task status has no such value, so the save is refused. Offer only the statuses the site's Task allows.
+- Reopening a Task does not bring back its assignees: ERPNext closes the ToDo assignments on completion. Reassign the people when it reopens.
+- "Add task" in the calendar asks for planned time first. Allow a task with no time yet.
+- Web Push is not working end to end (no keys are set up, and nothing subscribes). PR #53 should say "Refs #41", not close it.
+- There is no switch to turn reminder sounds off. Add one in settings.
+- The session box's quick buttons (On time, -30 to -5, Now, +5, +15) were checked locally only. Check them on the hosted site on a phone.
+- The task form's Description box edits plain text only. A Task whose description has links, lists or images is edited in the desk. A rich editor would lift that.
+- PR #46 duplicates #47, and #39 is superseded. Close them once the owner agrees.
